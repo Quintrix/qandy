@@ -324,7 +324,7 @@ function button(b, event) {
               } else {
                 executeCode(LINE);
                 pokeCursorOn();
-                CURP = 0;
+                LINE=""; CURP = 0;
                 LINEX = CURX; LINEY = CURY;
                 return;
               }
@@ -429,16 +429,19 @@ function button(b, event) {
   pokeCursorOn();
 }
 
-// Qandy Console: route console messages and uncaught errors/rejections into the Qandy display.
 (function installQandyConsole() {
   if (window.__QANDY_CONSOLE_INSTALLED__) return;
   window.__QANDY_CONSOLE_INSTALLED__ = true;
 
-  // Config
-  var QANDY_CONSOLE_ENABLED = true;         // flip to false to disable routing
-  var MAX_MSG_LENGTH = 2000;                // truncate long messages
-  var MAX_STACK_LINES = 8;                  // limit stack lines printed
+  // Config: default enabled state is driven by the global devteam/DEVTEAM flag.
+  var MAX_MSG_LENGTH = 2000;
+  var MAX_STACK_LINES = 8;
   var SHOW_STACK_FOR_ERRORS = true;
+
+  // drive enabled state from global devteam/DEVTEAM (use existing project flag)
+  var QANDY_CONSOLE_ENABLED = (typeof window.devteam !== 'undefined')
+    ? !!window.devteam
+    : (typeof window.DEVTEAM !== 'undefined' ? !!window.DEVTEAM : true);
 
   // keep originals
   var _origConsole = {
@@ -456,9 +459,8 @@ function button(b, event) {
       }
       if (typeof val === 'string') return val;
       if (typeof val === 'object' && val !== null) {
-        // Try JSON, fallback to toString
         try {
-          return JSON.stringify(val, replacer, 2);
+          return JSON.stringify(val, replacer(), 2);
         } catch (e) {
           try { return String(val); } catch (e2) { return '[object]'; }
         }
@@ -482,50 +484,40 @@ function button(b, event) {
     };
   }
 
-  // Truncate long messages
   function truncate(s) {
     if (typeof s !== 'string') s = String(s);
     if (s.length <= MAX_MSG_LENGTH) return s;
     return s.slice(0, MAX_MSG_LENGTH) + '... [truncated ' + (s.length - MAX_MSG_LENGTH) + ' chars]';
   }
 
-  // Avoid reentrancy if print() itself triggers errors
   var inQandyPrint = false;
 
-  // Send to Qandy display (safe wrapper)
   function qandyPrintLine(prefix, msg) {
+    // If globally disabled, do nothing (don't call print)
     if (!QANDY_CONSOLE_ENABLED || typeof print !== 'function') return;
     try {
       if (inQandyPrint) {
-        // In reentrant situation, fallback to native console to avoid infinite loop
         _origConsole.log(prefix + ' ' + msg);
         return;
       }
       inQandyPrint = true;
-      // Use print() but keep it text-only (no HTML). Append newline to mimic console.
-      // trim trailing spaces/newlines for neatness
       var out = prefix ? (prefix + ' ' + msg) : msg;
       out = out.replace(/\r/g, '');
-      // print() may expect ANSI sequences; we simply send text and newline.
       print(out + "\n");
     } catch (e) {
-      // fallback to original console to ensure we don't swallow errors
-      //_origConsole.log('qandyPrintLine error: ' + safeFormat(e));
+      // swallow to avoid recursion loops
     } finally {
       inQandyPrint = false;
     }
   }
 
-  // Wrap console methods
   function wrapConsoleMethod(name, prefix) {
     console[name] = function() {
       try {
-        // still call original console for developer tools
+        // always call original console for devtools visibility
         _origConsole[name].apply(console, arguments);
       } catch (e) {}
       if (!QANDY_CONSOLE_ENABLED) return;
-
-      // format args
       var parts = [];
       for (var i = 0; i < arguments.length; i++) parts.push(safeFormat(arguments[i]));
       var msg = parts.join(' ');
@@ -542,16 +534,19 @@ function button(b, event) {
   // window.onerror for uncaught exceptions
   window.addEventListener('error', function(evt) {
     try {
-      // evt: ErrorEvent { message, filename, lineno, colno, error }
+      // If console routing is disabled, prevent default browser reporting and return.
+      if (!QANDY_CONSOLE_ENABLED) {
+        try { if (typeof evt.preventDefault === 'function') evt.preventDefault(); } catch (e) {}
+        return;
+      }
+
       var message = String(evt.message || 'Error');
       var file = evt.filename || '';
       var pos = ((typeof evt.lineno === 'number') ? (':' + evt.lineno + (evt.colno ? ':' + evt.colno : '')) : '');
       var header = '[UNCAUGHT ERROR] ' + message + (file ? (' @ ' + file + pos) : '');
-      // prefer stack if available
       var stack = (evt.error && evt.error.stack) ? String(evt.error.stack) : '';
       if (!stack && evt.error) stack = safeFormat(evt.error);
       if (stack) {
-        // limit stack lines
         var lines = stack.split(/\r?\n/).slice(0, MAX_STACK_LINES).join('\n');
         qandyPrintLine('ERROR', truncate(header + '\n' + lines));
       } else {
@@ -560,27 +555,12 @@ function button(b, event) {
     } catch (e) {
       _origConsole.error('qandy error handler failed', e);
     }
-  });
+  }, true);
 
   // unhandled promise rejections
   window.addEventListener('unhandledrejection', function(evt) {
     try {
-      var reason = evt && evt.reason ? evt.reason : 'unknown reason';
-      var msg = '[UNHANDLED REJECTION] ' + safeFormat(reason);
-      msg = truncate(msg);
-      qandyPrintLine('ERROR', msg);
-    } catch (e) {
-      _origConsole.error('qandy rejection handler failed', e);
-    }
-  });
-
-  // expose small control API
-  window.qandyConsole = {
-    enable: function() { QANDY_CONSOLE_ENABLED = true; },
-    disable: function() { QANDY_CONSOLE_ENABLED = false; },
-    installed: true
-  };
-})();
+     _
 
 
 document.addEventListener('keydown', function (event) {
