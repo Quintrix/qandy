@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html><head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <script>
 if (typeof window.print === 'function' && window.print.toString().indexOf('[native code]') !== -1) { window._native_print = window.print; window.print = function() {}; }
 </script>
@@ -418,7 +419,7 @@ var inInputMode = false;       // True when processing user input (prevents pagi
     // Visual style (retro look)
     overlay.style.background = '#000';
     overlay.style.color = '#bbb';
-    overlay.style.border = '0px solid #bbb';
+    overlay.style.border = '4px solid #bbb';
     overlay.style.overflow = 'hidden';   /* hide any internal scrollbars */
     overlay.style.direction = 'ltr';     /* ensure scrollbar (if shown) is on the right */
     overlay.style.display = 'flex';

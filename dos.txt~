@@ -1,0 +1,41 @@
+
+                 
+                       Qandy PC DOS:
+                       Disk Operating System
+
+
+       mount(device) — sets the active device to access: "local" for localStorage,
+                       "harddrive" for user's harddrive, "qandy" for Qandy
+                       Server, "cookie" for browser cookie, "echo", or "none".
+       
+       DEVICE="name" — global var for active device: 
+      
+        format(data) — formats active device with data, if data is omitted
+                       returns JSON string with contents of device    
+                      
+     save(name,data) — saves var data as filename to active device, if filename
+                       begins with > (">filename") append data to existing file
+
+          load(name) — returns contents of filename from active device
+
+           del(name) — deletes filename from active device 
+        delete(name) — deletes filename from active device (same as del)
+            rm(name) — removes filename from active (same as del)
+            
+                ls() — returns string with list of files separated by new lines
+               dir() — returns string with list of files separated by new lines
+
+        exists(name) — returns true if filename exists      
+
+
+
+                name — maximum length 255 bytes, allowed characters:
+                       A–Z, a–z, 0–9, space (leading/trailing trimmed), 
+                       minus, underscore, dot (but not first character),
+                       parentheses, plus, and equals: -_.()+= 
+                       
+                data = plain UTF‑8 text, use base64 for binary data, dos.js
+                       returns whole file content as single string. 
+
+
+

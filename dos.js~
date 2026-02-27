@@ -1,0 +1,577 @@
+// Qandy DOS - dos.js
+// Implements a simple device-backed file API with user-friendly global functions:
+//   mount(device)
+//   format(data)
+//   save(name, data)            (use '>filename' to append)
+//   load(name)
+//   del(name), delete(name), rm(name)
+//   ls(), dir()
+//   exists(name)
+//
+// Backends supported by name: "local", "harddrive", "qandy", "cookie", "echo", "none"
+// - local:     localStorage (prefixed keys)
+// - harddrive: File System Access API directory (if available — requires user gesture)
+// - qandy:     REST endpoint at QANDY_URL (configurable)
+// - cookie:    small per-file cookies (tiny storage only)
+// - echo:      ephemeral in-memory store (page-lifetime)
+// - none:      noop device (always empty)
+//
+// NOTE: All functions return Promises (so they work uniformly for sync/async backends).
+// The interactive REPL in Qandy should already handle Promise results (it prints resolved values).
+//
+// Filename rules (as requested):
+// - Trim leading/trailing spaces
+// - Max 255 bytes (UTF-8)
+// - Allowed characters: A-Z a-z 0-9 space (trimmed), minus(-), underscore(_), dot(. but not first char),
+//   parentheses (), plus(+), equals(=)
+//   (Regex used below enforces this.)
+//
+// Data is treated as UTF-8 text. Use base64 if you need to store binary.
+//
+
+(function(global){
+  'use strict';
+
+  if (global.dos && global.dos._installed) return;
+  // Public-ish global active device name (per your spec)
+  global.DEVICE = global.DEVICE || 'local';
+
+  // Config
+  var QANDY_URL = global.QANDY_URL || '/qandy/files'; // override if needed
+  var LOCAL_PREFIX = 'qandy_file:';   // localStorage key prefix for files
+  var LOCAL_MANIFEST_KEY = 'qandy_manifest_local'; // local manifest key
+  var COOKIE_MANIFEST_KEY = 'qandy_manifest_cookie';
+  var MAX_NAME_BYTES = 255;
+
+  // In-memory state
+  var localManifest = null; // array of filenames (cached)
+  var cookieManifest = null; // array for cookie backend
+  var echoStore = Object.create(null); // in-memory map for echo backend
+  var harddriveHandle = null; // DirectoryHandle for FS API (if mounted)
+  var harddriveManifest = null; // optional cached manifest for FS API
+
+  // Helpers: filename validation & normalization
+  function _utf8ByteLength(s) {
+    try {
+      return (new TextEncoder()).encode(String(s)).length;
+    } catch (e) {
+      // Fallback naive
+      return String(s).length;
+    }
+  }
+
+  function _normalizeName(rawName) {
+    if (typeof rawName !== 'string') rawName = String(rawName == null ? '' : rawName);
+    // Trim spaces
+    var name = rawName.trim();
+    return name;
+  }
+
+  // Allowed characters: A-Z a-z 0-9 space (trimmed), - _ . () + =
+  var VALID_NAME_RE = /^(?!\.)[A-Za-z0-9 \-_.()+=]+$/;
+
+  function _isValidNameRaw(name) {
+    if (typeof name !== 'string') return false;
+    if (name.length === 0) return false;
+    if (!_isNameByteLengthOk(name)) return false;
+    if (!VALID_NAME_RE.test(name)) return false;
+    return true;
+  }
+
+  function _isNameByteLengthOk(name) {
+    return _utf8ByteLength(name) <= MAX_NAME_BYTES;
+  }
+
+  function _validateAndNormalize(rawName) {
+    // Accept a raw name; handle the '>' prefix for append externally.
+    var n = _normalizeName(rawName);
+    if (!_isNameByteLengthOk(n)) return { ok: false, reason: 'too-long' };
+    if (!VALID_NAME_RE.test(n)) return { ok: false, reason: 'invalid-chars-or-leading-dot' };
+    return { ok: true, name: n };
+  }
+
+  // Cookie helpers
+  function _cookieGet(k) {
+    var pairs = document.cookie ? document.cookie.split('; ') : [];
+    for (var i = 0; i < pairs.length; i++) {
+      var p = pairs[i];
+      var idx = p.indexOf('=');
+      var key = p.substring(0, idx);
+      if (key === k) return decodeURIComponent(p.substring(idx + 1));
+    }
+    return null;
+  }
+  function _cookieSet(k, v, days) {
+    var s = encodeURIComponent(String(v == null ? '' : v));
+    var exp = '';
+    if (typeof days === 'number') {
+      var d = new Date();
+      d.setTime(d.getTime() + (days * 24 * 60 * 60 * 1000));
+      exp = '; expires=' + d.toUTCString();
+    }
+    document.cookie = k + '=' + s + exp + '; path=/';
+  }
+  function _cookieDel(k) { _cookieSet(k, '', -1); }
+
+  // local manifest helpers (lazy load)
+  function _loadLocalManifest() {
+    if (localManifest !== null) return Promise.resolve(localManifest);
+    try {
+      var raw = localStorage.getItem(LOCAL_MANIFEST_KEY);
+      if (raw) {
+        localManifest = JSON.parse(raw);
+      } else {
+        // build manifest by scanning keys once
+        localManifest = [];
+        for (var i = 0; i < localStorage.length; i++) {
+          var k = localStorage.key(i);
+          if (k && k.indexOf(LOCAL_PREFIX) === 0) {
+            localManifest.push(k.substring(LOCAL_PREFIX.length));
+          }
+        }
+        try { localStorage.setItem(LOCAL_MANIFEST_KEY, JSON.stringify(localManifest)); } catch (e) {}
+      }
+    } catch (e) {
+      localManifest = [];
+    }
+    return Promise.resolve(localManifest);
+  }
+
+  function _persistLocalManifest() {
+    try {
+      localStorage.setItem(LOCAL_MANIFEST_KEY, JSON.stringify(localManifest || []));
+    } catch (e) {}
+    return Promise.resolve();
+  }
+
+  // cookie manifest helpers
+  function _loadCookieManifest() {
+    if (cookieManifest !== null) return Promise.resolve(cookieManifest);
+    try {
+      var raw = _cookieGet(COOKIE_MANIFEST_KEY);
+      cookieManifest = raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      cookieManifest = [];
+    }
+    return Promise.resolve(cookieManifest);
+  }
+  function _persistCookieManifest() {
+    try {
+      _cookieSet(COOKIE_MANIFEST_KEY, JSON.stringify(cookieManifest || []), 365);
+    } catch (e) {}
+    return Promise.resolve();
+  }
+
+  // FS API helpers for harddrive backend
+  async function _harddriveList() {
+    // if we have a dir handle, iterate
+    if (!harddriveHandle) return [];
+    var out = [];
+    try {
+      for await (const [name, entry] of harddriveHandle.entries()) {
+        if (entry.kind === 'file') out.push(name);
+      }
+    } catch (e) {
+      // ignore
+    }
+    harddriveManifest = out;
+    return out;
+  }
+
+  async function _harddriveLoad(name) {
+    if (!harddriveHandle) return null;
+    try {
+      const fh = await harddriveHandle.getFileHandle(name, { create: false });
+      const file = await fh.getFile();
+      return await file.text();
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async function _harddriveSave(name, content) {
+    if (!harddriveHandle) return Promise.reject(new Error('harddrive not mounted'));
+    const fh = await harddriveHandle.getFileHandle(name, { create: true });
+    const writable = await fh.createWritable();
+    await writable.write(String(content == null ? '' : content));
+    await writable.close();
+    // update manifest
+    if (!harddriveManifest) harddriveManifest = [];
+    if (harddriveManifest.indexOf(name) === -1) harddriveManifest.push(name);
+    return;
+  }
+
+  async function _harddriveDelete(name) {
+    if (!harddriveHandle) return Promise.reject(new Error('harddrive not mounted'));
+    try {
+      await harddriveHandle.removeEntry(name);
+    } catch (e) { /* ignore missing */ }
+    if (harddriveManifest) {
+      var i = harddriveManifest.indexOf(name);
+      if (i !== -1) harddriveManifest.splice(i,1);
+    }
+    return;
+  }
+
+  // Qandy server backend (very small REST convention)
+  var qandyBackend = {
+    list: async function(){
+      var r = await fetch(QANDY_URL, { method: 'GET' });
+      if (!r.ok) return [];
+      return await r.json();
+    },
+    load: async function(name){
+      var r = await fetch(QANDY_URL + '/' + encodeURIComponent(name));
+      if (!r.ok) return null;
+      return await r.text();
+    },
+    save: async function(name, content){
+      var r = await fetch(QANDY_URL + '/' + encodeURIComponent(name), { method: 'PUT', body: String(content == null ? '' : content) });
+      if (!r.ok) throw new Error('qandy save failed');
+      return;
+    },
+    delete: async function(name){
+      var r = await fetch(QANDY_URL + '/' + encodeURIComponent(name), { method: 'DELETE' });
+      if (!r.ok) throw new Error('qandy delete failed');
+      return;
+    }
+  };
+
+  // Core backend dispatchers per active DEVICE value
+  function _ensureLocalManifestLoaded() { return _loadLocalManifest(); }
+
+  async function _backend_list(device) {
+    device = device || global.DEVICE;
+    switch (device) {
+      case 'local':
+        await _ensureLocalManifestLoaded();
+        return (localManifest || []).slice();
+      case 'cookie':
+        await _loadCookieManifest();
+        return (cookieManifest || []).slice();
+      case 'echo':
+        return Object.keys(echoStore).slice();
+      case 'none':
+        return [];
+      case 'harddrive':
+        return await _harddriveList();
+      case 'qandy':
+        return await qandyBackend.list();
+      default:
+        // unknown device -> treat as none
+        return [];
+    }
+  }
+
+  async function _backend_load(device, name) {
+    device = device || global.DEVICE;
+    switch (device) {
+      case 'local': {
+        var v = localStorage.getItem(LOCAL_PREFIX + name);
+        return v === null ? null : String(v);
+      }
+      case 'cookie': {
+        var v = _cookieGet(LOCAL_PREFIX + name);
+        return v === null ? null : String(v);
+      }
+      case 'echo':
+        return echoStore.hasOwnProperty(name) ? echoStore[name] : null;
+      case 'none':
+        return null;
+      case 'harddrive':
+        return await _harddriveLoad(name);
+      case 'qandy':
+        return await qandyBackend.load(name);
+      default:
+        return null;
+    }
+  }
+
+  async function _backend_save(device, name, content) {
+    device = device || global.DEVICE;
+    switch (device) {
+      case 'local':
+        try {
+          localStorage.setItem(LOCAL_PREFIX + name, String(content == null ? '' : content));
+          if (!localManifest) localManifest = [];
+          if (localManifest.indexOf(name) === -1) localManifest.push(name);
+          _persistLocalManifest();
+          return;
+        } catch (e) { throw e; }
+      case 'cookie':
+        try {
+          _cookieSet(LOCAL_PREFIX + name, String(content == null ? '' : content), 365);
+          if (!cookieManifest) cookieManifest = [];
+          if (cookieManifest.indexOf(name) === -1) cookieManifest.push(name);
+          _persistCookieManifest();
+          return;
+        } catch (e) { throw e; }
+      case 'echo':
+        echoStore[name] = String(content == null ? '' : content);
+        return;
+      case 'none':
+        return;
+      case 'harddrive':
+        return await _harddriveSave(name, content);
+      case 'qandy':
+        return await qandyBackend.save(name, content);
+      default:
+        return;
+    }
+  }
+
+  async function _backend_delete(device, name) {
+    device = device || global.DEVICE;
+    switch (device) {
+      case 'local':
+        try {
+          localStorage.removeItem(LOCAL_PREFIX + name);
+          if (localManifest) {
+            var i = localManifest.indexOf(name);
+            if (i !== -1) { localManifest.splice(i,1); _persistLocalManifest(); }
+          }
+        } catch (e) {}
+        return;
+      case 'cookie':
+        try {
+          _cookieDel(LOCAL_PREFIX + name);
+          if (cookieManifest) {
+            var j = cookieManifest.indexOf(name);
+            if (j !== -1) { cookieManifest.splice(j,1); _persistCookieManifest(); }
+          }
+        } catch (e) {}
+        return;
+      case 'echo':
+        delete echoStore[name];
+        return;
+      case 'none':
+        return;
+      case 'harddrive':
+        return await _harddriveDelete(name);
+      case 'qandy':
+        return await qandyBackend.delete(name);
+      default:
+        return;
+    }
+  }
+
+// Updated mount(...) with strict device validation.
+// Supported devices: 'local', 'harddrive', 'qandy', 'cookie', 'echo', 'none'
+async function mount(device) {
+  // If no device supplied, return the currently active device.
+  if (typeof device === 'undefined' || device === null || String(device).trim() === '') {
+    return Promise.resolve(global.DEVICE || 'none');
+  }
+
+  // Must be a string
+  if (typeof device !== 'string') return Promise.reject(new Error('device must be string'));
+  device = device.trim();
+
+  if (!device) return Promise.reject(new Error('device required'));
+
+  // Validate against the supported device list
+  var SUPPORTED = ['local','harddrive','qandy','cookie','echo','none'];
+  if (SUPPORTED.indexOf(device) === -1) {
+    return Promise.reject(new Error('unsupported device: ' + device));
+  }
+
+  // Configure special behavior for harddrive: user gesture needed to pick directory.
+  if (device === 'harddrive') {
+    if (typeof window.showDirectoryPicker === 'function') {
+      try {
+        // Attempt to get directory handle (may require a user gesture; if it fails we ignore)
+        harddriveHandle = await window.showDirectoryPicker();
+        harddriveManifest = null; // reset cached manifest
+      } catch (e) {
+        // leave harddriveHandle as-is (null or previous), allow caller to retry from a user gesture
+        harddriveHandle = harddriveHandle || null;
+      }
+    } else {
+      // File System Access API not available; harddrive operations will error later.
+      harddriveHandle = null;
+    }
+  }
+
+  // Set global active device
+  global.DEVICE = device;
+  return Promise.resolve(device);
+}
+  // format(data):
+  // - no argument: return JSON string describing active device { device, created, files: {name: content,...} }
+  // - with argument: accepts JSON string or object describing files; clears device and writes those files
+  async function format(data) {
+    var dev = global.DEVICE || 'local';
+    if (typeof data === 'undefined') {
+      // export: gather files and return JSON string
+      var files = {};
+      var list = await _backend_list(dev);
+      for (var i = 0; i < list.length; i++) {
+        var n = list[i];
+        try {
+          var c = await _backend_load(dev, n);
+          if (c !== null) files[n] = String(c);
+        } catch (e) {
+          files[n] = null;
+        }
+      }
+      var archive = { device: dev, created: (new Date()).toISOString(), files: files };
+      return JSON.stringify(archive);
+    } else {
+      // import: data can be JSON string or object
+      var obj = data;
+      if (typeof data === 'string') {
+        try {
+          obj = JSON.parse(data);
+        } catch (e) {
+          return Promise.reject(new Error('format: data must be valid JSON string or object'));
+        }
+      }
+      if (!obj || typeof obj !== 'object' || !obj.files || typeof obj.files !== 'object') {
+        return Promise.reject(new Error('format: invalid archive format (expected .files object)'));
+      }
+      // clear device (delete all current files)
+      var curList = await _backend_list(dev);
+      for (var j = 0; j < curList.length; j++) {
+        await _backend_delete(dev, curList[j]);
+      }
+      // write provided files
+      var keys = Object.keys(obj.files);
+      for (var k = 0; k < keys.length; k++) {
+        var name = keys[k];
+        var val = obj.files[name];
+        // validate name
+        var v = _validateAndNormalize(name);
+        if (!v.ok) {
+          // skip invalid names
+          continue;
+        }
+        await _backend_save(dev, v.name, val == null ? '' : String(val));
+      }
+      return Promise.resolve(true);
+    }
+  }
+
+  // save(name,data): if name begins with '>' (first character), append to file
+  async function save(name, data) {
+    if (typeof name !== 'string') return Promise.reject(new Error('name required'));
+    var append = false;
+    if (name.charAt(0) === '>') {
+      append = true;
+      name = name.substring(1);
+    }
+    var v = _validateAndNormalize(name);
+    if (!v.ok) return Promise.reject(new Error('save: invalid filename (' + v.reason + ')'));
+    var dev = global.DEVICE || 'local';
+    if (append) {
+      // load existing content and append (with newline)
+      var existing = await _backend_load(dev, v.name);
+      var newContent = (existing === null ? '' : String(existing));
+      // append the new data as string (no automatic newline unless provided)
+      newContent = newContent + (data == null ? '' : String(data));
+      await _backend_save(dev, v.name, newContent);
+      return Promise.resolve(true);
+    } else {
+      await _backend_save(dev, v.name, data == null ? '' : String(data));
+      return Promise.resolve(true);
+    }
+  }
+
+  async function load(name) {
+    if (typeof name !== 'string') return Promise.reject(new Error('load: name required'));
+    var v = _validateAndNormalize(name);
+    if (!v.ok) return Promise.reject(new Error('load: invalid filename (' + v.reason + ')'));
+    var dev = global.DEVICE || 'local';
+    var content = await _backend_load(dev, v.name);
+    return content; // may be null
+  }
+
+  async function del(name) { return _delImpl(name); }
+  async function _delImpl(name) {
+    if (typeof name !== 'string') return Promise.reject(new Error('del: name required'));
+    var v = _validateAndNormalize(name);
+    if (!v.ok) return Promise.reject(new Error('del: invalid filename (' + v.reason + ')'));
+    var dev = global.DEVICE || 'local';
+    await _backend_delete(dev, v.name);
+    return Promise.resolve(true);
+  }
+
+  // aliases
+  var deleteFn = _delImpl;
+  var rm = _delImpl;
+
+  async function ls() {
+    var dev = global.DEVICE || 'local';
+    var arr = await _backend_list(dev);
+    return arr.join('\n');
+  }
+  var dir = ls;
+
+  async function exists(name) {
+    if (typeof name !== 'string') return Promise.resolve(false);
+    var v = _validateAndNormalize(name);
+    if (!v.ok) return Promise.resolve(false);
+    var dev = global.DEVICE || 'local';
+    var arr = await _backend_list(dev);
+    return arr.indexOf(v.name) !== -1;
+  }
+
+  // Small convenience: mountHarddrive() to trigger directory picker and mount automatically
+  async function mountHarddrivePicker() {
+    if (typeof window.showDirectoryPicker !== 'function') return Promise.reject(new Error('File System Access API not available'));
+    try {
+      harddriveHandle = await window.showDirectoryPicker();
+      harddriveManifest = null;
+      global.DEVICE = 'harddrive';
+      return Promise.resolve('harddrive');
+    } catch (e) {
+      return Promise.reject(e);
+    }
+  }
+
+  // Expose API to global scope exactly as requested
+  global.mount = mount;
+  global.format = format;
+  global.save = save;
+  global.load = load;
+  global.del = del;
+  global["delete"] = deleteFn;
+  global.rm = rm;
+  global.ls = ls;
+  global.dir = dir;
+  global.exists = exists;
+
+  // Helpful utility exposures (optional)
+  global.dos = global.dos || {};
+  global.dos._installed = true;
+  global.dos.mountHarddrivePicker = mountHarddrivePicker;
+  global.dos._internal = {
+    _backend_list: _backend_list,
+    _backend_load: _backend_load,
+    _backend_save: _backend_save,
+    _backend_delete: _backend_delete,
+    _validateAndNormalize: _validateAndNormalize
+  };
+
+  // Initialize default device
+  global.DEVICE = global.DEVICE || 'local';
+
+// Add a "Pick folder" button and mount on click
+const btn = document.createElement('button');
+btn.textContent = 'Pick folder to mount as harddrive';
+btn.style.position = 'fixed';
+btn.style.top = '8px';
+btn.style.right = '8px';
+btn.style.zIndex = 9999;
+btn.onclick = async function() {
+  try {
+    // mount('harddrive') will prompt the directory picker inside this user click
+    const dev = await mount('harddrive');
+    alert('Mounted device: ' + dev + '\nNow run ls() or load("file.txt")');
+  } catch (err) {
+    alert('Mount failed: ' + (err && err.message ? err.message : err));
+  }
+};
+document.body.appendChild(btn);
+
+
+})(window);

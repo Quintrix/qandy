@@ -267,3 +267,10 @@ body { background-color: #333 }
 .qandy-cell.ansi-bg-106 { --bg: #00ffff; background-color: var(--bg); }
 .qandy-cell.ansi-bg-107 { --bg: #ffffff; background-color: var(--bg); }
 
+/* Improve touch behavior */
+.k1, .k2, .k3, [role="button"], button {
+  touch-action: manipulation;                /* hints to browsers to avoid double-tap zoom */
+  -webkit-tap-highlight-color: rgba(0,0,0,0);/* remove ugly highlight (optional) */
+  -ms-touch-action: manipulation;
+}
+html { -webkit-text-size-adjust: 100%; }     /* keep text size stable across zoom/text adjustments */

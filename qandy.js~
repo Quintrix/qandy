@@ -560,8 +560,48 @@ function button(b, event) {
   // unhandled promise rejections
   window.addEventListener('unhandledrejection', function(evt) {
     try {
-     _
+      if (!QANDY_CONSOLE_ENABLED) {
+        try { if (typeof evt.preventDefault === 'function') evt.preventDefault(); } catch (e) {}
+        return;
+      }
+      var reason = evt && evt.reason ? evt.reason : 'unknown reason';
+      var msg = '[UNHANDLED REJECTION] ' + safeFormat(reason);
+      msg = truncate(msg);
+      qandyPrintLine('ERROR', msg);
+    } catch (e) {
+      _origConsole.error('qandy rejection handler failed', e);
+    }
+  }, true);
 
+  // Control API that also keeps global devteam in sync
+  window.qandyConsole = {
+    enable: function() {
+      QANDY_CONSOLE_ENABLED = true;
+      try { window.devteam = true; } catch (e) {}
+    },
+    disable: function() {
+      QANDY_CONSOLE_ENABLED = false;
+      try { window.devteam = false; } catch (e) {}
+    },
+    installed: true,
+    isEnabled: function() { return !!QANDY_CONSOLE_ENABLED; }
+  };
+
+  // keep devteam and QANDY_CONSOLE_ENABLED in sync if devteam changes later
+  try {
+    Object.defineProperty(window, '_qandy_devteam_watcher_', {
+      configurable: true,
+      enumerable: false,
+      get: function() { return QANDY_CONSOLE_ENABLED; },
+      set: function(v) {
+        QANDY_CONSOLE_ENABLED = !!v;
+        try { window.devteam = !!v; } catch (e) {}
+      }
+    });
+  } catch (e) {
+    // ignore if defineProperty fails in some contexts
+  }
+})();
 
 document.addEventListener('keydown', function (event) {
  if (event.keycode === 32) { event.preventDefault(); }

@@ -10,7 +10,7 @@ body { background-color: #333 }
   top: 64px;  
   width: 256px; 
   height: 384px; 
-  z-index: 254;     
+  z-index: 254;     I think it appeared after 
   /* Font stack optimized for readability with extended character support */
   /* Priority: Courier (readable) -> System monospace with Unicode -> Generic fallback */
   font-family: 'Courier New', Courier, 'Consolas', 'DejaVu Sans Mono', 'Liberation Mono', 'Menlo', Monaco, monospace;
@@ -18,7 +18,7 @@ body { background-color: #333 }
   font-weight: normal;
   color: #fff;
   background-color: #000;
-  overflow-y: scroll;
+  overflow-y: hidden;
   overflow-x: hidden;
   padding: 4px;
   line-height: 1.2;
