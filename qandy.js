@@ -931,6 +931,13 @@ CURBAUD=9600; CURSOR=4; pokeCursorOn();
 text="\n[cyan]Qandy Pocket\nComputer v1.j\n\n[yellow]Prototype Release\n[white]\n";
 print(text);
 
+(async function(){
+  if (await exists('autoexec.js')) {
+    const txt = await load('autoexec.js');
+    if (txt !== null) executeCode(txt);    
+  }
+})(); 
+
 // system ready
 
 mySearch=location.search.substr(1).split("&")

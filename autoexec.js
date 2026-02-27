@@ -1,0 +1,4 @@
+
+CURSOR=5;
+CURFG=47;
+CURBG=30;

@@ -39,7 +39,7 @@ var CURANSI = true; // cursor text ANSI on
 var CURFG = 37;     // cursor text fg color white
 var CURBG = 40;     // cursor text bg color black
 var CURATTR = 0;    // cursor text attr (not including color)
-var CURBAUD = 2400;    // baud rate to display text
+var CURBAUD = 9600;    // baud rate to display text
 
 // video.js
 var W=32; // screen width
@@ -255,10 +255,7 @@ var keyboardData = [
 ];
 
 // dos.js
-var device = "local";
-var RAM="";           // Current file content in memory
-var RAMFILE="";       // Current filename loaded in RAM
-var RAMTYPE="";       // Current file type (js, txt, etc)
+var DEVICE = "local"; // default device, browser localStorage
 
 // stray code
 var paginationEnabled = true;  // Enable/disable pagination feature
