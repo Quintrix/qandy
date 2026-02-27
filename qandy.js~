@@ -324,7 +324,7 @@ function button(b, event) {
               } else {
                 executeCode(LINE);
                 pokeCursorOn();
-                LINE=""; CURP = 0;
+                CURP = 0;
                 LINEX = CURX; LINEY = CURY;
                 return;
               }
