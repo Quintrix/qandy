@@ -3,99 +3,282 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Qandy — Instructions (iframe)</title>
+<title>Qandy — Instructions Viewer</title>
 <style>
-  :root{ --outer-border:#333; --bg:#000; --fg:#ddd; --mono: "Courier New", Courier, monospace; }
-  body{ margin:0; background:var(--outer-border); padding:16px; box-sizing:border-box; font-family:var(--mono); color:var(--fg);}
-  .viewer{ background:var(--bg); padding:12px; border-radius:4px; height:calc(100vh - 32px); overflow:auto; }
-  pre.ansi{ margin:0; white-space:pre; font-family:var(--mono); font-size:15px; line-height:1.18; color:var(--fg); }
-  .toolbar{ color:#9f9fa9; font-size:13px; margin-bottom:8px; display:flex; gap:8px; align-items:center; }
-  button{ background:#111;border:1px solid #222;color:#ddd;padding:6px 8px;border-radius:6px; cursor:pointer;}
+  :root{
+    --border:#666;
+    --bg:#000;
+    --fg:#ddd;
+    --mono: "Courier New", Courier, monospace;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: var(--border); /* grey margin/border */
+    color: var(--fg);
+    font-family: var(--mono);
+  }
+
+  /* Outer box: the visible 16px border is created by the page background + an inner box with padding */
+  .display {
+    box-sizing: border-box;
+    width: 100vw;
+    height: 100vh;
+    padding: 16px;                /* visual border thickness */
+    background: var(--bg);       /* inner black display */
+    display: flex;
+    align-items: flex-start;     /* text starts at top-left like a terminal */
+    justify-content: flex-start;
+    color: var(--fg);
+    font-family: var(--mono);
+    overflow: auto;
+  }
+
+  /* Text area preserves whitespace and renders monospace */
+  pre.ansi {
+    margin: 0;
+    white-space: pre;
+    font-family: var(--mono);
+    font-size: 15px;
+    line-height: 1.1;
+    color: var(--fg);
+    width: 100%;
+    box-sizing: border-box;
+    tab-size: 4;
+  }
+
+  /* Small status line below the pre when needed */
+  .status {
+    color: #9f9fa9;
+    font-size: 12px;
+    margin-top: 8px;
+    font-family: var(--mono);
+  }
+
+  /* Buttons for quick testing (non-essential) */
+  .controls {
+    position: fixed;
+    right: 12px;
+    top: 12px;
+    z-index: 999;
+    display:flex;
+    gap:8px;
+  }
+  .controls button {
+    background: #111;
+    color: var(--fg);
+    border: 1px solid #222;
+    padding: 6px 8px;
+    border-radius: 6px;
+    font-family: var(--mono);
+    cursor: pointer;
+  }
 </style>
 </head>
 <body>
-  <div class="toolbar">
-    <div id="status">Waiting for parent to send file...</div>
-    <div style="margin-left:auto">
-      <button id="requestQandy">Request qandy.txt</button>
-      <button id="requestVideo">Request video.txt</button>
-    </div>
+  <div class="controls" aria-hidden="true">
+    <button id="clsBtn">CLS</button>
+    <button id="demoBtn">DEMO</button>
   </div>
 
-  <div class="viewer" role="region" aria-label="Qandy instructions viewer">
-    <pre id="output" class="ansi" aria-live="polite"></pre>
+  <div class="display" role="region" aria-label="Qandy instructions viewer">
+    <pre id="output" class="ansi" aria-live="polite">Coming soon...
+
+
+
+
+The Qandy Pocket Computer
+</pre>
   </div>
 
 <script>
-/* Minimal ANSI SGR renderer (same as earlier). For brevity uses same color map. */
-function escapeText(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-const ANSI_COLORS = {30:'#000',31:'#aa0000',32:'#00aa00',33:'#aa5500',34:'#0000aa',35:'#aa00aa',36:'#00aaaa',37:'#aaaaaa',90:'#555555',91:'#ff5555',92:'#55ff55',93:'#ffff55',94:'#5555ff',95:'#ff55ff',96:'#55ffff',97:'#ffffff'};
-function ansiColorFor(code){ if(code in ANSI_COLORS) return ANSI_COLORS[code]; if(code>=40&&code<=47) return ANSI_COLORS[code-10]; if(code>=100&&code<=107) return ANSI_COLORS[code-10]; return null; }
+/* Lightweight ANSI SGR renderer and simple print()/showText()/cls() API.
+   - print(text) appends ANSI-aware text to the display.
+   - showText(text) replaces the whole display with provided ANSI text.
+   - cls() clears the display.
+   - Parent pages may postMessage into this frame:
+       parent.postMessage({ __qandy:true, type:'print', text: '...' }, '*');
+       parent.postMessage({ __qandy:true, type:'file', content: '...' }, '*'); // replaces whole display
+       parent.postMessage({ __qandy:true, type:'clear' }, '*');
+*/
+
+const outputEl = document.getElementById('output');
+
+// HTML-escape helper
+function escHtml(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ANSI color palette
+const ANSI_COLORS = {
+  30: '#000000', 31: '#aa0000', 32: '#00aa00', 33: '#aa5500',
+  34: '#0000aa', 35: '#aa00aa', 36: '#00aaaa', 37: '#aaaaaa',
+  90: '#555555', 91: '#ff5555', 92: '#55ff55', 93: '#ffff55',
+  94: '#5555ff', 95: '#ff55ff', 96: '#55ffff', 97: '#ffffff'
+};
+
+function ansiColor(code){
+  if (code in ANSI_COLORS) return ANSI_COLORS[code];
+  if (code >= 40 && code <= 47) return ANSI_COLORS[code - 10] || null;
+  if (code >= 100 && code <= 107) return ANSI_COLORS[code - 10] || null;
+  return null;
+}
+
 const ANSI_REGEX = /\x1b\[([0-9;]*?)m/g;
+
 function ansiToHtml(text){
-  let out='', last=0, match;
-  let state={fg:null,bg:null,bold:false,underline:false,inverse:false};
-  function styleForState(s){ let styles=[]; if(s.inverse){ if(s.bg) styles.push('color:'+s.bg); if(s.fg) styles.push('background:'+s.fg); if(!s.bg&&s.fg) styles.push('background:#000'); if(!s.fg&&s.bg) styles.push('color:#fff'); } else { if(s.fg) styles.push('color:'+s.fg); if(s.bg) styles.push('background:'+s.bg); } if(s.bold) styles.push('font-weight:700'); if(s.underline) styles.push('text-decoration:underline'); return styles.join('; '); }
-  function openSpan(s, txt){ const style = styleForState(s); return style ? `<span style="${style}">${escapeText(txt)}</span>` : escapeText(txt); }
-  while((match = ANSI_REGEX.exec(text)) !== null){
-    const idx = match.index; const chunk = text.slice(last, idx); if(chunk) out += openSpan(state, chunk);
-    let codes = match[1].length ? match[1].split(';').map(c=>c===''?0:parseInt(c,10)) : [0]; if(codes.length===0) codes=[0];
-    for(let code of codes){
-      if(code===0){ state={fg:null,bg:null,bold:false,underline:false,inverse:false}; }
-      else if(code===1) state.bold=true;
-      else if(code===22) state.bold=false;
-      else if(code===4) state.underline=true;
-      else if(code===24) state.underline=false;
-      else if(code===7) state.inverse=true;
-      else if(code===27) state.inverse=false;
-      else if((code>=30&&code<=37)||(code>=90&&code<=97)) state.fg = ansiColorFor(code);
-      else if((code>=40&&code<=47)||(code>=100&&code<=107)) state.bg = ansiColorFor(code);
-      else if(code===39) state.fg=null;
-      else if(code===49) state.bg=null;
+  let out = '';
+  let last = 0;
+  let match;
+
+  let state = { fg: null, bg: null, bold: false, underline: false, inverse: false };
+
+  function styleFor(s){
+    const styles = [];
+    if (s.inverse) {
+      if (s.bg) styles.push('color:' + s.bg);
+      if (s.fg) styles.push('background:' + s.fg);
+      if (!s.bg && s.fg) styles.push('background:#000');
+      if (!s.fg && s.bg) styles.push('color:#fff');
+    } else {
+      if (s.fg) styles.push('color:' + s.fg);
+      if (s.bg) styles.push('background:' + s.bg);
     }
+    if (s.bold) styles.push('font-weight:700');
+    if (s.underline) styles.push('text-decoration:underline');
+    return styles.join('; ');
+  }
+
+  function wrapChunk(chunk, st){
+    if (!chunk) return '';
+    const escaped = escHtml(chunk);
+    const style = styleFor(st);
+    return style ? `<span style="${style}">${escaped}</span>` : escaped;
+  }
+
+  while ((match = ANSI_REGEX.exec(text)) !== null) {
+    const idx = match.index;
+    const chunk = text.slice(last, idx);
+    out += wrapChunk(chunk, state);
+
+    // parse codes
+    let codes = match[1].length ? match[1].split(';').map(c => c === '' ? 0 : parseInt(c, 10)) : [0];
+    if (codes.length === 0) codes = [0];
+
+    for (const code of codes) {
+      if (code === 0) {
+        state = { fg: null, bg: null, bold: false, underline: false, inverse: false };
+      } else if (code === 1) {
+        state.bold = true;
+      } else if (code === 22) {
+        state.bold = false;
+      } else if (code === 4) {
+        state.underline = true;
+      } else if (code === 24) {
+        state.underline = false;
+      } else if (code === 7) {
+        state.inverse = true;
+      } else if (code === 27) {
+        state.inverse = false;
+      } else if ((code >= 30 && code <= 37) || (code >= 90 && code <= 97)) {
+        state.fg = ansiColor(code);
+      } else if ((code >= 40 && code <= 47) || (code >= 100 && code <= 107)) {
+        state.bg = ansiColor(code);
+      } else if (code === 39) {
+        state.fg = null;
+      } else if (code === 49) {
+        state.bg = null;
+      } else {
+        // ignore unsupported codes (e.g. 38;5;..)
+      }
+    }
+
     last = ANSI_REGEX.lastIndex;
   }
-  if(last < text.length) out += openSpan(state, text.slice(last));
+
+  if (last < text.length) {
+    out += wrapChunk(text.slice(last), state);
+  }
+
   return out;
 }
 
-/* UI elements */
-const statusEl = document.getElementById('status');
-const outputEl = document.getElementById('output');
-const requestQandyBtn = document.getElementById('requestQandy');
-const requestVideoBtn = document.getElementById('requestVideo');
+// Normalize newlines and append HTML to the <pre>
+function appendAnsi(text){
+  const normalized = (typeof text === 'string') ? text.replace(/\r\n/g, '\n').replace(/\r/g, '\n') : String(text || '');
+  // Convert to HTML fragments; preserve newlines (pre will keep them)
+  try {
+    const html = ansiToHtml(normalized);
+    outputEl.innerHTML += html;
+  } catch (e) {
+    // fallback
+    outputEl.textContent += normalized;
+  }
+  // keep visible bottom
+  outputEl.parentElement.scrollTop = outputEl.parentElement.scrollHeight;
+}
 
-/* Handle incoming messages from parent */
+// Public API
+function print(data){
+  appendAnsi(typeof data === 'string' ? data : String(data || ''));
+}
+function showText(text){
+  const normalized = (typeof text === 'string') ? text.replace(/\r\n/g, '\n').replace(/\r/g, '\n') : String(text || '');
+  try {
+    outputEl.innerHTML = ansiToHtml(normalized);
+  } catch (e) {
+    outputEl.textContent = normalized;
+  }
+  outputEl.parentElement.scrollTop = outputEl.parentElement.scrollHeight;
+}
+function cls(){
+  outputEl.textContent = '';
+  outputEl.parentElement.scrollTop = 0;
+}
+
+// Expose functions globally
+window.print = print;
+window.qandyPrint = print;
+window.showText = showText;
+window.cls = cls;
+
+// Listen for simple postMessage envelope from parent (optional)
 window.addEventListener('message', function(ev){
   const m = ev.data;
-  if(!m || typeof m !== 'object' || !m.__qandy) return;
-  if(m.type === 'file'){
-    const path = m.path || '(unknown)';
-    const content = typeof m.content === 'string' ? m.content : String(m.content || '');
-    statusEl.textContent = 'Showing: ' + path;
-    // normalize newlines
-    const normalized = content.replace(/\r\n/g,'\n').replace(/\r/g,'\n');
-    outputEl.innerHTML = ansiToHtml(normalized);
-  } else if(m.type === 'error'){
-    statusEl.textContent = 'Error: ' + String(m.message || '(unknown)');
-    outputEl.textContent = '';
+  if (!m || typeof m !== 'object') return;
+  if (m.__qandy !== true) return;
+
+  if (m.type === 'print') {
+    print(m.text || '');
+  } else if (m.type === 'file' || m.type === 'show') {
+    showText(m.content || m.text || '');
+  } else if (m.type === 'clear' || m.type === 'cls') {
+    cls();
   }
 }, false);
 
-/* Request parent to load a file */
-function requestFile(path){
-  statusEl.textContent = 'Requesting: ' + path;
-  // message to parent: ask it to fetch and send file contents
-  parent.postMessage({ __qandy: true, type: 'requestFile', path: path }, '*');
-}
+// Demo button: small ANSI sample
+document.getElementById('demoBtn').addEventListener('click', function(){
+  showText([
+    'QANDY INSTRUCTIONS DEMO',
+    '',
+    '\x1b[32mGreen\x1b[0m and \x1b[31mRed\x1b[0m and \x1b[93mBright Yellow\x1b[0m',
+    '',
+    'Bold: \x1b[1mON\x1b[22m  Underline: \x1b[4mON\x1b[24m  Inverse: \x1b[7mON\x1b[27m',
+    '',
+    'Links: https://example.com (links are not auto-linked)',
+    '',
+    'End of demo.'
+  ].join('\n'));
+});
 
-/* Buttons wiring */
-requestQandyBtn.addEventListener('click', ()=> requestFile('qandy.txt'));
-requestVideoBtn.addEventListener('click', ()=> requestFile('video.txt'));
+// Clear button behavior
+document.getElementById('clsBtn').addEventListener('click', cls);
 
-/* Optionally, when iframe is ready, notify parent (not strictly needed because parent posts proactively)
-   parent may prefer to wait for this message. */
-parent.postMessage({ __qandy: true, type: 'iframeReady' }, '*');
+// Initial hint (short)
+print('\x1b[90mReady — use print(\"text\") or postMessage {__qandy:true,type:\"print\",text:\"...\"}\x1b[0m\n');
 
 </script>
 </body>

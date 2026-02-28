@@ -1,66 +1,43 @@
 <!doctype html>
-<html lang="en">
+<html>
 <head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Qandy — Instructions (iframe)</title>
+<title>Fixed full-bleed display</title>
 <style>
-  :root{ --outer-border:#333; --bg:#000; --fg:#ddd; --mono: "Courier New", Courier, monospace; }
-  body{ margin:0; background:var(--outer-border); padding:16px; box-sizing:border-box; font-family:var(--mono); color:var(--fg);}
-  .viewer{ background:var(--bg); padding:12px; border-radius:4px; height:calc(100vh - 32px); overflow:auto; }
-  pre.ansi{ margin:0; white-space:pre; font-family:var(--mono); font-size:15px; line-height:1.18; color:var(--fg); }
-  .toolbar{ color:#9f9fa9; font-size:13px; margin-bottom:8px; display:flex; gap:8px; align-items:center; }
-  button{ background:#111;border:1px solid #222;color:#ddd;padding:6px 8px;border-radius:6px; cursor:pointer;}
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+  }
+
+  /* Make the display fill the viewport exactly */
+  .display {
+    padding: 16px; 
+    box-sizing: border-box;        /* include border in the size */
+    width: 100vw;                  /* full viewport width */
+    height: 100vh;                 /* full viewport height */
+    border: 16px solid #666;       /* your 16px border */
+    background: #000;              /* inner black display */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-family: monospace;
+  }
 </style>
 </head>
 <body>
-  <div class="toolbar">
-    <div id="status">Waiting for parent to send file...</div>
-    <div style="margin-left:auto">
-      <button id="requestQandy">Request qandy.txt</button>
-      <button id="requestVideo">Request video.txt</button>
-    </div>
+  <div class="display">
+
+Coming soon...
+<p>
+<br><br><br><br><br><br><br>
+The Qandy Pocket Computer
+  
   </div>
-
-  <div class="viewer" role="region" aria-label="Qandy instructions viewer">
-    <pre id="output" class="ansi" aria-live="polite"></pre>
-  </div>
-
-<script>
-/* Minimal ANSI SGR renderer (same as earlier). For brevity uses same color map. */
-function escapeText(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-const ANSI_COLORS = {30:'#000',31:'#aa0000',32:'#00aa00',33:'#aa5500',34:'#0000aa',35:'#aa00aa',36:'#00aaaa',37:'#aaaaaa',90:'#555555',91:'#ff5555',92:'#55ff55',93:'#ffff55',94:'#5555ff',95:'#ff55ff',96:'#55ffff',97:'#ffffff'};
-function ansiColorFor(code){ if(code in ANSI_COLORS) return ANSI_COLORS[code]; if(code>=40&&code<=47) return ANSI_COLORS[code-10]; if(code>=100&&code<=107) return ANSI_COLORS[code-10]; return null; }
-const ANSI_REGEX = /\x1b\[([0-9;]*?)m/g;
-function ansiToHtml(text){
-  let out='', last=0, match;
-  let state={fg:null,bg:null,bold:false,underline:false,inverse:false};
-  function styleForState(s){ let styles=[]; if(s.inverse){ if(s.bg) styles.push('color:'+s.bg); if(s.fg) styles.push('background:'+s.fg); if(!s.bg&&s.fg) styles.push('background:#000'); if(!s.fg&&s.bg) styles.push('color:#fff'); } else { if(s.fg) styles.push('color:'+s.fg); if(s.bg) styles.push('background:'+s.bg); } if(s.bold) styles.push('font-weight:700'); if(s.underline) styles.push('text-decoration:underline'); return styles.join('; '); }
-  function openSpan(s, txt){ const style = styleForState(s); return style ? `<span style="${style}">${escapeText(txt)}</span>` : escapeText(txt); }
-  while((match = ANSI_REGEX.exec(text)) !== null){
-    const idx = match.index; const chunk = text.slice(last, idx); if(chunk) out += openSpan(state, chunk);
-    let codes = match[1].length ? match[1].split(';').map(c=>c===''?0:parseInt(c,10)) : [0]; if(codes.length===0) codes=[0];
-    for(let code of codes){
-      if(code===0){ state={fg:null,bg:null,bold:false,underline:false,inverse:false}; }
-      else if(code===1) state.bold=true;
-      else if(code===22) state.bold=false;
-      else if(code===4) state.underline=true;
-      else if(code===24) state.underline=false;
-      else if(code===7) state.inverse=true;
-      else if(code===27) state.inverse=false;
-      else if((code>=30&&code<=37)||(code>=90&&code<=97)) state.fg = ansiColorFor(code);
-      else if((code>=40&&code<=47)||(code>=100&&code<=107)) state.bg = ansiColorFor(code);
-      else if(code===39) state.fg=null;
-      else if(code===49) state.bg=null;
-    }
-    last = ANSI_REGEX.lastIndex;
-  }
-  if(last < text.length) out += openSpan(state, text.slice(last));
-  return out;
-}
-
-
-
-</script>
 </body>
 </html>
+
+
+
+  

@@ -31,6 +31,11 @@
  *  - Clipboard is session-only in-memory and accessible via dosCopy/dosPaste behavior.
  */
 
+print("Instal QDOS");
+
+
+
+
 (function (global) {
   'use strict';
 
