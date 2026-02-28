@@ -1,6 +1,4 @@
 /**
- * Qandy PC DOS - fresh rewrite (no backwards compatibility)
- *
  * Exposed globals (async functions returning Promises unless noted):
  *  - dosMount(device)
  *  - dosFormat(data)
@@ -15,21 +13,16 @@
  *  - dosUpload(optionalDest)
  *  - dosDelete(file)
  *  - dosExists(file)
- *
- * Global var:
- *  - DEVICE (string) - active device name; defaults to "local"
- *
- * Devices supported: local, harddrive, server (stub), echo, none
- *
- * Filenames: validated per VALID_NAME_RE and MAX_NAME_BYTES
- * Data: plain UTF-8 text. Use base64 for binary if desired.
- *
- * Notes:
- *  - All file I/O is async and may prompt the user (harddrive picker or upload/save-as).
- *  - dosUpload opens native file picker and saves chosen file into the active device.
- *  - dosDownload opens save-as to let the user download a file from the active device.
- *  - Clipboard is session-only in-memory and accessible via dosCopy/dosPaste behavior.
  */
+
+var DOS=false;            // if true, user has confirmed DOS install 
+var DEVICE = "local"; // default device, browser localStorage
+
+print("\nQandy Disk Operating System:\n");
+print("\nThese functions save and load files to your brower\'s localStorage.\n");
+print("\nDo not use Qandy DOS to store sensitive information such as names and passwords.\n");
+print("\nThe Qandy Pocket Computer\'s security is limited to your browser\'s security, we\'ve do the best we can with what we have to work with.\n");
+print("\nTo complete installation, input:\n  confirmDOS()\n\n");
 
 (function (global) {
   'use strict';

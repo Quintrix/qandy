@@ -1,0 +1,42 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>Fixed full-bleed display</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+  }
+
+  /* Make the display fill the viewport exactly */
+  .display {
+    padding: 16px; 
+    box-sizing: border-box;        /* include border in the size */
+    width: 100vw;                  /* full viewport width */
+    height: 100vh;                 /* full viewport height */
+    border: 16px solid #666;       /* your 16px border */
+    background: #000;              /* inner black display */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-family: monospace;
+  }
+</style>
+</head>
+<body>
+  <div class="display">
+  <p><img src="qandy.png"><p>
+  &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; Coming soon...
+  <p><br><br><br><br><br><br><br><br>
+  The Qandyland Server!
+  <p><br><br>
+  </div>
+</body>
+</html>
+
+
+
+  
