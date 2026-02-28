@@ -323,12 +323,16 @@ function button(b, event) {
                 LINEX = 0; LINEY = 0;
               } else {
                 executeCode(LINE);
-                LINE = "";
-                CURP = 0;
+                pokeCursorOn();
+                LINE=""; CURP = 0;
                 LINEX = CURX; LINEY = CURY;
+                return;
               }
               pokeRefresh();
             }
+            
+            
+            
           }
         } else if (l) {
           // Insert printable character(s)
@@ -428,16 +432,19 @@ function button(b, event) {
   pokeCursorOn();
 }
 
-// Qandy Console: route console messages and uncaught errors/rejections into the Qandy display.
 (function installQandyConsole() {
   if (window.__QANDY_CONSOLE_INSTALLED__) return;
   window.__QANDY_CONSOLE_INSTALLED__ = true;
 
-  // Config
-  var QANDY_CONSOLE_ENABLED = true;         // flip to false to disable routing
-  var MAX_MSG_LENGTH = 2000;                // truncate long messages
-  var MAX_STACK_LINES = 8;                  // limit stack lines printed
+  // Config: default enabled state is driven by the global devteam/DEVTEAM flag.
+  var MAX_MSG_LENGTH = 2000;
+  var MAX_STACK_LINES = 8;
   var SHOW_STACK_FOR_ERRORS = true;
+
+  // drive enabled state from global devteam/DEVTEAM (use existing project flag)
+  var QANDY_CONSOLE_ENABLED = (typeof window.devteam !== 'undefined')
+    ? !!window.devteam
+    : (typeof window.DEVTEAM !== 'undefined' ? !!window.DEVTEAM : true);
 
   // keep originals
   var _origConsole = {
@@ -455,9 +462,8 @@ function button(b, event) {
       }
       if (typeof val === 'string') return val;
       if (typeof val === 'object' && val !== null) {
-        // Try JSON, fallback to toString
         try {
-          return JSON.stringify(val, replacer, 2);
+          return JSON.stringify(val, replacer(), 2);
         } catch (e) {
           try { return String(val); } catch (e2) { return '[object]'; }
         }
@@ -481,50 +487,40 @@ function button(b, event) {
     };
   }
 
-  // Truncate long messages
   function truncate(s) {
     if (typeof s !== 'string') s = String(s);
     if (s.length <= MAX_MSG_LENGTH) return s;
     return s.slice(0, MAX_MSG_LENGTH) + '... [truncated ' + (s.length - MAX_MSG_LENGTH) + ' chars]';
   }
 
-  // Avoid reentrancy if print() itself triggers errors
   var inQandyPrint = false;
 
-  // Send to Qandy display (safe wrapper)
   function qandyPrintLine(prefix, msg) {
+    // If globally disabled, do nothing (don't call print)
     if (!QANDY_CONSOLE_ENABLED || typeof print !== 'function') return;
     try {
       if (inQandyPrint) {
-        // In reentrant situation, fallback to native console to avoid infinite loop
         _origConsole.log(prefix + ' ' + msg);
         return;
       }
       inQandyPrint = true;
-      // Use print() but keep it text-only (no HTML). Append newline to mimic console.
-      // trim trailing spaces/newlines for neatness
       var out = prefix ? (prefix + ' ' + msg) : msg;
       out = out.replace(/\r/g, '');
-      // print() may expect ANSI sequences; we simply send text and newline.
       print(out + "\n");
     } catch (e) {
-      // fallback to original console to ensure we don't swallow errors
-      //_origConsole.log('qandyPrintLine error: ' + safeFormat(e));
+      // swallow to avoid recursion loops
     } finally {
       inQandyPrint = false;
     }
   }
 
-  // Wrap console methods
   function wrapConsoleMethod(name, prefix) {
     console[name] = function() {
       try {
-        // still call original console for developer tools
+        // always call original console for devtools visibility
         _origConsole[name].apply(console, arguments);
       } catch (e) {}
       if (!QANDY_CONSOLE_ENABLED) return;
-
-      // format args
       var parts = [];
       for (var i = 0; i < arguments.length; i++) parts.push(safeFormat(arguments[i]));
       var msg = parts.join(' ');
@@ -541,16 +537,19 @@ function button(b, event) {
   // window.onerror for uncaught exceptions
   window.addEventListener('error', function(evt) {
     try {
-      // evt: ErrorEvent { message, filename, lineno, colno, error }
+      // If console routing is disabled, prevent default browser reporting and return.
+      if (!QANDY_CONSOLE_ENABLED) {
+        try { if (typeof evt.preventDefault === 'function') evt.preventDefault(); } catch (e) {}
+        return;
+      }
+
       var message = String(evt.message || 'Error');
       var file = evt.filename || '';
       var pos = ((typeof evt.lineno === 'number') ? (':' + evt.lineno + (evt.colno ? ':' + evt.colno : '')) : '');
       var header = '[UNCAUGHT ERROR] ' + message + (file ? (' @ ' + file + pos) : '');
-      // prefer stack if available
       var stack = (evt.error && evt.error.stack) ? String(evt.error.stack) : '';
       if (!stack && evt.error) stack = safeFormat(evt.error);
       if (stack) {
-        // limit stack lines
         var lines = stack.split(/\r?\n/).slice(0, MAX_STACK_LINES).join('\n');
         qandyPrintLine('ERROR', truncate(header + '\n' + lines));
       } else {
@@ -559,11 +558,15 @@ function button(b, event) {
     } catch (e) {
       _origConsole.error('qandy error handler failed', e);
     }
-  });
+  }, true);
 
   // unhandled promise rejections
   window.addEventListener('unhandledrejection', function(evt) {
     try {
+      if (!QANDY_CONSOLE_ENABLED) {
+        try { if (typeof evt.preventDefault === 'function') evt.preventDefault(); } catch (e) {}
+        return;
+      }
       var reason = evt && evt.reason ? evt.reason : 'unknown reason';
       var msg = '[UNHANDLED REJECTION] ' + safeFormat(reason);
       msg = truncate(msg);
@@ -571,16 +574,37 @@ function button(b, event) {
     } catch (e) {
       _origConsole.error('qandy rejection handler failed', e);
     }
-  });
+  }, true);
 
-  // expose small control API
+  // Control API that also keeps global devteam in sync
   window.qandyConsole = {
-    enable: function() { QANDY_CONSOLE_ENABLED = true; },
-    disable: function() { QANDY_CONSOLE_ENABLED = false; },
-    installed: true
+    enable: function() {
+      QANDY_CONSOLE_ENABLED = true;
+      try { window.devteam = true; } catch (e) {}
+    },
+    disable: function() {
+      QANDY_CONSOLE_ENABLED = false;
+      try { window.devteam = false; } catch (e) {}
+    },
+    installed: true,
+    isEnabled: function() { return !!QANDY_CONSOLE_ENABLED; }
   };
-})();
 
+  // keep devteam and QANDY_CONSOLE_ENABLED in sync if devteam changes later
+  try {
+    Object.defineProperty(window, '_qandy_devteam_watcher_', {
+      configurable: true,
+      enumerable: false,
+      get: function() { return QANDY_CONSOLE_ENABLED; },
+      set: function(v) {
+        QANDY_CONSOLE_ENABLED = !!v;
+        try { window.devteam = !!v; } catch (e) {}
+      }
+    });
+  } catch (e) {
+    // ignore if defineProperty fails in some contexts
+  }
+})();
 
 document.addEventListener('keydown', function (event) {
  if (event.keycode === 32) { event.preventDefault(); }
@@ -745,22 +769,51 @@ function executeCode(code) {
   try {
     var trimmed = String(code).trim();
     var simpleNameRE = /^[$A-Za-z_][$A-Za-z0-9_]*(?:\s*\.\s*[$A-Za-z_][$A-Za-z0-9_]*)*$/;
+
+    function handleResult(result) {
+      try {
+        if (result === undefined) return;
+        // If result is a Promise, wait for it and print the resolved value or error
+        if (result && typeof result.then === 'function') {
+          result.then(function(res) {
+            try {
+              if (res !== undefined) { print(String(res) + "\n\n"); }
+            } catch (e) {
+              print("Error printing promise result: " + (e && e.message ? e.message : String(e)) + "\n\n");
+            }
+          }).catch(function(err) {
+            try {
+              print("Promise rejection: " + (err && err.message ? err.message : String(err)) + "\n\n");
+            } catch (e) {
+              /* swallow */
+            }
+          });
+          return;
+        }
+        // Non-promise: print synchronously
+        print(String(result) + "\n\n");
+      } catch (e) {
+        try { print("Error handling result: " + e.message + "\n\n"); } catch (ee) {}
+      }
+    }
+
     if (simpleNameRE.test(trimmed)) {
       try {
         var value = eval(trimmed);
       } catch (e) {
-        print("Error: " + e.message + "\n\n");
+        print("EI assume trror: " + e.message + "\n\n");
         return false;
       }
       if (typeof value === "function") {
-        print("ERROR: use: "+trimmed+"()\n\n");
+        print("ERROR: use: " + trimmed + "()\n\n");
         return true;
       }
-      if (value !== undefined) { print(String(value) + "\n\n"); }
+      handleResult(value);
       return true;
     }
+
     var result = eval(code);
-    if (result !== undefined) { print(String(result) + "\n\n"); }
+    handleResult(result);
     return true;
   } catch (error) {
     print("Error: " + error.message + "\n\n");
@@ -866,7 +919,7 @@ function print(t) {
   text = text.replace(/\[magenta\]/g, ANSImagenta);
   text = text.replace(/\[cyan\]/g, ANSIcyan);
   text = text.replace(/\[white\]/g, ANSIwhite);
-
+  
   // enqueue the print and start processor
   var q = window._qandy_print_queue;
   return new Promise(function(resolve) {
@@ -879,8 +932,169 @@ function print(t) {
 
 CURBAUD=9600; CURSOR=4; pokeCursorOn();
 
-text="\n[cyan]Qandy Pocket\nComputer v1.j\n\n[yellow]Prototype Release\n[white]\n";
-print(text);
+pokeRefresh();
+
+rs232.init({
+  guestWindow: null,               // will connect later when guest iframe is created
+  guestOrigin: '*',                // set to the guest origin in production (e.g. 'https://guest.qandy.example')
+  allowWildcardOrigin: true,       // dev only; disable in prod
+  defaultTimeoutMs: 15000,
+  maxConcurrentRequests: 64,
+  maxCommandsPerSecond: 200,
+  auditLogger: function(action, details) {
+    // optional: write to console or to an audit store
+    console.log('[AUDIT]', action, details);
+  },
+  permissionChecker: async function(method, args, meta) {
+    // default policy: allow safe read calls, require confirmation for destructive calls.
+    const destructive = ['dosSave','dosDelete','dosUpload','dosMount','format'];
+    if (destructive.includes(method)) {
+      return { allowed: false, requireUserGesture: true, prompt: { title: 'Guest requests permission', body: 'The guest wants to perform a potentially destructive operation: ' + method } };
+    }
+    // allow reads
+    return { allowed: true };
+  }
+});
+
+// call once during startup
+rs232.onRequest(async function(req) {
+  // req: { id, method, args, meta, origin }
+  const method = String(req.method || '');
+  const args = Array.isArray(req.args) ? req.args : [];
+
+  try {
+    switch (method) {
+      case 'dosList':
+        if (typeof dosList === 'function') {
+          const list = await dosList();
+          return { ok: true, result: list };
+        }
+        return { ok: false, error: 'dosList not available' };
+
+      case 'dosLoad':
+        if (!args[0]) return { ok:false, error:'filename required' };
+        if (typeof dosLoad === 'function') {
+          const content = await dosLoad(args[0]);
+          return { ok:true, result: content };
+        }
+        return { ok:false, error:'dosLoad not available' };
+
+      case 'dosSave':
+        if (!args[0]) return { ok:false, error:'filename required' };
+        if (typeof dosSave === 'function') {
+          await dosSave(args[0], args[1] || '');
+          return { ok:true, result:true };
+        }
+        return { ok:false, error:'dosSave not available' };
+
+      case 'dosDelete':
+        if (!args[0]) return { ok:false, error:'filename required' };
+        if (typeof dosDelete === 'function') {
+          await dosDelete(args[0]);
+          return { ok:true, result:true };
+        }
+        return { ok:false, error:'dosDelete not available' };
+
+      // add more mappings as needed: dosMount, dosUpload etc.
+
+      default:
+        // return undefined to let other handlers run or to produce unknown-method
+        return undefined;
+    }
+  } catch (e) { 
+    return { ok: false, error: String(e) };
+  }
+});
+
+// === rs232 guest -> host handlers ===
+// Put this after cls() / screen init and after rs232.init(...) during startup.
+// It registers once and maps guest RPCs to the existing dos.* APIs.
+
+(function installRs232Handlers() {
+  if (!window.rs232 || typeof rs232.onRequest !== 'function') {
+    console.warn('rs232 not available yet; handlers not installed');
+    return;
+  }
+  // idempotent install (safety if this block gets evaluated twice)
+  if (window._qandy_rs232_handlers_installed) return;
+  window._qandy_rs232_handlers_installed = true;
+
+  rs232.onRequest(async function (req) {
+    // req: { id, method, args, meta, origin }
+    const method = String(req.method || '');
+    const args = Array.isArray(req.args) ? req.args : [];
+    try {
+      switch (method) {
+        case 'dosList':
+        case 'list': {
+          if (typeof dosList === 'function') {
+            const list = await dosList();
+            return { ok: true, result: list };
+          }
+          return { ok: false, error: 'dosList not available' };
+        }
+
+        case 'dosLoad': {
+          const name = args[0];
+          if (!name) return { ok:false, error:'filename required' };
+          if (typeof dosLoad === 'function') {
+            const content = await dosLoad(name);
+            return { ok:true, result: content };
+          }
+          return { ok:false, error:'dosLoad not available' };
+        }
+
+        case 'dosSave': {
+          const name = args[0];
+          const data = args[1] != null ? args[1] : '';
+          if (!name) return { ok:false, error:'filename required' };
+          if (typeof dosSave === 'function') {
+            await dosSave(name, data);
+            return { ok:true, result: true };
+          }
+          return { ok:false, error:'dosSave not available' };
+        }
+
+        case 'dosDelete': {
+          const name = args[0];
+          if (!name) return { ok:false, error:'filename required' };
+          if (typeof dosDelete === 'function') {
+            await dosDelete(name);
+            return { ok:true, result: true };
+          }
+          return { ok:false, error:'dosDelete not available' };
+        }
+
+        // Add any other dos.* mappings you need here:
+        // case 'dosMount': ...
+        // case 'dosUpload': ...
+
+        default:
+          // Return undefined to let other handlers run, or produce unknown-method in rs232
+          return undefined;
+      }
+    } catch (err) {
+      // Never throw — return structured error
+      console.warn('rs232 handler error for', method, err);
+      return { ok: false, error: String(err) };
+    }
+  });
+})();
+
+
+
+//
+// system ready
+//
+
+print("\n[cyan]Qandy Pocket\nComputer v1.j\n\n[yellow]Prototype Release\nUse at your own risk!\n[white]\n");
+
+//(async function(){
+//  if (await dosExists('autoexec.js')) {
+//    const txt = await dosLoad('autoexec.js');
+//    if (txt !== null) executeCode(txt);    
+//  }
+//})(); 
 
 // system ready
 

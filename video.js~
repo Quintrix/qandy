@@ -1049,13 +1049,13 @@ function cursorVarsToAttr(vars) {
 
 window.pokeScroll = function(n) {
   // Hide cursor while we mutate screen state
-  // if (typeof pokeCursorOff === 'function') try { pokeCursorOff(); } catch (e) {}
+  if (typeof pokeCursorOff === 'function') try { pokeCursorOff(); } catch (e) {}
 
   if (typeof n === 'undefined') n = 0;
   n = Number(n) || 0;
   if (n === 0) {
     // restore cursor and exit
-    // if (typeof pokeCursorOn === 'function') try { pokeCursorOn(); } catch (e) {}
+    if (typeof pokeCursorOn === 'function') try { pokeCursorOn(); } catch (e) {}
     return true;
   }
 
@@ -1195,7 +1195,7 @@ window.pokeScroll = function(n) {
   LINEX = Math.max(0, Math.min(W - 1, (typeof LINEX === 'number' ? LINEX : 0)));
 
   // Restore cursor
-  // if (typeof pokeCursorOn === 'function') try { pokeCursorOn(); } catch (e) {}
+  if (typeof pokeCursorOn === 'function') try { pokeCursorOn(); } catch (e) {}
 
   return true;
 };

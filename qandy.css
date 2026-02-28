@@ -10,7 +10,7 @@ body { background-color: #333 }
   top: 64px;  
   width: 256px; 
   height: 384px; 
-  z-index: 254;     
+  z-index: 254;     I think it appeared after 
   /* Font stack optimized for readability with extended character support */
   /* Priority: Courier (readable) -> System monospace with Unicode -> Generic fallback */
   font-family: 'Courier New', Courier, 'Consolas', 'DejaVu Sans Mono', 'Liberation Mono', 'Menlo', Monaco, monospace;
@@ -18,7 +18,7 @@ body { background-color: #333 }
   font-weight: normal;
   color: #fff;
   background-color: #000;
-  overflow-y: scroll;
+  overflow-y: hidden;
   overflow-x: hidden;
   padding: 4px;
   line-height: 1.2;
@@ -267,3 +267,10 @@ body { background-color: #333 }
 .qandy-cell.ansi-bg-106 { --bg: #00ffff; background-color: var(--bg); }
 .qandy-cell.ansi-bg-107 { --bg: #ffffff; background-color: var(--bg); }
 
+/* Improve touch behavior */
+.k1, .k2, .k3, [role="button"], button {
+  touch-action: manipulation;                /* hints to browsers to avoid double-tap zoom */
+  -webkit-tap-highlight-color: rgba(0,0,0,0);/* remove ugly highlight (optional) */
+  -ms-touch-action: manipulation;
+}
+html { -webkit-text-size-adjust: 100%; }     /* keep text size stable across zoom/text adjustments */

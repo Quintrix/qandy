@@ -1,5 +1,16 @@
 <!DOCTYPE html>
 <html><head>
+<link rel="icon" href="/i/Jc.png" sizes="32x32" type="image/png">
+<link rel="icon" href="/i/Jc.png" sizes="32x32" type="image/png">
+<link rel="shortcut icon" href="/i/Jc.png" type="image/png"> <!-- legacy fallback -->
+<link rel="apple-touch-icon" href="/i/Jc.png"> <!-- iOS home screen icon -->
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0a0a0a">
+<!-- iOS -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<link rel="apple-touch-icon" href="/icons/qandy-192.png">
 <script>
 if (typeof window.print === 'function' && window.print.toString().indexOf('[native code]') !== -1) { window._native_print = window.print; window.print = function() {}; }
 </script>
@@ -18,7 +29,7 @@ var SOUND=false;       // enable/disable sound card
 var SOUND=true;       // enable/disable sound card
 
 // qandy.js
-var devteam=1;  // developer mode
+var DEVTEAM=0;  // developer mode
 var RUN="";     // current script running starting with qandy.js 
 var RUNIN="";   // input mode set by running script, line or key
 var RUNOUT="";  // output display set by running script, gfx or txt
@@ -38,7 +49,7 @@ var CURANSI = true; // cursor text ANSI on
 var CURFG = 37;     // cursor text fg color white
 var CURBG = 40;     // cursor text bg color black
 var CURATTR = 0;    // cursor text attr (not including color)
-var CURBAUD = 2400;    // baud rate to display text
+var CURBAUD = 9600;    // baud rate to display text
 
 // video.js
 var W=32; // screen width
@@ -87,6 +98,7 @@ var ANSIblue_bright = "\x1b[94m";
 var ANSImagenta_bright = "\x1b[95m";
 var ANSIcyan_bright = "\x1b[96m";
 var ANSIwhite_bright = "\x1b[97m";
+
 
 // Background (normal)
 var ANSIbgblack = "\x1b[40m";
@@ -254,10 +266,7 @@ var keyboardData = [
 ];
 
 // dos.js
-var device = "local";
-var RAM="";           // Current file content in memory
-var RAMFILE="";       // Current filename loaded in RAM
-var RAMTYPE="";       // Current file type (js, txt, etc)
+var DEVICE = "local"; // default device, browser localStorage
 
 // stray code
 var paginationEnabled = true;  // Enable/disable pagination feature
@@ -333,6 +342,8 @@ var inInputMode = false;       // True when processing user input (prevents pagi
     { src: 'gfx.js', name: 'Graphics' },
     { src: 'keyboard.js', name: 'Keyboard' },
     { src: 'dos.js', name: 'DOS', optional: true },
+    { src: 'rs232.js', name: 'rs-232', optional: true },
+    { src: 'execute.js', name: 'execute', optional: true },
     { src: 'qandy.js', name: 'Qandy Core' }
   ];
 
@@ -419,6 +430,8 @@ var inInputMode = false;       // True when processing user input (prevents pagi
     overlay.style.background = '#000';
     overlay.style.color = '#bbb';
     overlay.style.border = '4px solid #bbb';
+    overlay.style.overflow = 'hidden';   /* hide any internal scrollbars */
+    overlay.style.direction = 'ltr';     /* ensure scrollbar (if shown) is on the right */
     overlay.style.display = 'flex';
     overlay.style.alignItems = 'center';
     overlay.style.justifyContent = 'center';
@@ -429,7 +442,7 @@ var inInputMode = false;       // True when processing user input (prevents pagi
     overlay.style.cursor = 'pointer';
     overlay.style.userSelect = 'none';
     overlay.style.whiteSpace = 'pre-wrap';
-    overlay.textContent = 'QANDY\nPOCKET\nCOMPUTER';
+    overlay.textContent = 'QANDY\nPOCKET\nCOMPUTER';  
 
     // Center small helper text beneath main label
     var helper = document.createElement('div');
