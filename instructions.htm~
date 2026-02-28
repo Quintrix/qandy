@@ -1,82 +1,102 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Qandy Instructions</title>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Qandy — Instructions (iframe)</title>
 <style>
-  :root{ --bg:#070707; --fg:#ddd; --muted:#9F9FA9; }
-  html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:monospace,ui-monospace,system-ui; font-size:13px;}
-  .wrap{display:flex;flex-direction:column;height:100%;}
-  .toolbar{padding:8px 10px;border-bottom:1px solid #0b0b0b;display:flex;gap:8px;align-items:center;background:#0a0a0a;}
-  .files{display:flex;flex-wrap:wrap;gap:6px;}
-  .files button{background:#0b0b0b;color:var(--muted);border:1px solid #111;padding:6px 8px;border-radius:4px;cursor:pointer;}
-  .files button.active{background:#1e73ff;color:#fff;border-color:#1e73ff;}
-  #content{padding:12px;overflow:auto;white-space:pre-wrap;flex:1;background:#050505;border-top:1px solid #000;}
-  .small{font-size:12px;color:var(--muted);}
+  :root{ --outer-border:#333; --bg:#000; --fg:#ddd; --mono: "Courier New", Courier, monospace; }
+  body{ margin:0; background:var(--outer-border); padding:16px; box-sizing:border-box; font-family:var(--mono); color:var(--fg);}
+  .viewer{ background:var(--bg); padding:12px; border-radius:4px; height:calc(100vh - 32px); overflow:auto; }
+  pre.ansi{ margin:0; white-space:pre; font-family:var(--mono); font-size:15px; line-height:1.18; color:var(--fg); }
+  .toolbar{ color:#9f9fa9; font-size:13px; margin-bottom:8px; display:flex; gap:8px; align-items:center; }
+  button{ background:#111;border:1px solid #222;color:#ddd;padding:6px 8px;border-radius:6px; cursor:pointer;}
 </style>
 </head>
 <body>
+  <div class="toolbar">
+    <div id="status">Waiting for parent to send file...</div>
+    <div style="margin-left:auto">
+      <button id="requestQandy">Request qandy.txt</button>
+      <button id="requestVideo">Request video.txt</button>
+    </div>
+  </div>
 
+  <div class="viewer" role="region" aria-label="Qandy instructions viewer">
+    <pre id="output" class="ansi" aria-live="polite"></pre>
+  </div>
 
+<script>
+/* Minimal ANSI SGR renderer (same as earlier). For brevity uses same color map. */
+function escapeText(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+const ANSI_COLORS = {30:'#000',31:'#aa0000',32:'#00aa00',33:'#aa5500',34:'#0000aa',35:'#aa00aa',36:'#00aaaa',37:'#aaaaaa',90:'#555555',91:'#ff5555',92:'#55ff55',93:'#ffff55',94:'#5555ff',95:'#ff55ff',96:'#55ffff',97:'#ffffff'};
+function ansiColorFor(code){ if(code in ANSI_COLORS) return ANSI_COLORS[code]; if(code>=40&&code<=47) return ANSI_COLORS[code-10]; if(code>=100&&code<=107) return ANSI_COLORS[code-10]; return null; }
+const ANSI_REGEX = /\x1b\[([0-9;]*?)m/g;
+function ansiToHtml(text){
+  let out='', last=0, match;
+  let state={fg:null,bg:null,bold:false,underline:false,inverse:false};
+  function styleForState(s){ let styles=[]; if(s.inverse){ if(s.bg) styles.push('color:'+s.bg); if(s.fg) styles.push('background:'+s.fg); if(!s.bg&&s.fg) styles.push('background:#000'); if(!s.fg&&s.bg) styles.push('color:#fff'); } else { if(s.fg) styles.push('color:'+s.fg); if(s.bg) styles.push('background:'+s.bg); } if(s.bold) styles.push('font-weight:700'); if(s.underline) styles.push('text-decoration:underline'); return styles.join('; '); }
+  function openSpan(s, txt){ const style = styleForState(s); return style ? `<span style="${style}">${escapeText(txt)}</span>` : escapeText(txt); }
+  while((match = ANSI_REGEX.exec(text)) !== null){
+    const idx = match.index; const chunk = text.slice(last, idx); if(chunk) out += openSpan(state, chunk);
+    let codes = match[1].length ? match[1].split(';').map(c=>c===''?0:parseInt(c,10)) : [0]; if(codes.length===0) codes=[0];
+    for(let code of codes){
+      if(code===0){ state={fg:null,bg:null,bold:false,underline:false,inverse:false}; }
+      else if(code===1) state.bold=true;
+      else if(code===22) state.bold=false;
+      else if(code===4) state.underline=true;
+      else if(code===24) state.underline=false;
+      else if(code===7) state.inverse=true;
+      else if(code===27) state.inverse=false;
+      else if((code>=30&&code<=37)||(code>=90&&code<=97)) state.fg = ansiColorFor(code);
+      else if((code>=40&&code<=47)||(code>=100&&code<=107)) state.bg = ansiColorFor(code);
+      else if(code===39) state.fg=null;
+      else if(code===49) state.bg=null;
+    }
+    last = ANSI_REGEX.lastIndex;
+  }
+  if(last < text.length) out += openSpan(state, text.slice(last));
+  return out;
+}
 
-             The Qandy Pocket Computer
+/* UI elements */
+const statusEl = document.getElementById('status');
+const outputEl = document.getElementById('output');
+const requestQandyBtn = document.getElementById('requestQandy');
+const requestVideoBtn = document.getElementById('requestVideo');
 
-               Experiemental Release:
-          
-  Some of these routines have been generated
-  with the assistance of Artifical Intelligence
-       and have not been fully tested
-  
-            Use at your own risk!
+/* Handle incoming messages from parent */
+window.addEventListener('message', function(ev){
+  const m = ev.data;
+  if(!m || typeof m !== 'object' || !m.__qandy) return;
+  if(m.type === 'file'){
+    const path = m.path || '(unknown)';
+    const content = typeof m.content === 'string' ? m.content : String(m.content || '');
+    statusEl.textContent = 'Showing: ' + path;
+    // normalize newlines
+    const normalized = content.replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+    outputEl.innerHTML = ansiToHtml(normalized);
+  } else if(m.type === 'error'){
+    statusEl.textContent = 'Error: ' + String(m.message || '(unknown)');
+    outputEl.textContent = '';
+  }
+}, false);
 
+/* Request parent to load a file */
+function requestFile(path){
+  statusEl.textContent = 'Requesting: ' + path;
+  // message to parent: ask it to fetch and send file contents
+  parent.postMessage({ __qandy: true, type: 'requestFile', path: path }, '*');
+}
 
+/* Buttons wiring */
+requestQandyBtn.addEventListener('click', ()=> requestFile('qandy.txt'));
+requestVideoBtn.addEventListener('click', ()=> requestFile('video.txt'));
 
-The qandy.htm file displays a "power on" display and
-awaits for some type of input (key, button, touch). 
-The BIOS first loads the sound.js which emits a beep
-to indicate power on sequence has begun. 
+/* Optionally, when iframe is ready, notify parent (not strictly needed because parent posts proactively)
+   parent may prefer to wait for this message. */
+parent.postMessage({ __qandy: true, type: 'iframeReady' }, '*');
 
-It loads a series of "hardware" scripts, execution is
-halted until these scripts have initialized all the 
-hardware drivers:
-
-video.js is the video driver that handles the text screen
-operations. It translates a "retro screen" into a 
-"JavaScript" DOM. The programmer does not need to access
-the DOM to use the text screen, but instead should use
-the built-in library of PEEK and POKE functions. It
-features an ANSI engine for changing colors and drawing
-graphics. 
-
-gfx.js is the graphics card, like "DirectX" was to Windows
-this is a 2d-X engine that has functions to display the
-Queville tileset, characters, and items and features
-the classic Queville "popup".
-
-keyboard.js is the keyboard controller, it displays the
-virtual keyboard and intercepts keystrokes from any
-physical keyboard attached and handles user input and the
-cursor controls. Future plans are to build a "mouse.js"
-to work in conjunction with the keyboard. 
-
-dos.js will be the disk operating system that interfaces
-with external devices starting with LOCAL for
-localStorage in the user's web browser. When a server
-is written, it will be able to interact with the server
-via the "COOKIE" device, which I might even call "MODEM".  
-
-
-
-Once the drivers are loaded, a Qandy Pocket Computer
-version number is displayed and the cursor starts to
-blink awaiting user input. Here, you can input
-JavaScript commands that will be executed, ie:
-
-  alert("hello world");
-
-
-
-
+</script>
 </body>
 </html>

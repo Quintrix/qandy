@@ -9,7 +9,7 @@
   .split-row{display:flex;flex-direction:row;align-items:flex-start;gap:64px;padding:32px;box-sizing:border-box;justify-content:center;}
   .display{background:#000;border-radius:6px;overflow:hidden;box-sizing:border-box;}
   .left .display{ width:364px; height:664px; }
-  .right .display{ width:664px; height:480px; transform: translateX(-64px) translateY(48px); }
+  .right .display{ width:664px; height:480px; transform: translateX(-64px) translateY(32px); }
   .display iframe{ width:100%; height:100%; border:0; display:block; background:#000; }
   @media (max-width:1100px){ .split-row{ flex-direction:column; gap:16px; padding:16px; } .left .display, .right .display { width:100%; height:auto; aspect-ratio: 16/9; } }
 </style>
@@ -81,6 +81,87 @@
     leftFrame.contentWindow.postMessage({ type: 'key', key: ev.key, code: ev.code, keyCode: ev.keyCode }, '*');
   });
   */
+})();
+</script>
+
+<!-- small controls for testing / local-file fallback -->
+<div class="controls">
+  <button id="reloadBtn">Reload qandy.txt</button>
+  <button id="openFileBtn">Open local file...</button>
+  <input id="filePicker" type="file" accept=".txt" style="display:none"/>
+</div>
+
+<script>
+(function(){
+  const instrFrame = document.getElementById('instrFrame');
+  const reloadBtn = document.getElementById('reloadBtn');
+  const openFileBtn = document.getElementById('openFileBtn');
+  const filePicker = document.getElementById('filePicker');
+
+  // Helper: post file content to instructions iframe
+  function postFileToInstructions(path, content){
+    if(!instrFrame || !instrFrame.contentWindow) return;
+    const msg = { __qandy: true, type: 'file', path: path || '', content: String(content || '') };
+    // in production replace '*' with the exact origin of the iframe (instrFrame.src origin)
+    instrFrame.contentWindow.postMessage(msg, '*');
+  }
+
+  // Fetch a file (HTTP same-origin) and post to instructions iframe
+  async function fetchAndPost(path){
+    try {
+      // fetch from same origin; will fail for file://
+      const res = await fetch(path, { cache: 'no-cache' });
+      if(!res.ok) throw new Error('HTTP ' + res.status + ' ' + res.statusText);
+      const txt = await res.text();
+      postFileToInstructions(path, txt);
+      console.log('posted', path, 'to instructions iframe');
+    } catch (err) {
+      console.warn('fetch failed for', path, err);
+      // If running file:// or fetch fails, notify iframe with an error message
+      postFileToInstructions(path, 'Error loading ' + path + ': ' + String(err) + '\n\n(If you are running from file://, use the Open local file button.)');
+    }
+  }
+
+  // Listen for messages FROM the instructions iframe (requests)
+  window.addEventListener('message', function(ev){
+    const m = ev.data;
+    if(!m || typeof m !== 'object' || !m.__qandy) return;
+    if(m.type === 'requestFile' && m.path){
+      // iframe asked parent to load a path
+      fetchAndPost(m.path);
+    }
+    // other message types could be handled here
+  }, false);
+
+  // On initial load: ask the iframe to be ready before posting, but it's fine to send — iframe will handle message anytime.
+  // We'll attempt to fetch qandy.txt automatically (if served via http(s))
+  function initialLoad(){
+    if(location.protocol === 'file:'){
+      // file:// can't fetch; show message in iframe instructing to use file picker
+      postFileToInstructions('qandy.txt', 'Running from file:// — parent cannot fetch local files. Use the Open local file button to pick qandy.txt or serve the site over HTTP (python3 -m http.server).');
+    } else {
+      fetchAndPost('qandy.txt');
+    }
+  }
+
+  // UI wiring
+  reloadBtn.addEventListener('click', () => fetchAndPost('qandy.txt'));
+  openFileBtn.addEventListener('click', ()=> filePicker.click());
+  filePicker.addEventListener('change', (ev) => {
+    const f = ev.target.files && ev.target.files[0];
+    if(!f) return;
+    const fr = new FileReader();
+    fr.onload = function(e){
+      postFileToInstructions(f.name, String(e.target.result || ''));
+    };
+    fr.onerror = function(){
+      postFileToInstructions(f.name, 'Error reading local file');
+    };
+    fr.readAsText(f, 'utf-8');
+  });
+
+  // Start
+  initialLoad();
 })();
 </script>
 
