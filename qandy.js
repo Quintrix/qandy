@@ -310,11 +310,9 @@ function button(b, event) {
               print("\n");
               if (LINE.slice(-3) === ".js") {
                 //keysoff();
-                var prg = document.createElement('script');
-                prg.src = LINE;
-                prg.onload = function() { keyson(); };
-                prg.onerror = function() { print("Error loading program\n"); keyson(); };
-                document.head.appendChild(prg);
+                var scriptName = String(LINE || '').trim();
+                LINE = ""; CURP = 0; LINEX = CURX; LINEY = CURY;
+                hostScript(scriptName);
                 LINE = ""; CURP = 0; LINEX = CURX; LINEY = CURY;
               } else if (LINE.substr(0,3) === "cls") {
                 if (typeof initScreen === 'function') initScreen(); else cls();
@@ -322,7 +320,7 @@ function button(b, event) {
                 CURX = 0; CURY = 0; CURP = 0;
                 LINEX = 0; LINEY = 0;
               } else {
-                executeCode(LINE);
+                evalCode(LINE);
                 pokeCursorOn();
                 LINE=""; CURP = 0;
                 LINEX = CURX; LINEY = CURY;
@@ -330,9 +328,6 @@ function button(b, event) {
               }
               pokeRefresh();
             }
-            
-            
-            
           }
         } else if (l) {
           // Insert printable character(s)
@@ -591,7 +586,26 @@ function pressup(event) {
   }
 }
 
-function executeCode(code) {
+function hostScript(name) {
+  if (!name || typeof name !== 'string') return false;
+  const s = name.trim();
+  name = name.trim();
+  if (!/^[A-Za-z0-9.\-]+\.js$/i.test(name)) return false;
+  if (/^[.\-]/.test(name) || /[.\-]$/.test(name)) return false;
+  if (/\.\./.test(name)) return false;
+  if (name.length > 16) return false;
+  try {
+    const prg = document.createElement('script');
+    prg.src = s;
+    prg.onerror = function() { print("File Error\n"); };
+    prg.onload = function() { /* optional: print(s + " loaded\n"); */ };
+    document.head.appendChild(prg);
+  } catch (e) {
+    print("Error inserting script: " + String(e) + "\n");
+  }
+}
+
+function evalCode(code) {
   try {
     var trimmed = String(code).trim();
     var simpleNameRE = /^[$A-Za-z_][$A-Za-z0-9_]*(?:\s*\.\s*[$A-Za-z_][$A-Za-z0-9_]*)*$/;
@@ -674,13 +688,7 @@ function showFiles() {
   }
 }
 
-function clearScreen() { cls(); }
-function cls() {
-  pokeCursorOff();
-  pokeText(0,0," ",800);
-  CURX=0; CURY=0; LINEX=0; LINEY=0;
-  pokeCursorOn();  
-}
+
 
 
 function waitForCursorIdle(timeoutMs) {
@@ -733,6 +741,14 @@ function exit() {
   RUN="qandy.js"
 }
 
+function clearScreen() { cls(); }
+function cls() {
+  pokeCursorOff();
+  pokeText(0,0," ",800);
+  CURX=0; CURY=0; LINEX=0; LINEY=0;
+  pokeCursorOn();  
+}
+
 // public print(...) replacement
 function print(t) {
   // do your color tag replacements first
@@ -769,7 +785,7 @@ print("\n[cyan]Qandy Pocket\nComputer v1.j\n\n[yellow]Prototype Release\nUse at 
 //(async function(){
 //  if (await dosExists('autoexec.js')) {
 //    const txt = await dosLoad('autoexec.js');
-//    if (txt !== null) executeCode(txt);    
+//    if (txt !== null) hostScript(txt);    
 //  }
 //})(); 
 

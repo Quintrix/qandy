@@ -30,7 +30,7 @@ var SOUND=true;       // enable/disable sound card
 
 // qandy.js
 var DEVTEAM=0;  // developer mode
-var RUN=so that it fits "";     // current script running starting with qandy.js 
+var RUN= "";     // current script running starting with qandy.js 
 var RUNIN="";   // input mode set by running script, line or key
 var RUNOUT="";  // output display set by running script, gfx or txt
 
@@ -42,7 +42,7 @@ var tempCommand = "";     // Temporary storage for command being typed when brow
 
 var CURSOR=5; // cursor type 0=off, 1=line, 3=blink line, 4=block, 5=blink block  
 var CURX = 0;    // cursor x
-var CURY =so that it fits  0;    // cursor y
+var CURY = 0;    // cursor y
 var CURP = 0;    // cursor p 
 
 var CURANSI = true; // cursor text ANSI on
@@ -266,7 +266,6 @@ var keyboardData = [
 ];
 
 // dos.js
-var DEVICE = "local"; // default device, browser localStorage
 
 // stray code
 var paginationEnabled = true;  // Enable/disable pagination feature

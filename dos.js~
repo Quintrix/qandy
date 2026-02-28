@@ -31,6 +31,12 @@
  *  - Clipboard is session-only in-memory and accessible via dosCopy/dosPaste behavior.
  */
 
+print("\nQandy Disk Operating System:\n");
+print("\nThese functions save and load files to your brower\'s localStorage.\n");
+print("\nDo not use Qandy DOS to store sensitive information such as names and passwords.\n");
+print("\nThe Qandy Pocket Computer\'s security is limited to your browser\'s security, we\'ve do the best we can with what we have to work with.\n");
+print("\nTo complete installation, input:\n  confirmDOS()\n\n");
+
 (function (global) {
   'use strict';
 
