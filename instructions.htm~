@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Qandy Instructions</title>
+<style>
+  :root{ --bg:#070707; --fg:#ddd; --muted:#9F9FA9; }
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:monospace,ui-monospace,system-ui; font-size:13px;}
+  .wrap{display:flex;flex-direction:column;height:100%;}
+  .toolbar{padding:8px 10px;border-bottom:1px solid #0b0b0b;display:flex;gap:8px;align-items:center;background:#0a0a0a;}
+  .files{display:flex;flex-wrap:wrap;gap:6px;}
+  .files button{background:#0b0b0b;color:var(--muted);border:1px solid #111;padding:6px 8px;border-radius:4px;cursor:pointer;}
+  .files button.active{background:#1e73ff;color:#fff;border-color:#1e73ff;}
+  #content{padding:12px;overflow:auto;white-space:pre-wrap;flex:1;background:#050505;border-top:1px solid #000;}
+  .small{font-size:12px;color:var(--muted);}
+</style>
+</head>
+<body>
+
+
+
+             The Qandy Pocket Computer
+
+               Experiemental Release:
+          
+  Some of these routines have been generated
+  with the assistance of Artifical Intelligence
+       and have not been fully tested
+  
+            Use at your own risk!
+
+
+
+The qandy.htm file displays a "power on" display and
+awaits for some type of input (key, button, touch). 
+The BIOS first loads the sound.js which emits a beep
+to indicate power on sequence has begun. 
+
+It loads a series of "hardware" scripts, execution is
+halted until these scripts have initialized all the 
+hardware drivers:
+
+video.js is the video driver that handles the text screen
+operations. It translates a "retro screen" into a 
+"JavaScript" DOM. The programmer does not need to access
+the DOM to use the text screen, but instead should use
+the built-in library of PEEK and POKE functions. It
+features an ANSI engine for changing colors and drawing
+graphics. 
+
+gfx.js is the graphics card, like "DirectX" was to Windows
+this is a 2d-X engine that has functions to display the
+Queville tileset, characters, and items and features
+the classic Queville "popup".
+
+keyboard.js is the keyboard controller, it displays the
+virtual keyboard and intercepts keystrokes from any
+physical keyboard attached and handles user input and the
+cursor controls. Future plans are to build a "mouse.js"
+to work in conjunction with the keyboard. 
+
+dos.js will be the disk operating system that interfaces
+with external devices starting with LOCAL for
+localStorage in the user's web browser. When a server
+is written, it will be able to interact with the server
+via the "COOKIE" device, which I might even call "MODEM".  
+
+
+
+Once the drivers are loaded, a Qandy Pocket Computer
+version number is displayed and the cursor starts to
+blink awaiting user input. Here, you can input
+JavaScript commands that will be executed, ie:
+
+  alert("hello world");
+
+
+
+
+</body>
+</html>

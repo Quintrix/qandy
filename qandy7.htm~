@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Qandy — Dual Display</title>
+<link rel="icon" href="/i/Jc.png" sizes="32x32" type="image/png">
+<style>
+  :root{ --bg:#000; --fg:#fff; --muted:#9F9FA9; --split:360px; }
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,Segoe UI,Roboto,monospace;}
+  /* Two-column layout on wide screens */
+  .container{ display:grid; grid-template-columns: 1fr var(--split); height:100vh; gap:0; }
+  .panel{ position:relative; overflow:hidden; background:#000; }
+  iframe { width:100%; height:100%; border:0; display:block; background:#000; }
+  /* On small screens collapse to single column: only left (Qandy) is shown full width */
+  @media (max-width:880px){
+    .container{ grid-template-columns: 1fr; }
+    .instructions { display:none; }
+  }
+  /* Small visual separator on desktop */
+  .instructions{ border-left:1px solid #111; background:#070707; color:#ddd; }
+  .instructions .note { padding:8px 12px; font-size:13px; color:var(--muted); border-bottom:1px solid #0b0b0b; display:flex; justify-content:space-between; align-items:center; }
+  .instructions .note a{ color:var(--muted); font-size:13px; text-decoration:none; }
+  /* optional toggle button for mobile (displayed only in JS if needed) */
+  .mobile-toggle{ position:absolute; top:10px; right:10px; z-index:30; background:rgba(0,0,0,.6); color:#ddd; border:1px solid #222; padding:6px 8px; border-radius:6px; font-size:13px; cursor:pointer; display:none; }
+  @media (max-width:880px){ .mobile-toggle{ display:block; } }
+</style>
+</head>
+<body>
+  <div class="container" id="container">
+    <div class="panel qandy" id="leftPanel" aria-label="Qandy display">
+      <!-- Optional mobile toggle to open the instructions in a full-screen overlay -->
+      <button id="toggleInstructions" class="mobile-toggle" aria-hidden="true">Docs</button>
+
+      <!-- This iframe will show the Qandy page (qandy7.htm preferred) -->
+      <iframe id="qandyFrame" title="Qandy Pocket Computer" src="about:blank" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
+    </div>
+
+    <aside class="panel instructions" id="rightPanel" aria-label="Instructions viewer">
+      <div class="note">
+        <div>Instructions & docs</div>
+        <a id="openRaw" href="qandy-readme.txt" target="_blank" rel="noopener">Open raw</a>
+      </div>
+      <!-- instructions.htm is a self-contained viewer page (keeps logic isolated) -->
+      <iframe id="instructionsFrame" title="Instructions" src="instructions.htm"></iframe>
+    </aside>
+  </div>
+
+<script>
+(function(){
+  const qframe = document.getElementById('qandyFrame');
+  const possible = ['qandy7.htm','qandy.htm']; // try qandy7.htm then qandy.htm
+  const toggleBtn = document.getElementById('toggleInstructions');
+  const rightPanel = document.getElementById('rightPanel');
+
+  // Try to detect which qandy file exists (same-origin)
+  async function pickQandy(){
+    for(const p of possible){
+      try{
+        // HEAD can fail on some hosts; GET and check ok
+        const res = await fetch(p, {method:'GET', cache:'no-store'});
+        if(res.ok){
+          qframe.src = p;
+          return;
+        }
+      }catch(e){
+        // network error or not found -> continue
+      }
+    }
+    // If nothing found, show a minimal placeholder page (inline data URL)
+    qframe.src = 'data:text/html;charset=utf-8,' + encodeURIComponent('<!doctype html><html><body style="background:#000;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;font-family:system-ui"><div style="text-align:center"><h2>Qandy not found</h2><p style="color:#9F9FA9">Place qandy7.htm or qandy.htm in the site root.</p></div></body></html>');
+  }
+  pickQandy();
+
+  // Mobile: toggle instructions overlay (simple approach: show/hide rightPanel using fixed positioning)
+  function isSmall(){ return window.matchMedia('(max-width:880px)').matches; }
+
+  toggleBtn.addEventListener('click', ()=>{
+    if(!isSmall()) return;
+    if(rightPanel.style.display === 'block'){
+      rightPanel.style.display = 'none';
+    } else {
+      // show overlay
+      rightPanel.style.display = 'block';
+      rightPanel.style.position = 'fixed';
+      rightPanel.style.right = '0';
+      rightPanel.style.top = '0';
+      rightPanel.style.width = '100%';
+      rightPanel.style.height = '100%';
+      rightPanel.style.zIndex = '9999';
+      rightPanel.style.background = '#070707';
+    }
+  });
+
+  // If the Qandy page needs to run at top level (some legacy scripts do), you must test inside iframe.
+  // If it misbehaves, consider opening it in a new tab or navigating top.location on user action.
+})();
+</script>
+</body>
+</html>
