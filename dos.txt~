@@ -5,7 +5,9 @@ The variables DEVICE= and DOS= have been removed from the qandy8.htm global decl
 
 I want to remove the "harddrive" and "server" devices along with any routines that use them as it has been decided they are a security threat. Replace them with a "rs232" device which will up the browser's "upload" and "download" functions to save and load files to and from the qandy and the user's harddrive.
 
-This is the dos.txt file which contains the instructions for the user, please use the same variable names as in the instructions so the instructions are not just for the end user, but for future programmers as well. 
+
+  
+
 
  
 
@@ -29,7 +31,7 @@ This is the dos.txt file which contains the instructions for the user, please us
      dosSave(file,data) — saves var data as filename to active device, if filename
                           begins with > (">filename") append data to existing file
 
-          dosLoad(file) — returns contents of filename from active device as string
+          dosLoad(file) — returns contents of filename from active device
 
     dosCopy(file, dest) — copies file into clipboard for dosPaste command, 
                           if dest is provided it also copies the file into
@@ -42,6 +44,11 @@ This is the dos.txt file which contains the instructions for the user, please us
 
           dosType(file) — print() file to display screen
             
+      dosDownload(file) — triggers browser download file prompt to download file
+      
+        dosUpload(file) — triggers browser upload file prompt to upload file
+      
+  
         dosDelete(file) — deletes filename from active device 
 
         dosExists(file) — returns true if filename exists      
@@ -56,12 +63,10 @@ This is the dos.txt file which contains the instructions for the user, please us
                    data — plain UTF‑8 text, use base64 for binary data, dos.js
                           returns whole file content as single text string.
                        
-                 device — local, echo, or none.
+                 device — local, harddrive, server, echo, or none.
                  
-                          We may in the future offer updates that would enable
-                          "harddrive" or "server" options for advanced users
-                          that understand the risks. 
-
-
+                          server is not currently implemented, will eventually
+                          allow for web based drives such as Google or DropBox.
+ 
  
 

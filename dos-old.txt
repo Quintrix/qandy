@@ -1,0 +1,82 @@
+
+We are going to re-write the dos.js script, there are no functions using the existing code so nothing needs to be "backwards compatible", everything in this script is a fresh start. Ignore previous versions of dos.js, let us re-write this script from the ground up to avoid costly bugs and incompatibilities with previous code.
+
+The variables DEVICE= and DOS= have been removed from the qandy8.htm global declarations and are now to be considered local variables. 
+
+We may in the future offer updates that would enable "harddrive" or "server" options for advanced users that understand the risks.  
+
+A manifest of filenames and filesizes should be kept and maintained with the name "dos.sys". This file should be updated whenever a file is changed so that it is always correct.   
+
+The script should start by declaring the DOS and DEVICE variable and then display this notice so users understand the risk. The dos.js script shouldn't do anything other than print this message until after the users types dosConfirm():
+
+    var DOS=false;        // if true, user has confirmed DOS install 
+    var DEVICE = "local"; // default device, browser localStorage
+    print("\nQandy Disk Operating System:\n");
+    print("\nThese functions save and load files to your brower\'s localStorage.\n");
+    print("\nDo not use Qandy DOS to store sensitive information such as names and passwords.\n");
+    print("\nThe Qandy Pocket Computer\'s security is limited to your browser\'s security, we do the best we can with what we have to work with.\n");
+    print("\nTo complete installation, input:\n  confirmDOS()\n\n");
+
+This is the dos.txt file which contains the instructions for the user, please use the same variable names as in the instructions so the instructions are not just for the end user, but for future programmers as well. 
+
+                 
+                       Qandy PC DOS:
+                       Disk Operating System
+
+           dosConfirm() - user must issue command to confirm permission to use DOS 
+
+             DOS="name" — set to true after user confirms DOS installation, all DOS
+                          functions should be inside  if (DOS) {} checks    
+
+       dosMount(device) — sets the active device to access, default "local" for localStorage
+      
+          DEVICE="name" — local var for active device
+      
+        dosBackup(data) — formats active device with JSON strong, if data is omitted
+                          returns JSON string with contents of device for backup
+     
+              dosList() — returns string with list of files separated by new lines
+                      
+     dosSave(file,data) — saves var data as filename to active device, if filename
+                          begins with > (">filename") append data to existing file
+
+          dosLoad(file) — returns contents of filename from active device as string
+
+    dosCopy(file, dest) — copies file into clipboard for dosPaste command, 
+                          if dest is provided it also copies the file into
+                          the dest file, returns error if dest already exists
+                          
+         dosPaste(dest) — pastes the clipboard contents into dest, returns
+                          error if dest already exists
+
+  dosRename(file, dest) — renames file to dest 
+
+          dosType(file) — print() file to display screen
+            
+        dosDelete(file) — deletes filename from active device 
+
+        dosExists(file) — returns true if filename exists      
+
+
+
+                   name — name of file, maximum length 255 bytes, allowed
+                          characters: A–Z, a–z, 0–9, space (leading/trailing
+                          trimmed), minus, underscore, dot (but not first
+                          character), parentheses, plus, and equals: -_.()+=
+                          
+                          the filename "dos.sys" is a read-only system file
+                          that contains a list of all files saved on the
+                          localStorage in the format of "## $$$$\n" where ##
+                          is the filesize and $$$$ is the filename and is
+                          serperated by new lines
+
+                   data — plain UTF‑8 text, use base64 for binary data, dos.js
+                          returns whole file content as single text string.
+                       
+                 device — local, echo, or none with future support for advanced
+                          users to install "harddrive" or "server" devices. 
+                 
+
+
+ 
+

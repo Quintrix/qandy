@@ -338,7 +338,7 @@ var inInputMode = false;       // True when processing user input (prevents pagi
     { src: 'video.js', name: 'Video' },
     { src: 'gfx.js', name: 'Graphics' },
     { src: 'keyboard.js', name: 'Keyboard' },
-    { src: 'command.js', name: 'Command' },
+    { src: 'command.js', name: 'Keyboard' },
     { src: 'qandy.js', name: 'Qandy Core' }
   ];
 
