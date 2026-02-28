@@ -1,6 +1,16 @@
 <!DOCTYPE html>
 <html><head>
+<link rel="icon" href="/i/Jc.png" sizes="32x32" type="image/png">
+<link rel="icon" href="/i/Jc.png" sizes="32x32" type="image/png">
+<link rel="shortcut icon" href="/i/Jc.png" type="image/png"> <!-- legacy fallback -->
+<link rel="apple-touch-icon" href="/i/Jc.png"> <!-- iOS home screen icon -->
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0a0a0a">
+<!-- iOS -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<link rel="apple-touch-icon" href="/icons/qandy-192.png">
 <script>
 if (typeof window.print === 'function' && window.print.toString().indexOf('[native code]') !== -1) { window._native_print = window.print; window.print = function() {}; }
 </script>
@@ -88,6 +98,7 @@ var ANSIblue_bright = "\x1b[94m";
 var ANSImagenta_bright = "\x1b[95m";
 var ANSIcyan_bright = "\x1b[96m";
 var ANSIwhite_bright = "\x1b[97m";
+
 
 // Background (normal)
 var ANSIbgblack = "\x1b[40m";

@@ -1,41 +1,63 @@
 
+We are going to re-write the dos.js script, there are no functions using the existing code so nothing needs to be "backwards compatiable", everything in this script is a fresh start. Ignore previous versions of dos.js, let us re-write this script from the ground up to avoid costly bugs and incompatibilities with previous code.
+
+Functions should use the same variable names as used in the instruction file, so the instructions are not just for the end user, but for future programmers as well. 
+
+ 
+
                  
                        Qandy PC DOS:
                        Disk Operating System
 
 
-       mount(device) — sets the active device to access: "local" for localStorage,
-                       "harddrive" for user's harddrive, "qandy" for Qandy
-                       Server, "cookie" for browser cookie, "echo", or "none".
-       
-       DEVICE="name" — global var for active device: 
+       dosMount(device) — sets the active device to access, default "local" for localStorage
       
-        format(data) — formats active device with data, if data is omitted
-                       returns JSON string with contents of device    
+          DEVICE="name" — global var for active device 
+      
+        dosFormat(data) — formats active device with JSON strong, if data is omitted
+                          returns JSON string with contents of device for backup
+     
+              dosList() — returns string with list of files separated by new lines
                       
-     save(name,data) — saves var data as filename to active device, if filename
-                       begins with > (">filename") append data to existing file
+     dosSave(file,data) — saves var data as filename to active device, if filename
+                          begins with > (">filename") append data to existing file
 
-          load(name) — returns contents of filename from active device
+          dosLoad(file) — returns contents of filename from active device
 
-           del(name) — deletes filename from active device 
-        delete(name) — deletes filename from active device (same as del)
-            rm(name) — removes filename from active (same as del)
+    dosCopy(file, dest) — copies file into clipboard for dosPaste command, 
+                          if dest is provided it also copies the file into
+                          the dest file, returns error if dest already exists
+                          
+         dosPaste(dest) — pastes the clipboard contents into dest, returns
+                          error if dest already exists
+
+  dosRename(file, dest) — renames file to dest 
+
+          dosType(file) — print() file to display screen
             
-                ls() — returns string with list of files separated by new lines
-               dir() — returns string with list of files separated by new lines
+      dosDownload(file) — triggers browser download file prompt to download file
+      
+        dosUpload(file) — triggers browser upload file prompt to upload file
+      
+  
+        dosDelete(file) — deletes filename from active device 
 
-        exists(name) — returns true if filename exists      
+        dosExists(file) — returns true if filename exists      
 
 
 
-                name — maximum length 255 bytes, allowed characters:
-                       A–Z, a–z, 0–9, space (leading/trailing trimmed), 
-                       minus, underscore, dot (but not first character),
-                       parentheses, plus, and equals: -_.()+= 
+                   name — Name of file, maximum length 255 bytes, allowed
+                          characters: A–Z, a–z, 0–9, space (leading/trailing
+                          trimmed), minus, underscore, dot (but not first
+                          character), parentheses, plus, and equals: -_.()+= 
                        
-                data = plain UTF‑8 text, use base64 for binary data, dos.js
-                       returns whole file content as single string. 
-
-
+                   data — plain UTF‑8 text, use base64 for binary data, dos.js
+                          returns whole file content as single text string.
+                       
+                 device — local, harddrive, server, echo, or none.
+                 
+                          server is not currently implemented, will eventually
+                          allow for web based drives such as Google or DropBox.
+ 
+ 
 

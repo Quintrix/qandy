@@ -330,6 +330,9 @@ function button(b, event) {
               }
               pokeRefresh();
             }
+            
+            
+            
           }
         } else if (l) {
           // Insert printable character(s)
@@ -817,6 +820,7 @@ function executeCode(code) {
     return false;
   }
 }
+
 function showFiles() {
   print("ascii.js\n");
   print("sound.js\n");
@@ -915,7 +919,7 @@ function print(t) {
   text = text.replace(/\[magenta\]/g, ANSImagenta);
   text = text.replace(/\[cyan\]/g, ANSIcyan);
   text = text.replace(/\[white\]/g, ANSIwhite);
-
+  
   // enqueue the print and start processor
   var q = window._qandy_print_queue;
   return new Promise(function(resolve) {
@@ -928,15 +932,169 @@ function print(t) {
 
 CURBAUD=9600; CURSOR=4; pokeCursorOn();
 
-text="\n[cyan]Qandy Pocket\nComputer v1.j\n\n[yellow]Prototype Release\n[white]\n";
-print(text);
+pokeRefresh();
 
-(async function(){
-  if (await exists('autoexec.js')) {
-    const txt = await load('autoexec.js');
-    if (txt !== null) executeCode(txt);    
+rs232.init({
+  guestWindow: null,               // will connect later when guest iframe is created
+  guestOrigin: '*',                // set to the guest origin in production (e.g. 'https://guest.qandy.example')
+  allowWildcardOrigin: true,       // dev only; disable in prod
+  defaultTimeoutMs: 15000,
+  maxConcurrentRequests: 64,
+  maxCommandsPerSecond: 200,
+  auditLogger: function(action, details) {
+    // optional: write to console or to an audit store
+    console.log('[AUDIT]', action, details);
+  },
+  permissionChecker: async function(method, args, meta) {
+    // default policy: allow safe read calls, require confirmation for destructive calls.
+    const destructive = ['dosSave','dosDelete','dosUpload','dosMount','format'];
+    if (destructive.includes(method)) {
+      return { allowed: false, requireUserGesture: true, prompt: { title: 'Guest requests permission', body: 'The guest wants to perform a potentially destructive operation: ' + method } };
+    }
+    // allow reads
+    return { allowed: true };
   }
-})(); 
+});
+
+// call once during startup
+rs232.onRequest(async function(req) {
+  // req: { id, method, args, meta, origin }
+  const method = String(req.method || '');
+  const args = Array.isArray(req.args) ? req.args : [];
+
+  try {
+    switch (method) {
+      case 'dosList':
+        if (typeof dosList === 'function') {
+          const list = await dosList();
+          return { ok: true, result: list };
+        }
+        return { ok: false, error: 'dosList not available' };
+
+      case 'dosLoad':
+        if (!args[0]) return { ok:false, error:'filename required' };
+        if (typeof dosLoad === 'function') {
+          const content = await dosLoad(args[0]);
+          return { ok:true, result: content };
+        }
+        return { ok:false, error:'dosLoad not available' };
+
+      case 'dosSave':
+        if (!args[0]) return { ok:false, error:'filename required' };
+        if (typeof dosSave === 'function') {
+          await dosSave(args[0], args[1] || '');
+          return { ok:true, result:true };
+        }
+        return { ok:false, error:'dosSave not available' };
+
+      case 'dosDelete':
+        if (!args[0]) return { ok:false, error:'filename required' };
+        if (typeof dosDelete === 'function') {
+          await dosDelete(args[0]);
+          return { ok:true, result:true };
+        }
+        return { ok:false, error:'dosDelete not available' };
+
+      // add more mappings as needed: dosMount, dosUpload etc.
+
+      default:
+        // return undefined to let other handlers run or to produce unknown-method
+        return undefined;
+    }
+  } catch (e) { 
+    return { ok: false, error: String(e) };
+  }
+});
+
+// === rs232 guest -> host handlers ===
+// Put this after cls() / screen init and after rs232.init(...) during startup.
+// It registers once and maps guest RPCs to the existing dos.* APIs.
+
+(function installRs232Handlers() {
+  if (!window.rs232 || typeof rs232.onRequest !== 'function') {
+    console.warn('rs232 not available yet; handlers not installed');
+    return;
+  }
+  // idempotent install (safety if this block gets evaluated twice)
+  if (window._qandy_rs232_handlers_installed) return;
+  window._qandy_rs232_handlers_installed = true;
+
+  rs232.onRequest(async function (req) {
+    // req: { id, method, args, meta, origin }
+    const method = String(req.method || '');
+    const args = Array.isArray(req.args) ? req.args : [];
+    try {
+      switch (method) {
+        case 'dosList':
+        case 'list': {
+          if (typeof dosList === 'function') {
+            const list = await dosList();
+            return { ok: true, result: list };
+          }
+          return { ok: false, error: 'dosList not available' };
+        }
+
+        case 'dosLoad': {
+          const name = args[0];
+          if (!name) return { ok:false, error:'filename required' };
+          if (typeof dosLoad === 'function') {
+            const content = await dosLoad(name);
+            return { ok:true, result: content };
+          }
+          return { ok:false, error:'dosLoad not available' };
+        }
+
+        case 'dosSave': {
+          const name = args[0];
+          const data = args[1] != null ? args[1] : '';
+          if (!name) return { ok:false, error:'filename required' };
+          if (typeof dosSave === 'function') {
+            await dosSave(name, data);
+            return { ok:true, result: true };
+          }
+          return { ok:false, error:'dosSave not available' };
+        }
+
+        case 'dosDelete': {
+          const name = args[0];
+          if (!name) return { ok:false, error:'filename required' };
+          if (typeof dosDelete === 'function') {
+            await dosDelete(name);
+            return { ok:true, result: true };
+          }
+          return { ok:false, error:'dosDelete not available' };
+        }
+
+        // Add any other dos.* mappings you need here:
+        // case 'dosMount': ...
+        // case 'dosUpload': ...
+
+        default:
+          // Return undefined to let other handlers run, or produce unknown-method in rs232
+          return undefined;
+      }
+    } catch (err) {
+      // Never throw — return structured error
+      console.warn('rs232 handler error for', method, err);
+      return { ok: false, error: String(err) };
+    }
+  });
+})();
+
+
+
+//
+// system ready
+//
+
+print("\n[cyan]Qandy Pocket\nComputer v1.j\n\n[yellow]Prototype Release\nUse at your own risk!\n[white]\n");
+
+//(async function(){
+//  if (await dosExists('autoexec.js')) {
+//    const txt = await dosLoad('autoexec.js');
+//    if (txt !== null) executeCode(txt);    
+//  }
+//})(); 
 
 // system ready
 
