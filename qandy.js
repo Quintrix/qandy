@@ -285,9 +285,7 @@ function button(b, event) {
           }
         } else if (k === "enter") {
           event.preventDefault();
-          if (window.QandyKeyboard && QandyKeyboard.handleEnter()) {
-            return;
-          }
+          if (window.QandyKeyboard && QandyKeyboard.handleEnter()) { return; }
           if (SSTART>-1) { pokeSelect(false); SSTART = -1; SEND = -1; }
           if (LINE !== undefined) {
             // Save to history
@@ -301,33 +299,10 @@ function button(b, event) {
             }
             historyIndex = -1;
             tempCommand = "";
-            if (RUN != "qandy.js") {
-              print("\n");
-              try { input(LINE); } catch (e) { /* ignore */ }
-              LINE = ""; CURP = 0; LINEX = CURX; LINEY = CURY;
-              pokeRefresh()
-            } else {
-              print("\n");
-              if (LINE.slice(-3) === ".js") {
-                //keysoff();
-                var scriptName = String(LINE || '').trim();
-                LINE = ""; CURP = 0; LINEX = CURX; LINEY = CURY;
-                hostScript(scriptName);
-                LINE = ""; CURP = 0; LINEX = CURX; LINEY = CURY;
-              } else if (LINE.substr(0,3) === "cls") {
-                if (typeof initScreen === 'function') initScreen(); else cls();
-                LINE = "";
-                CURX = 0; CURY = 0; CURP = 0;
-                LINEX = 0; LINEY = 0;
-              } else {
-                evalCode(LINE);
-                pokeCursorOn();
-                LINE=""; CURP = 0;
-                LINEX = CURX; LINEY = CURY;
-                return;
-              }
-              pokeRefresh();
-            }
+            cmd=LINE; LINE = ""; CURP = 0; LINEX = CURX; LINEY = CURY;
+            pokeRefresh()
+            command(cmd);
+            return; 
           }
         } else if (l) {
           // Insert printable character(s)
@@ -602,62 +577,6 @@ function hostScript(name) {
     document.head.appendChild(prg);
   } catch (e) {
     print("Error inserting script: " + String(e) + "\n");
-  }
-}
-
-function evalCode(code) {
-  try {
-    var trimmed = String(code).trim();
-    var simpleNameRE = /^[$A-Za-z_][$A-Za-z0-9_]*(?:\s*\.\s*[$A-Za-z_][$A-Za-z0-9_]*)*$/;
-
-    function handleResult(result) {
-      try {
-        if (result === undefined) return;
-        // If result is a Promise, wait for it and print the resolved value or error
-        if (result && typeof result.then === 'function') {
-          result.then(function(res) {
-            try {
-              if (res !== undefined) { print(String(res) + "\n\n"); }
-            } catch (e) {
-              print("Error printing promise result: " + (e && e.message ? e.message : String(e)) + "\n\n");
-            }
-          }).catch(function(err) {
-            try {
-              print("Promise rejection: " + (err && err.message ? err.message : String(err)) + "\n\n");
-            } catch (e) {
-              /* swallow */
-            }
-          });
-          return;
-        }
-        // Non-promise: print synchronously
-        print(String(result) + "\n\n");
-      } catch (e) {
-        try { print("Error handling result: " + e.message + "\n\n"); } catch (ee) {}
-      }
-    }
-
-    if (simpleNameRE.test(trimmed)) {
-      try {
-        var value = eval(trimmed);
-      } catch (e) {
-        print("EI assume trror: " + e.message + "\n\n");
-        return false;
-      }
-      if (typeof value === "function") {
-        print("ERROR: use: " + trimmed + "()\n\n");
-        return true;
-      }
-      handleResult(value);
-      return true;
-    }
-
-    var result = eval(code);
-    handleResult(result);
-    return true;
-  } catch (error) {
-    print("Error: " + error.message + "\n\n");
-    return false;
   }
 }
 

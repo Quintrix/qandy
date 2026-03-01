@@ -1,7 +1,11 @@
 
 We are going to re-write the dos.js script, there are no functions using the existing code so nothing needs to be "backwards compatiable", everything in this script is a fresh start. Ignore previous versions of dos.js, let us re-write this script from the ground up to avoid costly bugs and incompatibilities with previous code.
 
-Functions should use the same variable names as used in the instruction file, so the instructions are not just for the end user, but for future programmers as well. 
+The variables DEVICE= and DOS= have been removed from the qandy8.htm global declarations and are now to be considered local variables. 
+
+I want to remove the "harddrive" and "server" devices along with any routines that use them as it has been decided they are a security threat. Replace them with a "rs232" device which will up the browser's "upload" and "download" functions to save and load files to and from the qandy and the user's harddrive.
+
+This is the dos.txt file which contains the instructions for the user, please use the same variable names as in the instructions so the instructions are not just for the end user, but for future programmers as well. 
 
  
 
@@ -10,11 +14,14 @@ Functions should use the same variable names as used in the instruction file, so
                        Disk Operating System
 
 
+             DOS="name" — set to true after user confirms DOS installation, all DOS
+                          functions should be inside "if (DOS) {}" checks    
+
        dosMount(device) — sets the active device to access, default "local" for localStorage
       
-          DEVICE="name" — global var for active device 
+          DEVICE="name" — local var for active device
       
-        dosFormat(data) — formats active device with JSON strong, if data is omitted
+        dosBackup(data) — formats active device with JSON strong, if data is omitted
                           returns JSON string with contents of device for backup
      
               dosList() — returns string with list of files separated by new lines
@@ -22,7 +29,7 @@ Functions should use the same variable names as used in the instruction file, so
      dosSave(file,data) — saves var data as filename to active device, if filename
                           begins with > (">filename") append data to existing file
 
-          dosLoad(file) — returns contents of filename from active device
+          dosLoad(file) — returns contents of filename from active device as string
 
     dosCopy(file, dest) — copies file into clipboard for dosPaste command, 
                           if dest is provided it also copies the file into
@@ -35,11 +42,6 @@ Functions should use the same variable names as used in the instruction file, so
 
           dosType(file) — print() file to display screen
             
-      dosDownload(file) — triggers browser download file prompt to download file
-      
-        dosUpload(file) — triggers browser upload file prompt to upload file
-      
-  
         dosDelete(file) — deletes filename from active device 
 
         dosExists(file) — returns true if filename exists      
@@ -54,10 +56,12 @@ Functions should use the same variable names as used in the instruction file, so
                    data — plain UTF‑8 text, use base64 for binary data, dos.js
                           returns whole file content as single text string.
                        
-                 device — local, harddrive, server, echo, or none.
+                 device — local, echo, or none.
                  
-                          server is not currently implemented, will eventually
-                          allow for web based drives such as Google or DropBox.
- 
+                          We may in the future offer updates that would enable
+                          "harddrive" or "server" options for advanced users
+                          that understand the risks. 
+
+
  
 

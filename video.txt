@@ -19,8 +19,8 @@
               pokeCursor(t) — poke text at cursor's position          
           pokeText(x,y,t,n) — poke text at x,y repeating n times
 
-            pokeCell(x,y,a) — poke character(s) to a cell (faster)
-
+      pokeCell(x,y,a,f,b,h) — poke cell x,y  
+ 
           pokeChar(x,y,a,n) — poke character(s) to cells (slower)
        pokeColor(x,y,f,b,n) — set foreground and background color
             pokeFG(x,y,f,n) — set foreground color
@@ -36,8 +36,6 @@
              
             pokeAttr(x,y,h) — sets attibute to hex byte
          pokeAttrBit(x,y,c) — sets attibute bit
-
-
 
             pokeAttr(x,y,h) — sets attribute to hex mask
          pokeAttrBit(x,y,c) — sets attribute bit
