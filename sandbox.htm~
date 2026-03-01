@@ -1,0 +1,368 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Qandy Guest Sandbox</title>
+  <link rel="stylesheet" href="sandbox.css">
+</head>
+<body>
+
+  <div id=txt class="txt"></div>
+
+<script>
+// guest-bootstrap.js  (include very early in sandbox.htm before you need memory.js)
+(function() {
+  'use strict';
+  var PARENT = window.parent;
+  var FILE_NAME = 'memory.js';
+  var TIMEOUT_MS = 2000; // adjust as desired
+
+  function requestFileFromParent(name) {
+    return new Promise(function(resolve, reject) {
+      var responded = false;
+      var id = Math.random().toString(36).slice(2);
+
+      function onMsg(ev) {
+        // Only accept messages from parent window
+        if (ev.source !== PARENT) return;
+        var d = ev.data;
+        if (!d || d.type !== 'file-response' || d.id !== id) return;
+        window.removeEventListener('message', onMsg);
+        responded = true;
+        if (d.status === 'ok' && typeof d.content === 'string') resolve(d.content);
+        else reject(new Error(d.error || 'file-response error'));
+      }
+      window.addEventListener('message', onMsg);
+
+      // Send request (parent should respond to messages from this iframe)
+      try {
+        PARENT.postMessage({ type: 'request-file', id: id, name: name }, '*');
+      } catch (e) {
+        window.removeEventListener('message', onMsg);
+        return reject(e);
+      }
+
+      // Timeout fallback
+      setTimeout(function() {
+        if (!responded) {
+          window.removeEventListener('message', onMsg);
+          reject(new Error('timeout waiting for parent file'));
+        }
+      }, TIMEOUT_MS);
+    });
+  }
+
+  function injectScriptFromString(code) {
+    // Use Blob->objectURL to avoid Content-Security-Policy inline-script restrictions
+    try {
+      var blob = new Blob([code], { type: 'application/javascript' });
+      var url = URL.createObjectURL(blob);
+      var s = document.createElement('script');
+      s.src = url;
+      s.onload = function() { URL.revokeObjectURL(url); };
+      s.onerror = function() { URL.revokeObjectURL(url); };
+      document.head.appendChild(s);
+      return true;
+    } catch (e) {
+      // fallback to inline if Blob not available
+      try {
+        var s2 = document.createElement('script');
+        s2.text = code;
+        document.head.appendChild(s2);
+        return true;
+      } catch (e2) {
+        return false;
+      }
+    }
+  }
+
+  // Kick off: request memory.js from parent, inject it; fallback to network load
+  requestFileFromParent(FILE_NAME).then(function(code) {
+    if (!injectScriptFromString(code)) {
+      console.warn('guest: failed to inject script from parent');
+    } else {
+      console.info('guest: memory.js injected from parent');
+      // optional: signal parent that guest has loaded memory
+      PARENT.postMessage({ type: 'file-loaded', name: FILE_NAME }, '*');
+    }
+  }).catch(function(err) {
+    console.warn('guest: request-file failed:', err);
+    // fallback: attempt to load memory.js via network <script src="memory.js">
+    var s = document.createElement('script');
+    s.src = 'memory.js';
+    s.onload = function() { console.info('guest: memory.js loaded via network fallback'); };
+    s.onerror = function() { console.error('guest: memory.js failed to load'); };
+    document.head.appendChild(s);
+  });
+});
+</script>  
+
+<script>
+(function() {
+  'use strict';
+
+  // Configuration array with script load order (unchanged)
+  var SCRIPT_QUEUE = [
+    { src: 'memory.js', name: 'Memory' },
+    { src: 'video.js', name: 'Video' },
+    { src: 'gfx.js', name: 'Graphics' }
+  ];
+  
+  // { src: 'keyboard.js', name: 'Keyboard' },
+  // { src: 'command.js', name: 'Command' },
+  // { src: 'qandy.js', name: 'Qandy Core' }
+
+
+  var startTime = Date.now();
+  var currentIndex = 0;
+  var signalAdvance = null;
+
+  // Called by each script when its initialization is complete
+  window.qandySignalReady = function(scriptName) {
+    // console.log('\u2713 ' + scriptName + ' signaled ready');
+    if (typeof signalAdvance === 'function') {
+      signalAdvance();
+    }
+  };
+
+  function loadNext() {
+    if (currentIndex >= SCRIPT_QUEUE.length) {
+      var elapsed = Date.now() - startTime;
+      document.dispatchEvent(new CustomEvent('qandyReady'));
+      return;
+    }
+
+    var entry = SCRIPT_QUEUE[currentIndex];
+    currentIndex++;
+
+    var advanced = false;
+    function advance() {
+      if (advanced) return;
+      advanced = true;
+      signalAdvance = null;
+      loadNext();
+    }
+
+    // Register advance as the handler for qandySignalReady for this script
+    signalAdvance = advance;
+
+    var script = document.createElement('script');
+    script.src = entry.src;
+
+    script.onerror = function() {
+      signalAdvance = null;
+      if (entry.optional) {
+        console.warn('⚠ Optional script not found: ' + entry.name);
+      } else {
+        console.error('✘ Failed to load required script: ' + entry.name + ' (' + entry.src + ')');
+      }
+      advance();
+    };
+
+    // Advance immediately when the script file loads (onload fallback)
+    script.onload = function() { advance(); };
+
+    // Keep a shorter timeout as a final safety
+    var timeout = setTimeout(function() {
+      if (!advanced) {
+        console.warn('Timed out waiting for ' + entry.name + ' to signal ready. Continuing.');
+        advance();
+      }
+    }, 1000); // 
+    document.head.appendChild(script);
+  }
+
+  function startScriptLoading() {
+    currentIndex = 0;
+    loadNext();
+  }
+
+  // Create an overlay the same size as the #txt display with "POWER SWITCH" text.
+  function createPowerOverlay() {
+    var txtEl = document.getElementById('txt') || document.body;
+    var rect = txtEl.getBoundingClientRect();
+
+    var overlay = document.createElement('div');
+    overlay.id = 'qandy-power-overlay';
+
+    // Position/size to match the txt element
+    overlay.style.position = 'absolute';
+    overlay.style.left = (rect.left + window.scrollX) + 'px';
+    overlay.style.top = (rect.top + window.scrollY) + 'px';
+    overlay.style.width = rect.width + 'px';
+    overlay.style.height = rect.height + 'px';
+
+    // Visual style (retro look)
+    overlay.style.background = '#000';
+    overlay.style.color = '#bbb';
+    overlay.style.border = '4px solid #bbb';
+    overlay.style.overflow = 'hidden';   /* hide any internal scrollbars */
+    overlay.style.direction = 'ltr';     /* ensure scrollbar (if shown) is on the right */
+    overlay.style.display = 'flex';
+    overlay.style.alignItems = 'center';
+    overlay.style.justifyContent = 'center';
+    overlay.style.fontFamily = 'monospace, monospace';
+    overlay.style.fontSize = '28px';
+    overlay.style.letterSpacing = '2px';
+    overlay.style.zIndex = '9999';
+    overlay.style.cursor = 'pointer';
+    overlay.style.userSelect = 'none';
+    overlay.style.whiteSpace = 'pre-wrap';
+    overlay.textContent = 'QANDY\nPOCKET\nCOMPUTER';  
+
+    // Center small helper text beneath main label
+    var helper = document.createElement('div');
+    helper.style.position = 'absolute';
+    helper.style.bottom = '8%';
+    helper.style.left = '50%';
+    helper.style.transform = 'translateX(-50%)';
+    helper.style.fontSize = '12px';
+    helper.style.color = '#fff';
+    helper.textContent = 'Click any button, press any key, or touch screen to power on.';
+    overlay.appendChild(helper);
+
+    document.body.appendChild(overlay);
+
+    function engageHandler(e) {
+      // Only first interaction matters
+      overlay.removeEventListener('click', engageHandler);
+      document.removeEventListener('keydown', engageHandler);
+
+      // Play an immediate tiny beep using an ephemeral AudioContext (this is inside a user gesture)
+      try {
+        var ctx = new (window.AudioContext || window.webkitAudioContext)();
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = 1000;
+        gain.gain.value = 0.03;
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.03);
+        setTimeout(function() { if (ctx.close) ctx.close(); }, 150);
+      } catch (err) {
+        /* ignore audio errors for ephemeral feedback */
+      }
+
+      // Inject sound.js so subsequent keypresses can use beep()
+      if (!document.getElementById('qandy-sound-js')) {
+        var s = document.createElement('script');
+        s.id = 'qandy-sound-js';
+        s.src = 'sound.js';
+        s.onload = function() {
+          try {
+            // If sound.js created audioContext but left it suspended, resume it now
+            if (window.audioContext && audioContext.state === 'suspended' && typeof audioContext.resume === 'function') {
+              audioContext.resume();
+            }
+          } catch (e) {}
+        };
+        s.onerror = function() {
+          console.warn('qandy: failed to load sound.js');
+        };
+        document.head.appendChild(s);
+      }
+
+      // Remove the overlay and start loading the normal script queue
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      startScriptLoading();
+    }
+
+    overlay.addEventListener('click', engageHandler);
+    // Accept keyboard activation too
+    document.addEventListener('keydown', engageHandler, { once: true });
+    // On touch devices ensure a tap also works (click covers most cases)
+  }
+
+  // Wait until DOM layout is available so size/position are accurate
+  // if (document.readyState === 'loading') {
+  //   document.addEventListener('DOMContentLoaded', createPowerOverlay);
+  // } else {
+  //   // small timeout to allow layout to stabilize (optional)
+  //   setTimeout(createPowerOverlay, 0);
+  // }
+  
+  // Initialization: show overlay only when SOUND === true; otherwise skip to script loading
+  function init() {
+    if (window.SOUND === true) {
+      // Wait until DOM layout is available so size/position are accurate
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', createPowerOverlay);
+      } else {
+        // small timeout to allow layout to stabilize (optional)
+        setTimeout(createPowerOverlay, 0);
+      }
+    } else {
+      // SOUND is not enabled (false or undefined); skip overlay and load scripts immediately
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', startScriptLoading);
+      } else {
+        setTimeout(startScriptLoading, 0);
+      }
+    }
+  }
+
+  init();
+})();
+</script>
+
+
+<script>
+// runtime.js - guest runtime bootstrap
+(function() {
+  'use strict';
+  // Draw welcome message
+  if (typeof gfx !== 'undefined') {
+    gfx.clearScreen('#fff','#000');
+    gfx.printAt(0,0, 'Qandy Guest VM', '#0f0', '#000');
+    gfx.printAt(0,2, 'Welcome to the guest sandbox.', '#ccc', '#000');
+  }
+
+  // Simple hostRequest wrapper (sends messages to parent and waits for response)
+  function hostRequest(action, payload) {
+    return new Promise(function(resolve, reject) {
+      const id = Math.random().toString(36).slice(2);
+      function onMsg(e) {
+        // accept response from parent only
+        if (!e.data || e.data.type !== 'response' || e.data.id !== id) return;
+        window.removeEventListener('message', onMsg);
+        if (e.data.status === 'ok') resolve(e.data.payload); else reject(e.data.payload);
+      }
+      window.addEventListener('message', onMsg);
+      // send request to parent (guest is sandboxed, postMessage allowed)
+      parent.postMessage({ type:'request', id:id, action: action, payload: payload }, '*');
+    });
+  }
+
+  // Example: request file list from host and show it
+  async function showFiles() {
+    try {
+      const res = await hostRequest('dosList', {});
+      gfx.printAt(0,4, 'Files:', '#fff', '#000');
+      const files = (res && res.files) ? res.files.split('\n') : [];
+      for (let i=0;i<Math.min(files.length, 10); i++) {
+        gfx.printAt(0,5+i, files[i], '#aaa', '#000');
+      }
+    } catch (e) {
+      gfx.printAt(0,4, 'Failed to list files', '#f00', '#000');
+    }
+  }
+
+  // show files after a short delay
+  setTimeout(showFiles, 500);
+
+  // Expose hostRequest to guest scripts
+  window.hostRequest = hostRequest;
+
+})();
+
+
+
+
+
+  </script>
+
+</body>
+</html>

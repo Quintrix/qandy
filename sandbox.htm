@@ -1,7 +1,265 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
 <head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Qandy Guest Sandbox</title>
+  <link rel="stylesheet" href="sandbox.css">
 </head>
 <body>
+
+  <div id=txt class="txt"></div>
+
+<script>
+
+// Guest-side file loader (include early in sandbox.htm)
+// Requests files from parent via postMessage and injects them sequentially.
+// Waits for either script.onload OR window.qandySignalReady(name) before proceeding.
+// Emits 'qandyFilesLoaded' and sets window.__qandy_files_loaded = true when done.
+
+(function () {
+  'use strict';
+
+  var PARENT = window.parent;
+  var FILES = [
+    { src: 'memory.js', name: 'Memory' },
+    { src: 'video.js',  name: 'Video' },
+    { src: 'gfx.js',    name: 'Graphics' }
+  ];
+  var REQUEST_TIMEOUT_MS = 8000; // how long we wait for host reply
+  var SCRIPT_READY_TIMEOUT_MS = 10000; // max wait for script to signal readiness
+
+  // Map to hold waiting resolvers for qandySignalReady(name)
+  var _signalResolvers = Object.create(null);
+
+  // Provide qandySignalReady function that scripts can call to signal readiness
+  // If a previous definition exists, call it too, but ensure our resolver runs.
+  (function installSignalHook() {
+    var prev = window.qandySignalReady;
+    window.qandySignalReady = function (scriptName) {
+      try {
+        if (typeof prev === 'function') {
+          try { prev(scriptName); } catch (e) { /* ignore */ }
+        }
+      } catch (e) {}
+      if (scriptName && _signalResolvers[scriptName]) {
+        try {
+          _signalResolvers[scriptName]();
+        } catch (e) {}
+      }
+    };
+  })();
+
+  // Request a file from parent, return Promise<string> of the file content
+  function requestFileFromParent(name, timeoutMs) {
+    timeoutMs = typeof timeoutMs === 'number' ? timeoutMs : REQUEST_TIMEOUT_MS;
+    return new Promise(function (resolve, reject) {
+      var id = Math.random().toString(36).slice(2);
+      var responded = false;
+
+      function onMsg(ev) {
+        if (ev.source !== PARENT) return;
+        var d = ev.data;
+        if (!d || d.type !== 'file-response' || d.id !== id) return;
+        window.removeEventListener('message', onMsg);
+        responded = true;
+        if (d.status === 'ok' && typeof d.content === 'string') return resolve(d.content);
+        return reject(new Error(d.error || 'file-response error'));
+      }
+      window.addEventListener('message', onMsg);
+
+      try {
+        PARENT.postMessage({ type: 'request-file', id: id, name: name }, '*');
+      } catch (e) {
+        window.removeEventListener('message', onMsg);
+        return reject(e);
+      }
+
+      setTimeout(function () {
+        if (!responded) {
+          window.removeEventListener('message', onMsg);
+          reject(new Error('timeout waiting for parent file: ' + name));
+        }
+      }, timeoutMs);
+    });
+  }
+
+  // Inject a script string into the document and return a Promise that resolves when
+  // either script.onload fires OR qandySignalReady(scriptName) is called.
+  function injectScriptString(code, scriptName) {
+    return new Promise(function (resolve, reject) {
+      var resolved = false;
+      var cleanup = function () {
+        resolved = true;
+        // clear pending resolver
+        if (_signalResolvers[scriptName]) {
+          delete _signalResolvers[scriptName];
+        }
+        // clear timeout
+        if (timeoutId) clearTimeout(timeoutId);
+      };
+
+      // Create script blob/url to avoid CSP inline issues
+      var scriptEl;
+      try {
+        var blob = new Blob([code], { type: 'application/javascript' });
+        var url = URL.createObjectURL(blob);
+        scriptEl = document.createElement('script');
+        scriptEl.src = url;
+        scriptEl.async = false; // preserve execution order
+        scriptEl.onload = function () {
+          try { URL.revokeObjectURL(url); } catch (e) {}
+          if (!resolved) {
+            cleanup();
+            resolve();
+          }
+        };
+        scriptEl.onerror = function (e) {
+          try { URL.revokeObjectURL(url); } catch (er) {}
+          if (!resolved) {
+            cleanup();
+            reject(new Error('Script load error: ' + scriptName));
+          }
+        };
+        document.head.appendChild(scriptEl);
+      } catch (e) {
+        // fallback to inline script if blob fails
+        try {
+          scriptEl = document.createElement('script');
+          scriptEl.text = code;
+          document.head.appendChild(scriptEl);
+          // inline executes immediately; consider it loaded
+          // but we still wait for qandySignalReady(scriptName) if script wishes to signal async readiness
+        } catch (e2) {
+          return reject(e2);
+        }
+      }
+
+      // Set up qandySignalReady-based resolver
+      _signalResolvers[scriptName] = function () {
+        if (!resolved) {
+          cleanup();
+          resolve();
+        }
+      };
+
+      // If the script element fires load it will resolve; otherwise wait for signal
+      // also apply a safety timeout so loader doesn't hang forever
+      var timeoutId = setTimeout(function () {
+        if (!resolved) {
+          // fallback: if no signal and no onload, treat as ready to continue
+          cleanup();
+          resolve(); // proceed anyway after timeout
+        }
+      }, SCRIPT_READY_TIMEOUT_MS);
+    });
+  }
+
+  // Attempt to load a file via host, otherwise fall back to network <script src=...>
+  function loadFile(name, displayName) {
+    return requestFileFromParent(name).then(function (code) {
+      return injectScriptString(code, displayName || name);
+    }).catch(function (err) {
+      // parent failed or timed out -> fallback to network load and wait for onload
+      console.warn('guest-loader: host request failed for', name, err);
+      return new Promise(function (resolve, reject) {
+        var script = document.createElement('script');
+        script.src = name;
+        script.async = false;
+        script.onload = function () { resolve(); };
+        script.onerror = function (e) { reject(new Error('network script load failed: ' + name)); };
+        document.head.appendChild(script);
+      });
+    });
+  }
+
+  // Sequentially load the FILES array and wait for each to be ready
+  async function loadAllFiles() {
+    for (var i = 0; i < FILES.length; i++) {
+      var f = FILES[i];
+      try {
+        // Wait until file is injected and script signals ready (or onload)
+        await loadFile(f.src, f.name);
+        // At this point either the script called qandySignalReady(f.name) or onload fired (or timeout)
+        // We do not call qandySignalReady ourselves; we just advance.
+        console.info('guest-loader: loaded', f.src);
+      } catch (e) {
+        console.error('guest-loader: failed loading', f.src, e);
+        // continue to next even if one fails (adjust policy if you want to stop)
+      }
+    }
+
+    // mark loaded and notify other code (startScriptLoading can wait for this)
+    window.__qandy_files_loaded = true;
+    try {
+      document.dispatchEvent(new CustomEvent('qandyFilesLoaded', { detail: { files: FILES.map(x => x.src) } }));
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  // Start loader immediately
+  try {
+    loadAllFiles().catch(function (e) { console.error('guest-loader error', e); });
+  } catch (e) {
+    console.error('guest-loader startup failed', e);
+  }
+
+})();
+
+</script>  
+
+
+<script>
+// runtime.js - guest runtime bootstrap
+(function() {
+  'use strict';
+  // Draw welcome message
+  if (typeof gfx !== 'undefined') {
+    gfx.clearScreen('#fff','#000');
+    gfx.printAt(0,0, 'Qandy Guest VM', '#0f0', '#000');
+    gfx.printAt(0,2, 'Welcome to the guest sandbox.', '#ccc', '#000');
+  }
+
+  // Simple hostRequest wrapper (sends messages to parent and waits for response)
+  function hostRequest(action, payload) {
+    return new Promise(function(resolve, reject) {
+      const id = Math.random().toString(36).slice(2);
+      function onMsg(e) {
+        // accept response from parent only
+        if (!e.data || e.data.type !== 'response' || e.data.id !== id) return;
+        window.removeEventListener('message', onMsg);
+        if (e.data.status === 'ok') resolve(e.data.payload); else reject(e.data.payload);
+      }
+      window.addEventListener('message', onMsg);
+      // send request to parent (guest is sandboxed, postMessage allowed)
+      parent.postMessage({ type:'request', id:id, action: action, payload: payload }, '*');
+    });
+  }
+
+  // Example: request file list from host and show it
+  async function showFiles() {
+    try {
+      const res = await hostRequest('dosList', {});
+      gfx.printAt(0,4, 'Files:', '#fff', '#000');
+      const files = (res && res.files) ? res.files.split('\n') : [];
+      for (let i=0;i<Math.min(files.length, 10); i++) {
+        gfx.printAt(0,5+i, files[i], '#aaa', '#000');
+      }
+    } catch (e) {
+      gfx.printAt(0,4, 'Failed to list files', '#f00', '#000');
+    }
+  }
+
+  // show files after a short delay
+  setTimeout(showFiles, 500);
+
+  // Expose hostRequest to guest scripts
+  window.hostRequest = hostRequest;
+
+})();
+
+  </script>
+
 </body>
-</html
+</html>
