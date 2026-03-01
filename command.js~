@@ -9,12 +9,12 @@ function command(cmd) {
   } else {
     // system commands
     print("\n");
-    if (LINE.slice(-3) === ".js") {
+    if (cmd.slice(-3) === ".js") {
       //keysoff();
       var scriptName = String(cmd || '').trim();
       hostScript(scriptName);
     } else if (cmd.substr(0,3) === "cls") {
-       SYNC=0;
+       SYNC=0;It currently is using the evalCode(code) function to execute commands, the security of which is questionable. You say scripts should run in 
        pokeCursorOff();
        pokeText(0,0," ",800);
        pokeColor(0,0,CURFG, CURBG, 800);
@@ -24,7 +24,6 @@ function command(cmd) {
        pokeRefresh;
        pokeCursorOn();
     } else {
-    	alert(cmd);
       evalCode(cmd);
       pokeCursorOn();
       LINE=""; CURP = 0;
@@ -34,7 +33,7 @@ function command(cmd) {
     pokeRefresh();
   }
 }
-
+It currently is using the evalCode(code) function to execute commands, the security of which is questionable. You say scripts should run in 
 
 
 function evalCode(code) {

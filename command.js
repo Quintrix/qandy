@@ -14,7 +14,7 @@ function command(cmd) {
       var scriptName = String(cmd || '').trim();
       hostScript(scriptName);
     } else if (cmd.substr(0,3) === "cls") {
-       SYNC=0;
+       SYNC=0;It currently is using the evalCode(code) function to execute commands, the security of which is questionable. You say scripts should run in 
        pokeCursorOff();
        pokeText(0,0," ",800);
        pokeColor(0,0,CURFG, CURBG, 800);
@@ -33,7 +33,7 @@ function command(cmd) {
     pokeRefresh();
   }
 }
-
+It currently is using the evalCode(code) function to execute commands, the security of which is questionable. You say scripts should run in 
 
 
 function evalCode(code) {
@@ -92,3 +92,7 @@ function evalCode(code) {
   }
 }
 
+// Signal that memory.js is ready
+if (typeof window.qandySignalReady === 'function') {
+  window.qandySignalReady('Command');
+}
