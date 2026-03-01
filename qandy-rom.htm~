@@ -300,8 +300,9 @@ html { -webkit-text-size-adjust: 100%; }     /* keep text size stable across zoo
 // Define Global Variables
 
 // sound.js
-var SOUND=false;       // enable/disable sound card
 var SOUND=true;       // enable/disable sound card
+var SOUND=false;       // enable/disable sound card
+
 
 // qandy.js
 var DEVTEAM=0;  // developer mode
@@ -601,6 +602,11 @@ var inInputMode = false;       // True when processing user input (prevents pagi
     try { window.RUN = window.run; } catch (e) { /* ignore */ }
   }
 })();
+
+// Safe no-op shims so these functions don't throw ReferenceError before keyboard_js() runs
+if (typeof window.highlightKey === 'undefined') window.highlightKey = function() {};
+if (typeof window.unhighlightKey === 'undefined') window.unhighlightKey = function() {};
+if (typeof window.updateKeyLabels === 'undefined') window.updateKeyLabels = function() {};
 </script>
 
 <script>
@@ -1084,8 +1090,9 @@ function volume(level) {
   if (isNaN(v)) v = 0;
   window.BEEP_VOLUME = Math.max(0, Math.min(1, v));
   return prev;
-}} 
-video_js();
+}
+return Promise.resolve();
+}
 
 function video_js() {
 //
@@ -2297,7 +2304,7 @@ window.pokeScroll = function(n) {
 //  pokeCursorOn();  
 //}
 
-keyboard_js();
+return Promise.resolve();
 }
 
 function keyboard_js() {
@@ -2717,7 +2724,7 @@ resize(); function resize() {
 
 })(window);
 
-command_js();
+return Promise.resolve();
 }
 
 function command_js() {
@@ -2811,7 +2818,7 @@ function evalCode(code) {
     return false;
   }
 }
-qandy_js(); }
+return Promise.resolve(); }
 
 function qandy_js() { 
 
@@ -3540,5 +3547,221 @@ for (i=0;i<mySearch.length;i++) {
 
 // if (SFiles) { showFiles(); }
 }
+
+function createPowerOverlay() {
+  var txtEl = document.getElementById('txt') || document.body;
+  var rect = txtEl.getBoundingClientRect();
+
+  var overlay = document.createElement('div');
+  overlay.id = 'qandy-power-overlay';
+  overlay.style.position = 'absolute';
+  overlay.style.left = (rect.left + window.scrollX) + 'px';
+  overlay.style.top = (rect.top + window.scrollY) + 'px';
+  overlay.style.width = rect.width + 'px';
+  overlay.style.height = rect.height + 'px';
+  overlay.style.background = '#000';
+  overlay.style.color = '#bbb';
+  overlay.style.border = '4px solid #bbb';
+  overlay.style.overflow = 'hidden';
+  overlay.style.direction = 'ltr';
+  overlay.style.display = 'flex';
+  overlay.style.alignItems = 'center';
+  overlay.style.justifyContent = 'center';
+  overlay.style.fontFamily = 'monospace, monospace';
+  overlay.style.fontSize = '28px';
+  overlay.style.letterSpacing = '2px';
+  overlay.style.zIndex = '9999';
+  overlay.style.cursor = 'pointer';
+  overlay.style.userSelect = 'none';
+  overlay.style.whiteSpace = 'pre-wrap';
+  overlay.textContent = 'QANDY\nPOCKET\nCOMPUTER';
+
+  var helper = document.createElement('div');
+  helper.style.position = 'absolute';
+  helper.style.bottom = '8%';
+  helper.style.left = '50%';
+  helper.style.transform = 'translateX(-50%)';
+  helper.style.fontSize = '12px';
+  helper.style.color = '#fff';
+  helper.textContent = 'Click anywhere, press any key, or touch screen to power on.';
+  overlay.appendChild(helper);
+
+  document.body.appendChild(overlay);
+
+  return new Promise(function(resolve) {
+    function engageHandler() {
+      overlay.removeEventListener('click', engageHandler);
+      document.removeEventListener('keydown', engageHandler);
+      try {
+        var ctx = new (window.AudioContext || window.webkitAudioContext)();
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = 1000;
+        gain.gain.value = 0.03;
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.03);
+        setTimeout(function() { if (ctx.close) ctx.close(); }, 150);
+      } catch (err) { console.warn('qandy: ephemeral power-on beep failed', err); }
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      resolve();
+    }
+    overlay.addEventListener('click', engageHandler);
+    document.addEventListener('keydown', engageHandler);
+  });
+}
+
+async function bootSequence() {
+  if (window.SOUND === true) {
+    await createPowerOverlay();
+  }
+  await sound_js();
+  await video_js();
+  await keyboard_js();
+  await command_js();
+  qandy_js();
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', function() { bootSequence(); });
+} else {
+  bootSequence();
+}
+
+
+
+  // Create an overlay the same size as the #txt display with "POWER SWITCH" text.
+  function createPowerOverlay() {
+    var txtEl = document.getElementById('txt') || document.body;
+    var rect = txtEl.getBoundingClientRect();
+
+    var overlay = document.createElement('div');
+    overlay.id = 'qandy-power-overlay';
+
+    // Position/size to match the txt element
+    overlay.style.position = 'absolute';
+    overlay.style.left = (rect.left + window.scrollX) + 'px';
+    overlay.style.top = (rect.top + window.scrollY) + 'px';
+    overlay.style.width = rect.width + 'px';
+    overlay.style.height = rect.height + 'px';
+
+    // Visual style (retro look)
+    overlay.style.background = '#000';
+    overlay.style.color = '#bbb';
+    overlay.style.border = '4px solid #bbb';
+    overlay.style.overflow = 'hidden';   /* hide any internal scrollbars */
+    overlay.style.direction = 'ltr';     /* ensure scrollbar (if shown) is on the right */
+    overlay.style.display = 'flex';
+    overlay.style.alignItems = 'center';
+    overlay.style.justifyContent = 'center';
+    overlay.style.fontFamily = 'monospace, monospace';
+    overlay.style.fontSize = '28px';
+    overlay.style.letterSpacing = '2px';
+    overlay.style.zIndex = '9999';
+    overlay.style.cursor = 'pointer';
+    overlay.style.userSelect = 'none';
+    overlay.style.whiteSpace = 'pre-wrap';
+    overlay.textContent = 'QANDY\nPOCKET\nCOMPUTER';  
+
+    // Center small helper text beneath main label
+    var helper = document.createElement('div');
+    helper.style.position = 'absolute';
+    helper.style.bottom = '8%';
+    helper.style.left = '50%';
+    helper.style.transform = 'translateX(-50%)';
+    helper.style.fontSize = '12px';
+    helper.style.color = '#fff';
+    helper.textContent = 'Click any button, press any key, or touch screen to power on.';
+    overlay.appendChild(helper);
+
+    document.body.appendChild(overlay);
+
+    function engageHandler(e) {
+      // Only first interaction matters
+      overlay.removeEventListener('click', engageHandler);
+      document.removeEventListener('keydown', engageHandler);
+
+      // Play an immediate tiny beep using an ephemeral AudioContext (this is inside a user gesture)
+      try {
+        var ctx = new (window.AudioContext || window.webkitAudioContext)();
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = 1000;
+        gain.gain.value = 0.03;
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.03);
+        setTimeout(function() { if (ctx.close) ctx.close(); }, 150);
+      } catch (err) {
+        /* ignore audio errors for ephemeral feedback */
+      }
+
+      // Inject sound.js so subsequent keypresses can use beep()
+      if (!document.getElementById('qandy-sound-js')) {
+        var s = document.createElement('script');
+        s.id = 'qandy-sound-js';
+        s.src = 'sound.js';
+        s.onload = function() {
+          try {
+            // If sound.js created audioContext but left it suspended, resume it now
+            if (window.audioContext && audioContext.state === 'suspended' && typeof audioContext.resume === 'function') {
+              audioContext.resume();
+            }
+          } catch (e) {}
+        };
+        s.onerror = function() {
+          console.warn('qandy: failed to load sound.js');
+        };
+        document.head.appendChild(s);
+      }
+
+      // Remove the overlay and start loading the normal script queue
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      startScriptLoading();
+    }
+
+    overlay.addEventListener('click', engageHandler);
+    // Accept keyboard activation too
+    document.addEventListener('keydown', engageHandler, { once: true });
+    // On touch devices ensure a tap also works (click covers most cases)
+  }
+
+  // Wait until DOM layout is available so size/position are accurate
+  // if (document.readyState === 'loading') {
+  //   document.addEventListener('DOMContentLoaded', createPowerOverlay);
+  // } else {
+  //   // small timeout to allow layout to stabilize (optional)
+  //   setTimeout(createPowerOverlay, 0);
+  // }
+  
+  // Initialization: show overlay only when SOUND === true; otherwise skip to script loading
+  function init() {
+    if (window.SOUND === true) {
+      // Wait until DOM layout is available so size/position are accurate
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', createPowerOverlay);
+      } else {
+        // small timeout to allow layout to stabilize (optional)
+        setTimeout(createPowerOverlay, 0);
+      }
+    } else {
+      // SOUND is not enabled (false or undefined); skip overlay and load scripts immediately
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', startScriptLoading);
+      } else {
+        setTimeout(startScriptLoading, 0);
+      }
+    }
+  }
+
+  init();
+
+
+
+
 </script>
 </body></html>
