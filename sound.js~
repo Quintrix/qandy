@@ -1,3 +1,44 @@
+// QANDY SOUND CARD
+// Sound and music API for the Qandy Pocket Computer
+// Generates beeps, tones, and musical notes using Web Audio API
+// Modern browsers don't support ASCII BEL character (\x07) for security reasons
+// This provides an alternative using actual audio generation
+
+//
+// API FUNCTIONS:
+//
+//              beep() plays standard "beep"
+//            beep(Hz) custom frequency
+//       beep(Hz, dur) frequency plus duration
+//      playNote(note) play note from music scale
+//  playNote(note,dur) play note with duration
+//
+//  playTune(string) play a sequence of notes from a music string
+// playMelody(array) play a sequence of notes from an array
+//  playNotes(string) play notes in GWBASIC PLAY command format
+//         stopTune() stop currently playing tune
+//        loopTune(s) loop a tune continuously
+//       loopNotes(s) loop GWBASIC format notes continuously
+//
+// EXAMPLES:
+//              beep() Standard beep (800Hz, 200ms)
+//          beep(1000) 1000Hz beep
+//       playNote('C') Play middle C (C4)
+//      playNote('A4') Play A4 (440Hz)
+// playNote('C#5',500) C sharp octave 5, 500ms
+//
+// playTune("C E G C5") Simple scale
+// playTune("C:100 D:100 E:100 F:100 G:400") Scale with timing
+// playTune("C4:200 R:100 E4:200 R:100 G4:400") With rests
+//
+// playMelody([['C4',200], ['E4',200], ['G4',400]]) Array format
+//
+// playNotes("C D E F G A B") GWBASIC PLAY format
+// playNotes("O3 L8 CDEFGAB") GWBASIC with octave and length
+// playNotes("T100 C#4 D8 F+16") GWBASIC with tempo and note lengths
+//
+// loopTune("C E G E") Background music loop
+//
 
 beep();
 
