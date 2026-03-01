@@ -4,7 +4,6 @@
 <link rel="icon" href="/i/Jc.png" sizes="32x32" type="image/png">
 <link rel="shortcut icon" href="/i/Jc.png" type="image/png"> <!-- legacy fallback -->
 <link rel="apple-touch-icon" href="/i/Jc.png"> <!-- iOS home screen icon -->
-<meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#0a0a0a">
 <!-- iOS -->
@@ -15,524 +14,506 @@
 if (typeof window.print === 'function' && window.print.toString().indexOf('[native code]') !== -1) { window._native_print = window.print; window.print = function() {}; }
 </script>
 <link rel="stylesheet" type="text/css" href="qandy.css">
-</head><body><p><br>
-<div id=txt class="txt"></div>
-<div id="pop" class="pop" onMouseOver='PopUpVis="visible";' onMouseOut='PopUpVis=PForce; PUV=setTimeout("document.getElementById(\"pop\").style.visibility=PopUpVis;",100);'></div>
-<div id="keyboard-container"></div>
-
+</head><body>
 <script>
 
-// Define Global Variables
 
-// sound.js
-var SOUND=false;       // enable/disable sound card
-var SOUND=true;       // enable/disable sound card
+// Host preload module: read allowed files into memory before starting the host file server.
+// Place this in qandy8.htm before you create the VM or install the host postMessage responder.
 
-// qandy.js
-var DEVTEAM=0;  // developer mode
-var RUN= "";     // current script running starting with qandy.js 
-var RUNIN="";   // input mode set by running script, line or key
-var RUNOUT="";  // output display set by running script, gfx or txt
-
-var runInputMode="";      // type of input qandy sends run= (line, key, or none)
-var commandHistory = [];  // Array to store command history
-var historyIndex = -1;    // Current position in history (-1 = not browsing, typing new command)
-var maxHistorySize = 50;  // Maximum number of commands to remember
-var tempCommand = "";     // Temporary storage for command being typed when browsing history
-
-var CURSOR=5; // cursor type 0=off, 1=line, 3=blink line, 4=block, 5=blink block  
-var CURX = 0;    // cursor x
-var CURY = 0;    // cursor y
-var CURP = 0;    // cursor p 
-
-var CURANSI = true; // cursor text ANSI on
-var CURFG = 37;     // cursor text fg color white
-var CURBG = 40;     // cursor text bg color black
-var CURATTR = 0;    // cursor text attr (not including color)
-var CURBAUD = 9600;    // baud rate to display text
-
-// video.js
-var W=32; // screen width
-var H=25; // screen height
-
-var VIDEO = [];  // video memory
-var COLOR = [];  // color memory
-var FCOLOR = []; // foreground color memory
-var BCOLOR = [];  // background color memory
-var ATTR = [];   // attribute memory
-var DOM = [];    // DOM memory
-
-var SYNC=true; // keeps DOM in sync with video
-
-// Attribute bit constants (16-bit)
-var ATTR_INVERSE    = 0x0001;
-var ATTR_BOLD       = 0x0002;
-var ATTR_DIM        = 0x0004;
-var ATTR_ITALIC     = 0x0008;
-var ATTR_UNDERLINE  = 0x0010;
-var ATTR_BLINK      = 0x0020;
-var ATTR_RAPIDBLINK = 0x0040; // optional
-var ATTR_HIDDEN     = 0x0080;
-var ATTR_STRIKE     = 0x0100;
-var ATTR_OVERLINE   = 0x0200; // optional
-
-// Foreground (normal)
-var ANSIblack = "\x1b[30m";
-var ANSIred = "\x1b[31m";
-var ANSIgreen = "\x1b[32m";
-var ANSIyellow = "\x1b[33m";
-var ANSIblue = "\x1b[34m";
-var ANSImagenta = "\x1b[35m";
-var ANSIcyan = "\x1b[36m";
-var ANSIwhite = "\x1b[37m";
-
-// rest of ANSI color variables not implemented yet
-var ANSIreset = "\x1b[0m";
-
-// Foreground (bright / high-intensity)
-var ANSIblack_bright = "\x1b[90m";
-var ANSIred_bright = "\x1b[91m";
-var ANSIgreen_bright = "\x1b[92m";
-var ANSIyellow_bright = "\x1b[93m";
-var ANSIblue_bright = "\x1b[94m";
-var ANSImagenta_bright = "\x1b[95m";
-var ANSIcyan_bright = "\x1b[96m";
-var ANSIwhite_bright = "\x1b[97m";
-
-
-// Background (normal)
-var ANSIbgblack = "\x1b[40m";
-var ANSIbgred = "\x1b[41m";
-var ANSIbggreen = "\x1b[42m";
-var ANSIbgyellow = "\x1b[43m";
-var ANSIbgblue = "\x1b[44m";
-var ANSIbgmagenta = "\x1b[45m";
-var ANSIbgcyan = "\x1b[46m";
-var ANSIbgwhite = "\x1b[47m";
-
-// Background (bright)
-var ANSIbgblack_bright = "\x1b[100m";
-var ANSIbgred_bright = "\x1b[101m";
-var ANSIbggreen_bright = "\x1b[102m";
-var ANSIbgyellow_bright = "\x1b[103m";
-var ANSIbgblue_bright = "\x1b[104m";
-var ANSIbgmagenta_bright = "\x1b[105m";
-var ANSIbgcyan_bright = "\x1b[106m";
-var ANSIbgwhite_bright = "\x1b[107m";
-
-// Useful attribute helpers
-var ANSIbold = "\x1b[1m";
-var ANSIdim = "\x1b[2m";
-var ANSIitalic = "\x1b[3m";
-var ANSIunderline = "\x1b[4m";
-var ANSIinverse = "\x1b[7m";
-var ANSIhidden = "\x1b[8m";
-var ANSIstrikethrough = "\x1b[9m";
-var ANSIresetAll = "\x1b[0m"; // same as ANSIreset
-
-// gfx.js
-var txt="";
-var mode="txt"; // gfx or txt display
-var allowScriptESC=false; // if true, script handles ESC instead of universal termination
-var PopX=0;
-var PopY=0;
-var PopHide="hidden";
-var PopAlign="center";
-var PForce="hidden";
-var mapx=7;
-var mapy=11;
-var map="";
-
-// keyboard.js
-var keyon=1;
-var caps=0;  // caps lock state: 0=lowercase, 1=uppercase, 2=extended graphics
-var shift=0; // shift key pressed  
-var ctrl=0;  // ctrl key pressed
-var alt=0;   // alt key pressed
-var ctrlPhysical=false;  // track if ctrl was activated by physical keyboard
-var altPhysical=false;   // track if alt was activated by physical keyboard
-var keyboard=1; // turn keyboard input on/off
-
-var LINE ="";  // input line
-var LINEX=0;   // start of input cursor x
-var LINEY=0;   // start of input cursor y
-var LINEP=0;   // cursor position on line
-
-var SSTART=-1;  // selection start
-var SEND=-1;    // selection end
-
-var selectionBgColor = '#ffffff';   // old Selection background color
-var selectionFgColor = '#000000';   // old Selection text color
-
-// keyboard.js
-
-var normalKeys = {
-           "`":"`","\\":"\\","[":"[", "]":"]", "-":"-", "=":"=", 
-  "1":"1", "2":"2", "3":"3", "4":"4", "5":"5", "6":"6", "7":"7", "8":"8", "9":"9", "0":"0",
-  "q":"q", "w":"w", "e":"e", "r":"r", "t":"t", "y":"y", "u":"u", "i":"i", "o":"o", "p":"p",
-  "a":"a", "s":"s", "d":"d", "f":"f", "g":"g", "h":"h", "j":"j", "k":"k", "l":"l", "'":"'",
-  "z":"z", "x":"x", "c":"c", "v":"v", "b":"b", "n":"n", "m":"m", ";":";",
-                    " ":" ",                   ",":",", ".":".", "/":"/"
-};
-
-var shiftedKeys = {
-           "`":"~","\\":"|", "[":"{", "]":"}", "-":"_", "=":"+",
-  "1":"!", "2":"@", "3":"#", "4":"$", "5":"%", "6":"^", "7":"&", "8":"*", "9":"(", "0":")",
-  "q":"Q", "w":"W", "e":"E", "r":"R", "t":"T", "y":"Y", "u":"U", "i":"I", "o":"O", "p":"P",
-  "a":"A", "s":"S", "d":"D", "f":"F", "g":"G", "h":"H", "j":"J", "k":"K", "l":"L", "'":'"',
-  "z":"Z", "x":"X", "c":"C", "v":"V", "b":"B", "n":"N", "m":"M", ";":":", 
-                    " ":" ",                   ",":"<", ".":">", "/":"?"
-};
-
-var altKeys = {
-           "`":"°","\\":"¦", "[":"«", "]":"»", "-":"─", "=":"═",
-  "1":"☺", "2":"☻", "3":"♥", "4":"♦", "5":"♣", "6":"♠", "7":"•", "8":"◘", "9":"○", "0":"◙",
-  "q":"┌", "w":"─", "e":"┐", "r":"├", "t":"┤", "y":"└", "u":"┴", "i":"┘", "o":"│", "p":"┼",
-  "a":"╔", "s":"═", "d":"╗", "f":"╠", "g":"╣", "h":"╚", "j":"╩", "k":"╝", "l":"║", "'":"″",
-  "z":"▀", "x":"▄", "c":"█", "v":"▌", "b":"▐", "n":"░", "m":"▒", ";":"╬",
-                    " ":"·",                   ",":"▓", ".":"■", "/":"□"
-};
-
-var altShiftKeys = {
-  "`":"¬","\\":"¦", "[":"‹", "]":"›", "-":"―", "=":"≡",
-  "1":"↑", "2":"↓", "3":"←", "4":"→", "5":"↔", "6":"↕", "7":"★", "8":"☆", "9":"◆", "0":"◇",
-  "q":"╭", "w":"╌", "e":"╮", "r":"╞", "t":"╡", "y":"╰", "u":"╴", "i":"╯", "o":"╎", "p":"╪",
-  "a":"┏", "s":"━", "d":"┓", "f":"┣", "g":"┫", "h":"┗", "j":"┻", "k":"┛", "l":"┃", "'":"′",
-  "zhttps://quintrix.github.io/qandy/":"▔", "x":"▁", "c":"▪", "v":"▸", "b":"◂", "n":"▴", "m":"▾", ";":"╋",
-  " ":"·", ",":"◊", ".":"●", "/":"○"
-};
-var keyboardData = [
-  // Row 0: ESC, BACKTICK, BACKSLASH, OPEN, CLOSE, DASH, EQUAL, BACK (y=446)
-  {id:"esc", label:"ESC", keyCode:27, x:47, y:446, width:52},
-  {id:"backtick", label:"`", keyCode:192, x:103, y:446, width:28},
-  {id:"backslash", label:"\\", keyCode:220, x:132, y:446, width:28},
-  {id:"open", label:"[", keyCode:219, x:160, y:446, width:28},
-  {id:"close", label:"]", keyCode:221, x:189, y:446, width:28},
-  {id:"dash", label:"-", keyCode:173, x:218, y:446, width:28},
-  {id:"equal", label:"=", keyCode:61, x:247, y:446, width:28},
-  {id:"back", label:"BACK", keyCode:8, x:275, y:446, width:52},
-  // Row 1: Number keys 1-0 (y=480)
-  {id:"n1", label:"1", keyCode:49, x:47, y:480, width:28},
-  {id:"n2", label:"2", keyCode:50, x:75, y:480, width:28},
-  {id:"n3", label:"3", keyCode:51, x:103, y:480, width:28},
-  {id:"n4", label:"4", keyCode:52, x:132, y:480, width:28},
-  {id:"n5", label:"5", keyCode:53, x:160, y:480, width:28},
-  {id:"n6", label:"6", keyCode:54, x:189, y:480, width:28},
-  {id:"n7", label:"7", keyCode:55, x:218, y:480, width:28},
-  {id:"n8", label:"8", keyCode:56, x:247, y:480, width:28},
-  {id:"n9", label:"9", keyCode:57, x:275, y:480, width:28},
-  {id:"n0", label:"0", keyCode:48, x:303, y:480, width:28},
-  // Row 2: QWERTY (y=511)
-  {id:"q", label:"q", keyCode:81, x:47, y:511, width:28},
-  {id:"w", label:"w", keyCode:87, x:75, y:511, width:28},
-  {id:"e", label:"e", keyCode:69, x:103, y:511, width:28},
-  {id:"r", label:"r", keyCode:82, x:132, y:511, width:28},
-  {id:"t", label:"t", keyCode:84, x:160, y:511, width:28},
-  {id:"y", label:"y", keyCode:89, x:189, y:511, width:28},
-  {id:"u", label:"u", keyCode:85, x:218, y:511, width:28},
-  {id:"i", label:"i", keyCode:73, x:247, y:511, width:28},
-  {id:"o", label:"o", keyCode:79, x:275, y:511, width:28},
-  {id:"p", label:"p", keyCode:80, x:303, y:511, width:28},
-  // Row 3: ASDF (y=542)
-  {id:"a", label:"a", keyCode:65, x:47, y:542, width:28},
-  {id:"s", label:"s", keyCode:83, x:75, y:542, width:28},
-  {id:"d", label:"d", keyCode:68, x:103, y:542, width:28},
-  {id:"f", label:"f", keyCode:70, x:132, y:542, width:28},
-  {id:"g", label:"g", keyCode:71, x:160, y:542, width:28},
-  {id:"h", label:"h", keyCode:72, x:189, y:542, width:28},
-  {id:"j", label:"j", keyCode:74, x:218, y:542, width:28},
-  {id:"k", label:"k", keyCode:75, x:247, y:542, width:28},
-  {id:"l", label:"l", keyCode:76, x:275, y:542, width:28},
-  {id:"quote", label:"'", keyCode:222, x:303, y:542, width:28},
-  // Row 4: ZXCV (y=573)
-  {id:"z", label:"z", keyCode:90, x:47, y:573, width:28},
-  {id:"x", label:"x", keyCode:88, x:75, y:573, width:28},
-  {id:"c", label:"c", keyCode:67, x:103, y:573, width:28},
-  {id:"v", label:"v", keyCode:86, x:132, y:573, width:28},
-  {id:"b", label:"b", keyCode:66, x:160, y:573, width:28},
-  {id:"n", label:"n", keyCode:78, x:189, y:573, width:28},
-  {id:"m", label:"m", keyCode:77, x:218, y:573, width:28},
-  {id:"colon", label:";", keyCode:59, x:247, y:573, width:28},
-  {id:"enter", label:"ENTER", keyCode:13, x:275, y:573, width:52},
-
-  // Row 5: Bottom row with modifiers (y=604)
-  {id:"caps", label:"CAPS", keyCode:20, x:47, y:604, width:52},
-  {id:"space", label:"SPACE", keyCode:32, x:103, y:604, width:81},
-  {id:"ctrl", label:"CTRL", keyCode:17, x:189, y:604, width:28},
-  {id:"alt", label:"ALT", keyCode:18, x:218, y:604, width:28},
-  {id:"comma", label:",", keyCode:188, x:247, y:604, width:28},
-  {id:"dot", label:".", keyCode:190, x:275, y:604, width:28},
-  {id:"slash", label:"/", keyCode:191, x:303, y:604, width:28}
-];
-
-// stray code
-var paginationEnabled = true;  // Enable/disable pagination feature
-var paginationPaused = false;  // Is print() currently paused?
-var paginationBuffer = [];     // Queued text waiting to be printed
-var paginationLinesBeforePause = 25;  // Lines to show before pausing
-var inInputMode = false;       // True when processing user input (prevents pagination)
-
-// run= RUN=
-(function() {
-  // backing storage
-  var _run = "";
-  try { if (typeof window.run !== 'undefined') { _run = window.run; } } catch (e) { /* ignore */ }
-
-  // Try to create window.RUN only if it's safe to do so
-  try {
-    var existingRunDesc = Object.getOwnPropertyDescriptor(window, 'RUN');
-    if (!existingRunDesc || existingRunDesc.configurable) {
-      Object.defineProperty(window, 'RUN', {
-        configurable: true,
-        enumerable: true,
-        get: function() { return _run; },
-        set: function(v) {
-          _run = (typeof v === 'undefined' || v === null) ? '' : String(v);
-          // Keep legacy run in sync if it still exists as a plain property
-          try { window.run = _run; } catch (e) { /* ignore */ }
-        }
-      });
-    } else {
-      // non-configurable existing property: try to read its value to seed _run
-      try { _run = window.RUN; } catch (e) { /* ignore */ }
-    }
-  } catch (e) {
-    // defineProperty failed for some reason — fall back to plain assignment
-    try { window.RUN = _run; } catch (e2) { /* ignore */ }
-  }
-
-  // Try to create a mirrored reactive window.run if safe
-  try {
-    var runDesc = Object.getOwnPropertyDescriptor(window, 'run');
-    if (!runDesc || runDesc.configurable) {
-      try { delete window.run; } catch (ignore) {}
-      Object.defineProperty(window, 'run', {
-        configurable: true,
-        enumerable: true,
-        get: function() { return _run; },
-        set: function(v) {
-          _run = (typeof v === 'undefined' || v === null) ? '' : String(v);
-          // keep RUN in sync (if it's defined as an accessor this will update it)
-          try { window.RUN = _run; } catch (e) { /* ignore */ }
-        }
-      });
-    } else {
-      // run exists and is non-configurable — seed/keep sync
-      try { _run = window.run; } catch (e) { /* ignore */ }
-      try { window.RUN = _run; } catch (e) { /* ignore */ }
-    }
-  } catch (err) {
-    // If all else fails, ensure RUN reflects existing run if possible
-    try { window.RUN = window.run; } catch (e) { /* ignore */ }
-  }
-})();
-
-</script>
-
-<script>
-(function() {
+(function () {
   'use strict';
 
-  // Configuration array with script load order (unchanged)
-  var SCRIPT_QUEUE = [
-    { src: 'video.js', name: 'Video' },
-    { src: 'gfx.js', name: 'Graphics' },
-    { src: 'keyboard.js', name: 'Keyboard' },
-    { src: 'qandy.js', name: 'Qandy Core' }
+  // Configure what the host should preload
+  var ALLOWED_FILES = [
+    'qandy.css',
+    'memory.js',
+    'video.js',
+    'gfx.js',
+    'keyboard.js',
+    'command.js',
+    'dos.js',
+    'qandy.js'
   ];
 
-  var startTime = Date.now();
-  var currentIndex = 0;
-  var signalAdvance = null;
+  // Internal caches exposed on window for file responder to use:
+  window._embeddedFiles = window._embeddedFiles || {};   // text files: js/css/txt
+  window._embeddedAssets = window._embeddedAssets || {}; // binary assets as data: URLs
 
-  // Called by each script when its initialization is complete
-  window.qandySignalReady = function(scriptName) {
-    // console.log('\u2713 ' + scriptName + ' signaled ready');
-    if (typeof signalAdvance === 'function') {
-      signalAdvance();
+  // Expose helper to manually embed a file at runtime (useful for file-picker)
+  window.hostEmbedFile = function (name, content, isAsset) {
+    if (!name) return;
+    if (isAsset) {
+      window._embeddedAssets[name] = String(content || '');
+    } else {
+      window._embeddedFiles[name] = String(content || '');
     }
   };
 
-  function loadNext() {
-    if (currentIndex >= SCRIPT_QUEUE.length) {
-      var elapsed = Date.now() - startTime;
-      document.dispatchEvent(new CustomEvent('qandyReady'));
-      return;
+  // Helper to convert ArrayBuffer -> data: URL (base64)
+  function arrayBufferToDataURL(ab, mime) {
+    var u8 = new Uint8Array(ab);
+    var CHUNK = 0x8000; // chunk for large buffers
+    var s = [];
+    for (var i = 0; i < u8.length; i += CHUNK) {
+      s.push(String.fromCharCode.apply(null, u8.subarray(i, i + CHUNK)));
     }
-
-    var entry = SCRIPT_QUEUE[currentIndex];
-    currentIndex++;
-
-    var advanced = false;
-    function advance() {
-      if (advanced) return;
-      advanced = true;
-      signalAdvance = null;
-      loadNext();
-    }
-
-    // Register advance as the handler for qandySignalReady for this script
-    signalAdvance = advance;
-
-    var script = document.createElement('script');
-    script.src = entry.src;
-
-    script.onerror = function() {
-      signalAdvance = null;
-      if (entry.optional) {
-        console.warn('⚠ Optional script not found: ' + entry.name);
-      } else {
-        console.error('✘ Failed to load required script: ' + entry.name + ' (' + entry.src + ')');
-      }
-      advance();
-    };
-
-    // Advance immediately when the script file loads (onload fallback)
-    script.onload = function() { advance(); };
-
-    // Keep a shorter timeout as a final safety
-    var timeout = setTimeout(function() {
-      if (!advanced) {
-        console.warn('Timed out waiting for ' + entry.name + ' to signal ready. Continuing.');
-        advance();
-      }
-    }, 1000); // 
-    document.head.appendChild(script);
+    var binary = s.join('');
+    var base64 = btoa(binary);
+    return 'data:' + (mime || 'application/octet-stream') + ';base64,' + base64;
   }
 
-  function startScriptLoading() {
-    currentIndex = 0;
-    loadNext();
-  }
-
-  // Create an overlay the same size as the #txt display with "POWER SWITCH" text.
-  function createPowerOverlay() {
-    var txtEl = document.getElementById('txt') || document.body;
-    var rect = txtEl.getBoundingClientRect();
-
-    var overlay = document.createElement('div');
-    overlay.id = 'qandy-power-overlay';
-
-    // Position/size to match the txt element
-    overlay.style.position = 'absolute';
-    overlay.style.left = (rect.left + window.scrollX) + 'px';
-    overlay.style.top = (rect.top + window.scrollY) + 'px';
-    overlay.style.width = rect.width + 'px';
-    overlay.style.height = rect.height + 'px';
-
-    // Visual style (retro look)
-    overlay.style.background = '#000';
-    overlay.style.color = '#bbb';
-    overlay.style.border = '4px solid #bbb';
-    overlay.style.overflow = 'hidden';   /* hide any internal scrollbars */
-    overlay.style.direction = 'ltr';     /* ensure scrollbar (if shown) is on the right */
-    overlay.style.display = 'flex';
-    overlay.style.alignItems = 'center';
-    overlay.style.justifyContent = 'center';
-    overlay.style.fontFamily = 'monospace, monospace';
-    overlay.style.fontSize = '28px';
-    overlay.style.letterSpacing = '2px';
-    overlay.style.zIndex = '9999';
-    overlay.style.cursor = 'pointer';
-    overlay.style.userSelect = 'none';
-    overlay.style.whiteSpace = 'pre-wrap';
-    overlay.textContent = 'QANDY\nPOCKET\nCOMPUTER';  
-
-    // Center small helper text beneath main label
-    var helper = document.createElement('div');
-    helper.style.position = 'absolute';
-    helper.style.bottom = '8%';
-    helper.style.left = '50%';
-    helper.style.transform = 'translateX(-50%)';
-    helper.style.fontSize = '12px';
-    helper.style.color = '#fff';
-    helper.textContent = 'Click any button, press any key, or touch screen to power on.';
-    overlay.appendChild(helper);
-
-    document.body.appendChild(overlay);
-
-    function engageHandler(e) {
-      // Only first interaction matters
-      overlay.removeEventListener('click', engageHandler);
-      document.removeEventListener('keydown', engageHandler);
-
-      // Play an immediate tiny beep using an ephemeral AudioContext (this is inside a user gesture)
-      try {
-        var ctx = new (window.AudioContext || window.webkitAudioContext)();
-        var osc = ctx.createOscillator();
-        var gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.value = 1000;
-        gain.gain.value = 0.03;
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.03);
-        setTimeout(function() { if (ctx.close) ctx.close(); }, 150);
-      } catch (err) {
-        /* ignore audio errors for ephemeral feedback */
-      }
-
-      // Inject sound.js so subsequent keypresses can use beep()
-      if (!document.getElementById('qandy-sound-js')) {
-        var s = document.createElement('script');
-        s.id = 'qandy-sound-js';
-        s.src = 'sound.js';
-        s.onload = function() {
-          try {
-            // If sound.js created audioContext but left it suspended, resume it now
-            if (window.audioContext && audioContext.state === 'suspended' && typeof audioContext.resume === 'function') {
-              audioContext.resume();
-            }
-          } catch (e) {}
-        };
-        s.onerror = function() {
-          console.warn('qandy: failed to load sound.js');
-        };
-        document.head.appendChild(s);
-      }
-
-      // Remove the overlay and start loading the normal script queue
-      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-      startScriptLoading();
-    }
-
-    overlay.addEventListener('click', engageHandler);
-    // Accept keyboard activation too
-    document.addEventListener('keydown', engageHandler, { once: true });
-    // On touch devices ensure a tap also works (click covers most cases)
-  }
-
-  // Wait until DOM layout is available so size/position are accurate
-  // if (document.readyState === 'loading') {
-  //   document.addEventListener('DOMContentLoaded', createPowerOverlay);
-  // } else {
-  //   // small timeout to allow layout to stabilize (optional)
-  //   setTimeout(createPowerOverlay, 0);
-  // }
-  
-  // Initialization: show overlay only when SOUND === true; otherwise skip to script loading
-  function init() {
-    if (window.SOUND === true) {
-      // Wait until DOM layout is available so size/position are accurate
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', createPowerOverlay);
-      } else {
-        // small timeout to allow layout to stabilize (optional)
-        setTimeout(createPowerOverlay, 0);
-      }
+  // Try load with fetch; for images we store data: URL
+  async function loadWithFetch(name) {
+    var resp = await fetch(name, { cache: 'no-cache' });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    var ct = resp.headers.get('content-type') || '';
+    if (ct.indexOf('text/') === 0 || ct.indexOf('application/javascript') === 0 || ct.indexOf('application/json') === 0 || name.match(/\.(js|css|txt|json)$/i)) {
+      return { type: 'text', content: await resp.text() };
     } else {
-      // SOUND is not enabled (false or undefined); skip overlay and load scripts immediately
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', startScriptLoading);
-      } else {
-        setTimeout(startScriptLoading, 0);
-      }
+      // binary -> dataURL
+      var ab = await resp.arrayBuffer();
+      var dataUrl = arrayBufferToDataURL(ab, ct.split(';')[0] || undefined);
+      return { type: 'asset', content: dataUrl };
     }
   }
 
-  init();
+  // Try synchronous XHR (file:// fallback). Returns same shape as loadWithFetch.
+  function loadWithSyncXHR(name) {
+    var xhr = new XMLHttpRequest();
+    try {
+      xhr.open('GET', name, false); // synchronous
+      // For local files, binary responses are tricky; request as 'ArrayBuffer' isn't supported synchronously,
+      // so we use responseText and treat images specially via FileReader fallback (if user supplies).
+      xhr.send(null);
+    } catch (e) {
+      throw new Error('XHR failed: ' + e.message);
+    }
+    var status = xhr.status;
+    if (!(status === 0 || (status >= 200 && status < 300))) {
+      throw new Error('XHR status ' + status);
+    }
+    // Heuristic for binary vs text: try to detect common text file extensions
+    if (name.match(/\.(js|css|txt|json|html)$/i)) {
+      return { type: 'text', content: xhr.responseText };
+    } else {
+      // For images, synchronous XHR responseText contains binary which is hard to reliably base64-encode;
+      // we'll signal failure to allow user to use file-picker. Throw to fallback.
+      throw new Error('binary sync XHR not supported for ' + name);
+    }
+  }
+
+  // Attempt to load a single file using best available technique.
+  async function preloadOne(name) {
+    // skip if already embedded
+    if (Object.prototype.hasOwnProperty.call(window._embeddedFiles, name) || Object.prototype.hasOwnProperty.call(window._embeddedAssets, name)) {
+      return { name: name, status: 'cached' };
+    }
+
+    // Attempt fetch first (works under http(s))
+    try {
+      var r = await loadWithFetch(name);
+      if (r.type === 'text') {
+        window._embeddedFiles[name] = r.content;
+      } else {
+        window._embeddedAssets[name] = r.content;
+      }
+      return { name: name, status: 'ok', method: 'fetch' };
+    } catch (fetchErr) {
+      // If running from file://, fetch often fails due to CORS. Try synchronous XHR for text files.
+      if (location.protocol === 'file:') {
+        try {
+          var xr = loadWithSyncXHR(name);
+          if (xr.type === 'text') {
+            window._embeddedFiles[name] = xr.content;
+            return { name: name, status: 'ok', method: 'sync-xhr' };
+          } else {
+            // not handled
+            return { name: name, status: 'failed', error: 'sync-xhr-binary' };
+          }
+        } catch (xhrErr) {
+          return { name: name, status: 'failed', error: String(xhrErr) };
+        }
+      }
+      return { name: name, status: 'failed', error: String(fetchErr) };
+    }
+  }
+
+  // Preload all allowed files. Returns Promise that resolves to array of results.
+  async function preloadFiles(options) {
+    options = options || {};
+    var list = options.files || ALLOWED_FILES;
+    var results = [];
+    for (var i = 0; i < list.length; i++) {
+      try {
+        var res = await preloadOne(list[i]);
+        results.push(res);
+      } catch (e) {
+        results.push({ name: list[i], status: 'failed', error: String(e) });
+      }
+    }
+    return results;
+  }
+
+  // If preload fails for some files, allow the user to pick files through a file input to embed them manually.
+  function promptUserToEmbedMissing(results) {
+    var missing = results.filter(r => r.status !== 'ok' && r.status !== 'cached').map(r => r.name);
+    if (!missing.length) return Promise.resolve(results);
+    return new Promise(function (resolve) {
+      // create input if needed
+      var input = document.createElement('input');
+      input.type = 'file';
+      input.multiple = true;
+      input.style.display = 'none';
+      // accept any file; user will choose the missing ones
+      document.body.appendChild(input);
+      input.addEventListener('change', function () {
+        var files = Array.from(input.files || []);
+        // try to match filenames to missing list
+        var readPromises = files.map(function (f) {
+          return new Promise(function (res) {
+            var reader = new FileReader();
+            reader.onload = function () {
+              var name = f.name;
+              var ext = name.split('.').pop().toLowerCase();
+              if (['png','jpg','jpeg','gif','webp','svg'].indexOf(ext) !== -1) {
+                // FileReader result is a dataURL if readAsDataURL used; we'll use that
+                window._embeddedAssets[name] = reader.result;
+              } else {
+                window._embeddedFiles[name] = reader.result;
+              }
+              res({ name: name, status: 'embedded-by-user' });
+            };
+            // choose read mode
+            var ext2 = f.name.split('.').pop().toLowerCase();
+            if (['png','jpg','jpeg','gif','webp','svg'].indexOf(ext2) !== -1) {
+              reader.readAsDataURL(f);
+            } else {
+              reader.readAsText(f, 'utf-8');
+            }
+          });
+        });
+        Promise.all(readPromises).then(function (rp) {
+          // remove input
+          try { input.parentNode.removeChild(input); } catch (e) {}
+          resolve(results.concat(rp));
+        });
+      }, { once: true });
+      // prompt user
+      input.click();
+    });
+  }
+
+  // Public: preload and return results. If some files failed to preload and options.promptOnFail === true,
+  // prompt the user to pick files.
+  window.hostPreloadFiles = async function (options) {
+    options = options || {};
+    var results = await preloadFiles(options);
+    var failed = results.filter(r => r.status !== 'ok' && r.status !== 'cached');
+    if (failed.length && options.promptOnFail) {
+      var final = await promptUserToEmbedMissing(results);
+      return final;
+    }
+    return results;
+  };
+
+  // Quick diagnostic log
+  console.info('Host preload helper installed. Call hostPreloadFiles({ files: [...], promptOnFail: true }) to preload.');
+
 })();
 
+
+
 </script>
+<script>
+// create-virtual-iframe.js
+// Drop this into qandy8.htm (inside a <script> tag) or include as an external script.
+// It creates a sandboxed "virtual" iframe (the VM) with sandbox.htm as src,
+// places it in a confined container (so it won't cover the #txt display),
+// exposes the iframe as window._vmIframe and provides startVM()/stopVM() helpers.
+
+(function createVirtualMachineModule() {
+  'use strict';
+
+  // Call createVirtualMachine() on DOMContentLoaded (you can call it earlier/later if you prefer)
+  document.addEventListener('DOMContentLoaded', function () {
+    // default creation: container appended to document.body
+    createVirtualMachine({
+      containerSelector: null, // null -> document.body, or '#guest-container'
+      iframeId: 'vm-iframe',
+      iframeSrc: 'sandbox.htm', // the VM page
+      width: 300,
+      height: 600,
+      right: 10,
+      top: 10,
+      iframeZIndex: 100,      // keep lower than qandy overlay/text which uses very high z-index
+      containerStyles: {
+        background: '#111',
+        border: '1px solid #333',
+        borderRadius: '4px',
+        overflow: 'hidden'
+      }
+    });
+  }, { once: true });
+
+  /**
+   * Creates the VM iframe and returns an object with controls.
+   * options:
+   *   - containerSelector: css selector to append the container, or null -> document.body
+   *   - iframeId: id for the iframe element
+   *   - iframeSrc: src to load in iframe (sandbox.htm)
+   *   - width, height, right, top: numeric px values for positioning
+   *   - iframeZIndex: numeric z-index of iframe container
+   *   - containerStyles: extra CSS styles applied to container
+   */
+  function createVirtualMachine(options) {
+    options = options || {};
+    var containerRoot = options.containerSelector ? document.querySelector(options.containerSelector) : document.body;
+    if (!containerRoot) containerRoot = document.body;
+
+    var iframeId = options.iframeId || 'vm-iframe';
+    var src = options.iframeSrc || 'sandbox.htm';
+    var width = (typeof options.width === 'number') ? options.width : 640;
+    var height = (typeof options.height === 'number') ? options.height : 480;
+    var right = (typeof options.right === 'number') ? options.right : 10;
+    var top = (typeof options.top === 'number') ? options.top : 10;
+    var z = (typeof options.iframeZIndex === 'number') ? options.iframeZIndex : 100;
+
+    // Create container to hold the iframe and keep it out of the way of the main display
+    var vmContainer = document.createElement('div');
+    vmContainer.id = 'vm-container';
+    vmContainer.style.position = 'absolute';
+    vmContainer.style.right = right + 'px';
+    vmContainer.style.top = top + 'px';
+    vmContainer.style.width = width + 'px';
+    vmContainer.style.height = height + 'px';
+    vmContainer.style.zIndex = String(z);
+    vmContainer.style.boxSizing = 'border-box';
+    vmContainer.style.display = 'block';
+    vmContainer.style.pointerEvents = 'auto';
+    // apply optional user styles
+    var userStyles = options.containerStyles || {};
+    Object.keys(userStyles).forEach(function (k) { vmContainer.style[k] = userStyles[k]; });
+
+    // Create the iframe
+    var iframe = document.createElement('iframe');
+    iframe.id = iframeId;
+    iframe.src = src;
+    // Sandbox with scripts allowed but no same-origin (prevents direct access to host localStorage/DOM)
+    iframe.setAttribute('sandbox', 'allow-scripts');
+    iframe.setAttribute('title', 'Qandy Virtual Machine');
+    // Styling: fill the container
+    iframe.style.width = '100%';
+    iframe.style.height = '100%';
+    iframe.style.border = '0';
+    iframe.style.display = 'block';
+    iframe.style.background = '#000';
+
+    // Append iframe to container, then container to DOM
+    vmContainer.appendChild(iframe);
+    containerRoot.appendChild(vmContainer);
+
+    // Expose globally for deba qandy8.htm page that will create the ugging
+    window._vmContainer = vmContainer;
+    window._vmIframe = iframe;
+
+    // When iframe loads, send a friendly "host-ready" message and log
+    iframe.addEventListener('load', function () {
+    try {
+        iframe.contentWindow.postMessage({ type: 'host-ready' }, '*');
+      } catch (e) { /* ignore cross-origin errors; sandboxed iframe allows postMessage */ }
+      console.info('VM iframe loaded:', src);
+    });
+
+    // Optional: a simple message handler that only processes messages from this iframe
+    window.addEventListener('message', function (ev) {
+      if (!iframe || ev.source !== iframe.contentWindow) return; // ignore other frames
+      // example: log vm messages
+      try {
+        var d = ev.data;
+        // handle known message types here (file requests, vm-ready, logs, etc.)
+        if (d && typeof d === 'object') {
+          if (d.type === 'vm-ready') {
+            console.info('VM reports ready');
+          } else if (d.type === 'vm-log') {
+            console.log('VM:', d.message);
+          } else {
+            // generic debug
+            console.debug('Message from VM:', d);
+          }
+        }
+      } catch (e) {}
+    });
+
+    // Helper to start VM: sends start-vm to the iframe. Call after host is ready (e.g. overlay removed)
+    function startVM() {
+      if (!iframe || !iframe.contentWindow) return Promise.reject(new Error('VM not available'));
+      try {
+        iframe.contentWindow.postMessage({ type: 'start-vm' }, '*');
+        return Promise.resolve();
+      } catch (e) {
+        return Promise.reject(e);
+      }
+    }
+
+    function stopVM() {
+      try {
+        iframe.contentWindow.postMessage({ type: 'stop-vm' }, '*');
+      } catch (e) {}
+    }
+
+    function destroyVM() {
+      try { if (vmContainer.parentNode) vmContainer.parentNode.removeChild(vmContainer); } catch (e) {}
+      window._vmIframe = null;
+      window._vmContainer = null;
+    }
+
+    return {
+      container: vmContainer,
+      iframe: iframe,
+      start: startVM,
+      stop: stopVM,
+      destroy: destroyVM
+    };
+  }
+
+  // Export as global for manual use
+  window.createVirtualMachine = createVirtualMachine;
+
+})();
+</script>
+
+<script>
+// Host file responder for VM iframe. Place in qandy8.htm.
+// It answers postMessage requests from the virtual iframe for allowed files.
+(function () {
+  'use strict';
+
+  // 1) Configuration: set allowlist of files the VM may request.
+  // Add all JS/CSS files the VM needs. Do NOT include sensitive host files.
+  var ALLOWED_FILES = new Set([
+    'memory.js',
+    'video.js',
+    'gfx.js',
+    'keyboard.js',
+    'command.js',
+    'qandy.js',
+    'dos.js',
+    'qandy.css',
+    'sandbox.htm' // optional if needed
+  ]);
+
+  // 2) Optional embedded files map (useful for file:// testing).
+  // Populate this at build-time or by hand. Values must be plain strings.
+  // Example:
+  // window._embeddedFiles = { 'qandy.css': 'body{background:#000}', 'memory.js': '/*...*/' };
+  window._embeddedFiles = window._embeddedFiles || window._embeddedFiles === false ? window._embeddedFiles : {};
+
+  // If you create the iframe from qandy8.htm, set window._vmIframe to
+  // the created element so the listener only accepts that source. Example:
+  // window._vmIframe = createdIframeElement;
+
+  // 3) Utility: read file text.
+  // Prefer embedded content, otherwise try fetch(). On file:// fetch may fail; embedding avoids that.
+  async function readFileText(name) {
+    if (window._embeddedFiles && Object.prototype.hasOwnProperty.call(window._embeddedFiles, name)) {
+      return window._embeddedFiles[name];
+    }
+
+    // fetch for http(s). On file:// this likely fails due to CORS; prefer embedding in that case.
+    try {
+      var resp = await fetch(name, { cache: 'no-cache' });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      return await resp.text();
+    } catch (err) {
+      throw err;
+    }
+  }
+
+  // 4) Safeguard: determine the VM iframe window(s) we accept messages from.
+  // If you create the iframe from this host, set window._vmIframe to the created element.
+  // If not, fallback: if there's exactly one iframe on the page, use it.
+  function getVmWindowCandidates() {
+    if (window._vmIframe && window._vmIframe.contentWindow) return [window._vmIframe.contentWindow];
+    // fallback: any iframes on page
+    var iframes = Array.from(document.getElementsByTagName('iframe'));
+    return iframes.map(f => f.contentWindow).filter(Boolean);
+  }
+
+  // 5) postMessage responder
+  window.addEventListener('message', async function (ev) {
+    try {
+      // only accept object messages
+      if (!ev.data || typeof ev.data !== 'object') return;
+
+      // Only accept messages from candidate vm windows
+      var vmCandidates = getVmWindowCandidates();
+      if (vmCandidates.length && vmCandidates.indexOf(ev.source) === -1) {
+        // ignore messages that are not from the VM iframe(s)
+        return;
+      }
+
+      var msg = ev.data;
+
+      // Handle request-file: VM -> { type:'request-file', id, name }
+      if (msg.type === 'request-file' && typeof msg.id === 'string' && typeof msg.name === 'string') {
+        var id = msg.id;
+        var name = msg.name;
+
+        // Normalize / prevent path traversal
+        if (name.indexOf('..') !== -1 || name.indexOf('/') !== -1 || name.indexOf('\\') !== -1) {
+          ev.source.postMessage({ type: 'file-response', id: id, status: 'err', error: 'invalid-filename' }, '*');
+          return;
+        }
+
+        if (!ALLOWED_FILES.has(name)) {
+          ev.source.postMessage({ type: 'file-response', id: id, status: 'err', error: 'not-allowed' }, '*');
+          return;
+        }
+
+        try {
+          var text = await readFileText(name);
+          ev.source.postMessage({ type: 'file-response', id: id, status: 'ok', content: text }, '*');
+        } catch (err) {
+          ev.source.postMessage({ type: 'file-response', id: id, status: 'err', error: String(err) }, '*');
+        }
+        return;
+      }
+
+      // Handle request-list: VM -> { type:'request-list', id }
+      if (msg.type === 'request-list' && typeof msg.id === 'string') {
+        ev.source.postMessage({ type: 'file-list', id: msg.id, status: 'ok', files: Array.from(ALLOWED_FILES) }, '*');
+        return;
+      }
+
+      // Deny write/delete by default. VM -> write-file/delete-file
+      if ((msg.type === 'write-file' || msg.type === 'delete-file') && typeof msg.id === 'string') {
+        ev.source.postMessage({ type: 'file-response', id: msg.id, status: 'err', error: 'write-not-permitted' }, '*');
+        return;
+      }
+
+      // Other message types: optional debug/log
+      if (msg.type === 'vm-log' && msg.message) {
+        console.log('VM log:', msg.message);
+        return;
+      }
+
+    } catch (e) {
+      // swallow errors to avoid crashing host; VM will timeout
+      console.error('host-file-responder error', e);
+    }
+  });
+
+  // 6) Export helper to update embedded files at runtime (convenience)
+  window.hostEmbedFile = function (name, content) {
+    window._embeddedFiles = window._embeddedFiles || {};
+    window._embeddedFiles[name] = String(content);
+  };
+
+  // 7) Quick diagnostic: log that file responder is active
+  console.info('Host file responder installed. Allowed files:', Array.from(ALLOWED_FILES).join(', '));
+
+})();
+</script>
+
 </body></html>
