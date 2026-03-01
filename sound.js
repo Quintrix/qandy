@@ -1,52 +1,4 @@
-// QANDY SOUND CARD
-// Sound and music API for the Qandy Pocket Computer
-// Generates beeps, tones, and musical notes using Web Audio API
-// Modern browsers don't support ASCII BEL character (\x07) for security reasons
-// This provides an alternative using actual audio generation
 
-//
-// API FUNCTIONS:
-//
-//              beep() plays standard "beep"
-//            beep(Hz) custom frequency
-//       beep(Hz, dur) frequency plus duration
-//      playNote(note) play note from music scale
-//  playNote(note,dur) play note with duration
-//
-//  playTune(string) play a sequence of notes from a music string
-// playMelody(array) play a sequence of notes from an array
-//  playNotes(string) play notes in GWBASIC PLAY command format
-//         stopTune() stop currently playing tune
-//        loopTune(s) loop a tune continuously
-//       loopNotes(s) loop GWBASIC format notes continuously
-//
-// EXAMPLES:
-//              beep() Standard beep (800Hz, 200ms)
-//          beep(1000) 1000Hz beep
-//       playNote('C') Play middle C (C4)
-//      playNote('A4') Play A4 (440Hz)
-// playNote('C#5',500) C sharp octave 5, 500ms
-//
-// playTune("C E G C5") Simple scale
-// playTune("C:100 D:100 E:100 F:100 G:400") Scale with timing
-// playTune("C4:200 R:100 E4:200 R:100 G4:400") With rests
-//
-// playMelody([['C4',200], ['E4',200], ['G4',400]]) Array format
-//
-// playNotes("C D E F G A B") GWBASIC PLAY format
-// playNotes("O3 L8 CDEFGAB") GWBASIC with octave and length
-// playNotes("T100 C#4 D8 F+16") GWBASIC with tempo and note lengths
-//
-// loopTune("C E G E") Background music loop
-//
-
-beep();
-
-// Sound.js is a library script, not an interactive program
-// Clear the run variable so the command prompt returns after loading
-run = "";
-
-// Create Web Audio context (lazily initialized on first beep)
 var audioContext = null;
 
 // Musical note frequencies (in Hz) based on A4 = 440Hz
@@ -122,47 +74,6 @@ function playNote(note, duration = 200) {
   
   // Use the existing beep function with the note's frequency
   return beep(frequency, duration);
-}
-
-function beep(frequency = 800, duration = 200) {
-  // Default values: 800 Hz, 200 milliseconds
-  
-  try {
-    // Initialize audio context on first use (must be triggered by user interaction)
-    if (!audioContext) {
-      if (!window.AudioContext && !window.webkitAudioContext) {
-        throw new Error('Web Audio API is not supported in this browser');
-      }
-      audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    }
-    
-    // Create oscillator (tone generator)
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    
-    // Configure oscillator
-    oscillator.type = 'sine';  // sine wave for a pure tone
-    oscillator.frequency.value = frequency;
-    
-    // Configure volume (gain)
-    gainNode.gain.value = 0.3;  // 30% volume to avoid being too loud
-    
-    // Connect audio nodes: oscillator -> gain -> output
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-    
-    // Start and stop the tone
-    const startTime = audioContext.currentTime;
-    const endTime = startTime + (duration / 1000);
-    
-    oscillator.start(startTime);
-    oscillator.stop(endTime);
-    
-    return true;
-  } catch (error) {
-    // Error: Web Audio API may not be supported in this browser
-    return false;
-  }
 }
 
 // Music notation parser and playback

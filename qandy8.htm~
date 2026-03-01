@@ -76,7 +76,7 @@ if (typeof window.print === 'function' && window.print.toString().indexOf('[nati
       var dataUrl = arrayBufferToDataURL(ab, ct.split(';')[0] || undefined);
       return { type: 'asset', content: dataUrl };
     }
-  } 
+  }
 
   // Try synchronous XHR (file:// fallback). Returns same shape as loadWithFetch.
   function loadWithSyncXHR(name) {
