@@ -3538,9 +3538,7 @@ for (i=0;i<mySearch.length;i++) {
  nameVal=mySearch[i].split("=");
  for (j in nameVal) { nameVal[j]=unescape(nameVal[j]); } 
  if (nameVal[0]=="run") {
-  script=document.createElement('script');
-  script.src=nameVal[1];
-  document.head.appendChild(script);
+  hostScript(nameVal[1]);
   SFiles=0;
  }
 }
