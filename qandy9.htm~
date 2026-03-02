@@ -19,15 +19,13 @@ if (typeof window.print === 'function' && window.print.toString().indexOf('[nati
 <div id=txt class="txt"></div>
 <div id="pop" class="pop" onMouseOver='PopUpVis="visible";' onMouseOut='PopUpVis=PForce; PUV=setTimeout("document.getElementById(\"pop\").style.visibility=PopUpVis;",100);'></div>
 <div id="keyboard-container"></div>
+
 <script>
 
 // Define Global Variables
 
 // sound.js
-
-var SOUND=false;       // enable/disable sound card
 var SOUND=true;       // enable/disable sound card
-
 
 // qandy.js
 var DEVTEAM=0;  // developer mode
@@ -43,7 +41,7 @@ var tempCommand = "";     // Temporary storage for command being typed when brow
 
 var CURSOR=5; // cursor type 0=off, 1=line, 3=blink line, 4=block, 5=blink block  
 var CURX = 0;    // cursor x
-var CURY = 0;    // cursor y
+var CURY = 0;    // Do the other functions have the sc/ cursor y
 var CURP = 0;    // cursor p 
 
 var CURANSI = true; // cursor text ANSI on
@@ -333,52 +331,211 @@ if (typeof window.highlightKey === 'undefined') window.highlightKey = function()
 if (typeof window.unhighlightKey === 'undefined') window.unhighlightKey = function() {};
 if (typeof window.updateKeyLabels === 'undefined') window.updateKeyLabels = function() {};
 
-function createPowerOverlay() {
-  var txtEl = document.getElementById('txt') || document.body;
-  var rect = txtEl.getBoundingClientRect();
+(function () {
+  'use strict';
 
-  var overlay = document.createElement('div');
-  overlay.id = 'qandy-power-overlay';
-  overlay.style.position = 'absolute';
-  overlay.style.left = (rect.left + window.scrollX) + 'px';
-  overlay.style.top = (rect.top + window.scrollY) + 'px';
-  overlay.style.width = rect.width + 'px';
-  overlay.style.height = rect.height + 'px';
-  overlay.style.background = '#000';
-  overlay.style.color = '#bbb';
-  overlay.style.border = '4px solid #bbb';
-  overlay.style.overflow = 'hidden';
-  overlay.style.direction = 'ltr';
-  overlay.style.display = 'flex';
-  overlay.style.alignItems = 'center';
-  overlay.style.justifyContent = 'center';
-  overlay.style.fontFamily = 'monospace, monospace';
-  overlay.style.fontSize = '28px';
-  overlay.style.letterSpacing = '2px';
-  overlay.style.zIndex = '9999';
-  overlay.style.cursor = 'pointer';
-  overlay.style.userSelect = 'none';
-  overlay.style.whiteSpace = 'pre-wrap';
-  overlay.textContent = 'QANDY\nPOCKET\nCOMPUTER';
+  // Create a namespace for Qandy runtime on the current window (guest window)
+  window.QANDY = window.QANDY || {};
+  window.QANDY.sound = window.QANDY.sound || {};
 
-  var helper = document.createElement('div');
-  helper.style.position = 'absolute';
-  helper.style.bottom = '8%';
-  helper.style.left = '50%';
-  helper.style.transform = 'translateX(-50%)';
-  helper.style.fontSize = '12px';
-  helper.style.color = '#fff';
-  helper.textContent = 'Click anywhere, press any key, or touch screen to power on.';
-  overlay.appendChild(helper);
+  // Private audio context handle (created lazily)
+  var AC = null;
+  function ensureAudioContext() {
+    if (AC) return AC;
+    try {
+      AC = new (window.AudioContext || window.webkitAudioContext)();
+      return AC;
+    } catch (e) {
+      AC = null;
+      return null;
+    }
+  }
 
-  document.body.appendChild(overlay);
+  // Low-level play tone helper (non-blocking)
+  function _playTone(freq, dur) {
+    var ctx = ensureAudioContext();
+    if (!ctx) return Promise.reject(new Error('AudioContext unavailable'));
+    try {
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = typeof freq === 'number' ? freq : 800;
+      gain.gain.value = (typeof dur === 'number' && dur > 0) ? 0.03 : 0.03;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + (typeof dur === 'number' ? dur : 0.06));
+      // do not close ctx immediately; modern browsers prefer single shared context.
+      return Promise.resolve();
+    } catch (err) {
+      return Promise.reject(err);
+    }
+  }
 
-  return new Promise(function(resolve) {
-    function engageHandler() {
+  // Public API: beep(freq?, durationSeconds?)
+  // Safe no-op fallback if AudioContext cannot be created.
+  function beep(freq, dur) {
+    if (typeof window.QANDY.sound._overrideBeep === 'function') {
+      // allow host or test harness to override behavior
+      try { return Promise.resolve(window.QANDY.sound._overrideBeep(freq, dur)); } catch (e) { /*ignore*/ }
+    }
+    return _playTone(freq, dur).catch(function () {
+      // swallow errors to avoid breaking boot if audio is blocked
+      return undefined;
+    });
+  }
+
+  // init function used by bootSequence: attempt a tiny "power on" tick (if user gesture).
+  async function sound_js() {
+    // Try a tiny click/beep to signal readiness. This may be blocked until a user gesture,
+    // but that's fine — we don't fail the boot if the sound can't play.
+    try {
+      // create audio context if possible. Play a tiny click if allowed (user gesture may be required).
+      await beep(1000, 0.03);
+    } catch (e) {
+      // ignore
+    }
+    // Provide a stable resolved promise so other code can await sound_js()
+    return Promise.resolve();
+  }
+
+  // Attach API to namespace and convenient aliases (without clobbering if host provided one)
+  window.QANDY.sound.beep = beep;
+  window.QANDY.sound.sound_js = sound_js;
+  // Provide global alias only if not already defined (do not override host-provided beep)
+  if (typeof window.beep !== 'function') window.beep = beep;
+  // Also expose legacy function name if other code calls sound_js()
+  if (typeof window.sound_js !== 'function') window.sound_js = sound_js;
+
+})();
+
+(function() {
+  'use strict';
+
+  // Configuration array with script load order (unchanged)
+  var SCRIPT_QUEUE = [
+    { src: 'video.js', name: 'Video' },
+    { src: 'gfx.js', name: 'Graphics' },
+    { src: 'keyboard.js', name: 'Keyboard' },
+    { src: 'qandy.js', name: 'Qandy Core' }
+  ];
+
+  var startTime = Date.now();
+  var currentIndex = 0;
+  var signalAdvance = null;
+
+  // Called by each script when its initialization is complete
+  window.qandySignalReady = function(scriptName) {
+    // console.log('\u2713 ' + scriptName + ' signaled ready');
+    if (typeof signalAdvance === 'function') {
+      signalAdvance();
+    }
+  };
+
+  function loadNext() {
+    if (currentIndex >= SCRIPT_QUEUE.length) {
+      var elapsed = Date.now() - startTime;
+      document.dispatchEvent(new CustomEvent('qandyReady'));
+      return;
+    }
+
+    var entry = SCRIPT_QUEUE[currentIndex];
+    currentIndex++;
+
+    var advanced = false;
+    function advance() {
+      if (advanced) return;
+      advanced = true;
+      signalAdvance = null;
+      loadNext();
+    }
+
+    // Register advance as the handler for qandySignalReady for this script
+    signalAdvance = advance;
+
+    var script = document.createElement('script');
+    script.src = entry.src;
+
+    script.onerror = function() {
+      signalAdvance = null;
+      if (entry.optional) {
+        console.warn('⚠ Optional script not found: ' + entry.name);
+      } else {
+        console.error('✘ Failed to load required script: ' + entry.name + ' (' + entry.src + ')');
+      }
+      advance();
+    };
+
+    // Advance immediately when the script file loads (onload fallback)
+    script.onload = function() { advance(); };
+
+    // Keep a shorter timeout as a final safety
+    var timeout = setTimeout(function() {
+      if (!advanced) {
+        console.warn('Timed out waiting for ' + entry.name + ' to signal ready. Continuing.');
+        advance();
+      }
+    }, 1000); // 
+    document.head.appendChild(script);
+  }
+
+  function startScriptLoading() {
+    currentIndex = 0;
+    loadNext();
+  }
+
+  // Create an overlay the same size as the #txt display with "POWER SWITCH" text.
+  function createPowerOverlay() {
+    var txtEl = document.getElementById('txt') || document.body;
+    var rect = txtEl.getBoundingClientRect();
+
+    var overlay = document.createElement('div');
+    overlay.id = 'qandy-power-overlay';
+
+    // Position/size to match the txt element
+    overlay.style.position = 'absolute';
+    overlay.style.left = (rect.left + window.scrollX) + 'px';
+    overlay.style.top = (rect.top + window.scrollY) + 'px';
+    overlay.style.width = rect.width + 'px';
+    overlay.style.height = rect.height + 'px';
+
+    // Visual style (retro look)
+    overlay.style.background = '#000';
+    overlay.style.color = '#bbb';
+    overlay.style.border = '4px solid #bbb';
+    overlay.style.overflow = 'hidden';   /* hide any internal scrollbars */
+    overlay.style.direction = 'ltr';     /* ensure scrollbar (if shown) is on the right */
+    overlay.style.display = 'flex';
+    overlay.style.alignItems = 'center';
+    overlay.style.justifyContent = 'center';
+    overlay.style.fontFamily = 'monospace, monospace';
+    overlay.style.fontSize = '28px';
+    overlay.style.letterSpacing = '2px';
+    overlay.style.zIndex = '9999';
+    overlay.style.cursor = 'pointer';
+    overlay.style.userSelect = 'none';
+    overlay.style.whiteSpace = 'pre-wrap';
+    overlay.textContent = 'QANDY\nPOCKET\nCOMPUTER';  
+
+    // Center small helper text beneath main label
+    var helper = document.createElement('div');
+    helper.style.position = 'absolute';
+    helper.style.bottom = '8%';
+    helper.style.left = '50%';
+    helper.style.transform = 'translateX(-50%)';
+    helper.style.fontSize = '12px';
+    helper.style.color = '#fff';
+    helper.textContent = 'Click any button, press any key, or touch screen to power on.';
+    overlay.appendChild(helper);
+
+    document.body.appendChild(overlay);
+
+    function engageHandler(e) {
+      // Only first interaction matters
       overlay.removeEventListener('click', engageHandler);
       document.removeEventListener('keydown', engageHandler);
-      
-      // Play power-on beep
+
+      // Play an immediate tiny beep using an ephemeral AudioContext (this is inside a user gesture)
       try {
         var ctx = new (window.AudioContext || window.webkitAudioContext)();
         var osc = ctx.createOscillator();
@@ -391,54 +548,70 @@ function createPowerOverlay() {
         osc.start();
         osc.stop(ctx.currentTime + 0.03);
         setTimeout(function() { if (ctx.close) ctx.close(); }, 150);
-      } catch (err) { 
-        console.warn('qandy: ephemeral power-on beep failed', err); 
+      } catch (err) {
+        /* ignore audio errors for ephemeral feedback */
       }
-      
-      // Remove overlay
+
+      // Inject sound.js so subsequent keypresses can use beep()
+      if (!document.getElementById('qandy-sound-js')) {
+        var s = document.createElement('script');
+        s.id = 'qandy-sound-js';
+        s.src = 'sound.js';
+        s.onload = function() {
+          try {
+            // If sound.js created audioContext but left it suspended, resume it now
+            if (window.audioContext && audioContext.state === 'suspended' && typeof audioContext.resume === 'function') {
+              audioContext.resume();
+            }
+          } catch (e) {}
+        };
+        s.onerror = function() {
+          console.warn('qandy: failed to load sound.js');
+        };
+        document.head.appendChild(s);
+      }
+
+      // Remove the overlay and start loading the normal script queue
       if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-      
-      // Resolve promise to continue boot
-      resolve();
+      startScriptLoading();
     }
-    
+
     overlay.addEventListener('click', engageHandler);
-    document.addEventListener('keydown', engageHandler);
-  });
-}
-
-
-// Boot sequence - THIS is what runs everything in order
-async function bootSequence() {
-  // Step 1: Show power overlay and wait for user interaction (if SOUND enabled)
-  if (window.SOUND === true) {
-    await createPowerOverlay();
+    // Accept keyboard activation too
+    document.addEventListener('keydown', engageHandler, { once: true });
+    // On touch devices ensure a tap also works (click covers most cases)
   }
-  
-  // Step 2: Initialize sound system
-  await sound_js();
-  
-  // Step 3: Initialize video system
-  await video_js();
-  
-  // Step 4: Initialize keyboard (this creates the virtual keyboard)
-  await keyboard_js();
-  
-  // Step 5: Initialize command system
-  await command_js();
-  
-  // Step 6: Start qandy.js (main system)
-  qandy_js();
-}
 
-// Entry point - wait for DOM then start boot
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', function() {
-    bootSequence();
-  });
-} else {
-  bootSequence();
-}
+  // Wait until DOM layout is available so size/position are accurate
+  // if (document.readyState === 'loading') {
+  //   document.addEventListener('DOMContentLoaded', createPowerOverlay);
+  // } else {
+  //   // small timeout to allow layout to stabilize (optional)
+  //   setTimeout(createPowerOverlay, 0);
+  // }
+  
+  // Initialization: show overlay only when SOUND === true; otherwise skip to script loading
+  function init() {
+    if (window.SOUND === true) {
+      // Wait until DOM layout is available so size/position are accurate
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', createPowerOverlay);
+      } else {
+        // small timeout to allow layout to stabilize (optional)
+        setTimeout(createPowerOverlay, 0);
+      }
+    } else {
+      // SOUND is not enabled (false or undefined); skip overlay and load scripts immediately
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', startScriptLoading);
+      } else {
+        setTimeout(startScriptLoading, 0);
+      }
+    }
+  }
+
+  init();
+})();
+
 </script>
-
 </body></html>

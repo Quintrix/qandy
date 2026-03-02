@@ -15,220 +15,87 @@ if (typeof window.print === 'function' && window.print.toString().indexOf('[nati
 </script>
 <link rel="stylesheet" type="text/css" href="qandy.css">
 </head><body>
-<script>
-
-
-// Host preload module: read allowed files into memory before starting the host file server.
-// Place this in qandy8.htm before you create the VM or install the host postMessage responder.
 
 (function () {
   'use strict';
 
-  // Configure what the host should preload
-  var ALLOWED_FILES = [
-    'qandy.css',
-    'memory.js',
-    'video.js',
-    'gfx.js',
-    'keyboard.js',
-    'command.js',
-    'dos.js',
-    'qandy.js'
-  ];
+  // Create a namespace for Qandy runtime on the current window (guest window)
+  window.QANDY = window.QANDY || {};
+  window.QANDY.sound = window.QANDY.sound || {};
 
-  // Internal caches exposed on window for file responder to use:
-  window._embeddedFiles = window._embeddedFiles || {};   // text files: js/css/txt
-  window._embeddedAssets = window._embeddedAssets || {}; // binary assets as data: URLs
-
-  // Expose helper to manually embed a file at runtime (useful for file-picker)
-  window.hostEmbedFile = function (name, content, isAsset) {
-    if (!name) return;
-    if (isAsset) {
-      window._embeddedAssets[name] = String(content || '');
-    } else {
-      window._embeddedFiles[name] = String(content || '');
-    }
-  };
-
-  // Helper to convert ArrayBuffer -> data: URL (base64)
-  function arrayBufferToDataURL(ab, mime) {
-    var u8 = new Uint8Array(ab);
-    var CHUNK = 0x8000; // chunk for large buffers
-    var s = [];
-    for (var i = 0; i < u8.length; i += CHUNK) {
-      s.push(String.fromCharCode.apply(null, u8.subarray(i, i + CHUNK)));
-    }
-    var binary = s.join('');
-    var base64 = btoa(binary);
-    return 'data:' + (mime || 'application/octet-stream') + ';base64,' + base64;
-  }
-
-  // Try load with fetch; for images we store data: URL
-  async function loadWithFetch(name) {
-    var resp = await fetch(name, { cache: 'no-cache' });
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    var ct = resp.headers.get('content-type') || '';
-    if (ct.indexOf('text/') === 0 || ct.indexOf('application/javascript') === 0 || ct.indexOf('application/json') === 0 || name.match(/\.(js|css|txt|json)$/i)) {
-      return { type: 'text', content: await resp.text() };
-    } else {
-      // binary -> dataURL
-      var ab = await resp.arrayBuffer();
-      var dataUrl = arrayBufferToDataURL(ab, ct.split(';')[0] || undefined);
-      return { type: 'asset', content: dataUrl };
-    }
-  }
-
-  // Try synchronous XHR (file:// fallback). Returns same shape as loadWithFetch.
-  function loadWithSyncXHR(name) {
-    var xhr = new XMLHttpRequest();
+  // Private audio context handle (created lazily)
+  var AC = null;
+  function ensureAudioContext() {
+    if (AC) return AC;
     try {
-      xhr.open('GET', name, false); // synchronous
-      // For local files, binary responses are tricky; request as 'ArrayBuffer' isn't supported synchronously,
-      // so we use responseText and treat images specially via FileReader fallback (if user supplies).
-      xhr.send(null);
+      AC = new (window.AudioContext || window.webkitAudioContext)();
+      return AC;
     } catch (e) {
-      throw new Error('XHR failed: ' + e.message);
-    }
-    var status = xhr.status;
-    if (!(status === 0 || (status >= 200 && status < 300))) {
-      throw new Error('XHR status ' + status);
-    }
-    // Heuristic for binary vs text: try to detect common text file extensions
-    if (name.match(/\.(js|css|txt|json|html)$/i)) {
-      return { type: 'text', content: xhr.responseText };
-    } else {
-      // For images, synchronous XHR responseText contains binary which is hard to reliably base64-encode;
-      // we'll signal failure to allow user to use file-picker. Throw to fallback.
-      throw new Error('binary sync XHR not supported for ' + name);
+      AC = null;
+      return null;
     }
   }
 
-  // Attempt to load a single file using best available technique.
-  async function preloadOne(name) {
-    // skip if already embedded
-    if (Object.prototype.hasOwnProperty.call(window._embeddedFiles, name) || Object.prototype.hasOwnProperty.call(window._embeddedAssets, name)) {
-      return { name: name, status: 'cached' };
-    }
-
-    // Attempt fetch first (works under http(s))
+  // Low-level play tone helper (non-blocking)
+  function _playTone(freq, dur) {
+    var ctx = ensureAudioContext();
+    if (!ctx) return Promise.reject(new Error('AudioContext unavailable'));
     try {
-      var r = await loadWithFetch(name);
-      if (r.type === 'text') {
-        window._embeddedFiles[name] = r.content;
-      } else {
-        window._embeddedAssets[name] = r.content;
-      }
-      return { name: name, status: 'ok', method: 'fetch' };
-    } catch (fetchErr) {
-      // If running from file://, fetch often fails due to CORS. Try synchronous XHR for text files.
-      if (location.protocol === 'file:') {
-        try {
-          var xr = loadWithSyncXHR(name);
-          if (xr.type === 'text') {
-            window._embeddedFiles[name] = xr.content;
-            return { name: name, status: 'ok', method: 'sync-xhr' };
-          } else {
-            // not handled
-            return { name: name, status: 'failed', error: 'sync-xhr-binary' };
-          }
-        } catch (xhrErr) {
-          return { name: name, status: 'failed', error: String(xhrErr) };
-        }
-      }
-      return { name: name, status: 'failed', error: String(fetchErr) };
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = typeof freq === 'number' ? freq : 800;
+      gain.gain.value = (typeof dur === 'number' && dur > 0) ? 0.03 : 0.03;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + (typeof dur === 'number' ? dur : 0.06));
+      // do not close ctx immediately; modern browsers prefer single shared context.
+      return Promise.resolve();
+    } catch (err) {
+      return Promise.reject(err);
     }
   }
 
-  // Preload all allowed files. Returns Promise that resolves to array of results.
-  async function preloadFiles(options) {
-    options = options || {};
-    var list = options.files || ALLOWED_FILES;
-    var results = [];
-    for (var i = 0; i < list.length; i++) {
-      try {
-        var res = await preloadOne(list[i]);
-        results.push(res);
-      } catch (e) {
-        results.push({ name: list[i], status: 'failed', error: String(e) });
-      }
+  // Public API: beep(freq?, durationSeconds?)
+  // Safe no-op fallback if AudioContext cannot be created.
+  function beep(freq, dur) {
+    if (typeof window.QANDY.sound._overrideBeep === 'function') {
+      // allow host or test harness to override behavior
+      try { return Promise.resolve(window.QANDY.sound._overrideBeep(freq, dur)); } catch (e) { /*ignore*/ }
     }
-    return results;
-  }
-
-  // If preload fails for some files, allow the user to pick files through a file input to embed them manually.
-  function promptUserToEmbedMissing(results) {
-    var missing = results.filter(r => r.status !== 'ok' && r.status !== 'cached').map(r => r.name);
-    if (!missing.length) return Promise.resolve(results);
-    return new Promise(function (resolve) {
-      // create input if needed
-      var input = document.createElement('input');
-      input.type = 'file';
-      input.multiple = true;
-      input.style.display = 'none';
-      // accept any file; user will choose the missing ones
-      document.body.appendChild(input);
-      input.addEventListener('change', function () {
-        var files = Array.from(input.files || []);
-        // try to match filenames to missing list
-        var readPromises = files.map(function (f) {
-          return new Promise(function (res) {
-            var reader = new FileReader();
-            reader.onload = function () {
-              var name = f.name;
-              var ext = name.split('.').pop().toLowerCase();
-              if (['png','jpg','jpeg','gif','webp','svg'].indexOf(ext) !== -1) {
-                // FileReader result is a dataURL if readAsDataURL used; we'll use that
-                window._embeddedAssets[name] = reader.result;
-              } else {
-                window._embeddedFiles[name] = reader.result;
-              }
-              res({ name: name, status: 'embedded-by-user' });
-            };
-            // choose read mode
-            var ext2 = f.name.split('.').pop().toLowerCase();
-            if (['png','jpg','jpeg','gif','webp','svg'].indexOf(ext2) !== -1) {
-              reader.readAsDataURL(f);
-            } else {
-              reader.readAsText(f, 'utf-8');
-            }
-          });
-        });
-        Promise.all(readPromises).then(function (rp) {
-          // remove input
-          try { input.parentNode.removeChild(input); } catch (e) {}
-          resolve(results.concat(rp));
-        });
-      }, { once: true });
-      // prompt user
-      input.click();
+    return _playTone(freq, dur).catch(function () {
+      // swallow errors to avoid breaking boot if audio is blocked
+      return undefined;
     });
   }
 
-  // Public: preload and return results. If some files failed to preload and options.promptOnFail === true,
-  // prompt the user to pick files.
-  window.hostPreloadFiles = async function (options) {
-    options = options || {};
-    var results = await preloadFiles(options);
-    var failed = results.filter(r => r.status !== 'ok' && r.status !== 'cached');
-    if (failed.length && options.promptOnFail) {
-      var final = await promptUserToEmbedMissing(results);
-      return final;
+  // init function used by bootSequence: attempt a tiny "power on" tick (if user gesture).
+  async function sound_js() {
+    // Try a tiny click/beep to signal readiness. This may be blocked until a user gesture,
+    // but that's fine — we don't fail the boot if the sound can't play.
+    try {
+      // create audio context if possible. Play a tiny click if allowed (user gesture may be required).
+      await beep(1000, 0.03);
+    } catch (e) {
+      // ignore
     }
-    return results;
-  };
+    // Provide a stable resolved promise so other code can await sound_js()
+    return Promise.resolve();
+  }
 
-  // Quick diagnostic log
-  console.info('Host preload helper installed. Call hostPreloadFiles({ files: [...], promptOnFail: true }) to preload.');
+  // Attach API to namespace and convenient aliases (without clobbering if host provided one)
+  window.QANDY.sound.beep = beep;
+  window.QANDY.sound.sound_js = sound_js;
+  // Provide global alias only if not already defined (do not override host-provided beep)
+  if (typeof window.beep !== 'function') window.beep = beep;
+  // Also expose legacy function name if other code calls sound_js()
+  if (typeof window.sound_js !== 'function') window.sound_js = sound_js;
 
 })();
-
-
-
-</script>
 <script>
 // create-virtual-iframe.js
-// Drop this into qandy8.htm (inside a <script> tag) or include as an external script.
-// It creates a sandboxed "virtual" iframe (the VM) with sandbox.htm as src,
+// It creates a sandboxed "virtual" iframe (the VM) with qandy-rom.htm as src,
 // places it in a confined container (so it won't cover the #txt display),
 // exposes the iframe as window._vmIframe and provides startVM()/stopVM() helpers.
 
@@ -241,7 +108,7 @@ if (typeof window.print === 'function' && window.print.toString().indexOf('[nati
     createVirtualMachine({
       containerSelector: null, // null -> document.body, or '#guest-container'
       iframeId: 'vm-iframe',
-      iframeSrc: 'sandbox.htm', // the VM page
+      iframeSrc: 'qandy-rom.htm', // the VM page
       width: 300,
       height: 600,
       right: 10,
@@ -261,7 +128,7 @@ if (typeof window.print === 'function' && window.print.toString().indexOf('[nati
    * options:
    *   - containerSelector: css selector to append the container, or null -> document.body
    *   - iframeId: id for the iframe element
-   *   - iframeSrc: src to load in iframe (sandbox.htm)
+   *   - iframeSrc: src to load in iframe (qandy-rom.htm)
    *   - width, height, right, top: numeric px values for positioning
    *   - iframeZIndex: numeric z-index of iframe container
    *   - containerStyles: extra CSS styles applied to container
@@ -272,7 +139,7 @@ if (typeof window.print === 'function' && window.print.toString().indexOf('[nati
     if (!containerRoot) containerRoot = document.body;
 
     var iframeId = options.iframeId || 'vm-iframe';
-    var src = options.iframeSrc || 'sandbox.htm';
+    var src = options.iframeSrc || 'qandy-rom.htm';
     var width = (typeof options.width === 'number') ? options.width : 640;
     var height = (typeof options.height === 'number') ? options.height : 480;
     var right = (typeof options.right === 'number') ? options.right : 10;
@@ -313,13 +180,13 @@ if (typeof window.print === 'function' && window.print.toString().indexOf('[nati
     vmContainer.appendChild(iframe);
     containerRoot.appendChild(vmContainer);
 
-    // Expose globally for deba qandy8.htm page that will create the ugging
+    // Expose globally for debug: window._vmContainer and window._vmIframe
     window._vmContainer = vmContainer;
     window._vmIframe = iframe;
 
     // When iframe loads, send a friendly "host-ready" message and log
     iframe.addEventListener('load', function () {
-    try {
+      try {
         iframe.contentWindow.postMessage({ type: 'host-ready' }, '*');
       } catch (e) { /* ignore cross-origin errors; sandboxed iframe allows postMessage */ }
       console.info('VM iframe loaded:', src);
