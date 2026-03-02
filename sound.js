@@ -431,3 +431,5 @@ function volume(level) {
   window.BEEP_VOLUME = Math.max(0, Math.min(1, v));
   return prev;
 }
+
+if (isGuest) { beep(); }

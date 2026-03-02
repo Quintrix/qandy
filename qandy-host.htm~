@@ -275,16 +275,14 @@ var inInputMode = false;       // True when processing user input (prevents pagi
 window.QANDY = window.QANDY || {};
 window.QANDY.mode = 'host'; // 'host' (file server), not the emulated machine
 
-(function() {
-  'use strict';
 
   // Configuration array with script load order (unchanged)
   var SCRIPT_QUEUE = [
     { src: 'video.js', name: 'Video' },
     { src: 'gfx.js', name: 'Graphics' },
     { src: 'keyboard.js', name: 'Keyboard' },
-    { src: 'command.js', name: 'Keyboard' },
-    { src: 'qandy.js', name: 'Keyboard' },
+    { src: 'command.js', name: 'Command' },
+    { src: 'qandy.js', name: 'Qandy' },
   ];
 
   var startTime = Date.now();
@@ -293,32 +291,15 @@ window.QANDY.mode = 'host'; // 'host' (file server), not the emulated machine
 
   // Called by each script when its initialization is complete
   window.qandySignalReady = function(scriptName) {
-    // console.log('\u2713 ' + scriptName + ' signaled ready');
+    console.log('\u2713 ' + scriptName + ' signaled ready');
     if (typeof signalAdvance === 'function') {
       signalAdvance();
     }
-    if (currentIndex >= SCRIPT_QUEUE.length) {
-      var elapsed = Date.now() - startTime;
-      // Call startup() (if present). Use an async IIFE so startup can be async/await.
-      (async function() {
-        try {
-          if (typeof startup === 'function') {
-            console.info('loader: calling startup()');
-            await Promise.resolve(startup());
-            console.info('loader: startup() completed');
-          } else {
-            console.info('loader: startup() not defined');
-          }
-        } catch (e) {
-          console.error('startup() failed', e);
-        } finally {
-          document.dispatchEvent(new CustomEvent('qandyReady'));
-        }
-      })();
-      return;
-    }
   };
+  
 
+function loadNext() {
+  if (typeof signalAdvance === 'function') { signalAdvance(); }
   if (currentIndex >= SCRIPT_QUEUE.length) {
     var elapsed = Date.now() - startTime;
     // Call startup() (if present). Use an async IIFE so startup can be async/await.
@@ -339,232 +320,203 @@ window.QANDY.mode = 'host'; // 'host' (file server), not the emulated machine
     })();
     return;
   }
-    var entry = SCRIPT_QUEUE[currentIndex];
-    currentIndex++;
 
-    var advanced = false;
-    function advance() {
-      if (advanced) return;
-      advanced = true;
-      signalAdvance = null;
-      loadNext();
-    }
 
-    // Register advance as the handler for qandySignalReady for this script
-    signalAdvance = advance;
-
-    var script = document.createElement('script');
-    script.src = entry.src;
-
-    script.onerror = function() {
-      signalAdvance = null;
-      if (entry.optional) {
-        console.warn('⚠ Optional script not found: ' + entry.name);
-      } else {
-        console.error('✘ Failed to load required script: ' + entry.name + ' (' + entry.src + ')');
-      }
-      advance();
-    };
-
-    // Advance immediately when the script file loads (onload fallback)
-    script.onload = function() { advance(); };
-
-    // Keep a shorter timeout as a final safety
-    var timeout = setTimeout(function() {
-      if (!advanced) {
-        console.warn('Timed out waiting for ' + entry.name + ' to signal ready. Continuing.');
-        advance();
-      }
-    }, 1000); // 
-    document.head.appendChild(script);
-  }
-​
-  function startScriptLoading() {
-    currentIndex = 0;
+  var entry = SCRIPT_QUEUE[currentIndex];
+  currentIndex++;
+  var advanced = false;
+  function advance() {
+    if (advanced) return;
+    advanced = true;
+    signalAdvance = null;
     loadNext();
   }
 
-  // Create an overlay the same size as the #txt display with "POWER SWITCH" text.
-  function createPowerOverlay() {
-    var txtEl = document.getElementById('txt') || document.body;
-    var rect = txtEl.getBoundingClientRect();
+  // Register advance as the handler for qandySignalReady for this script
+  signalAdvance = advance;
 
-    var overlay = document.createElement('div');
-    overlay.id = 'qandy-power-overlay';
+  var script = document.createElement('script');
+  script.src = entry.src;
 
-    // Position/size to match the txt element
-    overlay.style.position = 'absolute';
-    overlay.style.left = (rect.left + window.scrollX) + 'px';
-    overlay.style.top = (rect.top + window.scrollY) + 'px';
-    overlay.style.width = rect.width + 'px';
-    overlay.style.height = rect.height + 'px';
-
-    // Visual style (retro look)
-    overlay.style.background = '#000';
-    overlay.style.color = '#bbb';
-    overlay.style.border = '4px solid #bbb';
-    overlay.style.overflow = 'hidden';   /* hide any internal scrollbars */
-    overlay.style.direction = 'ltr';     /* ensure scrollbar (if shown) is on the right */
-    overlay.style.display = 'flex';
-    overlay.style.alignItems = 'center';
-    overlay.style.justifyContent = 'center';
-    overlay.style.fontFamily = 'monospace, monospace';
-    overlay.style.fontSize = '28px';
-    overlay.style.letterSpacing = '2px';
-    overlay.style.zIndex = '9999';
-    overlay.style.cursor = 'pointer';
-    overlay.style.userSelect = 'none';
-    overlay.style.whiteSpace = 'pre-wrap';
-    overlay.textContent = 'QANDY\nPOCKET\nCOMPUTER';  
-
-    // Center small helper text beneath main label
-    var helper = document.createElement('div');
-    helper.style.position = 'absolute';
-    helper.style.bottom = '8%';
-    helper.style.left = '50%';
-    helper.style.transform = 'translateX(-50%)';
-    helper.style.fontSize = '12px';
-    helper.style.color = '#fff';
-    helper.textContent = 'Click any button, press any key, or touch screen to power on.';
-    overlay.appendChild(helper);
-
-    document.body.appendChild(overlay);
-
-    function engageHandler(e) {
-      // Only first interaction matters
-      overlay.removeEventListener('click', engageHandler);
-      document.removeEventListener('keydown', engageHandler);
-
-      // Play an immediate tiny beep using an ephemeral AudioContext (this is inside a user gesture)
-      try {
-        var ctx = new (window.AudioContext || window.webkitAudioContext)();
-        var osc = ctx.createOscillator();
-        var gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.value = 1000;
-        gain.gain.value = 0.03;
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.03);
-        setTimeout(function() { if (ctx.close) ctx.close(); }, 150);
-      } catch (err) {
-        /* ignore audio errors for ephemeral feedback */
-      }
-
-      // Inject sound.js so subsequent keypresses can use beep()
-      if (!document.getElementById('qandy-sound-js')) {
-        var s = document.createElement('script');
-        s.id = 'qandy-sound-js';
-        s.src = 'sound.js';
-        s.onload = function() {
-          try {
-            // If sound.js created audioContext but left it suspended, resume it now
-            if (window.audioContext && audioContext.state === 'suspended' && typeof audioContext.resume === 'function') {
-              audioContext.resume();
-            }
-          } catch (e) {}
-        };
-        s.onerror = function() {
-          console.warn('qandy: failed to load sound.js');
-        };
-        document.head.appendChild(s);
-      }
-
-      // Remove the overlay and start loading the normal script queue
-      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-      startScriptLoading();
-    }
-
-    overlay.addEventListener('click', engageHandler);
-    // Accept keyboard activation too
-    document.addEventListener('keydown', engageHandler, { once: true });
-    // On touch devices ensure a tap also works (click covers most cases)
-  }
-
-  function init() {
-    // Wait until DOM layout is available so size/position are accurate
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', createPowerOverlay);
+  script.onerror = function() {
+    signalAdvance = null;
+    if (entry.optional) {
+      console.warn('⚠ Optional script not found: ' + entry.name);
     } else {
-      // small timeout to allow layout to stabilize (optional)
-      setTimeout(createPowerOverlay, 0);
+      console.error('✘ Failed to load required script: ' + entry.name + ' (' + entry.src + ')');
     }
+    advance();
+  };
+
+  // Advance immediately when the script file loads (onload fallback)
+  script.onload = function() { advance(); };
+
+  // Keep a shorter timeout as a final safety
+  var timeout = setTimeout(function() {
+    if (!advanced) {
+      console.warn('Timed out waiting for ' + entry.name + ' to signal ready. Continuing.');
+      advance();
+    }
+  }, 1000);
+  document.head.appendChild(script);
+}
+
+function startScriptLoading() {
+  currentIndex = 0;
+  loadNext();
+}
+
+function createPowerOverlay() {
+  var txtEl = document.getElementById('txt') || document.body;
+  var rect = txtEl.getBoundingClientRect();
+  var overlay = document.createElement('div');
+  overlay.id = 'qandy-power-overlay';
+  // Position/size to match the txt element
+  overlay.style.position = 'absolute';
+  overlay.style.left = (rect.left + window.scrollX) + 'px';
+  overlay.style.top = (rect.top + window.scrollY) + 'px';
+  overlay.style.width = rect.width + 'px';
+  overlay.style.height = rect.height + 'px';
+  // Visual style (retro look)
+  overlay.style.background = '#000';
+  overlay.style.color = '#bbb';
+  overlay.style.border = '4px solid #bbb';
+  overlay.style.overflow = 'hidden';   /* hide any internal scrollbars */
+  overlay.style.direction = 'ltr';     /* ensure scrollbar (if shown) is on the right */
+  overlay.style.display = 'flex';
+  overlay.style.alignItems = 'center';
+  overlay.style.justifyContent = 'center';
+  overlay.style.fontFamily = 'monospace, monospace';
+  overlay.style.fontSize = '28px';
+  overlay.style.letterSpacing = '2px';
+  overlay.style.zIndex = '9999';
+  overlay.style.cursor = 'pointer';
+  overlay.style.userSelect = 'none';
+  overlay.style.whiteSpace = 'pre-wrap';
+  overlay.textContent = 'QANDY\nPOCKET\nCOMPUTER';  
+  // Center small helper text beneath main label
+  var helper = document.createElement('div');
+  helper.style.position = 'absolute';
+  helper.style.bottom = '8%';
+  helper.style.left = '50%';
+  helper.style.transform = 'translateX(-50%)';
+  helper.style.fontSize = '12px';
+  helper.style.color = '#fff';
+  helper.textContent = 'Click any button, press any key, or touch screen to power on.';
+  overlay.appendChild(helper);
+  document.body.appendChild(overlay);
+  function engageHandler(e) {
+    // Only first interaction matters
+    overlay.removeEventListener('click', engageHandler);
+    document.removeEventListener('keydown', engageHandler);
+    // Play an immediate tiny beep using an ephemeral AudioContext (this is inside a user gesture)
+    try {
+      var ctx = new (window.AudioContext || window.webkitAudioContext)();
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = 1000;
+      gain.gain.value = 0.03;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.03);
+      setTimeout(function() { if (ctx.close) ctx.close(); }, 150);
+    } catch (err) {
+      /* ignore audio errors for ephemeral feedback */
+    }
+    // Inject sound.js so subsequent keypresses can use beep()
+    if (!document.getElementById('qandy-sound-js')) {
+      var s = document.createElement('script');
+      s.id = 'qandy-sound-js';
+      s.src = 'sound.js';
+      s.onload = function() {
+        try {
+          // If sound.js created audioContext but left it suspended, resume it now
+          if (window.audioContext && audioContext.state === 'suspended' && typeof audioContext.resume === 'function') {
+            audioContext.resume();
+          }
+        } catch (e) {}
+      };
+      s.onerror = function() {
+        console.warn('qandy: failed to load sound.js');
+      };
+      document.head.appendChild(s);
+    }
+    // Remove the overlay and start loading the normal script queue
+    if (overlay.parentNode) { overlay.parentNode.removeChild(overlay); }
+    startScriptLoading();
   }
 
-  init();
-})();
+  overlay.addEventListener('click', engageHandler);
+  // Accept keyboard activation too
+  document.addEventListener('keydown', engageHandler, { once: true });
+  // On touch devices ensure a tap also works (click covers most cases)
+}
 
-// Safe isGuest (unchanged, defensive)
+function init() {
+  // Wait until DOM layout is available so size/position are accurate
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', createPowerOverlay);
+  } else {
+    // small timeout to allow layout to stabilize (optional)
+    setTimeout(createPowerOverlay, 0);
+  }
+}
+
+init();
+
 function isGuest() {
   try {
-    // explicit flag (best)
-    if (window.QANDY && typeof window.QANDY.mode === 'string') {
-      return window.QANDY.mode === 'guest';
-    }
-    // assembled flag set by the host assembler
-    if (typeof window._QANDY_ASSEMBLED !== 'undefined') {
-      return !!window._QANDY_ASSEMBLED;
-    }
-    // fallback heuristic: not top-level => guest
+    if (window.QANDY && typeof window.QANDY.mode === 'string') { return window.QANDY.mode === 'guest'; }
+    if (typeof window._QANDY_ASSEMBLED !== 'undefined') { return !!window._QANDY_ASSEMBLED; }
     return (window.top && window.top !== window);
   } catch (e) {
-    // in weird sandboxed contexts, assume guest
     return true;
   }
 }
 
-function async startUp() {
-  let guest = true;
+async function startUp() {
+  // Determine guest status (support sync or async isGuest)
+  var guest = true;
   try {
-    if (typeof isGuest === 'function') {
-      // allow isGuest to be sync or return a Promise
-      guest = !!(await Promise.resolve(isGuest()));
-    } else {
-      // conservative fallback: treat as guest if assembled flag or not top-level
-      guest = !!(window._QANDY_ASSEMBLED || (window.top && window.top !== window));
-      console.warn('isGuest() not defined; falling back to heuristic => isGuest=' + guest);
-    }
+    if (typeof isGuest === 'function') guest = !!(await Promise.resolve(isGuest()));
+    else guest = !!(window._QANDY_ASSEMBLED || (window.top && window.top !== window));
   } catch (err) {
-    console.warn('isGuest() check threw; assuming guest mode', err);
+    console.warn('isGuest check failed; assuming guest', err);
     guest = true;
   }
 
-    // Prefer high-level createAndLoadVM if available
+  if (!guest) {
+    console.info('startup: host mode detected — assembling/creating guest VM (if available)');
+
     if (typeof createAndLoadVM === 'function') {
       try {
-        // Customize options as desired
         await createAndLoadVM({
-          bootScripts: [
-            'sound.js','memory.js','video.js','gfx.js','keyboard.js',
-            'command.js','dos.js','qandy.js'
-          ],
+          bootScripts: ['sound.js','memory.js','video.js','gfx.js','keyboard.js','command.js','dos.js','qandy.js'],
           cssName: 'qandy.css',
           width: 300,
           height: 600,
           right: 10,
           top: 10,
           zIndex: 100,
-          hideHost: false // set true later when guest reports ready if desired
+          hideHost: false
         });
         console.info('startup: createAndLoadVM completed');
       } catch (e) {
         console.error('startup: createAndLoadVM failed', e);
       }
-    }
-    // If createAndLoadVM not present, try lower-level assembleGuestHtml -> manual blob load
-    else if (typeof assembleGuestHtml === 'function') {
+    } else if (typeof assembleGuestHtml === 'function') {
       try {
-        var html = await assembleGuestHtml({ bootScripts: undefined, cssName: 'qandy.css' });
+        var html = await assembleGuestHtml({ cssName: 'qandy.css' });
         var blob = new Blob([html], { type: 'text/html' });
         var url = URL.createObjectURL(blob);
         var iframe = document.createElement('iframe');
-    U+200B    iframe.setAttribute('sandbox', 'allow-scripts');
+        iframe.setAttribute('sandbox', 'allow-scripts');
         iframe.style.width = '300px';
         iframe.style.height = '600px';
         iframe.src = url;
         document.body.appendChild(iframe);
-        // store cleanup if desired
         iframe._qandyGuestBlobUrl = url;
         window._vmIframe = iframe;
         console.info('startup: assembled guest blob loaded into iframe');
@@ -572,27 +524,22 @@ function async startUp() {
         console.error('startup: assembleGuestHtml fallback failed', e);
       }
     } else {
-      console.warn('startup: no createAndLoadVM or assembleGuestHtml available to create guest');
+      console.warn('startup: no createAndLoadVM or assembleGuestHtml available');
     }
 
-    // Optionally: listen for guest-ready from the guest to hide/transfer UI
-    window.addEventListener('message', function onHostMessage(ev) {
+    // Listen once for guest-ready to optionally hide host UI / focus guest
+    function onHostMessage(ev) {
       var d = ev && ev.data;
       if (d && typeof d === 'object' && d.type === 'guest-ready') {
-        console.info('startup: guest reported ready');
-        // e.g. hide host UI now if you want:
-        // document.body.style.visibility = 'hidden';
-        // focus guest iframe:
+        console.info('startup: guest reported ready (host may hide UI now)');
         try { if (window._vmIframe && window._vmIframe.contentWindow) window._vmIframe.contentWindow.focus(); } catch (e) {}
-        // remove listener if one-time
         window.removeEventListener('message', onHostMessage, false);
       }
-    }, false);
+    }
+    window.addEventListener('message', onHostMessage, false);
 
   } else {
-    // Guest mode: just log and let guest-startup logic run (guest assembled bundle usually auto-runs or waits for start-vm)
-    console.info('startup: guest detected — skipping host assembly');
+    console.info('startup: guest mode detected — skipping host assembly');
   }
 }
 </script>
-</body></html>
