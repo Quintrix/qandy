@@ -24,7 +24,7 @@ if (typeof window.print === 'function' && window.print.toString().indexOf('[nati
 var SOUND=true;       // enable/disable sound card
 
 // qandy.js
-var ROOT=1;     // root access, to replace devteam   
+var ROOT=0;     // root access, to replace devteam   
 var DEVTEAM=0;  // developer mode
 var RUN= "";    // current script running starting with qandy.js 
 var RUNIN="";   // input mode set by running script, line or key
@@ -275,6 +275,7 @@ window.QANDY.mode = 'host'; // 'host' (file server), not the emulated machine
 
   // Configuration array with script load order (unchanged)
   var SCRIPT_QUEUE = [
+    { src: 'sound.js', name: 'sound.js' },
     { src: 'video.js', name: 'video.js' },
     { src: 'keyboard.js', name: 'keyboard.js' },
     { src: 'command.js', name: 'command.js' },
@@ -475,159 +476,10 @@ function isGuest() {
   }
 }
 
-
-
-// ensure current copies of Qandy assets are stored in localStorage.
-//await ensureAssetsStored([
-//  'qandy.css', 'sound.js', 'video.js', 'keyboard.js', 'command.js', 'qandy.js'
-//  ], { forceDeleteFirst: false });
-
-(async () => {
-  const list = ['qandy.css','sound.js','video.js','keyboard.js','command.js','qandy.js'];
-  const res = await ensureAssetsStored(list, { forceDeleteFirst: false, timeoutMs: 8000, log: true });
-  console.table(res);
-})();
-
-async function ensureAssetsStored(fileNames, options = {}) {
-  options = Object.assign({ forceDeleteFirst: false, timeoutMs: 10000, log: true }, options);
-  function log(...args) { if (options.log) console.log('[qandy-host-install]', ...args); }
-  function storageKey(name) { return 'qandy_asset:' + name; }
-  // Helper: read embedded template by id "template-<name>"
-  function readEmbeddedTemplate(name) {
-    try {
-      const sanitizedId = 'template-' + name.replace(/[^a-zA-Z0-9\-_\.]/g, '_');
-      const el = document.getElementById(sanitizedId);
-      if (el && (el.tagName === 'SCRIPT' || el.tagName === 'TEXTAREA')) {
-        return el.textContent || el.value || null;
-      }
-    } catch (e) { /* ignore */ }
-    return null;
-  }
-
-  // Helper: fetch text with timeout; uses same-origin credentials
-  async function fetchTextWithTimeout(url, timeoutMs) {
-    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    const signal = controller ? controller.signal : undefined;
-    const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
-    try {
-      const res = await fetch(url, { credentials: 'same-origin', cache: 'no-cache', signal });
-      if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + res.statusText);
-      const txt = await res.text();
-      return txt;
-    } finally {
-      if (timer) clearTimeout(timer);
-    }
-  }
-
-  const results = [];
-
-  for (const name of fileNames) {
-    const result = { name, status: 'skipped', message: '', replaced: false };
-    try {
-      // basic whitelist check (very simple): allow alphanum, -, _, ., /
-      if (!/^[\w\-\.\/]+$/.test(name)) {
-        result.status = 'error';
-        result.message = 'invalid filename';
-        results.push(result);
-        log('invalid filename skipped:', name);
-        continue;
-      }
-
-      const key = storageKey(name);
-
-      // Optionally delete old copy before fetching (not recommended except when you want forced removal)
-      if (options.forceDeleteFirst) {
-        try {
-          localStorage.removeItem(key);
-          log('deleted old copy (force) for', name);
-        } catch (e) {
-          // If localStorage not available or throws (private mode?), report error but continue attempt
-          log('warning deleting old copy for', name, e);
-        }
-      }
-
-      // 1) Try embedded template first
-      let content = readEmbeddedTemplate(name);
-      if (content !== null) {
-        // Use embedded template
-        localStorage.setItem(key, content);
-        result.status = 'ok';
-        result.message = 'stored from embedded template';
-        result.replaced = true;
-        log('stored', name, '(from embedded template)');
-        results.push(result);
-        continue;
-      }
-
-      // 2) Fetch from same-origin
-      try {
-        content = await fetchTextWithTimeout(name, options.timeoutMs);
-      } catch (fetchErr) {
-        result.status = 'error';
-        result.message = 'fetch failed: ' + String(fetchErr);
-        // Do not overwrite existing localStorage if fetch fails (safer)
-        log('fetch failed for', name, fetchErr);
-        results.push(result);
-        continue;
-      }
-
-      // write new content to localStorage (overwrite)
-      try {
-        localStorage.setItem(key, content);
-        result.status = 'ok';
-        result.message = 'fetched and stored';
-        result.replaced = true;
-        log('fetched and stored', name);
-      } catch (e) {
-        result.status = 'error';
-        result.message = 'localStorage.setItem failed: ' + String(e);
-        log('error storing', name, e);
-      }
-    } catch (err) {
-      result.status = 'error';
-      result.message = 'unexpected error: ' + String(err);
-      log('unexpected error for', name, err);
-    }
-    results.push(result);
-  }
-
-  return results;
-}
-
 // Build guest HTML and embed HOST_SCRIPTS map (filename -> source string)
-
-
-
-
 async function assembleGuestHtml(options) {
  if (ROOT==false) {  
   options = options || {};
-  var BOOT_SCRIPTS = options.bootScripts || [
-    'sound.js','video.js','keyboard.js','command.js','qandy.js'
-  ];
-  var CSS_NAME = options.cssName || 'qandy.css';
-   // Attempt to fetch/inline CSS (optional)
-  var cssText = (window._embeddedFiles && window._embeddedFiles[CSS_NAME]) || '';
-  if (!cssText) {
-    try {
-      var respCss = await fetch(CSS_NAME, { cache: 'no-cache' }).catch(()=>null);
-      if (respCss && respCss.ok) cssText = await respCss.text();
-    } catch (e) { cssText = cssText || ''; }
-  }
-  cssText = String(cssText).replace(/[\u200B\uFEFF\u200C\u200D]/g, '');
-  // Collect scripts into a map of name -> source (may be empty string on fetch failure)
-  var scriptMap = {};
-  for (var i = 0; i < BOOT_SCRIPTS.length; i++) {
-    var name = BOOT_SCRIPTS[i];
-    //var txt = await getScriptText(name, 4000).catch(()=> '');
-    if (!txt) {
-      scriptMap[name] = null; // mark missing; guest can request later via postMessage
-    } else {
-      var s = sanitizeScriptText(txt);
-      s += '\n//# sourceURL=' + name;
-      scriptMap[name] = s;
-    }
-  }
 
   // Build HTML parts
   var parts = [];
@@ -830,11 +682,9 @@ async function assembleGuestHtml(options) {
   }
  }
  
- 
  // expose globally
- window.assembleGuestHtml = assembleGuestHtml;
- window.createAndLoadVM = createAndLoadVM;
-
+ // window.assembleGuestHtml = assembleGuestHtml;
+ // window.createAndLoadVM = createAndLoadVM;
 
 async function startup() {
   // Determine guest status (support sync or async isGuest)
@@ -901,59 +751,38 @@ async function startup() {
 //
 
 
-function init_sound_js() {
-var audioContext = null;
-
-// Musical note frequencies (in Hz) based on A4 = 440Hz
-// Supports notes from C0 to B8
-var noteFrequencies = {
-  // Octave 0
-  'C0': 16.35, 'C#0': 17.32, 'Db0': 17.32, 'D0': 18.35, 'D#0': 19.45, 'Eb0': 19.45,
-  'E0': 20.60, 'F0': 21.83, 'F#0': 23.12, 'Gb0': 23.12, 'G0': 24.50, 'G#0': 25.96, 'Ab0': 25.96,
-  'A0': 27.50, 'A#0': 29.14, 'Bb0': 29.14, 'B0': 30.87,
-  
-  // Octave 1
-  'C1': 32.70, 'C#1': 34.65, 'Db1': 34.65, 'D1': 36.71, 'D#1': 38.89, 'Eb1': 38.89,
-  'E1': 41.20, 'F1': 43.65, 'F#1': 46.25, 'Gb1': 46.25, 'G1': 49.00, 'G#1': 51.91, 'Ab1': 51.91,
-  'A1': 55.00, 'A#1': 58.27, 'Bb1': 58.27, 'B1': 61.74,
-  
-  // Octave 2
-  'C2': 65.41, 'C#2': 69.30, 'Db2': 69.30, 'D2': 73.42, 'D#2': 77.78, 'Eb2': 77.78,
-  'E2': 82.41, 'F2': 87.31, 'F#2': 92.50, 'Gb2': 92.50, 'G2': 98.00, 'G#2': 103.83, 'Ab2': 103.83,
-  'A2': 110.00, 'A#2': 116.54, 'Bb2': 116.54, 'B2': 123.47,
-  
-  // Octave 3
+window.init_sound_js=function() {
+ window.audioContext = null;
+ window.noteFrequencies = {
+  'C0': 16.35, 'C#0': 17.32, 'Db0': 17.32, 'D0': 18.35, 'D#0': 19.45, 'Eb0': 19.45, 'E0': 20.60,
+  'F0': 21.83, 'F#0': 23.12, 'Gb0': 23.12, 'G0': 24.50, 'G#0': 25.96, 'Ab0': 25.96, 'A0': 27.50,
+  'A#0': 29.14, 'Bb0': 29.14, 'B0': 30.87, 'C1': 32.70, 'C#1': 34.65, 'Db1': 34.65, 'D1': 36.71,
+  'D#1': 38.89, 'Eb1': 38.89, 'E1': 41.20, 'F1': 43.65, 'F#1': 46.25, 'Gb1': 46.25, 'G1': 49.00,
+  'G#1': 51.91, 'Ab1': 51.91, 'A1': 55.00, 'A#1': 58.27, 'Bb1': 58.27, 'B1': 61.74, 'C2': 65.41,
+  'C#2': 69.30, 'Db2': 69.30, 'D2': 73.42, 'D#2': 77.78, 'Eb2': 77.78, 'E2': 82.41, 'F2': 87.31,
+  'F#2': 92.50, 'Gb2': 92.50, 'G2': 98.00, 'G#2': 103.83, 'Ab2': 103.83, 'A2': 110.00,
+  'A#2': 116.54, 'Bb2': 116.54, 'B2': 123.47,
   'C3': 130.81, 'C#3': 138.59, 'Db3': 138.59, 'D3': 146.83, 'D#3': 155.56, 'Eb3': 155.56,
   'E3': 164.81, 'F3': 174.61, 'F#3': 185.00, 'Gb3': 185.00, 'G3': 196.00, 'G#3': 207.65, 'Ab3': 207.65,
   'A3': 220.00, 'A#3': 233.08, 'Bb3': 233.08, 'B3': 246.94,
-  
-  // Octave 4 (Middle octave)
   'C4': 261.63, 'C#4': 277.18, 'Db4': 277.18, 'D4': 293.66, 'D#4': 311.13, 'Eb4': 311.13,
   'E4': 329.63, 'F4': 349.23, 'F#4': 369.99, 'Gb4': 369.99, 'G4': 392.00, 'G#4': 415.30, 'Ab4': 415.30,
   'A4': 440.00, 'A#4': 466.16, 'Bb4': 466.16, 'B4': 493.88,
-  
-  // Octave 5
   'C5': 523.25, 'C#5': 554.37, 'Db5': 554.37, 'D5': 587.33, 'D#5': 622.25, 'Eb5': 622.25,
   'E5': 659.25, 'F5': 698.46, 'F#5': 739.99, 'Gb5': 739.99, 'G5': 783.99, 'G#5': 830.61, 'Ab5': 830.61,
   'A5': 880.00, 'A#5': 932.33, 'Bb5': 932.33, 'B5': 987.77,
-  
-  // Octave 6
   'C6': 1046.50, 'C#6': 1108.73, 'Db6': 1108.73, 'D6': 1174.66, 'D#6': 1244.51, 'Eb6': 1244.51,
   'E6': 1318.51, 'F6': 1396.91, 'F#6': 1479.98, 'Gb6': 1479.98, 'G6': 1567.98, 'G#6': 1661.22, 'Ab6': 1661.22,
   'A6': 1760.00, 'A#6': 1864.66, 'Bb6': 1864.66, 'B6': 1975.53,
-  
-  // Octave 7
   'C7': 2093.00, 'C#7': 2217.46, 'Db7': 2217.46, 'D7': 2349.32, 'D#7': 2489.02, 'Eb7': 2489.02,
   'E7': 2637.02, 'F7': 2793.83, 'F#7': 2959.96, 'Gb7': 2959.96, 'G7': 3135.96, 'G#7': 3322.44, 'Ab7': 3322.44,
   'A7': 3520.00, 'A#7': 3729.31, 'Bb7': 3729.31, 'B7': 3951.07,
-  
-  // Octave 8
   'C8': 4186.01, 'C#8': 4434.92, 'Db8': 4434.92, 'D8': 4698.63, 'D#8': 4978.03, 'Eb8': 4978.03,
   'E8': 5274.04, 'F8': 5587.65, 'F#8': 5919.91, 'Gb8': 5919.91, 'G8': 6271.93, 'G#8': 6644.88, 'Ab8': 6644.88,
   'A8': 7040.00, 'A#8': 7458.62, 'Bb8': 7458.62, 'B8': 7902.13
-};
+ };
 
-function playNote(note, duration = 200) {
+ window.playNote = function(note, duration = 200) {
   // Convert note to uppercase and trim whitespace
   note = note.toString().trim().toUpperCase();
   
@@ -977,357 +806,146 @@ function playNote(note, duration = 200) {
   
   // Use the existing beep function with the note's frequency
   return beep(frequency, duration);
-}
-
-// Music notation parser and playback
-// Inspired by early computer music formats (BASIC PLAY, Commodore 64 SID)
-// Music string format: "C4:200 E4:200 G4:400 R:100 C5:300"
-//   - Note format: NOTE:DURATION (e.g., "C4:200" = C4 for 200ms)
-//   - R or rest indicates a pause/rest
-//   - Separate notes with spaces
-//   - Duration is optional, defaults to 200ms
-// Example: playTune("C E G C5") plays C4, E4, G4, C5
-// Example: playTune("C:100 D:100 E:100 F:100 G:400") plays a scale
-
-var currentTune = null;  // Currently playing tune (can be stopped)
-var tuneTimeout = null;  // Timeout for next note
-
-function playTune(musicString, onComplete) {
-  // Stop any currently playing tune
+ }
+ currentTune = null;  // Currently playing tune (can be stopped)
+ var tuneTimeout = null;  // Timeout for next note
+ window.playTune = function(musicString, onComplete) {
   stopTune();
-  
-  // Parse the music string into an array of notes
-  const notes = parseMusicString(musicString);
-  if (!notes || notes.length === 0) {
-    return false;
-  }
-  
-  // Store tune info so it can be stopped if needed
-  currentTune = {
-    notes: notes,
-    index: 0,
-    onComplete: onComplete
-  };
-  
-  // Start playing the tune
+  window.notes = parseMusicString(musicString);
+  if (!notes || notes.length === 0) { return false; }
+  currentTune = { notes: notes, index: 0, onComplete: onComplete };
   playNextNote();
   return true;
-}
-
-function parseMusicString(musicString) {
-  // Split by spaces and parse each note
-  const tokens = musicString.trim().split(/\s+/);
-  const notes = [];
-  
+ }
+ window.parseMusicString = function(musicString) {
+  const notes = []; const tokens = musicString.trim().split(/\s+/);
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i];
     const parts = token.split(':');
     const noteName = parts[0].trim().toUpperCase();
     let duration = parts[1] ? parseInt(parts[1]) : 200;
-    
-    // Validate duration is a positive number
-    if (isNaN(duration) || duration <= 0) {
-      duration = 200; // Default to 200ms if invalid
-    }
-    
-    if (noteName === 'R' || noteName === 'REST') {
-      // Rest/pause
-      notes.push({ type: 'rest', duration: duration });
-    } else {
-      // Musical note
-      notes.push({ type: 'note', note: noteName, duration: duration });
-    }
+    if (isNaN(duration) || duration <= 0) { duration = 200; }
+    if (noteName === 'R' || noteName === 'REST') { notes.push({ type: 'rest', duration: duration }); } else { notes.push({ type: 'note', note: noteName, duration: duration });}
   }
-  
   return notes;
-}
-
-function playNextNote() {
+ }
+ window.playNextNote = function() {
   if (!currentTune || currentTune.index >= currentTune.notes.length) {
-    // Tune finished
     const callback = currentTune ? currentTune.onComplete : null;
     currentTune = null;
-    if (callback) {
-      callback();
-    }
+    if (callback) { callback(); }
     return;
   }
-  
   const noteInfo = currentTune.notes[currentTune.index];
   currentTune.index++;
-  
   if (noteInfo.type === 'rest') {
-    // Just wait for the duration
     tuneTimeout = setTimeout(playNextNote, noteInfo.duration);
   } else {
-    // Play the note
     playNote(noteInfo.note, noteInfo.duration);
-    // Schedule next note
     tuneTimeout = setTimeout(playNextNote, noteInfo.duration);
   }
-}
+ }
 
-function stopTune() {
-  // Stop currently playing tune
-  if (tuneTimeout) {
-    clearTimeout(tuneTimeout);
-    tuneTimeout = null;
-  }
-  currentTune = null;
-}
-
-// Loop a tune continuously
-function loopTune(musicString) {
-  playTune(musicString, function() {
-    // When tune completes, play it again
-    loopTune(musicString);
-  });
-}
-
-// Loop GWBASIC format notes continuously
-function loopNotes(gwbasicString) {
-  playNotes(gwbasicString, function() {
-    // When tune completes, play it again
-    loopNotes(gwbasicString);
-  });
-}
-
-// Alternative notation: playMelody with array format
-// Example: playMelody([['C4', 200], ['E4', 200], ['G4', 400]])
-function playMelody(notesArray, onComplete) {
-  // Convert array format to music string
+window.stopTune = function() { if (tuneTimeout) { clearTimeout(tuneTimeout); tuneTimeout = null; } currentTune = null; }
+window.loopTune = function(musicString) { playTune(musicString, function() { loopTune(musicString); });}
+window.loopNotes = function(gwbasicString) { playNotes(gwbasicString, function() { loopNotes(gwbasicString); }); }
+window.playMelody = function(notesArray, onComplete) {
   const musicString = notesArray.map(function(note) {
-    if (note[0] === 'R' || note[0] === 'rest') {
-      return 'R:' + (note[1] || 200);
-    }
+    if (note[0] === 'R' || note[0] === 'rest') { return 'R:' + (note[1] || 200); }
     return note[0] + ':' + (note[1] || 200);
   }).join(' ');
-  
   return playTune(musicString, onComplete);
 }
-
-// GWBASIC PLAY command format parser
-// Supports the same format as GWBASIC.COM "PLAY [string]" command
-// 
-// Format:
-//   Notes: A, B, C, D, E, F, G
-//   Modifiers: # or + (sharp), - (flat)
-//   Length: L followed by a number (e.g., L4 for quarter notes, L1 for whole notes)
-//   Octave: O followed by a number (0-6) sets the current octave
-//   Tempo: T followed by a number (e.g., T120) sets the speed in quarter notes per minute
-//   Pause/Rest: P followed by a number (e.g., P4 for quarter rest)
-//
-// Examples:
-//   playNotes("C D E F G A B") - Basic melody
-//   playNotes("O3 L8 CDEFGAB") - 3rd octave C-B scale using eighth notes
-//   playNotes("T100 C#4 D8 F+16") - Tempo 100, C# quarter, D eighth, F# sixteenth
-//
-function playNotes(gwbasicString, onComplete) {
-  // Parse GWBASIC format into internal format
+window.playNotes = function(gwbasicString, onComplete) {
   const notes = parseGWBasicString(gwbasicString);
-  if (!notes || notes.length === 0) {
-    return false;
-  }
-  
-  // Convert to music string format and play
+  if (!notes || notes.length === 0) { return false; }
   const musicString = notes.map(function(note) {
-    if (note.type === 'rest') {
-      return 'R:' + note.duration;
-    }
+    if (note.type === 'rest') { return 'R:' + note.duration; }
     return note.note + ':' + note.duration;
   }).join(' ');
-  
   return playTune(musicString, onComplete);
 }
-
-// Parse GWBASIC PLAY string format
-function parseGWBasicString(str) {
+window.parseGWBasicString = function(str) {
   const notes = [];
   let currentOctave = 4;  // Default octave
   let currentLength = 4;  // Default quarter note (L4)
   let currentTempo = 120; // Default tempo (120 BPM = quarter notes per minute)
-  
-  // Calculate duration in ms from note length and tempo
-  // Formula: duration = (60000 / tempo) * (4 / length)
-  // For L4 at T120: (60000/120) * (4/4) = 500ms
-  function getDuration(length) {
-    return Math.round((60000 / currentTempo) * (4 / length));
-  }
-  
-  // Remove extra whitespace and convert to uppercase
+  function getDuration(length) { return Math.round((60000 / currentTempo) * (4 / length)); }
   str = str.trim().toUpperCase();
-  
   let i = 0;
   while (i < str.length) {
     const char = str[i];
-    
-    // Skip whitespace
-    if (char === ' ' || char === '\t') {
-      i++;
+    if (char === ' ' || char === '\t') { i++; continue; }
+    if (char === 'T') { i++; let numStr = '';
+      while (i < str.length && str[i] >= '0' && str[i] <= '9') { numStr += str[i]; i++; }
+      if (numStr) { const tempo = parseInt(numStr); if (tempo > 0 && tempo <= 255) { currentTempo = tempo; } }
       continue;
     }
-    
-    // Parse tempo (T followed by number)
-    if (char === 'T') {
-      i++;
-      let numStr = '';
-      while (i < str.length && str[i] >= '0' && str[i] <= '9') {
-        numStr += str[i];
-        i++;
-      }
-      if (numStr) {
-        const tempo = parseInt(numStr);
-        if (tempo > 0 && tempo <= 255) {
-          currentTempo = tempo;
-        }
-      }
-      continue;
-    }
-    
-    // Parse default length (L followed by number)
     if (char === 'L') {
-      i++;
-      let numStr = '';
-      while (i < str.length && str[i] >= '0' && str[i] <= '9') {
-        numStr += str[i];
-        i++;
-      }
-      if (numStr) {
-        const length = parseInt(numStr);
-        if (length > 0 && length <= 64) {
-          currentLength = length;
-        }
-      }
+      i++; let numStr = '';
+      while (i < str.length && str[i] >= '0' && str[i] <= '9') { numStr += str[i]; i++; }
+      if (numStr) { const length = parseInt(numStr); if (length > 0 && length <= 64) { currentLength = length; } }
       continue;
     }
-    
-    // Parse octave (O followed by number)
     if (char === 'O') {
-      i++;
-      if (i < str.length && str[i] >= '0' && str[i] <= '6') {
-        currentOctave = parseInt(str[i]);
-        i++;
-      }
+      i++; if (i < str.length && str[i] >= '0' && str[i] <= '6') { currentOctave = parseInt(str[i]); i++; }
       continue;
     }
     
-    // Parse pause/rest (P followed by number)
     if (char === 'P') {
-      i++;
-      let numStr = '';
-      while (i < str.length && str[i] >= '0' && str[i] <= '9') {
-        numStr += str[i];
-        i++;
-      }
+      i++; let numStr = '';
+      while (i < str.length && str[i] >= '0' && str[i] <= '9') { numStr += str[i]; i++; }
       const length = numStr ? parseInt(numStr) : currentLength;
-      notes.push({
-        type: 'rest',
-        duration: getDuration(length)
-      });
+      notes.push({ type: 'rest', duration: getDuration(length) });
       continue;
     }
-    
-    // Parse note (A-G with optional modifiers and length)
     if (char >= 'A' && char <= 'G') {
-      let noteName = char;
-      i++;
-      
-      // Check for sharp/flat modifier
+      let noteName = char; i++;
       if (i < str.length && (str[i] === '#' || str[i] === '+')) {
-        noteName += '#';
-        i++;
+        noteName += '#'; i++;
       } else if (i < str.length && str[i] === '-') {
-        // Flat: convert to enharmonic sharp equivalent
-        // Note: C- and F- are special cases (would require octave change)
-        const flats = {
-          'D': 'C#', 'E': 'D#', 'G': 'F#', 'A': 'G#', 'B': 'A#'
-        };
-        if (flats[noteName]) {
-          noteName = flats[noteName];
-        }
-        // C- and F- are ignored (C-flat = B, F-flat = E in different octaves)
+        const flats = { 'D': 'C#', 'E': 'D#', 'G': 'F#', 'A': 'G#', 'B': 'A#' };
+        if (flats[noteName]) { noteName = flats[noteName]; }
         i++;
       }
-      
-      // Check for note-specific length (number immediately after note)
-      let noteLength = currentLength;
-      let numStr = '';
-      while (i < str.length && str[i] >= '0' && str[i] <= '9') {
-        numStr += str[i];
-        i++;
-      }
-      if (numStr) {
-        noteLength = parseInt(numStr);
-      }
-      
-      // Add note with octave
-      notes.push({
-        type: 'note',
-        note: noteName + currentOctave,
-        duration: getDuration(noteLength)
-      });
+      let noteLength = currentLength; let numStr = '';
+      while (i < str.length && str[i] >= '0' && str[i] <= '9') { numStr += str[i]; i++; }
+      if (numStr) { noteLength = parseInt(numStr); }
+      notes.push({ type: 'note', note: noteName + currentOctave, duration: getDuration(noteLength) });
       continue;
     }
-    
-    // Skip unrecognized characters (like M for music style)
     i++;
   }
-  
   return notes;
 }
-
-// Replace existing beep(...) with this version (supports optional volume param)
-// and add a volume(level) API to set/get global beep volume.
-
 window.BEEP_VOLUME = (typeof window.BEEP_VOLUME !== 'undefined') ? window.BEEP_VOLUME : 0.3;
-
-function beep(frequency = 800, duration = 200, volume) {
+window.beep = function(frequency = 800, duration = 200, volume) {
   try {
-    // Initialize audio context on first use (must be triggered by user interaction)
     if (!audioContext) {
-      if (!window.AudioContext && !window.webkitAudioContext) {
-        throw new Error('Web Audio API is not supported in this browser');
-      }
+      if (!window.AudioContext && !window.webkitAudioContext) { throw new Error('Web Audio API is not supported in this browser'); }
       audioContext = new (window.AudioContext || window.webkitAudioContext)();
     }
-
-    // If caller did not provide volume, use global BEEP_VOLUME
     var vol = (typeof volume === 'number') ? volume : (window.BEEP_VOLUME || 0.3);
     vol = Math.max(0, Math.min(1, vol)); // clamp 0.0..1.0
-
-    // Create oscillator (tone generator) and gain node
     const oscillator = audioContext.createOscillator();
     const gainNode = audioContext.createGain();
-
     oscillator.type = 'sine';
     oscillator.frequency.value = frequency;
-
-    // Configure volume
     gainNode.gain.value = vol;
-
-    // Connect nodes and schedule
     oscillator.connect(gainNode);
     gainNode.connect(audioContext.destination);
-
     const startTime = audioContext.currentTime;
     const endTime = startTime + (duration / 1000);
-
     oscillator.start(startTime);
     oscillator.stop(endTime);
-
     return true;
   } catch (error) {
     return false;
   }
 }
 
-// volume(level)
-// - If called with no args, returns current global beep volume (0.0..1.0).
-// - If called with a numeric level, sets global default beep volume (clamped 0.0..1.0) and returns the previous value.
-function volume(level) {
-  if (typeof level === 'undefined') {
-    return (typeof window.BEEP_VOLUME === 'number') ? window.BEEP_VOLUME : 0.3;
-  }
+window.volume = function(level) {
+  if (typeof level === 'undefined') { return (typeof window.BEEP_VOLUME === 'number') ? window.BEEP_VOLUME : 0.3; }
   var prev = (typeof window.BEEP_VOLUME === 'number') ? window.BEEP_VOLUME : 0.3;
   var v = Number(level);
   if (isNaN(v)) v = 0;
@@ -1781,7 +1399,7 @@ window.peekChar = function(x, y) {
 };
 
 
-const ANSI = {
+window.ANSI = {
   colors: { 30: 'black', 31: 'red', 32: 'green', 33: 'yellow', 34: 'blue', 35: 'magenta', 36: 'cyan', 37: 'white', 90: 'black', 91: 'red', 92: 'green', 93: 'yellow', 94: 'blue', 95: 'magenta', 96: 'cyan', 97: 'white' },
   bgColors: { 40: 'black', 41: 'red', 42: 'green', 43: 'yellow', 44: 'blue', 45: 'magenta', 46: 'cyan', 47: 'white', 100: 'black', 101: 'red', 102: 'green', 103: 'yellow', 104: 'blue', 105: 'magenta', 106: 'cyan', 107: 'white' },
   render: function(text) {
@@ -2567,11 +2185,11 @@ if (typeof window.qandySignalReady === 'function') {
 //
 
 function init_keyboard_js() { 
-function keyson() {
+window.keyson=function() {
   //keyon=1;
   //cursor(1);
 }
-function keysoff() {
+window.keysoff=function() {
   //keyon=0;
   //cursor(0);
 }
@@ -2685,7 +2303,7 @@ keyboardData.forEach(function(key) {
 window.keyTimeouts = {};
 
 // Function to highlight a virtual key
-function highlightKey(keyCode) {
+window.highlightKey = function(keyCode) {
   var elementId = keyCodeToId[keyCode];
   if (!elementId) return; // Key not in virtual keyboard
   
@@ -2708,7 +2326,7 @@ function highlightKey(keyCode) {
 }
 
 // Function to unhighlight a virtual key
-function unhighlightKey(elementId) {
+window.unhighlightKey=function(elementId) {
   var element = document.getElementById(elementId);
   if (!element) return;
 
@@ -2994,7 +2612,7 @@ if (typeof window.qandySignalReady === 'function') {
 //
 
 function init_command_js() {
-function command(cmd) {
+ window.command=function(cmd) {
   if (RUN != "qandy.js") {
     print("\n");
     try { input(cmd); } catch (e) { /* ignore */ }
@@ -3029,7 +2647,7 @@ function command(cmd) {
   }
 }
 
-function evalCode(code) {
+window.evalCode=function(code) {
   try {
     var trimmed = String(code).trim();
     var simpleNameRE = /^[$A-Za-z_][$A-Za-z0-9_]*(?:\s*\.\s*[$A-Za-z_][$A-Za-z0-9_]*)*$/;
@@ -3658,7 +3276,7 @@ function pressup(event) {
   }
 }
 
-function hostScript(name) {
+window.hostScript=function(name) {
   if (!name || typeof name !== 'string') return false;
   const s = name.trim();
   name = name.trim();
@@ -3834,15 +3452,6 @@ if (GUEST) {
   // host system ready
   print("\nQandy Root:");
 }
-
-
-
-
-
-
-
-
-
 
 //mySearch=location.search.substr(1).split("&")
 //for (i=0;i<mySearch.length;i++) {
