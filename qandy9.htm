@@ -22,114 +22,9 @@ if (typeof window.print === 'function' && window.print.toString().indexOf('[nati
 
 <script>
 
-// VM: request qandy.css from host and apply it
-(function () {
-  'use strict';
-
-  var REQUEST_TIMEOUT_MS = 5000;
-
-  // Helper: send request to host and wait for response with matching id
-  function requestFileFromHost(name, timeoutMs) {
-    timeoutMs = (typeof timeoutMs === 'number') ? timeoutMs : REQUEST_TIMEOUT_MS;
-    return new Promise(function (resolve, reject) {
-      var id = 'req_' + Math.random().toString(36).slice(2);
-      var responded = false;
-
-      function onMessage(ev) {
-        // Only accept messages from parent
-        if (ev.source !== window.parent) return;
-        var d = ev.data;
-        if (!d || typeof d !== 'object') return;
-        if (d.type === 'file-response' && d.id === id) {
-          responded = true;
-          window.removeEventListener('message', onMessage);
-          if (d.status === 'ok' && typeof d.content === 'string') {
-            resolve(d.content);
-          } else {
-            reject(new Error(d.error || 'file-response error'));
-          }
-        }
-      }
-
-      window.addEventListener('message', onMessage);
-      // send request
-      try {
-        window.parent.postMessage({ type: 'request-file', id: id, name: name }, '*');
-      } catch (e) {
-        window.removeEventListener('message', onMessage);
-        return reject(e);
-      }
-
-      // timeout
-      setTimeout(function () {
-        if (responded) return;
-        window.removeEventListener('message', onMessage);
-        reject(new Error('timeout waiting for host file: ' + name));
-      }, timeoutMs);
-    });
-  }
-
-  // Apply CSS content: prefer Blob -> link; fallback to inline <style>
-  function applyCssText(cssText, options) {
-    options = options || {};
-    var preferBlob = options.preferBlob !== false; // default true
-
-    if (preferBlob && typeof Blob === 'function' && typeof URL === 'object' && typeof URL.createObjectURL === 'function') {
-      try {
-        var blob = new Blob([cssText], { type: 'text/css' });
-        var url = URL.createObjectURL(blob);
-        var link = document.createElement('link');
-        link.rel = 'stylesheet';
-        link.href = url;
-        link.onload = function () { URL.revokeObjectURL(url); };
-        link.onerror = function () { URL.revokeObjectURL(url); /* fallback below */ };
-        document.head.appendChild(link);
-        return link;
-      } catch (e) {
-        // fall through to inline style
-      }
-    }
-
-    // Fallback: inline style
-    var style = document.createElement('style');
-    style.type = 'text/css';
-    style.appendChild(document.createTextNode(cssText));
-    document.head.appendChild(style);
-    return style;
-  }
-
-  // Public convenience: request and apply CSS by name
-  async function requestAndApplyCss(name, opts) {
-    try {
-      var css = await requestFileFromHost(name, opts && opts.timeoutMs);
-      applyCssText(css, opts);
-      console.info('VM: applied CSS from host:', name);
-      // optional: notify host/parent that CSS applied
-      try { window.parent.postMessage({ type: 'vm-log', message: 'applied-css:' + name }, '*'); } catch (e) {}
-      return true;
-    } catch (err) {
-      console.warn('VM: failed to load CSS', name, err);
-      return false;
-    }
-  }
-
-  // Expose helpers on window for manual use
-  window.vmRequestFileFromHost = requestFileFromHost;
-  window.vmApplyCssText = applyCssText;
-  window.vmRequestAndApplyCss = requestAndApplyCss;
-
-  // Auto-request qandy.css at startup (optional — comment out if host will trigger)
-  document.addEventListener('DOMContentLoaded', function () {
-    // try to load 'qandy.css' from host and apply it before further UI setup
-    requestAndApplyCss('qandy.css').catch(function () { /* ignored */ });
-  }, { once: true });
-
-})();
-
 // Define Global Variables
 
 // sound.js
-var SOUND=false;       // enable/disable sound card
 var SOUND=true;       // enable/disable sound card
 
 // qandy.js
@@ -431,9 +326,89 @@ var inInputMode = false;       // True when processing user input (prevents pagi
   }
 })();
 
-</script>
+// Safe no-op shims so these functions don't throw ReferenceError before keyboard_js() runs
+if (typeof window.highlightKey === 'undefined') window.highlightKey = function() {};
+if (typeof window.unhighlightKey === 'undefined') window.unhighlightKey = function() {};
+if (typeof window.updateKeyLabels === 'undefined') window.updateKeyLabels = function() {};
 
-<script>
+(function () {
+  'use strict';
+
+  // Create a namespace for Qandy runtime on the current window (guest window)
+  window.QANDY = window.QANDY || {};
+  window.QANDY.sound = window.QANDY.sound || {};
+
+  // Private audio context handle (created lazily)
+  var AC = null;
+  function ensureAudioContext() {
+    if (AC) return AC;
+    try {
+      AC = new (window.AudioContext || window.webkitAudioContext)();
+      return AC;
+    } catch (e) {
+      AC = null;
+      return null;
+    }
+  }
+
+  // Low-level play tone helper (non-blocking)
+  function _playTone(freq, dur) {
+    var ctx = ensureAudioContext();
+    if (!ctx) return Promise.reject(new Error('AudioContext unavailable'));
+    try {
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = typeof freq === 'number' ? freq : 800;
+      gain.gain.value = (typeof dur === 'number' && dur > 0) ? 0.03 : 0.03;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + (typeof dur === 'number' ? dur : 0.06));
+      // do not close ctx immediately; modern browsers prefer single shared context.
+      return Promise.resolve();
+    } catch (err) {
+      return Promise.reject(err);
+    }
+  }
+
+  // Public API: beep(freq?, durationSeconds?)
+  // Safe no-op fallback if AudioContext cannot be created.
+  function beep(freq, dur) {
+    if (typeof window.QANDY.sound._overrideBeep === 'function') {
+      // allow host or test harness to override behavior
+      try { return Promise.resolve(window.QANDY.sound._overrideBeep(freq, dur)); } catch (e) { /*ignore*/ }
+    }
+    return _playTone(freq, dur).catch(function () {
+      // swallow errors to avoid breaking boot if audio is blocked
+      return undefined;
+    });
+  }
+
+  // init function used by bootSequence: attempt a tiny "power on" tick (if user gesture).
+  async function sound_js() {
+    // Try a tiny click/beep to signal readiness. This may be blocked until a user gesture,
+    // but that's fine — we don't fail the boot if the sound can't play.
+    try {
+      // create audio context if possible. Play a tiny click if allowed (user gesture may be required).
+      await beep(1000, 0.03);
+    } catch (e) {
+      // ignore
+    }
+    // Provide a stable resolved promise so other code can await sound_js()
+    return Promise.resolve();
+  }
+
+  // Attach API to namespace and convenient aliases (without clobbering if host provided one)
+  window.QANDY.sound.beep = beep;
+  window.QANDY.sound.sound_js = sound_js;
+  // Provide global alias only if not already defined (do not override host-provided beep)
+  if (typeof window.beep !== 'function') window.beep = beep;
+  // Also expose legacy function name if other code calls sound_js()
+  if (typeof window.sound_js !== 'function') window.sound_js = sound_js;
+
+})();
+
 (function() {
   'use strict';
 
@@ -442,7 +417,6 @@ var inInputMode = false;       // True when processing user input (prevents pagi
     { src: 'video.js', name: 'Video' },
     { src: 'gfx.js', name: 'Graphics' },
     { src: 'keyboard.js', name: 'Keyboard' },
-    { src: 'command.js', name: 'Command' },
     { src: 'qandy.js', name: 'Qandy Core' }
   ];
 

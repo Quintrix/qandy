@@ -431,3 +431,10 @@ function volume(level) {
   window.BEEP_VOLUME = Math.max(0, Math.min(1, v));
   return prev;
 }
+
+if (isGuest) { beep(); }
+
+// Signal that sound.js is ready
+if (typeof window.qandySignalReady === 'function') {
+  window.qandySignalReady('Sound');
+}
