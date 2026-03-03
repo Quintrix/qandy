@@ -22,9 +22,9 @@ if (typeof window.print === 'function' && window.print.toString().indexOf('[nati
 
 (function () {
   if (typeof document === 'undefined') return;
-  if (document.getElementById('qandy-css-js')) return; // avoid duplicate insertion
 
   var css = String.raw`
+
 body { background-color: #333 }
 #cursor { background-color: #CCC; }
 .qpc { position: absolute; top: 0px; left: 0px; width: 160px; height: 24px;
@@ -36,7 +36,7 @@ body { background-color: #333 }
   top: 64px;  
   width: 256px; 
   height: 384px; 
-  z-index: 254;     /* I think it appeared after (converted to comment for valid CSS) */
+  z-index: 254;     I think it appeared after 
   /* Font stack optimized for readability with extended character support */
   /* Priority: Courier (readable) -> System monospace with Unicode -> Generic fallback */
   font-family: 'Courier New', Courier, 'Consolas', 'DejaVu Sans Mono', 'Liberation Mono', 'Menlo', Monaco, monospace;
@@ -110,7 +110,199 @@ body { background-color: #333 }
   color: #000;
   animation: qandy-blink 1s steps(1, start) infinite;
 }
+
+.pop { position:absolute; top:260; left:190; z-index:250;
+       font-family: arial; font-size: 14px; weight: bold;
+       color: navy; background-color: #999; visibility:hidden;
+       text-align: center;
+       padding-top: 0px; padding-bottom: 0px;  
+       padding-right: 4px; padding-left: 4px; }
+.tile { position: absolute; top: 0px; left: 0px; }
+.item { position: absolute; top: 0px; left: 0px; }
+.char { position: absolute; top: 0px; left: 0px; }
+
+.k1 { position: absolute; top: 0px; left: 0px; width: 30px; height: 30px;
+      padding-left: 0px; padding-right: 0px; align-items: center;
+      max-width: 24px; max-height: 24px; margin: 0; padding: 4; 
+      display: flex; justify-content: center;  align-items: center;       
+      color: white; background-color: #222; text-align: center;
+      font-family: Arial; font-size: 14px; weight: bold;
+      cursor: pointer; z-index: 99; 
+      border: 1px solid #555; border-radius: 3px;
+      user-select: none; }
+.k1:hover { background-color: #444; }
+.k1:active { background-color: #666; }
+.k2 { position: absolute; top: 0px; left: 0px; width: 52px; height: 30px;
+      padding-left: 0px; padding-right: 0px; align-items: center;
+      max-width: 52px; max-height: 24px; margin: 0; padding: 4;        
+      display: flex; justify-content: center;  align-items: center;      
+      color: white; background-color: #222; text-align: center;
+      font-family: Arial; font-size: 12px; weight: bold; 
+      cursor: pointer; z-index: 99; 
+      border: 1px solid #555; border-radius: 3px;
+      user-select: none; }
+.k2:hover { background-color: #444; }
+.k2:active { background-color: #666; }
+.k4 { position: absolute; top: 0px; left: 0px; width: 109px; height: 30px;
+      padding-left: 0px; padding-right: 0px; align-items: center;
+      max-width: 109px; max-height: 24px; margin: 0; padding: 4;        
+      display: flex; justify-content: center;  align-items: center;      
+      color: white; background-color: #888; text-align: center;
+      font-family: Arial; font-size: 12px; weight: bold;
+      cursor: pointer; z-index: 99; 
+      border: 1px solid #555; border-radius: 3px;
+      user-select: none; }
+.k4:hover { background-color: #aaa; }
+.k4:active { background-color: #666; }
+
+/* New key classes for full keyboard */
+.k-ctrl { position: absolute; top: 0px; left: 0px; width: 40px; height: 30px;
+      padding-left: 0px; padding-right: 0px; align-items: center;
+      max-width: 40px; max-height: 30px; margin: 0; padding: 4px;        
+      display: flex; justify-content: center;  align-items: center;      
+      color: white; background-color: #222; text-align: center;
+      font-family: Arial; font-size: 11px; font-weight: bold;
+      cursor: pointer; z-index: 99; 
+      border: 1px solid #555; border-radius: 3px;
+      user-select: none; }
+.k-ctrl:hover { background-color: #444; }
+.k-ctrl:active { background-color: #666; }
+.k-enter { position: absolute; top: 0px; left: 0px; width: 40px; height: 30px;
+      padding-left: 0px; padding-right: 0px; align-items: center;
+      max-width: 40px; max-height: 30px; margin: 0; padding: 4px;        
+      display: flex; justify-content: center;  align-items: center;      
+      color: white; background-color: #222; text-align: center;
+      font-family: Arial; font-size: 11px; font-weight: bold;
+      cursor: pointer; z-index: 99; 
+      border: 1px solid #555; border-radius: 3px;
+      user-select: none; }
+.k-enter:hover { background-color: #444; }
+.k-enter:active { background-color: #666; }
+
+/* Custom width for SPACE key (81px) */
+.k-space { position: absolute; top: 0px; left: 0px; width: 81px; height: 30px;
+      padding-left: 0px; padding-right: 0px; align-items: center;
+      max-width: 81px; max-height: 24px; margin: 0; padding: 4;        
+      display: flex; justify-content: center;  align-items: center;      
+      color: white; background-color: #222; text-align: center;
+      font-family: Arial; font-size: 12px; font-weight: bold;
+      cursor: pointer; z-index: 99; 
+      border: 1px solid #555; border-radius: 3px;
+      user-select: none; }
+.k-space:hover { background-color: #444; }
+.k-space:active { background-color: #666; }
+
+
+/* Import authentic IBM VGA fonts from The Ultimate Oldschool PC Font Pack */
+/* License: CC BY-SA 4.0 - https://int10h.org/oldschool-pc-fonts/ */
+@font-face {
+  font-family: 'IBM VGA 8x16';
+  src: url('fonts/IBM_VGA_8x16.woff') format('woff');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'IBM VGA 8x14';
+  src: url('fonts/IBM_VGA_8x14.woff') format('woff');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'IBM VGA 9x16';
+  src: url('fonts/IBM_VGA_9x16.woff') format('woff');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Import Google Fonts for better extended ASCII character support (optional fallback) */
+@import url('https://fonts.googleapis.com/css2?family=VT323&family=IBM+Plex+Mono:wght@400;700&display=swap');
+
+/* Default cell */
+.qandy-cell {
+  /* default variables (fg/bg) */
+  --fg: #e5e5e5;   /* light gray (default fg 37) */
+  --bg: #000000;   /* black (default bg 40) */
+  color: var(--fg);
+  background-color: var(--bg);
+  display: inline-block;
+  white-space: pre;
+  padding: 0;
+  margin: 0;
+  line-height: 1;
+  font-family: monospace;
+}
+
+/* Inverse: swap fg/bg */
+.qandy-cell.ansi-inverse {
+  color: var(--bg) !important;
+  background-color: var(--fg) !important;
+}
+
+/* Text styles */
+.qandy-cell.ansi-bold { font-weight: 700; }
+.qandy-cell.ansi-underline { text-decoration: underline; }
+.qandy-cell.ansi-italic { font-style: italic; }
+.qandy-cell.ansi-dim { opacity: 0.6; }
+
+/* Simple blink (can be turned off on some browsers) */
+@keyframes qandy-blink { 50% { visibility: hidden; } }
+.qandy-cell.ansi-blink { animation: qandy-blink 1s step-end infinite; }
+
+/* Foreground colors (30-37) */
+.qandy-cell.ansi-fg-30 { --fg: #000000; color: var(--fg); } /* black */
+.qandy-cell.ansi-fg-31 { --fg: #cd0000; color: var(--fg); } /* red */
+.qandy-cell.ansi-fg-32 { --fg: #00cd00; color: var(--fg); } /* green */
+.qandy-cell.ansi-fg-33 { --fg: #cdcd00; color: var(--fg); } /* yellow */
+.qandy-cell.ansi-fg-34 { --fg: #0000ee; color: var(--fg); } /* blue */
+.qandy-cell.ansi-fg-35 { --fg: #cd00cd; color: var(--fg); } /* magenta */
+.qandy-cell.ansi-fg-36 { --fg: #00cdcd; color: var(--fg); } /* cyan */
+.qandy-cell.ansi-fg-37 { --fg: #e5e5e5; color: var(--fg); } /* white/light gray */
+
+/* Bright foreground (90-97) */
+.qandy-cell.ansi-fg-90 { --fg: #7f7f7f; color: var(--fg); } /* bright black / gray */
+.qandy-cell.ansi-fg-91 { --fg: #ff0000; color: var(--fg); } /* bright red */
+.qandy-cell.ansi-fg-92 { --fg: #00ff00; color: var(--fg); } /* bright green */
+.qandy-cell.ansi-fg-93 { --fg: #ffff00; color: var(--fg); } /* bright yellow */
+.qandy-cell.ansi-fg-94 { --fg: #5c5cff; color: var(--fg); } /* bright blue */
+.qandy-cell.ansi-fg-95 { --fg: #ff00ff; color: var(--fg); } /* bright magenta */
+.qandy-cell.ansi-fg-96 { --fg: #00ffff; color: var(--fg); } /* bright cyan */
+.qandy-cell.ansi-fg-97 { --fg: #ffffff; color: var(--fg); } /* bright white */
+
+/* Background colors (40-47) */
+.qandy-cell.ansi-bg-40 { --bg: #000000; background-color: var(--bg); } /* black */
+.qandy-cell.ansi-bg-41 { --bg: #cd0000; background-color: var(--bg); } /* red */
+.qandy-cell.ansi-bg-42 { --bg: #00cd00; background-color: var(--bg); } /* green */
+.qandy-cell.ansi-bg-43 { --bg: #cdcd00; background-color: var(--bg); } /* yellow */
+.qandy-cell.ansi-bg-44 { --bg: #0000ee; background-color: var(--bg); } /* blue */
+.qandy-cell.ansi-bg-45 { --bg: #cd00cd; background-color: var(--bg); } /* magenta */
+.qandy-cell.ansi-bg-46 { --bg: #00cdcd; background-color: var(--bg); } /* cyan */
+.qandy-cell.ansi-bg-47 { --bg: #e5e5e5; background-color: var(--bg); } /* white/light gray */
+
+/* Bright backgrounds (100-107) */
+.qandy-cell.ansi-bg-100 { --bg: #7f7f7f; background-color: var(--bg); }
+.qandy-cell.ansi-bg-101 { --bg: #ff0000; background-color: var(--bg); }
+.qandy-cell.ansi-bg-102 { --bg: #00ff00; background-color: var(--bg); }
+.qandy-cell.ansi-bg-103 { --bg: #ffff00; background-color: var(--bg); }
+.qandy-cell.ansi-bg-104 { --bg: #5c5cff; background-color: var(--bg); }
+.qandy-cell.ansi-bg-105 { --bg: #ff00ff; background-color: var(--bg); }
+.qandy-cell.ansi-bg-106 { --bg: #00ffff; background-color: var(--bg); }
+.qandy-cell.ansi-bg-107 { --bg: #ffffff; background-color: var(--bg); }
+
+/* Improve touch behavior */
+.k1, .k2, .k3, [role="button"], button {
+  touch-action: manipulation;                /* hints to browsers to avoid double-tap zoom */
+  -webkit-tap-highlight-color: rgba(0,0,0,0);/* remove ugly highlight (optional) */
+  -ms-touch-action: manipulation;
+}
+html { -webkit-text-size-adjust: 100%; }     /* keep text size stable across zoom/text adjustments */
 `;
+
+  if (document.getElementById('qandy-css-js')) return; // avoid duplicate insertion
 
   var style = document.createElement('style');
   style.id = 'qandy-css-js';
@@ -708,7 +900,7 @@ async function assembleGuestHtml(options) {
 
     var iframe = document.createElement('iframe');
     iframe.id = options.iframeId || 'vm-iframe';
-    iframe.setAttribute('sandbox', 'allow-scripts'); // add allow-same-origin if required
+    iframe.setAttribute('sandbox', 'allow-scripts allow-modals');
     iframe.setAttribute('title', 'Qandy Virtual Machine');
     iframe.style.width = '100%';
     iframe.style.height = '100%';
@@ -772,20 +964,23 @@ async function assembleGuestHtml(options) {
 async function startup() {
   // Determine guest status (support sync or async isGuest)
 
-  if (!GUEST) {
+  function globalAccess() {
+    try {
+      // Will throw SecurityError in cross-origin or sandboxed (no allow-same-origin) iframes
+      void window.top.document;
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  
+  if (globalAccess()) {
     console.info('startup: host mode detected — assembling/creating guest VM (if available)');
 
     if (typeof createAndLoadVM === 'function') {
       try {
         await createAndLoadVM({
-          bootScripts: ['sound.js','video.js','keyboard.js','command.js','qandy.js'],
-          cssName: 'qandy.css',
-          width: 300,
-          height: 600,
-          right: 10,
-          top: 10,
-          zIndex: 100,
-          hideHost: false
+          hideHost: true
         });
         console.info('startup: createAndLoadVM completed');
       } catch (e) {
@@ -793,12 +988,12 @@ async function startup() {
       }
     } else if (typeof assembleGuestHtml === 'function') {
       try {
-        var html = await assembleGuestHtml({ cssName: 'qandy.css' });
+        var html = await assembleGuestHtml();
         var blob = new Blob([html], { type: 'text/html' });
         var url = URL.createObjectURL(blob);
         var iframe = document.createElement('iframe');
         iframe.setAttribute('sandbox', 'allow-scripts');
-        iframe.style.width = '300px';
+        iframe.style.width = '400px';
         iframe.style.height = '600px';
         iframe.src = url;
         document.body.appendChild(iframe);
@@ -2796,10 +2991,10 @@ if (typeof window.qandySignalReady === 'function') {
 // qandy.js
 //
 
-function init_qandy_js() {
+window.init_qandy_js=function() {
 RUN="qandy.js";
 
-function button(b, event) {
+window.button=function(b, event) {
   pokeCursorOff();
   if (event && typeof event.shiftKey !== 'undefined') shift = !!event.shiftKey;
   var k = "", l = "";
@@ -3225,7 +3420,7 @@ document.addEventListener('paste', function (event) {
  }
 });
 
-function press(event) { 
+window.press=function(event) { 
  key=""; k=event.keyCode; shift=event.shiftKey;
 
  // Handle physical CapsLock keypress (keyCode 20)
@@ -3319,7 +3514,7 @@ function press(event) {
  button(k, event);
 }
 
-function pressup(event) {
+window.pressup=function(event) {
   // Prevent browser from handling ALT key - must be done before any conditionals
   if (event.keyCode === 18 || event.altKey) {
     event.preventDefault(); // Prevent browser menu from opening
@@ -3378,34 +3573,9 @@ window.hostScript=function(name) {
   }
 }
 
-function showFiles() {
-  print("ascii.js\n");
-  print("sound.js\n");
-  print("piano.js\n");
-  print("demo.js\n");
-  print("q.js\n");
-  print("world.js\n");
-  print("\n");
-  
-  // List files from localStorage
-  var userFiles = [];
-  for (var i = 0; i < localStorage.length; i++) {
-    var key = localStorage.key(i);
-    if (key.startsWith("qandy_file_")) {
-      userFiles.push(key.substring(11)); // Remove "qandy_file_" prefix
-    }
-  }
-  
-  if (userFiles.length > 0) {
-    print("\x1b[1;32mUSER FILES:\x1b[0m\n");
-    for (var j = 0; j < userFiles.length; j++) {
-      print(userFiles[j] + "\n");
-    }
-    print("\n");
-  }
-}
+function showFiles() {}
 
-function waitForCursorIdle(timeoutMs) {
+window.waitForCursorIdle=function(timeoutMs) {
   timeoutMs = typeof timeoutMs === 'number' ? timeoutMs : 5000;
   return new Promise(function(resolve) {
     if (!window._pokeCursor_state) return resolve();
@@ -3423,7 +3593,7 @@ function waitForCursorIdle(timeoutMs) {
   });
 }
 
-window.GUEST = false;
+GUEST=true;
 async function determineGuestMode() {
   try {
     if (typeof isGuest === 'function') {
@@ -3449,7 +3619,6 @@ async function determineGuestMode() {
 
   return window.GUEST;
 }
-
 
 window._qandy_print_queue = window._qandy_print_queue || { items: [], running: false };
 
@@ -3555,6 +3724,14 @@ if (typeof qandySignalReady === 'function') {
   qandySignalReady('Qandy Core');
 }
 }
+
+// document.getElementById('txt')?.style.setProperty('display','none');
+// document.getElementById('keyboard-container')?.style.setProperty('display','none');
+// document.getElementById('pop')?.style.setProperty('display','none');
+// document.getElementById('qpc')?.style.setProperty('display','none');
+
+// document.getElementById('qandy-power-overlay')?.remove();
+
 </script>
 </body>
 </html>
