@@ -1,8 +1,6 @@
 <!DOCTYPE html>
 <html><head>
-<link rel="stylesheet" type="text/css" href="qandy.css">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#0a0a0a">
 <!-- iOS -->
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -15,7 +13,120 @@ if (typeof window.print === 'function' && window.print.toString().indexOf('[nati
 <div id=txt class="txt"></div>
 <div id="pop" class="pop" onMouseOver='PopUpVis="visible";' onMouseOut='PopUpVis=PForce; PUV=setTimeout("document.getElementById(\"pop\").style.visibility=PopUpVis;",100);'></div>
 <div id="keyboard-container"></div>
+<script>
+// inject style sheet into header for virutal machine 
+// css.js
+// Injects qandy.css rules into the document as a <style> element so you can remove qandy.css.
+// Source CSS originally from:
+// https://github.com/Quintrix/qandy/blob/750ce8635eaeb68e11c2336868d70d7702712afc/qandy.css#L1-L87
 
+(function () {
+  if (typeof document === 'undefined') return;
+  if (document.getElementById('qandy-css-js')) return; // avoid duplicate insertion
+
+  var css = String.raw`
+body { background-color: #333 }
+#cursor { background-color: #CCC; }
+.qpc { position: absolute; top: 0px; left: 0px; width: 160px; height: 24px;
+       padding-left: 0px; padding-right: 0px; align-items: center;
+       background-color: grey; z-index: 0; }
+.txt { 
+  position: absolute; 
+  left: 54px; 
+  top: 64px;  
+  width: 256px; 
+  height: 384px; 
+  z-index: 254;     /* I think it appeared after (converted to comment for valid CSS) */
+  /* Font stack optimized for readability with extended character support */
+  /* Priority: Courier (readable) -> System monospace with Unicode -> Generic fallback */
+  font-family: 'Courier New', Courier, 'Consolas', 'DejaVu Sans Mono', 'Liberation Mono', 'Menlo', Monaco, monospace;
+  font-size: 12px;
+  font-weight: normal;
+  color: #fff;
+  background-color: #000;
+  overflow-y: hidden;
+  overflow-x: hidden;
+  padding: 4px;
+  line-height: 1.2;
+  box-sizing: border-box;
+  white-space: pre;
+  word-wrap: break-word;
+  display: block;
+  scrollbar-width: thin;
+  scrollbar-color: #0f0 #000;
+}
+
+#cursor {
+  display: inline-block;
+  background-color: #fff;
+  width: 8px;
+  height: 14px;
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+.txt::-webkit-scrollbar { width: 14px; }
+.txt::-webkit-scrollbar-track { background: #000; }
+.txt::-webkit-scrollbar-thumb { background: #0f0; border-radius: 7px; }
+.txt::-webkit-scrollbar-thumb:hover { background: #0f0; }
+
+.ansi-black { color: #000; }
+.ansi-red { color: #f00; }
+.ansi-green { color: #0f0; }
+.ansi-yellow { color: #ff0; }
+.ansi-blue { color: #00f; }
+.ansi-magenta { color: #f0f; }
+.ansi-cyan { color: #0ff; }
+.ansi-white { color: #fff; }
+
+.ansi-bg-black { background-color: #000; }
+.ansi-bg-red { background-color: #f00; }
+.ansi-bg-green { background-color: #0f0; }
+.ansi-bg-yellow { background-color: #ff0; }
+.ansi-bg-blue { background-color: #00f; }
+.ansi-bg-magenta { background-color: #f0f; }
+.ansi-bg-cyan { background-color: #0ff; }
+.ansi-bg-white { background-color: #fff; }
+
+.ansi-bold { font-weight: bold; }
+.ansi-inverse {
+  background-color: #fff !important;
+  color: #000 !important;
+  filter: none !important;
+}
+
+@keyframes qandy-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+.qandy-cursor {
+  display: inline-block;
+  background-color: #fff;
+  color: #000;
+  animation: qandy-blink 1s steps(1, start) infinite;
+}
+`;
+
+  var style = document.createElement('style');
+  style.id = 'qandy-css-js';
+  style.type = 'text/css';
+
+  // Use textContent where possible; fall back to createTextNode for very old browsers
+  if ('textContent' in style) {
+    style.textContent = css;
+  } else {
+    style.appendChild(document.createTextNode(css));
+  }
+
+  var head = document.head || document.getElementsByTagName('head')[0] || document.documentElement;
+  head.appendChild(style);
+})();
+</script>
 <script>
 
 // Define Global Variables
@@ -486,30 +597,11 @@ async function assembleGuestHtml(options) {
   parts.push('<!doctype html>');
   parts.push('<html>');
   parts.push('<head>');
-    
-  var CSS_NAME = options && options.cssName ? options.cssName : 'qandy.css';
-  var cssText = (options && typeof options.cssText === 'string' && options.cssText.length)
-    ? options.cssText
-    : ((window._embeddedFiles && window._embeddedFiles[CSS_NAME]) || '');
-  if (!cssText) {
-    try {
-      // fetch may fail on file:// — that's why we prefer options/_embeddedFiles first
-      var respCss = await fetch(CSS_NAME, { cache: 'no-cache' }).catch(function(){ return null; });
-      if (respCss && respCss.ok) cssText = await respCss.text();
-    } catch (e) {
-      cssText = cssText || '';
-    }
-  }
-    
   parts.push('<meta charset="utf-8">');
   parts.push('<meta name="viewport" content="width=device-width,initial-scale=1">');
-  if (cssText) parts.push('<style>\n' + cssText + '\n</style>');
-
   // Expose assembled flag and QANDY.mode
   parts.push('<script>window._QANDY_ASSEMBLED = true; window.QANDY = window.QANDY || {}; window.QANDY.mode = "guest";</' + 'script>');
   // Embed the HOST_SCRIPTS map (JSON-stringified; escape closing tags)
-  var jsonMap = JSON.stringify(scriptMap).replace(/<\/script>/gi, '<\\/script>');
-  parts.push('<script>window.HOST_SCRIPTS = ' + jsonMap + ';</' + 'script>');
   // Guest helper: runHostScript(name) and requestFromHost(name)
   parts.push('<script>\n' +
   '/* Guest-side helpers injected by host */\n' +
@@ -564,32 +656,23 @@ async function assembleGuestHtml(options) {
     parts.push('</head>');
     parts.push('<body>');
     
-    var HTM_NAME = options && options.htmName ? options.htmName : 'qandy-host.htm';
-    var htmText = (options && typeof options.htmText === 'string' && options.htmText.length)
-      ? options.htmText
-      : ((window._embeddedFiles && window._embeddedFiles[HTM_NAME]) || '');
-    if (!htmText) {
-      try {
-        // fetch may fail on file:// — that's why we prefer options/_embeddedFiles first
-        var respHtm = await fetch(HTM_NAME, { cache: 'no-cache' }).catch(function(){ return null; });
-        if (respHtm && respHtm.ok) htmText = await respHtm.text();
-      } catch (e) {
-        htmText = htmText || '';
-      }
-    }
+    //var HTM_NAME = options && options.htmName ? options.htmName : 'qandy-host.htm';
+    //var htmText = (options && typeof options.htmText === 'string' && options.htmText.length)
+    //  ? options.htmText
+    //  : ((window._embeddedFiles && window._embeddedFiles[HTM_NAME]) || '');
+    //if (!htmText) {
+    //  try {
+    //    // fetch may fail on file:// — that's why we prefer options/_embeddedFiles first
+    //    var respHtm = await fetch(HTM_NAME, { cache: 'no-cache' }).catch(function(){ return null; });
+    //    if (respHtm && respHtm.ok) htmText = await respHtm.text();
+    //  } catch (e) {
+    //    htmText = htmText || '';
+    //  }
+    //}
 
-    var bodyHtml = '';
-    try {
-      var parser = new DOMParser();
-      var doc = parser.parseFromString(htmText, 'text/html');
-      bodyHtml = doc.body ? doc.body.innerHTML : '';
-    } catch (e) {
-      // Fallback: if parsing fails, just use the raw text (less safe)
-      bodyHtml = htmText;
-    }
-
+    var bodyHtml =  document.body.innerHTML;
     // strip invisible characters that sometimes break parsing
-    bodyHtml = String(bodyHtml || '').replace(/[\u200B\uFEFF\u200C\u200D]/g, '');
+    // bodyHtml = String(bodyHtml || '').replace(/[\u200B\uFEFF\u200C\u200D]/g, '');
    
     parts.push(bodyHtml);
     
