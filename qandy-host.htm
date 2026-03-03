@@ -24,7 +24,7 @@ if (typeof window.print === 'function' && window.print.toString().indexOf('[nati
 var SOUND=true;       // enable/disable sound card
 
 // qandy.js
-var ROOT=0;     // root access, to replace devteam   
+var ROOT=1;     // root access, to replace devteam   
 var DEVTEAM=0;  // developer mode
 var RUN= "";    // current script running starting with qandy.js 
 var RUNIN="";   // input mode set by running script, line or key
@@ -316,6 +316,7 @@ function loadNext() {
     return;
   }
 
+
   var entry = SCRIPT_QUEUE[currentIndex];
   currentIndex++;
   var advanced = false;
@@ -460,71 +461,6 @@ function init() {
 
 init();
 
-
-async function startup() {
-  // Determine guest status (support sync or async isGuest)
-  print("\n[cyan]Qandy Pocket\nComputer\n");
-  if (!GUEST) {
-    // host machine
-    if (ROOT === 1) {
-      // running in root mode (local access)
-    } else {
-      // create guest <iframe>
-      console.info('assembling/creating guest VM (if available)');
-      if (typeof createAndLoadVM === 'function') {
-        try {
-          await createAndLoadVM({
-            bootScripts: ['sound.js','video.js','keyboard.js','command.js','qandy.js'],
-            cssName: 'qandy.css',
-            width: 300,
-            height: 600,
-            right: 10,
-            top: 10,
-            zIndex: 100,
-            hideHost: false
-          });
-          console.info('startup: createAndLoadVM completed');
-        } catch (e) {
-          console.error('startup: createAndLoadVM failed', e);
-        }
-      } else if (typeof assembleGuestHtml === 'function') {
-        try {
-          var html = await assembleGuestHtml({ cssName: 'qandy.css' });
-          var blob = new Blob([html], { type: 'text/html' });
-          var url = URL.createObjectURL(blob);
-          var iframe = document.createElement('iframe');
-          iframe.setAttribute('sandbox', 'allow-scripts');
-          iframe.style.width = '300px';
-          iframe.style.height = '600px';
-          iframe.src = url;
-          document.body.appendChild(iframe);
-          iframe._qandyGuestBlobUrl = url;
-          window._vmIframe = iframe;
-          console.info('startup: assembled guest blob loaded into iframe');
-        } catch (e) {
-          console.error('startup: assembleGuestHtml fallback failed', e);
-        }
-      } else {
-        console.warn('startup: no createAndLoadVM or assembleGuestHtml available');
-      }
-    }
-
-    // Listen once for guest-ready to optionally hide host UI / focus guest
-    function onHostMessage(ev) {
-      var d = ev && ev.data;
-      if (d && typeof d === 'object' && d.type === 'guest-ready') {
-        console.info('startup: guest reported ready (host may hide UI now)');
-        try { if (window._vmIframe && window._vmIframe.contentWindow) window._vmIframe.contentWindow.focus(); } catch (e) {}
-        window.removeEventListener('message', onHostMessage, false);
-      }
-    }
-    window.addEventListener('message', onHostMessage, false);
-
-  } else {
-    console.info('startup: guest mode detected — skipping host assembly');
-  }
-}
-
 function isGuest() {
   try {
     if (window.QANDY && typeof window.QANDY.mode === 'string') { return window.QANDY.mode === 'guest'; }
@@ -535,14 +471,129 @@ function isGuest() {
   }
 }
 
-Object.defineProperty(window, 'GUEST', {
-  value: isGuest(),
-  writable: true,
-  configurable: true,
-  enumerable: false
-});
+
+
+// ensure current copies of Qandy assets are stored in localStorage.
+//await ensureAssetsStored([
+//  'qandy.css', 'sound.js', 'video.js', 'keyboard.js', 'command.js', 'qandy.js'
+//  ], { forceDeleteFirst: false });
+
+(async () => {
+  const list = ['qandy.css','sound.js','video.js','keyboard.js','command.js','qandy.js'];
+  const res = await ensureAssetsStored(list, { forceDeleteFirst: false, timeoutMs: 8000, log: true });
+  console.table(res);
+})();
+
+async function ensureAssetsStored(fileNames, options = {}) {
+  options = Object.assign({ forceDeleteFirst: false, timeoutMs: 10000, log: true }, options);
+  function log(...args) { if (options.log) console.log('[qandy-host-install]', ...args); }
+  function storageKey(name) { return 'qandy_asset:' + name; }
+  // Helper: read embedded template by id "template-<name>"
+  function readEmbeddedTemplate(name) {
+    try {
+      const sanitizedId = 'template-' + name.replace(/[^a-zA-Z0-9\-_\.]/g, '_');
+      const el = document.getElementById(sanitizedId);
+      if (el && (el.tagName === 'SCRIPT' || el.tagName === 'TEXTAREA')) {
+        return el.textContent || el.value || null;
+      }
+    } catch (e) { /* ignore */ }
+    return null;
+  }
+
+  // Helper: fetch text with timeout; uses same-origin credentials
+  async function fetchTextWithTimeout(url, timeoutMs) {
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const signal = controller ? controller.signal : undefined;
+    const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+    try {
+      const res = await fetch(url, { credentials: 'same-origin', cache: 'no-cache', signal });
+      if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + res.statusText);
+      const txt = await res.text();
+      return txt;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
+  const results = [];
+
+  for (const name of fileNames) {
+    const result = { name, status: 'skipped', message: '', replaced: false };
+    try {
+      // basic whitelist check (very simple): allow alphanum, -, _, ., /
+      if (!/^[\w\-\.\/]+$/.test(name)) {
+        result.status = 'error';
+        result.message = 'invalid filename';
+        results.push(result);
+        log('invalid filename skipped:', name);
+        continue;
+      }
+
+      const key = storageKey(name);
+
+      // Optionally delete old copy before fetching (not recommended except when you want forced removal)
+      if (options.forceDeleteFirst) {
+        try {
+          localStorage.removeItem(key);
+          log('deleted old copy (force) for', name);
+        } catch (e) {
+          // If localStorage not available or throws (private mode?), report error but continue attempt
+          log('warning deleting old copy for', name, e);
+        }
+      }
+
+      // 1) Try embedded template first
+      let content = readEmbeddedTemplate(name);
+      if (content !== null) {
+        // Use embedded template
+        localStorage.setItem(key, content);
+        result.status = 'ok';
+        result.message = 'stored from embedded template';
+        result.replaced = true;
+        log('stored', name, '(from embedded template)');
+        results.push(result);
+        continue;
+      }
+
+      // 2) Fetch from same-origin
+      try {
+        content = await fetchTextWithTimeout(name, options.timeoutMs);
+      } catch (fetchErr) {
+        result.status = 'error';
+        result.message = 'fetch failed: ' + String(fetchErr);
+        // Do not overwrite existing localStorage if fetch fails (safer)
+        log('fetch failed for', name, fetchErr);
+        results.push(result);
+        continue;
+      }
+
+      // write new content to localStorage (overwrite)
+      try {
+        localStorage.setItem(key, content);
+        result.status = 'ok';
+        result.message = 'fetched and stored';
+        result.replaced = true;
+        log('fetched and stored', name);
+      } catch (e) {
+        result.status = 'error';
+        result.message = 'localStorage.setItem failed: ' + String(e);
+        log('error storing', name, e);
+      }
+    } catch (err) {
+      result.status = 'error';
+      result.message = 'unexpected error: ' + String(err);
+      log('unexpected error for', name, err);
+    }
+    results.push(result);
+  }
+
+  return results;
+}
 
 // Build guest HTML and embed HOST_SCRIPTS map (filename -> source string)
+
+
+
 
 async function assembleGuestHtml(options) {
  if (ROOT==false) {  
@@ -551,8 +602,16 @@ async function assembleGuestHtml(options) {
     'sound.js','video.js','keyboard.js','command.js','qandy.js'
   ];
   var CSS_NAME = options.cssName || 'qandy.css';
-
-  // change this to work with with new format 
+   // Attempt to fetch/inline CSS (optional)
+  var cssText = (window._embeddedFiles && window._embeddedFiles[CSS_NAME]) || '';
+  if (!cssText) {
+    try {
+      var respCss = await fetch(CSS_NAME, { cache: 'no-cache' }).catch(()=>null);
+      if (respCss && respCss.ok) cssText = await respCss.text();
+    } catch (e) { cssText = cssText || ''; }
+  }
+  cssText = String(cssText).replace(/[\u200B\uFEFF\u200C\u200D]/g, '');
+  // Collect scripts into a map of name -> source (may be empty string on fetch failure)
   var scriptMap = {};
   for (var i = 0; i < BOOT_SCRIPTS.length; i++) {
     var name = BOOT_SCRIPTS[i];
@@ -572,26 +631,25 @@ async function assembleGuestHtml(options) {
   parts.push('<html>');
   parts.push('<head>');
     
-  //var CSS_NAME = options && options.cssName ? options.cssName : 'qandy.css';
-  //var cssText = (options && typeof options.cssText === 'string' && options.cssText.length)
-  //  ? options.cssText
-  //  : ((window._embeddedFiles && window._embeddedFiles[CSS_NAME]) || '');
-  //if (!cssText) {
-  //  try {
-  //    // fetch may fail on file:// — that's why we prefer options/_embeddedFiles first
-  //    var respCss = await fetch(CSS_NAME, { cache: 'no-cache' }).catch(function(){ return null; });
-  //    if (respCss && respCss.ok) cssText = await respCss.text();
-  //  } catch (e) {
-  //    cssText = cssText || '';
-  //  }
-  //}
+  var CSS_NAME = options && options.cssName ? options.cssName : 'qandy.css';
+  var cssText = (options && typeof options.cssText === 'string' && options.cssText.length)
+    ? options.cssText
+    : ((window._embeddedFiles && window._embeddedFiles[CSS_NAME]) || '');
+  if (!cssText) {
+    try {
+      // fetch may fail on file:// — that's why we prefer options/_embeddedFiles first
+      var respCss = await fetch(CSS_NAME, { cache: 'no-cache' }).catch(function(){ return null; });
+      if (respCss && respCss.ok) cssText = await respCss.text();
+    } catch (e) {
+      cssText = cssText || '';
+    }
+  }
     
   parts.push('<meta charset="utf-8">');
   parts.push('<meta name="viewport" content="width=device-width,initial-scale=1">');
-
-  var cssText = getStyleSheetContents();
   if (cssText) parts.push('<style>\n' + cssText + '\n</style>');
 
+  // Expose assembled flag and QANDY.mode
   parts.push('<script>window._QANDY_ASSEMBLED = true; window.QANDY = window.QANDY || {}; window.QANDY.mode = "guest";</' + 'script>');
   // Embed the HOST_SCRIPTS map (JSON-stringified; escape closing tags)
   var jsonMap = JSON.stringify(scriptMap).replace(/<\/script>/gi, '<\\/script>');
@@ -648,34 +706,40 @@ async function assembleGuestHtml(options) {
       '</' + 'script>');
 
     parts.push('</head>');
+    parts.push('<body>');
     
-    // strip invisible characters that sometimes break parsing
-    // bodyHtml = String(bodyHtml || '').replace(/[\u200B\uFEFF\u200C\u200D]/g, '');
-    
-    var bodyHtml = document.body.innerHTML;
-    parts.push(bodyHtml);
+    var HTM_NAME = options && options.htmName ? options.htmName : 'qandy-host.htm';
+    var htmText = (options && typeof options.htmText === 'string' && options.htmText.length)
+      ? options.htmText
+      : ((window._embeddedFiles && window._embeddedFiles[HTM_NAME]) || '');
+    if (!htmText) {
+      try {
+        // fetch may fail on file:// — that's why we prefer options/_embeddedFiles first
+        var respHtm = await fetch(HTM_NAME, { cache: 'no-cache' }).catch(function(){ return null; });
+        if (respHtm && respHtm.ok) htmText = await respHtm.text();
+      } catch (e) {
+        htmText = htmText || '';
+      }
+    }
 
-    parts.push('<body>');    
+    var bodyHtml = '';
+    try {
+      var parser = new DOMParser();
+      var doc = parser.parseFromString(htmText, 'text/html');
+      bodyHtml = doc.body ? doc.body.innerHTML : '';
+    } catch (e) {
+      // Fallback: if parsing fails, just use the raw text (less safe)
+      bodyHtml = htmText;
+    }
+
+    // strip invisible characters that sometimes break parsing
+    bodyHtml = String(bodyHtml || '').replace(/[\u200B\uFEFF\u200C\u200D]/g, '');
+   
+    parts.push(bodyHtml);
+    
     parts.push('</body>');
     parts.push('</html>');
     return parts.join('\n');
-  }
-
-  function getStyleSheetContents() {
-    let cssString = "";
-    // Loop through all stylesheets attached to the document
-    for (let sheet of document.styleSheets) {
-      try {
-        // Loop through every CSS rule in the sheet
-        for (let rule of sheet.cssRules) {
-          cssString += rule.cssText + "\n";
-        }
-      } catch (e) {
-        // This happens if the CSS is on a different domain (CORS)
-        console.warn("Could not read stylesheet rules: ", e);
-      }
-    }
-    return cssString;
   }
   
   function sanitizeScriptText(txt) {
@@ -764,11 +828,66 @@ async function assembleGuestHtml(options) {
  
  
  // expose globally
- // window.assembleGuestHtml = assembleGuestHtml;
- // window.createAndLoadVM = createAndLoadVM;
+ window.assembleGuestHtml = assembleGuestHtml;
+ window.createAndLoadVM = createAndLoadVM;
 
 
+async function startup() {
+  // Determine guest status (support sync or async isGuest)
 
+  if (!GUEST) {
+    console.info('startup: host mode detected — assembling/creating guest VM (if available)');
 
+    if (typeof createAndLoadVM === 'function') {
+      try {
+        await createAndLoadVM({
+          bootScripts: ['sound.js','video.js','keyboard.js','command.js','qandy.js'],
+          cssName: 'qandy.css',
+          width: 300,
+          height: 600,
+          right: 10,
+          top: 10,
+          zIndex: 100,
+          hideHost: false
+        });
+        console.info('startup: createAndLoadVM completed');
+      } catch (e) {
+        console.error('startup: createAndLoadVM failed', e);
+      }
+    } else if (typeof assembleGuestHtml === 'function') {
+      try {
+        var html = await assembleGuestHtml({ cssName: 'qandy.css' });
+        var blob = new Blob([html], { type: 'text/html' });
+        var url = URL.createObjectURL(blob);
+        var iframe = document.createElement('iframe');
+        iframe.setAttribute('sandbox', 'allow-scripts');
+        iframe.style.width = '300px';
+        iframe.style.height = '600px';
+        iframe.src = url;
+        document.body.appendChild(iframe);
+        iframe._qandyGuestBlobUrl = url;
+        window._vmIframe = iframe;
+        console.info('startup: assembled guest blob loaded into iframe');
+      } catch (e) {
+        console.error('startup: assembleGuestHtml fallback failed', e);
+      }
+    } else {
+      console.warn('startup: no createAndLoadVM or assembleGuestHtml available');
+    }
 
+    // Listen once for guest-ready to optionally hide host UI / focus guest
+    function onHostMessage(ev) {
+      var d = ev && ev.data;
+      if (d && typeof d === 'object' && d.type === 'guest-ready') {
+        console.info('startup: guest reported ready (host may hide UI now)');
+        try { if (window._vmIframe && window._vmIframe.contentWindow) window._vmIframe.contentWindow.focus(); } catch (e) {}
+        window.removeEventListener('message', onHostMessage, false);
+      }
+    }
+    window.addEventListener('message', onHostMessage, false);
+
+  } else {
+    console.info('startup: guest mode detected — skipping host assembly');
+  }
+}
 </script>

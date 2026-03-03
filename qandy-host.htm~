@@ -589,7 +589,7 @@ async function assembleGuestHtml(options) {
   parts.push('<meta charset="utf-8">');
   parts.push('<meta name="viewport" content="width=device-width,initial-scale=1">');
 
-  var cssText = document.querySelector('style').innerHTML;
+  var cssText = getStyleSheetContents();
   if (cssText) parts.push('<style>\n' + cssText + '\n</style>');
 
   parts.push('<script>window._QANDY_ASSEMBLED = true; window.QANDY = window.QANDY || {}; window.QANDY.mode = "guest";</' + 'script>');
@@ -659,6 +659,23 @@ async function assembleGuestHtml(options) {
     parts.push('</body>');
     parts.push('</html>');
     return parts.join('\n');
+  }
+
+  function getStyleSheetContents() {
+    let cssString = "";
+    // Loop through all stylesheets attached to the document
+    for (let sheet of document.styleSheets) {
+      try {
+        // Loop through every CSS rule in the sheet
+        for (let rule of sheet.cssRules) {
+          cssString += rule.cssText + "\n";
+        }
+      } catch (e) {
+        // This happens if the CSS is on a different domain (CORS)
+        console.warn("Could not read stylesheet rules: ", e);
+      }
+    }
+    return cssString;
   }
   
   function sanitizeScriptText(txt) {

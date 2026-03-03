@@ -1,5 +1,4 @@
 
-function init_sound_js() {
 var audioContext = null;
 
 // Musical note frequencies (in Hz) based on A4 = 440Hz
@@ -438,5 +437,4 @@ if (isGuest) { beep(); }
 // Signal that sound.js is ready
 if (typeof window.qandySignalReady === 'function') {
   window.qandySignalReady('Sound');
-}
 }
