@@ -1,10 +1,6 @@
 <!DOCTYPE html>
 <html><head>
 <link rel="stylesheet" type="text/css" href="qandy.css">
-<link rel="icon" href="/i/Jc.png" sizes="32x32" type="image/png">
-<link rel="icon" href="/i/Jc.png" sizes="32x32" type="image/png">
-<link rel="shortcut icon" href="/i/Jc.png" type="image/png"> <!-- legacy fallback -->
-<link rel="apple-touch-icon" href="/i/Jc.png"> <!-- iOS home screen icon -->
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#0a0a0a">
@@ -28,8 +24,9 @@ if (typeof window.print === 'function' && window.print.toString().indexOf('[nati
 var SOUND=true;       // enable/disable sound card
 
 // qandy.js
+var ROOT=1;     // root access, to replace devteam   
 var DEVTEAM=0;  // developer mode
-var RUN= "";     // current script running starting with qandy.js 
+var RUN= "";    // current script running starting with qandy.js 
 var RUNIN="";   // input mode set by running script, line or key
 var RUNOUT="";  // output display set by running script, gfx or txt
 
@@ -275,11 +272,9 @@ var inInputMode = false;       // True when processing user input (prevents pagi
 window.QANDY = window.QANDY || {};
 window.QANDY.mode = 'host'; // 'host' (file server), not the emulated machine
 
-
   // Configuration array with script load order (unchanged)
   var SCRIPT_QUEUE = [
     { src: 'video.js', name: 'Video' },
-    { src: 'gfx.js', name: 'Graphics' },
     { src: 'keyboard.js', name: 'Keyboard' },
     { src: 'command.js', name: 'Command' },
     { src: 'qandy.js', name: 'Qandy' },
@@ -349,7 +344,7 @@ function loadNext() {
   };
 
   // Advance immediately when the script file loads (onload fallback)
-  script.onload = function() { advance(); };
+  // @@ script.onload = function() { advance(); };
 
   // Keep a shorter timeout as a final safety
   var timeout = setTimeout(function() {
@@ -476,24 +471,377 @@ function isGuest() {
   }
 }
 
-async function startUp() {
-  // Determine guest status (support sync or async isGuest)
-  var guest = true;
-  try {
-    if (typeof isGuest === 'function') guest = !!(await Promise.resolve(isGuest()));
-    else guest = !!(window._QANDY_ASSEMBLED || (window.top && window.top !== window));
-  } catch (err) {
-    console.warn('isGuest check failed; assuming guest', err);
-    guest = true;
+
+
+// ensure current copies of Qandy assets are stored in localStorage.
+//await ensureAssetsStored([
+//  'qandy.css', 'sound.js', 'video.js', 'keyboard.js', 'command.js', 'qandy.js'
+//  ], { forceDeleteFirst: false });
+
+(async () => {
+  const list = ['qandy.css','sound.js','video.js','keyboard.js','command.js','qandy.js'];
+  const res = await ensureAssetsStored(list, { forceDeleteFirst: false, timeoutMs: 8000, log: true });
+  console.table(res);
+})();
+
+async function ensureAssetsStored(fileNames, options = {}) {
+  options = Object.assign({ forceDeleteFirst: false, timeoutMs: 10000, log: true }, options);
+  function log(...args) { if (options.log) console.log('[qandy-host-install]', ...args); }
+  function storageKey(name) { return 'qandy_asset:' + name; }
+  // Helper: read embedded template by id "template-<name>"
+  function readEmbeddedTemplate(name) {
+    try {
+      const sanitizedId = 'template-' + name.replace(/[^a-zA-Z0-9\-_\.]/g, '_');
+      const el = document.getElementById(sanitizedId);
+      if (el && (el.tagName === 'SCRIPT' || el.tagName === 'TEXTAREA')) {
+        return el.textContent || el.value || null;
+      }
+    } catch (e) { /* ignore */ }
+    return null;
   }
 
-  if (!guest) {
+  // Helper: fetch text with timeout; uses same-origin credentials
+  async function fetchTextWithTimeout(url, timeoutMs) {
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const signal = controller ? controller.signal : undefined;
+    const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+    try {
+      const res = await fetch(url, { credentials: 'same-origin', cache: 'no-cache', signal });
+      if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + res.statusText);
+      const txt = await res.text();
+      return txt;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
+  const results = [];
+
+  for (const name of fileNames) {
+    const result = { name, status: 'skipped', message: '', replaced: false };
+    try {
+      // basic whitelist check (very simple): allow alphanum, -, _, ., /
+      if (!/^[\w\-\.\/]+$/.test(name)) {
+        result.status = 'error';
+        result.message = 'invalid filename';
+        results.push(result);
+        log('invalid filename skipped:', name);
+        continue;
+      }
+
+      const key = storageKey(name);
+
+      // Optionally delete old copy before fetching (not recommended except when you want forced removal)
+      if (options.forceDeleteFirst) {
+        try {
+          localStorage.removeItem(key);
+          log('deleted old copy (force) for', name);
+        } catch (e) {
+          // If localStorage not available or throws (private mode?), report error but continue attempt
+          log('warning deleting old copy for', name, e);
+        }
+      }
+
+      // 1) Try embedded template first
+      let content = readEmbeddedTemplate(name);
+      if (content !== null) {
+        // Use embedded template
+        localStorage.setItem(key, content);
+        result.status = 'ok';
+        result.message = 'stored from embedded template';
+        result.replaced = true;
+        log('stored', name, '(from embedded template)');
+        results.push(result);
+        continue;
+      }
+
+      // 2) Fetch from same-origin
+      try {
+        content = await fetchTextWithTimeout(name, options.timeoutMs);
+      } catch (fetchErr) {
+        result.status = 'error';
+        result.message = 'fetch failed: ' + String(fetchErr);
+        // Do not overwrite existing localStorage if fetch fails (safer)
+        log('fetch failed for', name, fetchErr);
+        results.push(result);
+        continue;
+      }
+
+      // write new content to localStorage (overwrite)
+      try {
+        localStorage.setItem(key, content);
+        result.status = 'ok';
+        result.message = 'fetched and stored';
+        result.replaced = true;
+        log('fetched and stored', name);
+      } catch (e) {
+        result.status = 'error';
+        result.message = 'localStorage.setItem failed: ' + String(e);
+        log('error storing', name, e);
+      }
+    } catch (err) {
+      result.status = 'error';
+      result.message = 'unexpected error: ' + String(err);
+      log('unexpected error for', name, err);
+    }
+    results.push(result);
+  }
+
+  return results;
+}
+
+// Build guest HTML and embed HOST_SCRIPTS map (filename -> source string)
+
+
+
+
+async function assembleGuestHtml(options) {
+ if (ROOT==false) {  
+  options = options || {};
+  var BOOT_SCRIPTS = options.bootScripts || [
+    'sound.js','video.js','keyboard.js','command.js','qandy.js'
+  ];
+  var CSS_NAME = options.cssName || 'qandy.css';
+   // Attempt to fetch/inline CSS (optional)
+  var cssText = (window._embeddedFiles && window._embeddedFiles[CSS_NAME]) || '';
+  if (!cssText) {
+    try {
+      var respCss = await fetch(CSS_NAME, { cache: 'no-cache' }).catch(()=>null);
+      if (respCss && respCss.ok) cssText = await respCss.text();
+    } catch (e) { cssText = cssText || ''; }
+  }
+  cssText = String(cssText).replace(/[\u200B\uFEFF\u200C\u200D]/g, '');
+  // Collect scripts into a map of name -> source (may be empty string on fetch failure)
+  var scriptMap = {};
+  for (var i = 0; i < BOOT_SCRIPTS.length; i++) {
+    var name = BOOT_SCRIPTS[i];
+    //var txt = await getScriptText(name, 4000).catch(()=> '');
+    if (!txt) {
+      scriptMap[name] = null; // mark missing; guest can request later via postMessage
+    } else {
+      var s = sanitizeScriptText(txt);
+      s += '\n//# sourceURL=' + name;
+      scriptMap[name] = s;
+    }
+  }
+
+  // Build HTML parts
+  var parts = [];
+  parts.push('<!doctype html>');
+  parts.push('<html>');
+  parts.push('<head>');
+    
+  var CSS_NAME = options && options.cssName ? options.cssName : 'qandy.css';
+  var cssText = (options && typeof options.cssText === 'string' && options.cssText.length)
+    ? options.cssText
+    : ((window._embeddedFiles && window._embeddedFiles[CSS_NAME]) || '');
+  if (!cssText) {
+    try {
+      // fetch may fail on file:// — that's why we prefer options/_embeddedFiles first
+      var respCss = await fetch(CSS_NAME, { cache: 'no-cache' }).catch(function(){ return null; });
+      if (respCss && respCss.ok) cssText = await respCss.text();
+    } catch (e) {
+      cssText = cssText || '';
+    }
+  }
+    
+  parts.push('<meta charset="utf-8">');
+  parts.push('<meta name="viewport" content="width=device-width,initial-scale=1">');
+  if (cssText) parts.push('<style>\n' + cssText + '\n</style>');
+
+  // Expose assembled flag and QANDY.mode
+  parts.push('<script>window._QANDY_ASSEMBLED = true; window.QANDY = window.QANDY || {}; window.QANDY.mode = "guest";</' + 'script>');
+  // Embed the HOST_SCRIPTS map (JSON-stringified; escape closing tags)
+  var jsonMap = JSON.stringify(scriptMap).replace(/<\/script>/gi, '<\\/script>');
+  parts.push('<script>window.HOST_SCRIPTS = ' + jsonMap + ';</' + 'script>');
+  // Guest helper: runHostScript(name) and requestFromHost(name)
+  parts.push('<script>\n' +
+  '/* Guest-side helpers injected by host */\n' +
+  'window.runHostScript = function(name) {\n' +
+      '  try {\n' +
+      '    var code = (window.HOST_SCRIPTS && window.HOST_SCRIPTS[name]) || null;\n' +
+      '    if (!code) {\n' +
+      '      // signal host to fetch it if not present\n' +
+      '      if (window.parent && window.parent !== window) {\n' +
+      '        var id = Math.random().toString(36).slice(2);\n' +
+      '        window._pendingScriptRequests = window._pendingScriptRequests || {};\n' +
+      '        window._pendingScriptRequests[id] = name;\n' +
+      '        window.parent.postMessage({ type: \"request-script\", id: id, name: name }, \"*\");\n' +
+      '      }\n' +
+      '      return false;\n' +
+      '    }\n' +
+      '    // Prefer executeCode() if available (executes in the intended VM context)\n' +
+      '    if (typeof executeCode === \"function\") {\n' +
+      '      executeCode(String(code));\n' +
+      '    } else {\n' +
+      '      // fallback: append a script tag (may be blocked by CSP)\n' +
+      '      var s = document.createElement(\"script\");\n' +
+      '      s.type = \"text/javascript\";\n' +
+      '      s.textContent = code;\n' +
+      '      document.head.appendChild(s);\n' +
+      '    }\n' +
+      '    return true;\n' +
+      '  } catch (e) { console && console.error && console.error(\"runHostScript failed\", e); return false; }\n' +
+      '};\n' +
+      '\n' +
+      '// Listen for host replies containing script text\n' +
+      'window.addEventListener(\"message\", function(ev) {\n' +
+      '  try {\n' +
+      '    var d = ev.data || {};\n' +
+      '    if (d && d.type === \"host-script\" && typeof d.name === \"string\") {\n' +
+      '      // store it and optionally run if requested\n' +
+      '      window.HOST_SCRIPTS = window.HOST_SCRIPTS || {};\n' +
+      '      window.HOST_SCRIPTS[d.name] = d.code === null ? null : String(d.code || \"\") + \"\\n//# sourceURL=\" + d.name;\n' +
+      '      // if we had previously requested this via id, auto-run\n' +
+      '      if (d.id && window._pendingScriptRequests && window._pendingScriptRequests[d.id]) {\n' +
+      '        try { window.runHostScript(d.name); } catch(e) {}\n' +
+      '        delete window._pendingScriptRequests[d.id];\n' +
+      '      }\n' +
+      '    }\n' +
+      '  } catch (e) { }\n' +
+      '}, false);\n' +
+      '\n' +
+      '// starter: optional auto-execution order (run core scripts as needed)\n' +
+      '(function(){ try { /* guest can decide order: e.g. runHostScript(\"memory.js\"); runHostScript(\"video.js\"); runHostScript(\"qandy.js\"); */ } catch(e){} })();\n' +
+      '</' + 'script>');
+
+    parts.push('</head>');
+    parts.push('<body>');
+    
+    var HTM_NAME = options && options.htmName ? options.htmName : 'qandy-host.htm';
+    var htmText = (options && typeof options.htmText === 'string' && options.htmText.length)
+      ? options.htmText
+      : ((window._embeddedFiles && window._embeddedFiles[HTM_NAME]) || '');
+    if (!htmText) {
+      try {
+        // fetch may fail on file:// — that's why we prefer options/_embeddedFiles first
+        var respHtm = await fetch(HTM_NAME, { cache: 'no-cache' }).catch(function(){ return null; });
+        if (respHtm && respHtm.ok) htmText = await respHtm.text();
+      } catch (e) {
+        htmText = htmText || '';
+      }
+    }
+
+    var bodyHtml = '';
+    try {
+      var parser = new DOMParser();
+      var doc = parser.parseFromString(htmText, 'text/html');
+      bodyHtml = doc.body ? doc.body.innerHTML : '';
+    } catch (e) {
+      // Fallback: if parsing fails, just use the raw text (less safe)
+      bodyHtml = htmText;
+    }
+
+    // strip invisible characters that sometimes break parsing
+    bodyHtml = String(bodyHtml || '').replace(/[\u200B\uFEFF\u200C\u200D]/g, '');
+   
+    parts.push(bodyHtml);
+    
+    parts.push('</body>');
+    parts.push('</html>');
+    return parts.join('\n');
+  }
+  
+  function sanitizeScriptText(txt) {
+    return String(txt || '')
+      .replace(/[\u200B\uFEFF\u200C\u200D]/g, '')      // strip invisible chars
+      .replace(/<\/script>/gi, '<\\/script>');        // escape closing script sequences
+  }
+
+  async function createAndLoadVM(options) {
+   if (ROOT==false) {
+    options = options || {};
+    var html = await assembleGuestHtml(options).catch(function (e) { console.error('assembleGuestHtml failed', e); return ''; });
+    if (!html) throw new Error('assembleGuestHtml returned empty HTML');
+
+    var vmContainer = document.createElement('div');
+    vmContainer.id = 'vm-container';
+    vmContainer.style.position = 'absolute';
+    vmContainer.style.right = (typeof options.right === 'number' ? options.right : 10) + 'px';
+    vmContainer.style.top = (typeof options.top === 'number' ? options.top : 10) + 'px';
+    vmContainer.style.width = (options.width || 300) + 'px';
+    vmContainer.style.height = (options.height || 600) + 'px';
+    vmContainer.style.zIndex = String(options.zIndex || 100);
+    vmContainer.style.background = options.containerBackground || '#111';
+    vmContainer.style.border = '1px solid #333';
+    vmContainer.style.borderRadius = '4px';
+    vmContainer.style.overflow = 'hidden';
+
+    var iframe = document.createElement('iframe');
+    iframe.id = options.iframeId || 'vm-iframe';
+    iframe.setAttribute('sandbox', 'allow-scripts'); // add allow-same-origin if required
+    iframe.setAttribute('title', 'Qandy Virtual Machine');
+    iframe.style.width = '100%';
+    iframe.style.height = '100%';
+    iframe.style.border = '0';
+    iframe.style.display = 'block';
+    iframe.style.background = '#000';
+
+    vmContainer.appendChild(iframe);
+    document.body.appendChild(vmContainer);
+
+    var blob = new Blob([html], { type: 'text/html' });
+    var blobUrl = URL.createObjectURL(blob);
+    iframe.src = blobUrl;
+
+    iframe._qandyGuestBlobUrl = blobUrl;
+    window._vmIframe = iframe;
+    window._vmContainer = vmContainer;
+
+    // Host listener: respond to guest requests for missing scripts
+    function hostMessageHandler(ev) {
+      // ensure message is from our iframe
+      if (!iframe.contentWindow || ev.source !== iframe.contentWindow) return;
+      var d = ev.data || {}; if (!d || typeof d !== 'object') return;
+      if (d.type === 'request-script' && typeof d.name === 'string') {
+        var reqId = d.id; var name = d.name;
+        (async function() {
+          try {
+            var code = await getScriptText(name, 5000);
+            if (!code) {
+              iframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: null }, '*');
+            } else {
+              var s = sanitizeScriptText(code) + '\n//# sourceURL=' + name;
+              iframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: s }, '*');
+            }
+          } catch (e) {
+            iframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: null, error: String(e) }, '*');
+          }
+        })();
+      }
+    } 
+    window.addEventListener('message', hostMessageHandler, false);
+
+    iframe._qandyGuestCleanup = function () {
+      try { URL.revokeObjectURL(blobUrl); } catch (e) {}
+      window.removeEventListener('message', hostMessageHandler, false);
+      if (iframe && iframe.parentNode) iframe.parentNode.removeChild(iframe);
+      if (vmContainer && vmContainer.parentNode) vmContainer.parentNode.removeChild(vmContainer);
+      window._vmIframe = null;
+      window._vmContainer = null;
+    };
+
+    return { iframe: iframe, container: vmContainer, blobUrl: blobUrl };
+   }
+  }
+ }
+ 
+ 
+ // expose globally
+ window.assembleGuestHtml = assembleGuestHtml;
+ window.createAndLoadVM = createAndLoadVM;
+
+
+async function startup() {
+  // Determine guest status (support sync or async isGuest)
+
+  if (!GUEST) {
     console.info('startup: host mode detected — assembling/creating guest VM (if available)');
 
     if (typeof createAndLoadVM === 'function') {
       try {
         await createAndLoadVM({
-          bootScripts: ['sound.js','memory.js','video.js','gfx.js','keyboard.js','command.js','dos.js','qandy.js'],
+          bootScripts: ['sound.js','video.js','keyboard.js','command.js','qandy.js'],
           cssName: 'qandy.css',
           width: 300,
           height: 600,

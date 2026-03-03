@@ -433,3 +433,8 @@ function volume(level) {
 }
 
 if (isGuest) { beep(); }
+
+// Signal that sound.js is ready
+if (typeof window.qandySignalReady === 'function') {
+  window.qandySignalReady('Sound');
+}

@@ -383,16 +383,16 @@ function button(b, event) {
           // Insert character into line at CURP (cursor position)
           // insert mode, need overwrite mode
 
-          if (window.QandyKeyboard && QandyKeyboard.handleTypedChar(char)) {
-            // consumed (e.g., masked input) — do nothing else
-          } else {
+          //if (window.QandyKeyboard && QandyKeyboard.handleTypedChar(char)) {
+          //  // consumed (e.g., masked input) — do nothing else
+          //} else {
             LINE = (LINE || "").substring(0, CURP) + finalChar + (LINE || "").substring(CURP);
             CURP += finalChar.length;
             CURX += finalChar.length;
             while (CURX >= W) { CURX -= W; CURY++; if (CURY >= H) { CURY = H - 1; } }
             pokeInput();
             if (typeof historyIndex !== 'undefined' && historyIndex !== -1) { historyIndex = -1; tempCommand = ""; }
-          }          
+          //}          
         }
     } // end else (not run+keydown)
   } else {
@@ -607,9 +607,6 @@ function showFiles() {
   }
 }
 
-
-
-
 function waitForCursorIdle(timeoutMs) {
   timeoutMs = typeof timeoutMs === 'number' ? timeoutMs : 5000;
   return new Promise(function(resolve) {
@@ -627,6 +624,34 @@ function waitForCursorIdle(timeoutMs) {
     }, 8);
   });
 }
+
+window.GUEST = false;
+async function determineGuestMode() {
+  try {
+    if (typeof isGuest === 'function') {
+      window.GUEST = !!(await Promise.resolve(isGuest()));
+    } else {
+      var assembled = !!window._QANDY_ASSEMBLED;
+      var inIframe = false;
+      try { inIframe = !!(window.top && window.top !== window); } catch (e) { inIframe = false; }
+      window.GUEST = !!(assembled || inIframe);
+    }
+  } catch (err) {
+    console.warn('determineGuestMode: check failed; defaulting to guest', err);
+    window.GUEST = true;
+  }
+
+  // optional: make it read-only so other scripts can't accidentally overwrite it
+  try {
+    Object.defineProperty(window, 'GUEST', { value: window.GUEST, writable: false, configurable: false });
+  } catch (e) { /* ignore in restrictive environments */ }
+
+  // notify anyone waiting
+  window.dispatchEvent(new CustomEvent('qandyModeDetermined', { detail: { guest: window.GUEST } }));
+
+  return window.GUEST;
+}
+
 
 window._qandy_print_queue = window._qandy_print_queue || { items: [], running: false };
 
@@ -699,31 +724,42 @@ pokeRefresh();
 // system ready
 //
 
-print("\n[cyan]Qandy Pocket\nComputer v1.j\n\n[yellow]Prototype Release\nUse at your own risk!\n[white]\n");
-
-//(async function(){
-//  if (await dosExists('autoexec.js')) {
-//    const txt = await dosLoad('autoexec.js');
-//    if (txt !== null) hostScript(txt);    
-//  }
-//})(); 
-
-// system ready
-
-mySearch=location.search.substr(1).split("&")
-for (i=0;i<mySearch.length;i++) {
- nameVal=mySearch[i].split("=");
- for (j in nameVal) { nameVal[j]=unescape(nameVal[j]); } 
- if (nameVal[0]=="run") {
-  script=document.createElement('script');
-  script.src=nameVal[1];
-  document.head.appendChild(script);
-  SFiles=0;
- }
+if (GUEST) {
+  print("\n[cyan]Qandy Pocket\nComputer v1.j\n\n[yellow]Prototype Release\nUse at your own risk!\n[white]\n");
+  //(async function(){
+  //  if (await dosExists('autoexec.js')) {
+  //    const txt = await dosLoad('autoexec.js');
+  //    if (txt !== null) hostScript(txt);    
+  //  }
+  //})();
+  // guest system ready 
+} else {
+  // host system ready
+  print("\nQandy Root:");
 }
 
-// if (SFiles) { showFiles(); }
 
+
+
+
+
+
+
+
+
+//mySearch=location.search.substr(1).split("&")
+//for (i=0;i<mySearch.length;i++) {
+// nameVal=mySearch[i].split("=");
+// for (j in nameVal) { nameVal[j]=unescape(nameVal[j]); } 
+// if (nameVal[0]=="run") {
+//  script=document.createElement('script');
+//  script.src=nameVal[1];
+//  document.head.appendChild(script);
+//  SFiles=0;
+// }
+//}
+
+// if (SFiles) { showFiles(); }
 // Signal that qandy.js is ready
 
 if (typeof qandySignalReady === 'function') {
