@@ -324,7 +324,7 @@ html { -webkit-text-size-adjust: 100%; }     /* keep text size stable across zoo
 // Define Global Variables
 
 // sound.js
-var SOUND=true;       // enable/disable sound card
+var SOUND=false;       // enable/disable sound card
 
 // qandy.js
 var ROOT=0;     // root access, to replace devteam   
@@ -344,11 +344,11 @@ var CURX = 0;    // cursor x
 var CURY = 0;    // cursor y
 var CURP = 0;    // cursor p 
 
-var CURANSI = true; // cursor text ANSI on
-var CURFG = 37;     // cursor text fg color white
-var CURBG = 40;     // cursor text bg color black
-var CURATTR = 0;;    // cursor text attr 
-var CURBAUD = 9600;    // baud rate to display text
+var CURANSI=true;   // cursor text ANSI on
+var CURFG=37;       // cursor text fg color white
+var CURBG=40;       // cursor text bg color black
+var CURATTR=0;;     // cursor text attr 
+var CURBAUD=115200; // baud rate to display text
 
 // video.js
 var W=32; // screen width
@@ -760,11 +760,27 @@ function createPowerOverlay() {
 function init() {
   // Wait until DOM layout is available so size/position are accurate
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', createPowerOverlay);
+    if (GUEST) { 
+      document.addEventListener('DOMContentLoaded', createPowerOverlay);
+    } else {
+      // power up to root mode
+      setTimeout(startScriptLoading, 0);
+    }
   } else {
-    // small timeout to allow layout to stabilize (optional)
-    setTimeout(createPowerOverlay, 0);
+    if (GUEST) { 
+      setTimeout(createPowerOverlay, 0);
+    } else {
+      // power up to root mode
+      setTimeout(startScriptLoading, 0);
+    }
+
   }
+}
+
+try {
+  window.GUEST = !!isGuest(); // true or false
+} catch (e) {
+  window.GUEST = true; // conservative default
 }
 
 init();
@@ -781,6 +797,7 @@ function isGuest() {
 
 // Build guest HTML and embed HOST_SCRIPTS map (filename -> source string)
 async function assembleGuestHtml(options) {
+ // should this be if GUEST==true?
  if (ROOT==false) {  
   options = options || {};
 
@@ -847,20 +864,6 @@ async function assembleGuestHtml(options) {
 
     parts.push('</head>');
     parts.push('<body>');
-    
-    //var HTM_NAME = options && options.htmName ? options.htmName : 'qandy-host.htm';
-    //var htmText = (options && typeof options.htmText === 'string' && options.htmText.length)
-    //  ? options.htmText
-    //  : ((window._embeddedFiles && window._embeddedFiles[HTM_NAME]) || '');
-    //if (!htmText) {
-    //  try {
-    //    // fetch may fail on file:// — that's why we prefer options/_embeddedFiles first
-    //    var respHtm = await fetch(HTM_NAME, { cache: 'no-cache' }).catch(function(){ return null; });
-    //    if (respHtm && respHtm.ok) htmText = await respHtm.text();
-    //  } catch (e) {
-    //    htmText = htmText || '';
-    //  }
-    //}
 
     var bodyHtml =  document.body.innerHTML;
     // strip invisible characters that sometimes break parsing
@@ -878,23 +881,23 @@ async function assembleGuestHtml(options) {
       .replace(/[\u200B\uFEFF\u200C\u200D]/g, '')      // strip invisible chars
       .replace(/<\/script>/gi, '<\\/script>');        // escape closing script sequences
   }
-
-  async function createAndLoadVM(options) {
+ }
+  
+  async function createGuest(options) {
    if (ROOT==false) {
-    options = options || {};
     var html = await assembleGuestHtml(options).catch(function (e) { console.error('assembleGuestHtml failed', e); return ''; });
     if (!html) throw new Error('assembleGuestHtml returned empty HTML');
 
     var vmContainer = document.createElement('div');
     vmContainer.id = 'vm-container';
     vmContainer.style.position = 'absolute';
-    vmContainer.style.right = (typeof options.right === 'number' ? options.right : 10) + 'px';
-    vmContainer.style.top = (typeof options.top === 'number' ? options.top : 10) + 'px';
+    vmContainer.style.left = (typeof options.left === 'number' ? options.left : 0) + 'px';
+    vmContainer.style.top = (typeof options.top === 'number' ? options.top : 0) + 'px';
     vmContainer.style.width = (options.width || 300) + 'px';
-    vmContainer.style.height = (options.height || 600) + 'px';
+    vmContainer.style.height = (options.height || 650) + 'px';
     vmContainer.style.zIndex = String(options.zIndex || 100);
     vmContainer.style.background = options.containerBackground || '#111';
-    vmContainer.style.border = '1px solid #333';
+    vmContainer.style.border = '0px';
     vmContainer.style.borderRadius = '4px';
     vmContainer.style.overflow = 'hidden';
 
@@ -902,12 +905,14 @@ async function assembleGuestHtml(options) {
     iframe.id = options.iframeId || 'vm-iframe';
     iframe.setAttribute('sandbox', 'allow-scripts allow-modals');
     iframe.setAttribute('title', 'Qandy Virtual Machine');
+    iframe.style.margin = 0;
+    iframe.style.padding = 0;
     iframe.style.width = '100%';
     iframe.style.height = '100%';
     iframe.style.border = '0';
     iframe.style.display = 'block';
+    iframe.style.overflow = 'hidden';
     iframe.style.background = '#000';
-
     vmContainer.appendChild(iframe);
     document.body.appendChild(vmContainer);
 
@@ -954,12 +959,12 @@ async function assembleGuestHtml(options) {
 
     return { iframe: iframe, container: vmContainer, blobUrl: blobUrl };
    }
-  }
+
  }
  
  // expose globally
- // window.assembleGuestHtml = assembleGuestHtml;
- // window.createAndLoadVM = createAndLoadVM;
+ window.assembleGuestHtml = assembleGuestHtml;
+ window.createAndLoadVM = createGuest;
 
 async function startup() {
   // Determine guest status (support sync or async isGuest)
@@ -977,52 +982,26 @@ async function startup() {
   if (globalAccess()) {
     console.info('startup: host mode detected — assembling/creating guest VM (if available)');
 
-    if (typeof createAndLoadVM === 'function') {
-      try {
-        await createAndLoadVM({
-          hideHost: true
-        });
-        console.info('startup: createAndLoadVM completed');
-      } catch (e) {
-        console.error('startup: createAndLoadVM failed', e);
-      }
-    } else if (typeof assembleGuestHtml === 'function') {
-      try {
-        var html = await assembleGuestHtml();
-        var blob = new Blob([html], { type: 'text/html' });
-        var url = URL.createObjectURL(blob);
-        var iframe = document.createElement('iframe');
-        iframe.setAttribute('sandbox', 'allow-scripts');
-        iframe.style.width = '400px';
-        iframe.style.height = '600px';
-        iframe.src = url;
-        document.body.appendChild(iframe);
-        iframe._qandyGuestBlobUrl = url;
-        window._vmIframe = iframe;
-        console.info('startup: assembled guest blob loaded into iframe');
-      } catch (e) {
-        console.error('startup: assembleGuestHtml fallback failed', e);
-      }
-    } else {
-      console.warn('startup: no createAndLoadVM or assembleGuestHtml available');
-    }
+    await createGuest({ hideHost: true });
 
     // Listen once for guest-ready to optionally hide host UI / focus guest
     function onHostMessage(ev) {
       var d = ev && ev.data;
       if (d && typeof d === 'object' && d.type === 'guest-ready') {
         console.info('startup: guest reported ready (host may hide UI now)');
+        document.getElementById('txt')?.style.setProperty('display','none');
+        document.getElementById('keyboard-container')?.style.setProperty('display','none');
+        document.getElementById('pop')?.style.setProperty('display','none');
+        document.getElementById('qpc')?.style.setProperty('display','none');
         try { if (window._vmIframe && window._vmIframe.contentWindow) window._vmIframe.contentWindow.focus(); } catch (e) {}
         window.removeEventListener('message', onHostMessage, false);
       }
     }
     window.addEventListener('message', onHostMessage, false);
-
   } else {
     console.info('startup: guest mode detected — skipping host assembly');
   }
 }
-
 
 //
 // sound.js 
@@ -1231,7 +1210,7 @@ window.volume = function(level) {
   return prev;
 }
 
-if (isGuest) { beep(); }
+// if (isGuest) { beep(); }
 
 // Signal that sound.js is ready
 if (typeof window.qandySignalReady === 'function') {
@@ -3661,7 +3640,7 @@ function cls() {
 }
 
 // public print(...) replacement
-function print(t) {
+window.print=function(t) {
   // do your color tag replacements first
   var text = String(t == null ? "" : t);
   text = text.replace(/\[blue\]/g, ANSIblue);
@@ -3683,9 +3662,7 @@ function print(t) {
 }
 
 
-CURBAUD=9600; CURSOR=4; pokeCursorOn();
-
-pokeRefresh();
+pokeCursorOn(); pokeRefresh();
 
 //
 // system ready
