@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0a0a0a">
+<title>Qandy</title>
+<style>
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #0a0a0a; }
+  iframe#qandy-host-frame { width: 100%; height: 100%; border: none; display: block; }
+</style>
+</head>
+<body>
+<iframe id="qandy-host-frame" src="qandy-host.htm" title="Qandy Host"></iframe>
+<script>
+// Maximum JS file size allowed (512 KB)
+var MAX_SCRIPT_SIZE = 512 * 1024;
+
+/**
+ * File server: respond to loadScript requests from child frames.
+ * Fetches .js files from disk using fetch() and returns content via scriptLoaded.
+ */
+window.addEventListener('message', function(ev) {
+  var d = ev.data;
+  if (!d || typeof d !== 'object') return;
+  if (d.type !== 'loadScript') return;
+
+  var id = d.id;
+  var name = typeof d.name === 'string' ? d.name : '';
+  var source = ev.source;
+  // Use ev.origin as targetOrigin; 'null' covers file:// and blob: frames
+  var origin = ev.origin || '*';
+
+  // Validate filename: only simple filenames with .js extension, no path traversal
+  if (!name ||
+      !/^[A-Za-z0-9.\-]+\.js$/i.test(name) ||
+      /^[.\-]/.test(name) ||
+      /[.\-]$/.test(name) ||
+      /\.\./.test(name) ||
+      name.length > 64) {
+    source.postMessage({ type: 'scriptLoaded', id: id, name: name, code: null, error: 'Invalid filename' }, origin);
+    return;
+  }
+
+  fetch(name)
+    .then(function(resp) {
+      if (!resp.ok) { throw new Error('HTTP ' + resp.status); }
+      var cl = resp.headers.get('content-length');
+      if (cl && parseInt(cl, 10) > MAX_SCRIPT_SIZE) { throw new Error('File too large'); }
+      return resp.text();
+    })
+    .then(function(code) {
+      if (code.length > MAX_SCRIPT_SIZE) { throw new Error('File too large'); }
+      source.postMessage({ type: 'scriptLoaded', id: id, name: name, code: code }, origin);
+    })
+    .catch(function(err) {
+      source.postMessage({ type: 'scriptLoaded', id: id, name: name, code: null, error: String(err) }, origin);
+    });
+}, false);
+</script>
+</body>
+</html>
