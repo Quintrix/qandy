@@ -3237,9 +3237,9 @@ function init_command_js() {
       //keysoff();
       var scriptName = String(trimmedCmd || '').trim();
       const prg=document.createElement('script');
-      prg.src=trimmedCmd;
+      prg.src="ascii.js";
       prg.onload = {  }
-      prg.onerror=() => { print("Error loading program"); keyon = 1; }
+      prg.onerror=() => { print("Error loading program\n"); keyon = 1; }
       document.head.appendChild(prg);
       line="";
     } else if (trimmedCmd.substr(0,3) === "cls") {
@@ -4026,7 +4026,8 @@ pokeCursorOn(); pokeRefresh();
 //
 
 if (GUEST) {
-  print("\n[cyan]Qandy Pocket\nComputer v1.j\n\n[yellow]Prototype Release\nUse at your own risk!\n[white]\n");
+  var CURBAUD=9600; // baud rate to display text
+  print("\n[cyan]Qandy Pocket\nComputer v1.j\n\n[yellow]Prototype Release\n\n[white]\nQandy User: ");
   //(async function(){
   //  if (await dosExists('autoexec.js')) {
   //    const txt = await dosLoad('autoexec.js');
@@ -4036,6 +4037,7 @@ if (GUEST) {
   // guest system ready 
 } else {
   // host system ready
+  var CURBAUD=115200; // baud rate to display text
   print("\nQandy Root:");
 }
 
@@ -4058,13 +4060,6 @@ if (typeof qandySignalReady === 'function') {
   qandySignalReady('qandy.js');
 }
 }
-
-// document.getElementById('txt')?.style.setProperty('display','none');
-// document.getElementById('keyboard-container')?.style.setProperty('display','none');
-// document.getElementById('pop')?.style.setProperty('display','none');
-// document.getElementById('qpc')?.style.setProperty('display','none');
-
-// document.getElementById('qandy-power-overlay')?.remove();
 
 </script>
 </body>
