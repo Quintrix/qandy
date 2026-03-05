@@ -317,7 +317,7 @@ html { -webkit-text-size-adjust: 100%; }     /* keep text size stable across zoo
 // Define Global Variables
 
 // sound.js
-var SOUND=false;       // enable/disable sound card
+var SOUND=true;       // enable/disable sound card
 
 // qandy.js
 var HOST=1;     // host machine
@@ -1004,17 +1004,49 @@ function hostMessageHandler(ev) {
       switch(d.action) {
         case 'show-host':
           console.log('Guest requested to show host');
-          if (typeof virtualHost === 'function') {
-            virtualHost(1); // ← ADD THIS LINE to actually show the host
+          try {
+            // Hide the guest iframe
+            if (iframe) {
+              //iframe.style.display = 'none';
+              //iframe.style.visibility = 'hidden';
+              //iframe.style.opacity = '0';
+              //iframe.style.pointerEvents = 'none';
+              //iframe.style.zIndex = '-9999';
+            }
+    
+            // Make sure host elements are visible
+            var hostEl = document.getElementById('txt');
+            if (hostEl) {
+              //hostEl.style.display = 'block';
+              //hostEl.style.visibility = 'visible';
+              //hostEl.style.opacity = '1';
+              //hostEl.style.pointerEvents = 'auto';
+            }
+    
+            var kbContainer = document.getElementById('keyboard-container');
+            if (kbContainer) {
+              kbContainer.style.display = 'block';
+              kbContainer.style.visibility = 'visible';
+            }
+    
+            // Try to focus the host
+            try { hostEl.focus(); } catch (e) {}
+    
             iframe.contentWindow.postMessage({ 
               type: 'action-result', 
               action: 'show-host', 
               success: true 
             }, '*');
-          } else {
-            throw new Error('virtualHost not available');
+          } catch (e) {
+            console.error('Error showing host:', e);
+            iframe.contentWindow.postMessage({ 
+              type: 'action-result', 
+              action: 'show-host', 
+              success: false, 
+              error: String(e) 
+            }, '*');
           }
-          break;          
+          break;
         case 'show-guest':
           console.log('Guest requested to show guest');
           if (typeof virtualHost === 'function') {
@@ -3054,11 +3086,7 @@ function init_command_js() {
     switch (trimmedCmd.toLowerCase()) {
       case 'root':
         try {
-          window.parent.postMessage({ 
-            type: 'action-result', 
-            action: d.action,
-            success: true 
-          }, '*');
+          window.parent.postMessage({ type: 'guest-action', action: 'show-host', success: true }, '*');
         } catch (e) {
           print("Error bringing host forward: " + String(e) + "\n");
         }
