@@ -1005,11 +1005,11 @@ function hostMessageHandler(ev) {
         case 'show-host':
           console.log('Guest requested to show host');
           if (typeof virtualHost === 'function') {
-            iframe.contentWindow.postMessage({ 
+            window.parent.postMessage({ 
               type: 'action-result', 
               action: 'show-host', 
               success: true 
-            }, '*');
+             }, '*');          
           } else {
             throw new Error('virtualHost not available');
           }
@@ -3089,7 +3089,7 @@ function init_command_js() {
     switch (trimmedCmd.toLowerCase()) {
       case 'root':
         try {
-          iframe.contentWindow.postMessage({ 
+          window.parent.postMessage({ 
             type: 'action-result', 
             action: d.action,
             success: true 
