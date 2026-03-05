@@ -1005,7 +1005,6 @@ function hostMessageHandler(ev) {
         case 'show-host':
           console.log('Guest requested to show host');
           if (typeof virtualHost === 'function') {
-            virtualHost(1);
             iframe.contentWindow.postMessage({ 
               type: 'action-result', 
               action: 'show-host', 
@@ -1053,7 +1052,7 @@ function hostMessageHandler(ev) {
       window._vmContainer = null;
     };
 
-    return {vm-Iframe iframe: iframe, container: vmContainer, blobUrl: blobUrl };
+    return {vmIframe: iframe, container: vmContainer, blobUrl: blobUrl };
    }
   }
  
