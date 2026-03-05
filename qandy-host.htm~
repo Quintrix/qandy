@@ -637,6 +637,7 @@ function loadNext() {
   }, 1000);
 }
 
+
 function startScriptLoading() {
   currentIndex = 0;
   loadNext();
@@ -973,28 +974,74 @@ async function assembleGuestHtml(options) {
     document.getElementById('pop')?.style.setProperty('display','none');
     document.getElementById('qpc')?.style.setProperty('display','none');
 
-    // Host listener: respond to guest requests for missing scripts
-    function hostMessageHandler(ev) {
-      // ensure message is from our iframe
-      if (!iframe.contentWindow || ev.source !== iframe.contentWindow) return;
-      var d = ev.data || {}; if (!d || typeof d !== 'object') return;
-      if (d.type === 'request-script' && typeof d.name === 'string') {
-        var reqId = d.id; var name = d.name;
-        (async function() {
-          try {
-            var code = await getScriptText(name, 5000);
-            if (!code) {
-              iframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: null }, '*');
-            } else {
-              var s = sanitizeScriptText(code) + '\n//# sourceURL=' + name;
-              iframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: s }, '*');
-            }
-          } catch (e) {
-            iframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: null, error: String(e) }, '*');
-          }
-        })();
+
+function hostMessageHandler(ev) {
+  // ensure message is from our iframe
+  if (!iframe.contentWindow || ev.source !== iframe.contentWindow) return;
+  var d = ev.data || {}; if (!d || typeof d !== 'object') return;
+  
+  // EXISTING: Handle script requests
+  if (d.type === 'request-script' && typeof d.name === 'string') {
+    var reqId = d.id; var name = d.name;
+    (async function() {
+      try {
+        var code = await getScriptText(name, 5000);
+        if (!code) {
+          iframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: null }, '*');
+        } else {
+          var s = sanitizeScriptText(code) + '\n//# sourceURL=' + name;
+          iframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: s }, '*');
+        }
+      } catch (e) {
+        iframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: null, error: String(e) }, '*');
       }
-    } 
+    })();
+  }
+  
+  // NEW: Handle guest request to show/hide host
+  if (d.type === 'guest-action' && typeof d.action === 'string') {
+    try {
+      switch(d.action) {
+        case 'show-host':
+          console.log('Guest requested to show host');
+          if (typeof virtualHost === 'function') {
+            virtualHost(1);
+            iframe.contentWindow.postMessage({ 
+              type: 'action-result', 
+              action: 'show-host', 
+              success: true 
+            }, '*');
+          } else {
+            throw new Error('virtualHost not available');
+          }
+          break;
+          
+        case 'show-guest':
+          console.log('Guest requested to show guest');
+          if (typeof virtualHost === 'function') {
+            virtualHost(0);
+            iframe.contentWindow.postMessage({ 
+              type: 'action-result', 
+              action: 'show-guest', 
+              success: true 
+            }, '*');
+          } else {
+            throw new Error('virtualHost not available');
+          }
+          break;
+      }
+    } catch (e) {
+      console.error('Error handling guest action:', e);
+      iframe.contentWindow.postMessage({ 
+        type: 'action-result', 
+        action: d.action, 
+        success: false, 
+        error: String(e) 
+      }, '*');
+    }
+  }
+}
+
     window.addEventListener('message', hostMessageHandler, false);
 
     iframe._qandyGuestCleanup = function () {
@@ -1006,7 +1053,7 @@ async function assembleGuestHtml(options) {
       window._vmContainer = null;
     };
 
-    return { iframe: iframe, container: vmContainer, blobUrl: blobUrl };
+    return {vm-Iframe iframe: iframe, container: vmContainer, blobUrl: blobUrl };
    }
   }
  
@@ -3040,36 +3087,14 @@ function init_command_js() {
     // Normalize command
     var trimmedCmd = String(cmd || '').trim();
 
-    // Short-circuit special textual commands (makes it easy to add more)
-    // root  -> bring host to top / make host visible & interactive
-    // user  -> bring guest to top / make guest iframe visible & interactive
-    // cls   -> clear screen (existing behavior)
-    // <name>.js -> load script (existing behavior)
     switch (trimmedCmd.toLowerCase()) {
       case 'root':
-        // Prefer virtualHost API if present
         try {
-          if (typeof virtualHost === 'function') {
-            virtualHost(1); // show host
-            print("Host brought to front\n");
-          } else if (typeof bringHostFront === 'function') {
-            bringHostFront();
-            print("Host brought to front (bringHostFront)\n");
-          } else {
-            // Fallback: try to lower the guest container and raise host
-            var vm = document.getElementById('vm-container');
-            if (vm) {
-              vm.style.setProperty('z-index','-1','important');
-              vm.style.setProperty('pointer-events','none','important');
-            }
-            var hostEl = document.getElementById('qandy') || document.getElementById('txt') || document.body;
-            if (hostEl) {
-              hostEl.style.setProperty('position', hostEl.style.position || 'relative', 'important');
-              hostEl.style.setProperty('z-index','2147483647','important');
-              hostEl.style.setProperty('pointer-events','auto','important');
-            }
-            print("Host brought to front (fallback)\n");
-          }
+          iframe.contentWindow.postMessage({ 
+            type: 'action-result', 
+            action: d.action,
+            success: true 
+          }, '*');
         } catch (e) {
           print("Error bringing host forward: " + String(e) + "\n");
         }
