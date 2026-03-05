@@ -3719,7 +3719,7 @@ window.button=function(b, event) {
   } else {
     if (RUN) { keydown(k || l); }
   }
-  if (SOUND) { beep(900, 25, .01); }
+  if (SOUND && typeof beep === 'function') { try { beep(900, 25, 0.01); } catch (e) {}} 
   pokeCursorOn();
 }
 
