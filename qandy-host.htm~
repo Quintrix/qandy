@@ -30,7 +30,7 @@ body { margin: 0; background-color: #333; }
   top: 64px;  
   width: 256px; 
   height: 384px; 
-  z-index: 254;     I think it appeared after 
+  z-index: 250; 
   /* Font stack optimized for readability with extended character support */
   /* Priority: Courier (readable) -> System monospace with Unicode -> Generic fallback */
   font-family: 'Courier New', Courier, 'Consolas', 'DejaVu Sans Mono', 'Liberation Mono', 'Menlo', Monaco, monospace;
@@ -317,7 +317,7 @@ html { -webkit-text-size-adjust: 100%; }     /* keep text size stable across zoo
 // Define Global Variables
 
 // sound.js
-var SOUND=false;       // enable/disable sound card
+var SOUND=true;       // enable/disable sound card
 
 // qandy.js
 var HOST=1;     // host machine
@@ -637,6 +637,7 @@ function loadNext() {
   }, 1000);
 }
 
+
 function startScriptLoading() {
   currentIndex = 0;
   loadNext();
@@ -660,7 +661,7 @@ function powerOn() {
     top: rect.top + 'px',
     width: rect.width + 'px',
     height: rect.height + 'px',
-    zIndex: '999999',
+    zIndex: '300',
     background: 'transparent',
     pointerEvents: 'auto',
     display: 'flex',
@@ -673,7 +674,7 @@ function powerOn() {
   label.id = 'qandy-power-label';
   label.textContent = 'POWER ON';
   Object.assign(label.style, {
-    color: '#ffffff',
+    color: '#fff',
     fontFamily: 'monospace, monospace',
     fontSize: '28px',
     letterSpacing: '2px',
@@ -940,9 +941,9 @@ async function assembleGuestHtml(options) {
     vmContainer.style.width = '350px';
     vmContainer.style.height = '650px';
     vmContainer.style.zIndex = String(options.zIndex || 100);
-    vmContainer.style.background = options.containerBackground || '#111';
+    vmContainer.style.background = 'transparent';
     vmContainer.style.border = '0px';
-    vmContainer.style.borderRadius = '4px';
+    vmContainer.style.borderRadius = '0px';
     vmContainer.style.overflow = 'hidden';
 
     var iframe = document.createElement('iframe');
@@ -956,7 +957,7 @@ async function assembleGuestHtml(options) {
     iframe.style.border = '0';
     iframe.style.display = 'block';
     iframe.style.overflow = 'hidden';
-    //iframe.style.background = '#000';
+    iframe.style.background = 'transparent';
     vmContainer.appendChild(iframe);
     document.body.appendChild(vmContainer);
 
@@ -970,31 +971,123 @@ async function assembleGuestHtml(options) {
 
     document.getElementById('txt')?.style.setProperty('display','none');
     document.getElementById('keyboard-container')?.style.setProperty('display','none');
-    document.getElementById('pop')?.style.setProperty('display','none');
+    //document.getElementById('pop')?.style.setProperty('display','none');
     document.getElementById('qpc')?.style.setProperty('display','none');
 
-    // Host listener: respond to guest requests for missing scripts
-    function hostMessageHandler(ev) {
-      // ensure message is from our iframe
-      if (!iframe.contentWindow || ev.source !== iframe.contentWindow) return;
-      var d = ev.data || {}; if (!d || typeof d !== 'object') return;
-      if (d.type === 'request-script' && typeof d.name === 'string') {
-        var reqId = d.id; var name = d.name;
-        (async function() {
-          try {
-            var code = await getScriptText(name, 5000);
-            if (!code) {
-              iframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: null }, '*');
-            } else {
-              var s = sanitizeScriptText(code) + '\n//# sourceURL=' + name;
-              iframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: s }, '*');
-            }
-          } catch (e) {
-            iframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: null, error: String(e) }, '*');
-          }
-        })();
+
+function hostMessageHandler(ev) {
+  // ensure message is from our iframe
+  if (!iframe.contentWindow || ev.source !== iframe.contentWindow) return;
+  var d = ev.data || {}; if (!d || typeof d !== 'object') return;
+  
+  // EXISTING: Handle script requests from guest iframe
+  // Forward to qandy-main.htm (parent) which acts as the file server
+  if (d.type === 'request-script' && typeof d.name === 'string') {
+    var reqId = d.id; var name = d.name;
+    window._fwdScriptCnt = (window._fwdScriptCnt || 0) + 1;
+    var fwdId = 'fw_' + Date.now() + '_' + window._fwdScriptCnt;
+    var fwdTimer = setTimeout(function() {
+      window.removeEventListener('message', fwdHandler);
+      iframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: null, error: 'Timeout' }, '*');
+    }, 10000);
+    function fwdHandler(ev2) {
+      var d2 = ev2.data || {};
+      if (d2 && d2.type === 'scriptLoaded' && d2.id === fwdId) {
+        clearTimeout(fwdTimer);
+        window.removeEventListener('message', fwdHandler);
+        if (d2.error || d2.code === null || d2.code === undefined) {
+          iframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: null, error: d2.error || 'Load failed' }, '*');
+        } else {
+          var s = sanitizeScriptText(d2.code) + '\n//# sourceURL=' + name;
+          iframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: s }, '*');
+        }
       }
-    } 
+    }
+    window.addEventListener('message', fwdHandler, false);
+    try {
+      window.parent.postMessage({ type: 'loadScript', id: fwdId, name: name }, '*');
+    } catch (e) {
+      clearTimeout(fwdTimer);
+      window.removeEventListener('message', fwdHandler);
+      iframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: null, error: String(e) }, '*');
+    }
+  }
+  
+  // NEW: Handle guest request to show/hide host
+  if (d.type === 'guest-action' && typeof d.action === 'string') {
+    try {
+      switch(d.action) {
+        case 'show-host':
+          console.log('Guest requested to show host');
+          try {
+            // Hide the guest iframe
+            if (iframe) {
+              iframe.style.display = 'none';
+              iframe.style.visibility = 'hidden';
+              iframe.style.opacity = '0';
+              iframe.style.pointerEvents = 'none';
+              iframe.style.zIndex = '-9999';
+            }
+    
+            // Make sure host elements are visible
+            var hostEl = document.getElementById('txt');
+            if (hostEl) {
+              hostEl.style.display = 'block';
+              hostEl.style.visibility = 'visible';
+              hostEl.style.opacity = '1';
+              hostEl.style.pointerEvents = 'auto';
+            }
+    
+            var kbContainer = document.getElementById('keyboard-container');
+            if (kbContainer) {
+              kbContainer.style.display = 'block';
+              kbContainer.style.visibility = 'visible';
+            }
+    
+            // Try to focus the host
+            try { hostEl.focus(); } catch (e) {}
+    
+            iframe.contentWindow.postMessage({ 
+              type: 'action-result', 
+              action: 'show-host', 
+              success: true 
+            }, '*');
+          } catch (e) {
+            console.error('Error showing host:', e);
+            iframe.contentWindow.postMessage({ 
+              type: 'action-result', 
+              action: 'show-host', 
+              success: false, 
+              error: String(e) 
+            }, '*');
+          }
+          break;
+        case 'show-guest':
+          console.log('Guest requested to show guest');
+          if (typeof virtualHost === 'function') {
+            virtualHost(0);
+            iframe.contentWindow.postMessage({ 
+              type: 'action-result', 
+              action: 'show-guest', 
+              success: true 
+            }, '*');
+          } else {
+            throw new Error('virtualHost not available');
+          }
+          break;
+      }
+    } catch (e) {
+      console.error('Error handling guest action:', e);
+      iframe.contentWindow.postMessage({ 
+        type: 'action-result', 
+        action: d.action, 
+        success: false, 
+        error: String(e) 
+      }, '*');
+    }
+  }
+}
+
     window.addEventListener('message', hostMessageHandler, false);
 
     iframe._qandyGuestCleanup = function () {
@@ -1006,7 +1099,7 @@ async function assembleGuestHtml(options) {
       window._vmContainer = null;
     };
 
-    return { iframe: iframe, container: vmContainer, blobUrl: blobUrl };
+    return {vmIframe: iframe, container: vmContainer, blobUrl: blobUrl };
    }
   }
  
@@ -1019,7 +1112,7 @@ async function startup() {
 
   if (HOST) {
     console.info('startup: <host> ready — assembling <guest> ');
-    await createGuest({ hideHost: true });
+    await createGuest({ hideHost: false });
     // Listen once for guest-ready to optionally hide host UI / focus guest
     function onHostMessage(ev) {
       var d = ev && ev.data;
@@ -1573,7 +1666,7 @@ window.pokeCursor = function(t) {
     //}
 
     pokeCell(CURX, CURY, ch, CURFG, CURBG, CURATTR);
-    if (SOUND) { beep(900, 25, .01); }
+    if (SOUND && typeof beep === 'function') { try { beep(900, 25, 0.01); } catch (e) {}}
 
     CURX = CURX + 1;
     if (CURX >= W) {
@@ -2597,207 +2690,171 @@ if (typeof window.qandySignalReady === 'function') {
 //
 
 function init_keyboard_js() { 
-window.keyson=function() {
-  //keyon=1;
-  //cursor(1);
-}
-window.keysoff=function() {
-  //keyon=0;
-  //cursor(0);
-}
-
-keyboardData.forEach(function(key) {
-  var btn = document.createElement('div');
-  btn.id = key.id;
-  btn.innerHTML = key.label;
-  
-  // inside initKeyboard() after btn.innerHTML = key.label;
-  if (key.label === 'SPACE') btn.dataset.keyChar = ' ';
-  else if (key.label && key.label.length === 1) btn.dataset.keyChar = key.label;
-  else btn.dataset.keyChar = '';  
-  
-  // Assign appropriate CSS class based on width
-  if (key.width === 28) {
-   btn.className = 'k1';
-  } else if (key.width === 40) {
-   // Check if it's the ENTER key specifically
-   if (key.id === 'enter') {
-    btn.className = 'k-enter';  // ENTER key
-   } else {
-    btn.className = 'k-ctrl';  // CAPS key and other 40px keys
-   }
-  } else if (key.width === 52) {
-   btn.className = 'k2';
-  } else if (key.width === 81) {
-   btn.className = 'k-space';  // SPACE key
-  } else if (key.width === 109) {
-   btn.className = 'k4';
+  window.keyson=function() {
+    //keyon=1;
+    //cursor(1);
   }
-  
-  // Set explicit width for custom-sized keys
-  if (key.width === 40 || key.width === 81) {
-   btn.style.width = key.width + 'px';
-  } 
-  
-  // Reduce font size for CTRL and ALT keys to fit text better
-  if (key.id === 'ctrl' || key.id === 'alt') {
-   btn.style.fontSize = '9px';
+  window.keysoff=function() {
+    //keyon=0;
+    //cursor(0);
   }
-  btn.style.left = key.x + 'px';
-  btn.style.top = key.y + 'px';
-  btn.onclick = function() { button(key.keyCode); };
-  document.getElementById('keyboard-container').appendChild(btn);
- });
- updateKeyLabels();
-
-function updateKeyLabels() {
-  // Decide current modifier priority:
-  // If ALT active (virtual or physical) -> show ALT labels (shifted if Shift also active)
-  window.altActive = !!alt || !!altPhysical;
-  window.shiftActive = !!window.shift;
-  window.capsActive = !!window.caps;
-
-  keyboardData.forEach(function(key) {
-    var el = document.getElementById(key.id);
-    if (!el) return;
-    var base = el.dataset.keyChar; // single-char canonical base (could be 'a' or 'A' etc)
-    if (!base || base.length === 0) return;
-
-    // Use lowercase for map lookups (maps are keyed by lower-case characters)
-    var lookup = base.toLowerCase();
-    var label = base;
-
-    if (altActive) {
-      // ALT is active: prefer altShiftKeys (if Shift also active), then altKeys
-      if (shiftActive && typeof altShiftKeys === 'object' && altShiftKeys.hasOwnProperty(lookup)) {
-        label = altShiftKeys[lookup];
-      } else if (typeof altKeys === 'object' && altKeys.hasOwnProperty(lookup)) {
-        label = altKeys[lookup];
-      } else if (shiftActive && typeof shiftedKeys === 'object' && shiftedKeys.hasOwnProperty(lookup)) {
-        // fallback to shiftedKeys if no alt mapping available
-        label = shiftedKeys[lookup];
-      } else if (typeof normalKeys === 'object' && normalKeys.hasOwnProperty(lookup)) {
-        label = normalKeys[lookup];
-      } else {
-        label = base;
-      }
-    } else {
-      // No ALT: existing CAPS/SHIFT logic
-      if (capsActive) {
-        // caps acts like shift for letters — show shifted label if available
-        if (shiftActive) {
-          // both shift and caps: show shifted label if present
-          label = (typeof shiftedKeys === 'object' && shiftedKeys.hasOwnProperty(lookup)) ? shiftedKeys[lookup] : base.toUpperCase();
-        } else {
-          label = (typeof shiftedKeys === 'object' && shiftedKeys.hasOwnProperty(lookup)) ? shiftedKeys[lookup] : base.toUpperCase();
-        }
-      } else {
-        // no caps: show shifted if shift is pressed (transient)
-        if (shiftActive && typeof shiftedKeys === 'object' && shiftedKeys.hasOwnProperty(lookup)) {
-          label = shiftedKeys[lookup];
-        } else {
-          label = (typeof normalKeys === 'object' && normalKeys.hasOwnProperty(lookup)) ? normalKeys[lookup] : base;
-        }
-      }
-    }
-
-    el.innerHTML = (label === ' ' && base === ' ') ? 'SPACE' : label;
-  });
-}
-
-// Create a mapping from keyCode to element ID for quick lookup
-window.keyCodeToId = {};
-keyboardData.forEach(function(key) {
-  keyCodeToId[key.keyCode] = key.id;
-});
-
-// Store timeout IDs for each key to handle rapid key presses
-window.keyTimeouts = {};
-
-// Function to highlight a virtual key
-window.highlightKey = function(keyCode) {
-  var elementId = keyCodeToId[keyCode];
-  if (!elementId) return; // Key not in virtual keyboard
-  
-  var element = document.getElementById(elementId);
-  if (!element) return; // Element not found
-  
-  // Clear any existing timeout for this key to prevent race conditions
-  if (keyTimeouts[elementId]) {
-    clearTimeout(keyTimeouts[elementId]);
-  }
-  
-  // Apply hover effect (using the same color as :hover in CSS)
-  element.style.backgroundColor = '#444';
-  
-  // Set a timeout to restore original color
-  keyTimeouts[elementId] = setTimeout(function() {
-    unhighlightKey(elementId);
-    delete keyTimeouts[elementId]; // Clean up timeout reference
-  }, 200); // 200ms flash effect
-}
-
-// Function to unhighlight a virtual key
-window.unhighlightKey=function(elementId) {
-  var element = document.getElementById(elementId);
-  if (!element) return;
-
-  // Keep locked appearance if key is logically locked
-  if (elementId === 'caps' && caps) {
-    element.style.backgroundColor = '#fff';
-    element.style.color = '#000';
-    return;
-  }
-  if (elementId === 'ctrl' && (ctrl || ctrlPhysical)) {
-    element.style.backgroundColor = ctrlPhysical ? '#bbb' : '#fff';
-    element.style.color = '#000';
-    return;
-  }
-  if (elementId === 'alt' && (alt || altPhysical)) {
-    element.style.backgroundColor = altPhysical ? '#444' : '#fff';
-    element.style.color = '#000';
-    return;
-  }
-
-  // Not locked -> clear inline styles
-  element.style.backgroundColor = '';
-  element.style.color = '';
-}
-
-img=document.createElement('img');
-img.id="qpc"; img.src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAA7EAAAOxAGVKw4bAAAAMklEQVRYhe3OMQEAMAjEwKei2wHxRQbLxUCu3u2fxc7mHAAAAAAAAAAAAAAAAAAAIEkGzIgCpxq6s7YAAAAASUVORK5CYII="; 
-img.style.width="300px"; img.style.height="600px"; img.style.zIndex="0"; 
-img.style.position="absolute";
-document.body.appendChild(img);
-document.getElementById("qpc").style.top = "32px";
-document.getElementById("qpc").style.left = "32px";
-
-resize(); function resize() {
- // Position text element based on mode
- if (window.mode=="gfx") {
-  up=32+(404-(document.getElementById('txt').offsetHeight));
-  left=32+22+300;
-  document.getElementById("txt").style.left=left+"px";
-  document.getElementById("txt").style.top=up+"px";
- } else {
-  left=32+22;
-  up=32+(402-(document.getElementById('txt').offsetHeight));
-  document.getElementById("txt").style.left="54px";
-  document.getElementById("txt").style.top=up+"px";
- }
  
- //const textElement=document.getElementById("txt");
- //textElement.scrollTop=textElement.scrollHeight;
- //Z=0; for (Y=0; Y<=mapy; Y++) {
- // for (X=0; X<=mapx; X++) {
- //  e=document.getElementById("T"+Z).style.top=50+(Y*32)+"px";  
- //  e=document.getElementById("T"+Z).style.left=54+(X*32)+"px"; 
- //  Z++;
- // }
- //}
-}
+  keyboardData.forEach(function(key) {
+    var btn = document.createElement('div');
+    btn.id = key.id;
+    btn.innerHTML = key.label;
+  
+    // inside initKeyboard() after btn.innerHTML = key.label;
+    if (key.label === 'SPACE') btn.dataset.keyChar = ' ';
+    else if (key.label && key.label.length === 1) btn.dataset.keyChar = key.label;
+    else btn.dataset.keyChar = '';  
+  
+    // Assign appropriate CSS class based on width
+    if (key.width === 28) {
+     btn.className = 'k1';
+    } else if (key.width === 40) {
+     // Check if it's the ENTER key specifically
+     if (key.id === 'enter') {
+      btn.className = 'k-enter';  // ENTER key
+     } else {
+      btn.className = 'k-ctrl';  // CAPS key and other 40px keys
+     }
+    } else if (key.width === 52) {
+     btn.className = 'k2';
+    } else if (key.width === 81) {
+     btn.className = 'k-space';  // SPACE key
+    } else if (key.width === 109) {
+     btn.className = 'k4';
+    }
+  
+    if (key.width === 40 || key.width === 81) { btn.style.width = key.width + 'px'; } 
+    if (key.id === 'ctrl' || key.id === 'alt') { btn.style.fontSize = '9px'; }
+    btn.style.left = key.x + 'px'; btn.style.top = key.y + 'px';
+    btn.onclick = function() { button(key.keyCode); };
+    document.getElementById('keyboard-container').appendChild(btn);
+   });
+   updateKeyLabels();
 
+  function updateKeyLabels() {
+    // Decide current modifier priority:
+    // If ALT active (virtual or physical) -> show ALT labels (shifted if Shift also active)
+    window.altActive = !!alt || !!altPhysical;
+    window.shiftActive = !!window.shift;
+    window.capsActive = !!window.caps;
 
+    keyboardData.forEach(function(key) {
+      var el = document.getElementById(key.id);
+      if (!el) return;
+      var base = el.dataset.keyChar; // single-char canonical base (could be 'a' or 'A' etc)
+      if (!base || base.length === 0) return;
+      var lookup = base.toLowerCase(); var label = base;
+      if (altActive) {
+        // ALT is active: prefer altShiftKeys (if Shift also active), then altKeys
+        if (shiftActive && typeof altShiftKeys === 'object' && altShiftKeys.hasOwnProperty(lookup)) {
+          label = altShiftKeys[lookup];
+        } else if (typeof altKeys === 'object' && altKeys.hasOwnProperty(lookup)) {
+          label = altKeys[lookup];
+        } else if (shiftActive && typeof shiftedKeys === 'object' && shiftedKeys.hasOwnProperty(lookup)) {
+          // fallback to shiftedKeys if no alt mapping available
+          label = shiftedKeys[lookup];
+        } else if (typeof normalKeys === 'object' && normalKeys.hasOwnProperty(lookup)) {
+          label = normalKeys[lookup];
+        } else {
+          label = base;
+        }
+      } else {
+        // No ALT: existing CAPS/SHIFT logic
+        if (capsActive) {
+          // caps acts like shift for letters — show shifted label if available
+          if (shiftActive) {
+            // both shift and caps: show shifted label if present
+            label = (typeof shiftedKeys === 'object' && shiftedKeys.hasOwnProperty(lookup)) ? shiftedKeys[lookup] : base.toUpperCase();
+          } else {
+            label = (typeof shiftedKeys === 'object' && shiftedKeys.hasOwnProperty(lookup)) ? shiftedKeys[lookup] : base.toUpperCase();
+          }
+        } else {
+          // no caps: show shifted if shift is pressed (transient)
+          if (shiftActive && typeof shiftedKeys === 'object' && shiftedKeys.hasOwnProperty(lookup)) {
+            label = shiftedKeys[lookup];
+          } else {
+            label = (typeof normalKeys === 'object' && normalKeys.hasOwnProperty(lookup)) ? normalKeys[lookup] : base;
+          }
+        }
+      }
+      el.innerHTML = (label === ' ' && base === ' ') ? 'SPACE' : label;
+    });
+  }
+
+  // Create a mapping from keyCode to element ID for quick lookup
+  window.keyCodeToId = {};
+  keyboardData.forEach(function(key) { keyCodeToId[key.keyCode] = key.id; });
+  // Store timeout IDs for each key to handle rapid key presses
+  window.keyTimeouts = {};
+  // Function to highlight a virtual key
+  window.highlightKey = function(keyCode) {
+    var elementId = keyCodeToId[keyCode];
+    if (!elementId) return; // Key not in virtual keyboard
+    var element = document.getElementById(elementId);
+    if (!element) return; // Element not found
+    // Clear any existing timeout for this key to prevent race conditions
+    if (keyTimeouts[elementId]) { clearTimeout(keyTimeouts[elementId]); }
+    // Apply hover effect (using the same color as :hover in CSS)
+    element.style.backgroundColor = '#444';
+    // Set a timeout to restore original color
+    keyTimeouts[elementId] = setTimeout(function() {
+      unhighlightKey(elementId);
+      delete keyTimeouts[elementId]; // Clean up timeout reference
+    }, 200); // 200ms flash effect
+  }
+  // Function to unhighlight a virtual key
+  window.unhighlightKey=function(elementId) {
+    var element = document.getElementById(elementId);
+    if (!element) return;
+    // Keep locked appearance if key is logically locked
+    if (elementId === 'caps' && caps) {
+      element.style.backgroundColor = '#fff';
+      element.style.color = '#000';
+      return;
+    }
+    if (elementId === 'ctrl' && (ctrl || ctrlPhysical)) {
+      element.style.backgroundColor = ctrlPhysical ? '#bbb' : '#fff';
+      element.style.color = '#000';
+      return;
+    }
+    if (elementId === 'alt' && (alt || altPhysical)) {
+      element.style.backgroundColor = altPhysical ? '#444' : '#fff';
+      element.style.color = '#000';
+      return;
+    }
+    // Not locked -> clear inline styles
+    element.style.backgroundColor = '';
+    element.style.color = '';
+  }
+
+  img=document.createElement('img');
+  img.id="qpc"; img.src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAA7EAAAOxAGVKw4bAAAAMklEQVRYhe3OMQEAMAjEwKei2wHxRQbLxUCu3u2fxc7mHAAAAAAAAAAAAAAAAAAAIEkGzIgCpxq6s7YAAAAASUVORK5CYII="; 
+  img.style.width="300px"; img.style.height="600px"; img.style.zIndex="0"; 
+  img.style.position="absolute";
+  img.style.left="32px";
+  img.style.top="32px";
+  document.body.appendChild(img);
+  document.getElementById("qpc").style.top = "32px";
+  document.getElementById("qpc").style.left = "32px";
+  
+  resize(); function resize() {
+   // Position text element based on mode
+   if (window.mode=="gfx") {
+    up=32+(404-(document.getElementById('txt').offsetHeight));
+    left=32+22+300;
+    document.getElementById("txt").style.left=left+"px";
+    document.getElementById("txt").style.top=up+"px";
+   } else {
+    left=32+22;
+    up=32+(402-(document.getElementById('txt').offsetHeight));
+    document.getElementById("txt").style.left="54px";
+    document.getElementById("txt").style.top=up+"px";
+   }
+  }
 
 // Qandy keyboard input glue
 // Exposes: window.QandyKeyboard and global input(...) for guest scripts.
@@ -3019,6 +3076,7 @@ resize(); function resize() {
  }
 }
 
+
 //
 // command.js (modified)
 //
@@ -3040,36 +3098,10 @@ function init_command_js() {
     // Normalize command
     var trimmedCmd = String(cmd || '').trim();
 
-    // Short-circuit special textual commands (makes it easy to add more)
-    // root  -> bring host to top / make host visible & interactive
-    // user  -> bring guest to top / make guest iframe visible & interactive
-    // cls   -> clear screen (existing behavior)
-    // <name>.js -> load script (existing behavior)
     switch (trimmedCmd.toLowerCase()) {
       case 'root':
-        // Prefer virtualHost API if present
         try {
-          if (typeof virtualHost === 'function') {
-            virtualHost(1); // show host
-            print("Host brought to front\n");
-          } else if (typeof bringHostFront === 'function') {
-            bringHostFront();
-            print("Host brought to front (bringHostFront)\n");
-          } else {
-            // Fallback: try to lower the guest container and raise host
-            var vm = document.getElementById('vm-container');
-            if (vm) {
-              vm.style.setProperty('z-index','-1','important');
-              vm.style.setProperty('pointer-events','none','important');
-            }
-            var hostEl = document.getElementById('qandy') || document.getElementById('txt') || document.body;
-            if (hostEl) {
-              hostEl.style.setProperty('position', hostEl.style.position || 'relative', 'important');
-              hostEl.style.setProperty('z-index','2147483647','important');
-              hostEl.style.setProperty('pointer-events','auto','important');
-            }
-            print("Host brought to front (fallback)\n");
-          }
+          window.parent.postMessage({ type: 'guest-action', action: 'show-host', success: true }, '*');
         } catch (e) {
           print("Error bringing host forward: " + String(e) + "\n");
         }
@@ -3779,20 +3811,45 @@ window.pressup=function(event) {
 
 window.hostScript=function(name) {
   if (!name || typeof name !== 'string') return false;
-  const s = name.trim();
   name = name.trim();
   if (!/^[A-Za-z0-9.\-]+\.js$/i.test(name)) return false;
   if (/^[.\-]/.test(name) || /[.\-]$/.test(name)) return false;
   if (/\.\./.test(name)) return false;
-  if (name.length > 16) return false;
+  if (name.length > 64) return false;
+
+  window.hostScript._cnt = (window.hostScript._cnt || 0) + 1;
+  var reqId = 'hs_' + Date.now() + '_' + window.hostScript._cnt;
+
+  var timer = setTimeout(function() {
+    window.removeEventListener('message', handler);
+    print("Timeout loading: " + name + "\n");
+  }, 10000);
+
+  function handler(ev) {
+    var d = ev.data || {};
+    if (d && d.type === 'scriptLoaded' && d.id === reqId) {
+      clearTimeout(timer);
+      window.removeEventListener('message', handler);
+      if (d.error || d.code === null || d.code === undefined) {
+        print("File Error\n");
+      } else {
+        try {
+          // eslint-disable-next-line no-eval
+          (0, eval)(String(d.code) + '\n//# sourceURL=' + name);
+        } catch (e) {
+          print("Error running " + name + ": " + String(e) + "\n");
+        }
+      }
+    }
+  }
+
+  window.addEventListener('message', handler, false);
   try {
-    const prg = document.createElement('script');
-    prg.src = s;
-    prg.onerror = function() { print("3702: "+s+" File Error\n"); };
-    prg.onload = function() { /* optional: print(s + " loaded\n"); */ };
-    document.head.appendChild(prg);
+    window.parent.postMessage({ type: 'loadScript', id: reqId, name: name }, '*');
   } catch (e) {
-    print("3706: Error inserting script: " + String(e) + "\n");
+    clearTimeout(timer);
+    window.removeEventListener('message', handler);
+    print("Error requesting script: " + String(e) + "\n");
   }
 }
 
