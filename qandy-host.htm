@@ -1046,6 +1046,32 @@ function hostMessageHandler(ev) {
     
             // Try to focus the host
             try { hostEl.focus(); } catch (e) {}
+            // Focus the host element for user interaction
+            try {
+              // Ensure host element is focusable
+              if (hostEl && !hostEl.hasAttribute('tabindex')) {
+                hostEl.setAttribute('tabindex', '0'); // makes the div focusable
+                // optional: avoid visible focus outline if you don't want it
+                hostEl.style.outline = 'none';
+              }
+
+              // If an iframe currently has focus, blur it so focus can move to the parent
+              try {
+                if (document.activeElement && document.activeElement.tagName === 'IFRAME') {
+                  try { document.activeElement.blur(); } catch (e) {}
+                }
+                // Also explicitly blur the guest iframe reference if we have it
+                if (iframe && typeof iframe.blur === 'function') {
+                  try { iframe.blur(); } catch (e) {}
+                }
+              } catch (e) {}
+
+              // Bring the top-level window into focus (may be restricted by browser, but try)
+              try { window.focus(); } catch (e) {}
+
+              // Finally focus the host element
+              try { if (hostEl) hostEl.focus(); } catch (e) {}
+            } catch (e) {}            
     
             iframe.contentWindow.postMessage({ 
               type: 'action-result', 
@@ -1064,17 +1090,69 @@ function hostMessageHandler(ev) {
           break;
         case 'show-guest':
           console.log('Guest requested to show guest');
-          if (typeof virtualHost === 'function') {
-            virtualHost(0);
-            iframe.contentWindow.postMessage({ 
-              type: 'action-result', 
-              action: 'show-guest', 
-              success: true 
-            }, '*');
-          } else {
-            throw new Error('virtualHost not available');
-          }
-          break;
+          try {
+            // Prefer the local iframe variable; fallback to global if set by createGuest
+            var giframe = iframe || window._vmIframe || document.querySelector('iframe');
+            var hostEl = document.getElementById('txt') || document.getElementById('qandy') || document.body;
+            if (!giframe) throw new Error('guest iframe not found');
+            // Hide/disable host UI so it doesn't visually cover the guest
+            if (hostEl) {
+              try {
+                hostEl.style.pointerEvents = 'none';
+                hostEl.style.visibility = 'hidden';
+                hostEl.style.opacity = '0';
+                hostEl.style.zIndex = '-1';
+              } catch (e) { /* ignore style failures */ }
+            }
+            // Position and size the iframe to cover the host area (best effort)
+            //try {
+            //  var rect = hostEl && hostEl.getBoundingClientRect && hostEl.getBoundingClientRect();
+            //  if (!rect || !rect.width || !rect.height) {
+            //    rect = { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+            //  }
+            //  giframe.style.position = 'fixed';
+            //  giframe.style.left = rect.left + 'px';
+            //  giframe.style.top = rect.top + 'px';
+            //  giframe.style.width = rect.width + 'px';
+            //  giframe.style.height = rect.height + 'px';
+            //} catch (e) {}
+            //// Make sure iframe is visible and interactive
+            //try {        
+            //  giframe.style.display = 'block';
+            //  giframe.style.border = '0';
+            //  giframe.style.visibility = 'visible';
+            //  giframe.style.opacity = '1';
+            //  giframe.style.pointerEvents = 'auto';
+            //  giframe.style.zIndex = '2147483647';
+            //  giframe.style.background = 'transparent';
+            //} catch (e) {}
+        
+    // Try to focus the guest (both element and contentWindow)
+    try { giframe.focus && giframe.focus(); } catch (e) {}
+    try { giframe.contentWindow && giframe.contentWindow.focus && giframe.contentWindow.focus(); } catch (e) {}
+
+    // update virtual host state if present
+    try { if (window.__QANDY_VIRTUALHOST_STATE) window.__QANDY_VIRTUALHOST_STATE.current = 'guest'; } catch (e) {}
+
+    // reply to the guest that the action succeeded
+    try {
+      var target = (giframe.contentWindow || (iframe && iframe.contentWindow) || window);
+      target.postMessage({ type: 'action-result', action: 'show-guest', success: true }, '*');
+    } catch (e) {}
+  } catch (e) {
+    console.error('Error showing guest:', e);
+    try {
+      (iframe && iframe.contentWindow || window).postMessage({
+        type: 'action-result',
+        action: 'show-guest',
+        success: false,
+        error: String(e)
+      }, '*');
+    } catch (e2) {}
+  }
+  break;
+  
+  
       }
     } catch (e) {
       console.error('Error handling guest action:', e);
@@ -3148,17 +3226,12 @@ function init_command_js() {
     if (trimmedCmd.slice(-3) === ".js") {
       //keysoff();
       var scriptName = String(trimmedCmd || '').trim();
-      hostScript(scriptName);
-
-    // This is the "cls" command, I want to be able to add more
-    // commands here, if/else is awkward for this, I'd prefer
-    // a switch() type structure to make it easy to add new commands
-    // to the Qandy starting with these two:
-    // 
-    // root == bring host to top
-    // user == bring <guest> to top
-    // 
-
+      const prg=document.createElement('script');
+      prg.src=cmd;
+      prg.onload=() => { keyon = 1; };
+      prg.onerror=() => { print("Error loading program"); keyon = 1; };
+      document.head.appendChild(prg);
+      line="";
     } else if (trimmedCmd.substr(0,3) === "cls") {
        SYNC=0;   
        pokeCursorOff();
@@ -3646,7 +3719,7 @@ window.button=function(b, event) {
   } else {
     if (RUN) { keydown(k || l); }
   }
-  if (SOUND) { beep(900, 25, .01); }
+  if (SOUND && typeof beep === 'function') { try { beep(900, 25, 0.01); } catch (e) {}} 
   pokeCursorOn();
 }
 
