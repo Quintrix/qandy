@@ -980,22 +980,37 @@ function hostMessageHandler(ev) {
   if (!iframe.contentWindow || ev.source !== iframe.contentWindow) return;
   var d = ev.data || {}; if (!d || typeof d !== 'object') return;
   
-  // EXISTING: Handle script requests
+  // EXISTING: Handle script requests from guest iframe
+  // Forward to qandy-main.htm (parent) which acts as the file server
   if (d.type === 'request-script' && typeof d.name === 'string') {
     var reqId = d.id; var name = d.name;
-    (async function() {
-      try {
-        var code = await getScriptText(name, 5000);
-        if (!code) {
-          iframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: null }, '*');
+    window._fwdScriptCnt = (window._fwdScriptCnt || 0) + 1;
+    var fwdId = 'fw_' + Date.now() + '_' + window._fwdScriptCnt;
+    var fwdTimer = setTimeout(function() {
+      window.removeEventListener('message', fwdHandler);
+      iframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: null, error: 'Timeout' }, '*');
+    }, 10000);
+    function fwdHandler(ev2) {
+      var d2 = ev2.data || {};
+      if (d2 && d2.type === 'scriptLoaded' && d2.id === fwdId) {
+        clearTimeout(fwdTimer);
+        window.removeEventListener('message', fwdHandler);
+        if (d2.error || d2.code === null || d2.code === undefined) {
+          iframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: null, error: d2.error || 'Load failed' }, '*');
         } else {
-          var s = sanitizeScriptText(code) + '\n//# sourceURL=' + name;
+          var s = sanitizeScriptText(d2.code) + '\n//# sourceURL=' + name;
           iframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: s }, '*');
         }
-      } catch (e) {
-        iframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: null, error: String(e) }, '*');
       }
-    })();
+    }
+    window.addEventListener('message', fwdHandler, false);
+    try {
+      window.parent.postMessage({ type: 'loadScript', id: fwdId, name: name }, '*');
+    } catch (e) {
+      clearTimeout(fwdTimer);
+      window.removeEventListener('message', fwdHandler);
+      iframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: null, error: String(e) }, '*');
+    }
   }
   
   // NEW: Handle guest request to show/hide host
@@ -1007,11 +1022,11 @@ function hostMessageHandler(ev) {
           try {
             // Hide the guest iframe
             if (iframe) {
-              //iframe.style.display = 'none';
-              //iframe.style.visibility = 'hidden';
-              //iframe.style.opacity = '0';
-              //iframe.style.pointerEvents = 'none';
-              //iframe.style.zIndex = '-9999';
+              iframe.style.display = 'none';
+              iframe.style.visibility = 'hidden';
+              iframe.style.opacity = '0';
+              iframe.style.pointerEvents = 'none';
+              iframe.style.zIndex = '-9999';
             }
     
             // Make sure host elements are visible
@@ -1651,7 +1666,7 @@ window.pokeCursor = function(t) {
     //}
 
     pokeCell(CURX, CURY, ch, CURFG, CURBG, CURATTR);
-    if (SOUND) { beep(900, 25, .01); }
+    if (SOUND && typeof beep === 'function') { try { beep(900, 25, 0.01); } catch (e) {}}
 
     CURX = CURX + 1;
     if (CURX >= W) {
@@ -3796,20 +3811,45 @@ window.pressup=function(event) {
 
 window.hostScript=function(name) {
   if (!name || typeof name !== 'string') return false;
-  const s = name.trim();
   name = name.trim();
   if (!/^[A-Za-z0-9.\-]+\.js$/i.test(name)) return false;
   if (/^[.\-]/.test(name) || /[.\-]$/.test(name)) return false;
   if (/\.\./.test(name)) return false;
-  if (name.length > 16) return false;
+  if (name.length > 64) return false;
+
+  window.hostScript._cnt = (window.hostScript._cnt || 0) + 1;
+  var reqId = 'hs_' + Date.now() + '_' + window.hostScript._cnt;
+
+  var timer = setTimeout(function() {
+    window.removeEventListener('message', handler);
+    print("Timeout loading: " + name + "\n");
+  }, 10000);
+
+  function handler(ev) {
+    var d = ev.data || {};
+    if (d && d.type === 'scriptLoaded' && d.id === reqId) {
+      clearTimeout(timer);
+      window.removeEventListener('message', handler);
+      if (d.error || d.code === null || d.code === undefined) {
+        print("File Error\n");
+      } else {
+        try {
+          // eslint-disable-next-line no-eval
+          (0, eval)(String(d.code) + '\n//# sourceURL=' + name);
+        } catch (e) {
+          print("Error running " + name + ": " + String(e) + "\n");
+        }
+      }
+    }
+  }
+
+  window.addEventListener('message', handler, false);
   try {
-    const prg = document.createElement('script');
-    prg.src = s;
-    prg.onerror = function() { print("3702: "+s+" File Error\n"); };
-    prg.onload = function() { /* optional: print(s + " loaded\n"); */ };
-    document.head.appendChild(prg);
+    window.parent.postMessage({ type: 'loadScript', id: reqId, name: name }, '*');
   } catch (e) {
-    print("3706: Error inserting script: " + String(e) + "\n");
+    clearTimeout(timer);
+    window.removeEventListener('message', handler);
+    print("Error requesting script: " + String(e) + "\n");
   }
 }
 

@@ -563,44 +563,20 @@ function pressup(event) {
 
 function hostScript(name) {
   if (!name || typeof name !== 'string') return false;
+  const s = name.trim();
   name = name.trim();
   if (!/^[A-Za-z0-9.\-]+\.js$/i.test(name)) return false;
   if (/^[.\-]/.test(name) || /[.\-]$/.test(name)) return false;
   if (/\.\./.test(name)) return false;
-  if (name.length > 64) return false;
-
-  hostScript._cnt = (hostScript._cnt || 0) + 1;
-  var reqId = 'hs_' + Date.now() + '_' + hostScript._cnt;
-
-  var timer = setTimeout(function() {
-    window.removeEventListener('message', handler);
-    print("Timeout loading: " + name + "\n");
-  }, 10000);
-
-  function handler(ev) {
-    var d = ev.data || {};
-    if (d && d.type === 'scriptLoaded' && d.id === reqId) {
-      clearTimeout(timer);
-      window.removeEventListener('message', handler);
-      if (d.error || d.code === null || d.code === undefined) {
-        print("File Error\n");
-      } else {
-        try {
-          eval(String(d.code) + '\n//# sourceURL=' + name); // jshint ignore:line
-        } catch (e) {
-          print("Error running " + name + ": " + String(e) + "\n");
-        }
-      }
-    }
-  }
-
-  window.addEventListener('message', handler, false);
+  if (name.length > 16) return false;
   try {
-    window.parent.postMessage({ type: 'loadScript', id: reqId, name: name }, '*');
+    const prg = document.createElement('script');
+    prg.src = s;
+    prg.onerror = function() { print("File Error\n"); };
+    prg.onload = function() { /* optional: print(s + " loaded\n"); */ };
+    document.head.appendChild(prg);
   } catch (e) {
-    clearTimeout(timer);
-    window.removeEventListener('message', handler);
-    print("Error requesting script: " + String(e) + "\n");
+    print("Error inserting script: " + String(e) + "\n");
   }
 }
 

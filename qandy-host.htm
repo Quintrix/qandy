@@ -1020,28 +1020,33 @@ function hostMessageHandler(ev) {
         case 'show-host':
           console.log('Guest requested to show host');
           try {
-            // Bring the host element to the front
+            // Hide the guest iframe
+            if (iframe) {
+              //iframe.style.display = 'none';
+              //iframe.style.visibility = 'hidden';
+              //iframe.style.opacity = '0';
+              //iframe.style.pointerEvents = 'none';
+              //iframe.style.zIndex = '-9999';
+            }
+    
+            // Make sure host elements are visible
             var hostEl = document.getElementById('txt');
             if (hostEl) {
-              hostEl.style.zIndex = '9999';
+              hostEl.style.display = 'block';
+              hostEl.style.visibility = 'visible';
+              hostEl.style.opacity = '1';
               hostEl.style.pointerEvents = 'auto';
             }
-
-            // Keep the guest iframe visible in the background
-            if (iframe) {
-              iframe.style.zIndex = '1';
-              iframe.style.pointerEvents = 'none';
-            }
-
+    
             var kbContainer = document.getElementById('keyboard-container');
             if (kbContainer) {
               kbContainer.style.display = 'block';
               kbContainer.style.visibility = 'visible';
             }
-
-            // Focus the host element for user interaction
-            try { if (hostEl) hostEl.focus(); } catch (e) {}
-
+    
+            // Try to focus the host
+            try { hostEl.focus(); } catch (e) {}
+    
             iframe.contentWindow.postMessage({ 
               type: 'action-result', 
               action: 'show-host', 
@@ -1661,7 +1666,7 @@ window.pokeCursor = function(t) {
     //}
 
     pokeCell(CURX, CURY, ch, CURFG, CURBG, CURATTR);
-    if (SOUND) { beep(900, 25, .01); }
+    if (SOUND && typeof beep === 'function') { try { beep(900, 25, 0.01); } catch (e) {}}
 
     CURX = CURX + 1;
     if (CURX >= W) {
