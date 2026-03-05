@@ -1190,7 +1190,7 @@ async function startup() {
 
   if (HOST) {
     console.info('startup: <host> ready — assembling <guest> ');
-    //await createGuest({ hideHost: false });
+    await createGuest({ hideHost: false });
     // Listen once for guest-ready to optionally hide host UI / focus guest
     function onHostMessage(ev) {
       var d = ev && ev.data;
@@ -3237,19 +3237,11 @@ function init_command_js() {
     // existing .js loader
     if (trimmedCmd.slice(-3) === ".js") {
       //keysoff();
-      var context = HOST ? "HOST (root access)" : "GUEST (user sandbox)";
-      print("\nContext: " + context + "\n");
-      print("Window URL: " + window.location.href + "\n");
-      print("Has file:// access: " + (typeof document.createElement('script').onerror === 'function' ? "yes" : "maybe") + "\n");
-      print("localStorage accessible: " + (typeof localStorage !== 'undefined' ? "yes" : "no") + "\n\n");
       var scriptName = String(trimmedCmd || '').trim();
       const prg=document.createElement('script');
-      prg.src="ascii.js";
-      prg.onload = function() { 
-       console.log("✓ ascii.js loaded successfully!");
-       print("ascii.js loaded\n");
-      };
-      prg.onerror=() => { print("Error loading program"); keyon = 1; };
+      prg.src=trimmedCmd;
+      prg.onload = {  }
+      prg.onerror=() => { print("Error loading program"); keyon = 1; }
       document.head.appendChild(prg);
       line="";
     } else if (trimmedCmd.substr(0,3) === "cls") {
