@@ -322,6 +322,16 @@ var SOUND=false;       // enable/disable sound card
 // qandy.js
 var HOST=1;     // host machine
 var GUEST=0;    // guest machine
+
+// Dual-iframe architecture: detect guest mode from URL parameter set by qandy-main.htm
+(function() {
+  try {
+    var _p = new URLSearchParams(window.location.search);
+    if (_p.get('guest') === '1') { HOST = 0; GUEST = 1; }
+  } catch(e) {}
+})();
+// Detect dual-iframe mode: this page is running as a child frame inside qandy-main.htm
+var _IN_IFRAME = (window.parent !== window);
 var ROOT=0;     // root access, to replace devteam   
 var DEVTEAM=0;  // developer mode
 var RUN= "";    // current script running starting with qandy.js 
@@ -1016,21 +1026,27 @@ async function assembleGuestHtml(options) {
  window.assembleGuestHtml = assembleGuestHtml;
 
 async function startup() {
-  // Determine guest status (support sync or async isGuest)
-
   if (HOST) {
-    console.info('startup: <host> ready — assembling <guest> ');
-    await createGuest({ hideHost: true });
-    // Listen once for guest-ready to optionally hide host UI / focus guest
-    function onHostMessage(ev) {
-      var d = ev && ev.data;
-      if (d && typeof d === 'object' && d.type === 'guest-ready') {
-        console.info('startup: guest reported ready (host may hide UI now)');
-        try { if (window._vmIframe && window._vmIframe.contentWindow) window._vmIframe.contentWindow.focus(); } catch (e) {}
-        window.removeEventListener('message', onHostMessage, false);
+    if (_IN_IFRAME) {
+      // Dual-iframe mode: parent (qandy-main.htm) manages the guest frame directly.
+      // No guest assembly needed here; just signal the parent that the host is ready.
+      console.info('startup: dual-iframe mode — guest frame managed by parent');
+      try { window.parent.postMessage({ type: 'host-ready' }, '*'); } catch(e) {}
+    } else {
+      // Legacy single-page mode: assemble and embed the guest iframe in-page.
+      console.info('startup: <host> ready — assembling <guest> ');
+      await createGuest({ hideHost: true });
+      // Listen once for guest-ready to optionally focus guest
+      function onHostMessage(ev) {
+        var d = ev && ev.data;
+        if (d && typeof d === 'object' && d.type === 'guest-ready') {
+          console.info('startup: guest reported ready (host may hide UI now)');
+          try { if (window._vmIframe && window._vmIframe.contentWindow) window._vmIframe.contentWindow.focus(); } catch (e) {}
+          window.removeEventListener('message', onHostMessage, false);
+        }
       }
+      window.addEventListener('message', onHostMessage, false);
     }
-    window.addEventListener('message', onHostMessage, false);
   } else {
     console.info('startup: guest mode detected — skipping host assembly');
   }
@@ -1051,6 +1067,13 @@ async function startup() {
 
   window.virtualHost = function virtualHost(option) {
     var showHost = Number(option) === 1;
+
+    // Dual-iframe mode: delegate show/hide to parent (qandy-main.htm)
+    if (_IN_IFRAME) {
+      try { window.parent.postMessage({ type: showHost ? 'show-host' : 'show-guest' }, '*'); } catch(e) {}
+      return true;
+    }
+
     var hostEl = findHostElement();
     var iframe = findGuestIframe();
     if (!hostEl || !iframe) {
