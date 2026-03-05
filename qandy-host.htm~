@@ -4026,6 +4026,7 @@ pokeCursorOn(); pokeRefresh();
 //
 
 if (GUEST) {
+  var CURBAUD=9600; // baud rate to display text
   print("\n[cyan]Qandy Pocket\nComputer v1.j\n\n[yellow]Prototype Release\n\n[white]\nQandy User: ");
   //(async function(){
   //  if (await dosExists('autoexec.js')) {

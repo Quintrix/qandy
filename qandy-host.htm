@@ -3237,7 +3237,7 @@ function init_command_js() {
       //keysoff();
       var scriptName = String(trimmedCmd || '').trim();
       const prg=document.createElement('script');
-      prg.src="ascii.js";
+      prg.src=trimmedCmd;
       prg.onload = {  }
       prg.onerror=() => { print("Error loading program\n"); keyon = 1; }
       document.head.appendChild(prg);
