@@ -170,12 +170,3 @@ function ansi() {
   keyon = 1;
 }
 
-function keydown(k) {
-  var key = k.toUpperCase();
-  
-  if (key === "Q") {
-    //cls();
-    keyon = 1;
-    print("Returned to input mode\n");
-  }
-}
