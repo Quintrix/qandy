@@ -10,7 +10,7 @@ function button(b, event) {
     case 16: // SHIFT
       if (event && typeof event.shiftKey !== 'undefined') shift = !!event.shiftKey;
       else shift = !shift;
-      if (typeof updateKeyLabels === 'function') updateKeyLabels();
+      updateKeyLabels();
       pokeCursorOn();
       return;
     case 17: k = "ctrl"; break;
