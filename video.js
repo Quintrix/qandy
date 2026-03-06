@@ -114,101 +114,104 @@ window.pokeCursor = function(t) {
     }
   }
 
-  // compute per-character delay in ms based on CURBAUD (10 bits/char)
-  var delayMs = 0;
-  if (typeof CURBAUD === 'number' && CURBAUD > 0) {
-    delayMs = Math.max(0, Math.round(10000 / CURBAUD)); // ms between characters
-  }
+  // characters per millisecond based on CURBAUD (10 bits per character)
+  var charsPerMs = (typeof CURBAUD === 'number' && CURBAUD > 0) ? CURBAUD / 10000 : 0;
 
-  // If delay is 0, run synchronously (old behavior)
-  if (!delayMs) {
-    
-  }
-
-  // paced/asynchronous processing
+  // paced/asynchronous processing using performance.now() token-bucket accumulator
   var state = {
     str: str,
     idx: 0,
     timer: null,
-    stopped: false
+    stopped: false,
+    startTime: performance.now(),
+    charsEmitted: 0
   };
   window._pokeCursor_state = state;
 
   function scheduleNext() {
     if (!state || state.stopped) return;
-    state.timer = setTimeout(processStep, delayMs);
+    var delay = 0;
+    if (charsPerMs) {
+      // schedule for when the next character is due
+      var nextMs = state.startTime + (state.charsEmitted + 1) / charsPerMs;
+      delay = Math.max(0, nextMs - performance.now());
+    }
+    state.timer = setTimeout(processStep, delay);
   }
 
   function processStep() {
     if (!state || state.stopped) return;
 
-    // end condition
+    // how many characters may be emitted on this tick
+    var charsAllowed = charsPerMs
+      ? Math.floor((performance.now() - state.startTime) * charsPerMs)
+      : state.str.length + 1;
+
+    pokeCursorOff();
+
+    while (state.idx < state.str.length && state.charsEmitted < charsAllowed) {
+      var ch = state.str.charAt(state.idx);
+
+      // handle CSI atomically (no intra-sequence delay)
+      if (CURANSI && ch === '\x1b') {
+        var rest = state.str.slice(state.idx);
+        var m = /^\x1b\[([0-9;]*)?([@A-Za-z])/.exec(rest);
+        if (m) {
+          handleCSI(m[1] || '', m[2]);
+          state.idx += m[0].length;
+        } else {
+          // unknown escape — skip it
+          state.idx++;
+        }
+        state.charsEmitted++;
+        continue;
+      }
+
+      if (ch === '\n') {
+        CURX = 0;
+        CURY = CURY + 1;
+        if (CURY >= H) { pokeScroll(1); CURY = H - 1; CURX = Math.min(CURX, W - 1); }
+        LINEX = CURX; LINEY = CURY;
+        state.idx++;
+        state.charsEmitted++;
+        continue;
+      }
+
+      // does this ever get executed?? 
+      //if (CURX >= W) {
+      //  CURX = 0; CURY = CURY + 1;
+      //  if (CURY >= H) {
+      //    pokeScroll(1); CURY = H - 1; CURX = 0;
+      //    pokeCursorOn();
+      //    window._pokeCursor_state = null;
+      //    pokeCursorOn();
+      //  }
+      //}
+
+      pokeCell(CURX, CURY, ch, CURFG, CURBG, CURATTR);
+      if (SOUND) { beep(900, 25, .01); }
+
+      CURX = CURX + 1;
+      if (CURX >= W) {
+        CURX = 0; CURY = CURY + 1;
+        if (CURY >= H) {
+          pokeScroll(1);
+          CURY = H - 1; CURX = Math.min(CURX, W - 1);
+        }
+      }
+      LINEX = CURX; LINEY = CURY;
+
+      state.idx++;
+      state.charsEmitted++;
+    }
+
+    pokeCursorOn();
+
     if (state.idx >= state.str.length) {
       window._pokeCursor_state = null;
       return;
     }
 
-    var ch = state.str.charAt(state.idx);
-
-    // handle CSI atomically (no intra-sequence delay)
-    if (CURANSI && ch === '\x1b') {
-      var rest = state.str.slice(state.idx);
-      var m = /^\x1b\[([0-9;]*)?([@A-Za-z])/.exec(rest);
-      if (m) {
-        handleCSI(m[1] || '', m[2]);
-        state.idx += m[0].length;
-        // schedule next after same delay
-        scheduleNext();
-        return;
-      } else {
-        // unknown escape — skip it
-        state.idx++;
-        scheduleNext();
-        return;
-      }
-    }
-
-    // printable char processing (counts toward baud)
-    pokeCursorOff();
-
-    if (ch === '\n') {
-      CURX = 0;
-      CURY = CURY + 1;
-      if (CURY >= H) { pokeScroll(1); CURY = H - 1; CURX = Math.min(CURX, W - 1); }
-      LINEX = CURX; LINEY = CURY;
-      state.idx++;
-      scheduleNext();
-      pokeCursorOn();
-      return;
-    }
-
-    // does this ever get executed?? 
-    //if (CURX >= W) {
-    //  CURX = 0; CURY = CURY + 1;
-    //  if (CURY >= H) {
-    //    pokeScroll(1); CURY = H - 1; CURX = 0;
-    //    pokeCursorOn();
-    //    window._pokeCursor_state = null;
-    //    pokeCursorOn();
-    //  }
-    //}
-
-    pokeCell(CURX, CURY, ch, CURFG, CURBG, CURATTR);
-    if (SOUND) { beep(900, 25, .01); }
-
-    CURX = CURX + 1;
-    if (CURX >= W) {
-      CURX = 0; CURY = CURY + 1;
-      if (CURY >= H) {
-        pokeScroll(1);
-        CURY = H - 1; CURX = Math.min(CURX, W - 1);
-      }
-    }
-
-    pokeCursorOn();
-    LINEX = CURX; LINEY = CURY;
-
-    state.idx++;
     scheduleNext();
   }
 
