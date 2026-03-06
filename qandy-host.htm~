@@ -1012,8 +1012,24 @@ function hostMessageHandler(ev) {
       iframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: null, error: String(e) }, '*');
     }
   }
-  
-  // NEW: Handle guest request to show/hide host
+
+
+function isAudioUnlocked() {
+  try {
+    // Primary flag we set in the unlock helper
+    if (window._qandy_audio && window._qandy_audio.unlocked) return true;
+    // Check AudioContext state(s) if present
+    var ctx = (window._qandy_audio && window._qandy_audio.ctx) || window.audioContext || null;
+    if (ctx && ctx.state === 'running') return true;
+    // Fallback: some pages put audio context elsewhere
+    if (window.audioCtx && window.audioCtx.state === 'running') return true;
+  } catch (e) {
+    // ignore errors and treat as locked
+  }
+  return false;
+}
+
+ 
   if (d.type === 'guest-action' && typeof d.action === 'string') {
     try {
       switch(d.action) {
@@ -1091,33 +1107,33 @@ function hostMessageHandler(ev) {
                 // optional: avoid visible focus outline if you don't want it
                 hostEl.style.outline = 'none';
               }
-
               // If an iframe currently has focus, blur it so focus can move to the parent
               try {
-                if (document.activeElement && document.activeElement.tagName === 'IFRAME') {
-                  try { document.activeElement.blur(); } catch (e) {}
-                }
+                if (document.activeElement && document.activeElement.tagName === 'IFRAME') { try { document.activeElement.blur(); } catch (e) {} }
                 // Also explicitly blur the guest iframe reference if we have it
-                if (iframe && typeof iframe.blur === 'function') {
-                  try { iframe.blur(); } catch (e) {}
-                }
+                if (iframe && typeof iframe.blur === 'function') { try { iframe.blur(); } catch (e) {}}
               } catch (e) {}
-
               // Bring the top-level window into focus (may be restricted by browser, but try)
               try { window.focus(); } catch (e) {}
-
               // Finally focus the host element
               try { if (hostEl) hostEl.focus(); } catch (e) {}
             } catch (e) {}            
-    
             iframe.contentWindow.postMessage({ 
               type: 'action-result', 
               action: 'show-host', 
               success: true 
             }, '*');
-            
-            
-            
+            if (!isAudioUnlocked()) {
+              print("Scripts run as ROOT can access\n");
+              print("global scope, file:///, and\n");
+              print("localStorage.\n\n");
+              print("Only run trusted scripts in\n");
+              print("ROOT mode.\n\n");
+              print("Input \'user\' to exit ROOT mode.\n\n");
+              print("Press ENTER:");
+              window._qandy_pendingRootConfirm = true;
+              return; 
+            }            
           } catch (e) {
             console.error('Error showing host:', e);
             iframe.contentWindow.postMessage({ 
@@ -3583,6 +3599,7 @@ window.button=function(b, event) {
         } else if (k === "enter") {
           event.preventDefault();
           if (window.QandyKeyboard && QandyKeyboard.handleEnter()) { return; }
+          if (window.QandyKeyboard && QandyKeyboard.handleEnter()) { return; }
           if (SSTART>-1) { pokeSelect(false); SSTART = -1; SEND = -1; }
           if (LINE !== undefined) {
             // Save to history
@@ -3993,12 +4010,12 @@ pokeCursorOn(); pokeRefresh();
 
 if (GUEST) {
   // guest system ready
-  var CURBAUD=9600; // baud rate to display text
+  var CURBAUD=2400; // baud rate to display text
   print("\n[cyan]Qandy Pocket\nComputer v1.j\n\n[yellow]Qandy Guest User\n[white]\n");
 
 } else {
   // host system ready
-  var CURBAUD=115200; // baud rate to display text
+  var CURBAUD=9600; // baud rate to display text
   print("\n[cyan]Qandy Pocket\nComputer v1.j\n\n[yellow]Qandy Root Access\n[white]\n");
 }
 
