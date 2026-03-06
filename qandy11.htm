@@ -1645,6 +1645,9 @@ window.pokeCursor = function(t) {
   // characters per millisecond based on CURBAUD (10 bits per character)
   var charsPerMs = (typeof CURBAUD === 'number' && CURBAUD > 0) ? CURBAUD / 10000 : 0;
 
+  // batch size for DOM refresh: update DOM after this many printable characters
+  var BATCH_SIZE = 8;
+
   // paced/asynchronous processing using performance.now() token-bucket accumulator
   var state = {
     str: str,
@@ -1677,11 +1680,23 @@ window.pokeCursor = function(t) {
 
     pokeCursorOff();
 
+    // Batch DOM refresh: accumulate up to BATCH_SIZE printable chars before refreshing
+    var batchStartX = -1, batchStartY = -1, batchCount = 0;
+
+    function flushBatch() {
+      if (batchCount > 0) {
+        pokeRefresh(batchStartX, batchStartY, batchCount);
+        batchCount = 0;
+        batchStartX = -1; batchStartY = -1;
+      }
+    }
+
     while (state.idx < state.str.length && state.charsEmitted < charsAllowed) {
       var ch = state.str.charAt(state.idx);
 
       // handle CSI atomically (no intra-sequence delay)
       if (CURANSI && ch === '\x1b') {
+        flushBatch();
         var rest = state.str.slice(state.idx);
         var m = /^\x1b\[([0-9;]*)?([@A-Za-z])/.exec(rest);
         if (m) {
@@ -1696,6 +1711,7 @@ window.pokeCursor = function(t) {
       }
 
       if (ch === '\n') {
+        flushBatch();
         CURX = 0;
         CURY = CURY + 1;
         if (CURY >= H) { pokeScroll(1); CURY = H - 1; CURX = Math.min(CURX, W - 1); }
@@ -1716,11 +1732,24 @@ window.pokeCursor = function(t) {
       //  }
       //}
 
-      pokeCell(CURX, CURY, ch, CURFG, CURBG, CURATTR);
+      // Write directly to arrays (avoids per-cell DOM refresh via pokeCell/SYNC)
+      if (CURX >= 0 && CURX < W && CURY >= 0 && CURY < H) {
+        if (batchCount === 0) {
+          batchStartX = CURX;
+          batchStartY = CURY;
+        }
+        VIDEO[CURY][CURX] = ch;
+        FCOLOR[CURY][CURX] = CURFG;
+        BCOLOR[CURY][CURX] = CURBG;
+        ATTR[CURY][CURX] = CURATTR;
+        batchCount++;
+      }
+
       if (SOUND && typeof beep === 'function') { try { beep(900, 25, 0.01); } catch (e) {}}
 
       CURX = CURX + 1;
       if (CURX >= W) {
+        flushBatch();
         CURX = 0; CURY = CURY + 1;
         if (CURY >= H) {
           pokeScroll(1);
@@ -1729,9 +1758,15 @@ window.pokeCursor = function(t) {
       }
       LINEX = CURX; LINEY = CURY;
 
+      if (batchCount >= BATCH_SIZE) {
+        flushBatch();
+      }
+
       state.idx++;
       state.charsEmitted++;
     }
+
+    flushBatch();
 
     pokeCursorOn();
 
