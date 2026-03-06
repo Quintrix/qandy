@@ -2796,58 +2796,66 @@ function init_keyboard_js() {
     btn.onclick = function() { button(key.keyCode); };
     document.getElementById('keyboard-container').appendChild(btn);
    });
-   updateKeyLabels();
 
-  function updateKeyLabels() {
-    // Decide current modifier priority:
-    // If ALT active (virtual or physical) -> show ALT labels (shifted if Shift also active)
-    window.altActive = !!alt || !!altPhysical;
-    window.shiftActive = !!window.shift;
-    window.capsActive = !!window.caps;
+// Safe exported updateKeyLabels: always read state/maps from window to avoid closure-scope issues
+window.updateKeyLabels = function() {
+  // Read modifier state from the global/window space (use !! to normalize)
+  var alt = !!window.alt || !!window.altPhysical;
+  var shift = !!window.shift;
+  var caps = !!window.caps;
 
-    keyboardData.forEach(function(key) {
-      var el = document.getElementById(key.id);
-      if (!el) return;
-      var base = el.dataset.keyChar; // single-char canonical base (could be 'a' or 'A' etc)
-      if (!base || base.length === 0) return;
-      var lookup = base.toLowerCase(); var label = base;
-      if (altActive) {
-        // ALT is active: prefer altShiftKeys (if Shift also active), then altKeys
-        if (shiftActive && typeof altShiftKeys === 'object' && altShiftKeys.hasOwnProperty(lookup)) {
-          label = altShiftKeys[lookup];
-        } else if (typeof altKeys === 'object' && altKeys.hasOwnProperty(lookup)) {
-          label = altKeys[lookup];
-        } else if (shiftActive && typeof shiftedKeys === 'object' && shiftedKeys.hasOwnProperty(lookup)) {
-          // fallback to shiftedKeys if no alt mapping available
-          label = shiftedKeys[lookup];
-        } else if (typeof normalKeys === 'object' && normalKeys.hasOwnProperty(lookup)) {
-          label = normalKeys[lookup];
+  // Optionally expose derived flags if other code expects them:
+  window.altActive = alt;
+  window.shiftActive = shift;
+  window.capsActive = caps;
+
+  // Ensure maps and data are read from window (they should be globals already)
+  var kbdData = window.keyboardData || keyboardData || [];
+  var normal = window.normalKeys || normalKeys || {};
+  var shifted = window.shiftedKeys || shiftedKeys || {};
+  var altMap = window.altKeys || altKeys || {};
+  var altShift = window.altShiftKeys || altShiftKeys || {};
+
+  kbdData.forEach(function(key) {
+    var el = document.getElementById(key.id);
+    if (!el) return;
+    var base = el.dataset.keyChar; // single-char canonical base
+    if (!base || base.length === 0) return;
+    var lookup = base.toLowerCase();
+    var label = base;
+
+    if (alt) {
+      if (shift && typeof altShift === 'object' && altShift.hasOwnProperty(lookup)) {
+        label = altShift[lookup];
+      } else if (typeof altMap === 'object' && altMap.hasOwnProperty(lookup)) {
+        label = altMap[lookup];
+      } else if (shift && typeof shifted === 'object' && shifted.hasOwnProperty(lookup)) {
+        label = shifted[lookup];
+      } else if (typeof normal === 'object' && normal.hasOwnProperty(lookup)) {
+        label = normal[lookup];
+      } else {
+        label = base;
+      }
+    } else {
+      if (caps) {
+        // caps acts like shift for letters — show shifted label if available
+        if (shift) {
+          label = (typeof shifted === 'object' && shifted.hasOwnProperty(lookup)) ? shifted[lookup] : base.toUpperCase();
         } else {
-          label = base;
+          label = (typeof shifted === 'object' && shifted.hasOwnProperty(lookup)) ? shifted[lookup] : base.toUpperCase();
         }
       } else {
-        // No ALT: existing CAPS/SHIFT logic
-        if (capsActive) {
-          // caps acts like shift for letters — show shifted label if available
-          if (shiftActive) {
-            // both shift and caps: show shifted label if present
-            label = (typeof shiftedKeys === 'object' && shiftedKeys.hasOwnProperty(lookup)) ? shiftedKeys[lookup] : base.toUpperCase();
-          } else {
-            label = (typeof shiftedKeys === 'object' && shiftedKeys.hasOwnProperty(lookup)) ? shiftedKeys[lookup] : base.toUpperCase();
-          }
+        if (shift && typeof shifted === 'object' && shifted.hasOwnProperty(lookup)) {
+          label = shifted[lookup];
         } else {
-          // no caps: show shifted if shift is pressed (transient)
-          if (shiftActive && typeof shiftedKeys === 'object' && shiftedKeys.hasOwnProperty(lookup)) {
-            label = shiftedKeys[lookup];
-          } else {
-            label = (typeof normalKeys === 'object' && normalKeys.hasOwnProperty(lookup)) ? normalKeys[lookup] : base;
-          }
+          label = (typeof normal === 'object' && normal.hasOwnProperty(lookup)) ? normal[lookup] : base;
         }
       }
-      el.innerHTML = (label === ' ' && base === ' ') ? 'SPACE' : label;
-    });
-  }
-  window.updateKeyLabels = updateKeyLabels;
+    }
+
+    el.innerHTML = (label === ' ' && base === ' ') ? 'SPACE' : label;
+  });
+};
 
   // Create a mapping from keyCode to element ID for quick lookup
   window.keyCodeToId = {};
@@ -3165,7 +3173,7 @@ function init_keyboard_js() {
  if (typeof shiftedKeys !== 'undefined') window.shiftedKeys = shiftedKeys;
  if (typeof altKeys !== 'undefined') window.altKeys = altKeys;
  if (typeof altShiftKeys !== 'undefined') window.altShiftKeys = altShiftKeys;
- alert("es");
+
  // Signal that keyboard.js is ready
  if (typeof window.qandySignalReady === 'function') {
   window.qandySignalReady('keyboard.js');
@@ -3386,7 +3394,7 @@ window.button=function(b, event) {
     case 16: // SHIFT
       if (event && typeof event.shiftKey !== 'undefined') shift = !!event.shiftKey;
       else shift = !shift;
-      if ((alt || altPhysical) && typeof updateKeyLabels === 'function') updateKeyLabels();
+      if (typeof updateKeyLabels === 'function') updateKeyLabels();
       pokeCursorOn();
       return;
     case 17: k = "ctrl"; break;
