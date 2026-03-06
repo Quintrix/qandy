@@ -1130,7 +1130,7 @@ function isAudioUnlocked() {
               print("Only run trusted scripts in\n");
               print("ROOT mode.\n\n");
               print("Input \'user\' to exit ROOT mode.\n\n");
-              print("Press ENTER:");
+              print("Press Any Key:");
               window._qandy_pendingRootConfirm = true;
               return; 
             }            
