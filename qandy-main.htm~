@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0a0a0a">
+<!-- iOS -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<link rel="apple-touch-icon" href="/icons/qandy-192.png">
+<title>Qandy Pocket Computer</title>
+<style>
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  overflow: hidden;
+}
+/* Both frames occupy the full viewport, stacked via z-index */
+#host-frame, #guest-frame {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+/* Host starts in the background; guest is shown on top */
+#host-frame { z-index: 1; pointer-events: none; }
+#guest-frame { z-index: 2; pointer-events: auto; }
+</style>
+</head><body>
+
+<!-- Host frame: qandy-host.htm with HOST=1 (initialises in background) -->
+<iframe id="host-frame"
+  src="qandy-host.htm"
+  title="Qandy Host"
+  allow="autoplay"
+  allowfullscreen></iframe>
+
+<!-- Guest frame: qandy-host.htm with ?guest=1 sets HOST=0,GUEST=1 -->
+<iframe id="guest-frame"
+  src="qandy-host.htm?guest=1"
+  title="Qandy Virtual Machine"
+  allow="autoplay"
+  allowfullscreen></iframe>
+
+<script>
+var hostFrame = document.getElementById('host-frame');
+var guestFrame = document.getElementById('guest-frame');
+
+/* Show the guest frame on top (default state) */
+function showGuest() {
+  guestFrame.style.zIndex = '2';
+  guestFrame.style.pointerEvents = 'auto';
+  hostFrame.style.zIndex = '1';
+  hostFrame.style.pointerEvents = 'none';
+  try { guestFrame.contentWindow && guestFrame.contentWindow.focus(); } catch(e) {}
+}
+
+/* Show the host frame on top */
+function showHost() {
+  hostFrame.style.zIndex = '2';
+  hostFrame.style.pointerEvents = 'auto';
+  guestFrame.style.zIndex = '1';
+  guestFrame.style.pointerEvents = 'none';
+  try { hostFrame.contentWindow && hostFrame.contentWindow.focus(); } catch(e) {}
+}
+
+window.addEventListener('message', function(ev) {
+  var d = ev.data;
+  if (!d || typeof d !== 'object') return;
+
+  /* Frame requests a visibility toggle */
+  if (d.type === 'show-host') { showHost(); return; }
+  if (d.type === 'show-guest') { showGuest(); return; }
+}, false);
+</script>
+</body></html>

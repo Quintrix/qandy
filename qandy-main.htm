@@ -1,82 +1,80 @@
-<!DOCTYPE html>
-<html><head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#0a0a0a">
-<!-- iOS -->
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black">
-<link rel="apple-touch-icon" href="/icons/qandy-192.png">
-<title>Qandy Pocket Computer</title>
-<style>
-html, body {
-  margin: 0;
-  padding: 0;
-  width: 100%;
-  height: 100%;
-  background: #000;
-  overflow: hidden;
-}
-/* Both frames occupy the full viewport, stacked via z-index */
-#host-frame, #guest-frame {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  border: 0;
-  margin: 0;
-  padding: 0;
-}
-/* Host starts in the background; guest is shown on top */
-#host-frame { z-index: 1; pointer-events: none; }
-#guest-frame { z-index: 2; pointer-events: auto; }
-</style>
-</head><body>
+// Guest-side: make the guest input surface focusable and respond to host focus requests
 
-<!-- Host frame: qandy-host.htm with HOST=1 (initialises in background) -->
-<iframe id="host-frame"
-  src="qandy-host.htm"
-  title="Qandy Host"
-  allow="autoplay"
-  allowfullscreen></iframe>
+(function() {
+  // Choose the element that should receive keyboard events in the guest.
+  // Adjust selectors if your actual input surface has a different id.
+  function getGuestInputElement() {
+    return document.getElementById('qandy') ||
+           document.getElementById('txt') ||
+           // If you have a specific canvas/input id, use it here:
+           // document.getElementById('guest-canvas') ||
+           document.body;
+  }
 
-<!-- Guest frame: qandy-host.htm with ?guest=1 sets HOST=0,GUEST=1 -->
-<iframe id="guest-frame"
-  src="qandy-host.htm?guest=1"
-  title="Qandy Virtual Machine"
-  allow="autoplay"
-  allowfullscreen></iframe>
+  // Make an element programmatically focusable and optionally focus it.
+  // tabindexOption: '0' to include in tab order, '-1' to allow programmatic focus only.
+  function ensureFocusable(el, tabindexOption) {
+    if (!el) return;
+    var tabindex = (typeof tabindexOption === 'undefined') ? '0' : String(tabindexOption);
+    try {
+      if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', tabindex);
+      // OPTIONAL: hide native focus outline if you dislike it.
+      // Accessibility note: If you remove the outline, provide a visible focus indicator via CSS.
+      el.style.outline = 'none';
+    } catch (e) {
+      // ignore failures to set attributes/styles (older browsers)
+    }
+  }
 
-<script>
-var hostFrame = document.getElementById('host-frame');
-var guestFrame = document.getElementById('guest-frame');
+  // Attempt to focus the guest input element.
+  function focusGuestInput() {
+    var el = getGuestInputElement();
+    if (!el) return;
+    ensureFocusable(el, '0'); // or '-1' if you don't want it tabbable
+    try { el.focus(); } catch (e) {}
+    // As an extra measure, also try focusing window (may be restricted)
+    try { window.focus(); } catch (e) {}
+  }
 
-/* Show the guest frame on top (default state) */
-function showGuest() {
-  guestFrame.style.zIndex = '2';
-  guestFrame.style.pointerEvents = 'auto';
-  hostFrame.style.zIndex = '1';
-  hostFrame.style.pointerEvents = 'none';
-  try { guestFrame.contentWindow && guestFrame.contentWindow.focus(); } catch(e) {}
-}
+  // Message handler: respond to host requests to focus the guest
+  window.addEventListener('message', function(ev) {
+    try {
+      var msg = ev.data;
+      if (!msg || typeof msg !== 'object') return;
 
-/* Show the host frame on top */
-function showHost() {
-  hostFrame.style.zIndex = '2';
-  hostFrame.style.pointerEvents = 'auto';
-  guestFrame.style.zIndex = '1';
-  guestFrame.style.pointerEvents = 'none';
-  try { hostFrame.contentWindow && hostFrame.contentWindow.focus(); } catch(e) {}
-}
+      // Host asked the guest to focus internal input (cross-origin-safe)
+      if (msg.type === 'focus-request') {
+        focusGuestInput();
+        return;
+      }
 
-window.addEventListener('message', function(ev) {
-  var d = ev.data;
-  if (!d || typeof d !== 'object') return;
+      // Host confirmed it showed the guest — treat as a cue to focus internal input
+      if (msg.type === 'action-result' && msg.action === 'show-guest') {
+        if (msg.success) {
+          focusGuestInput();
+        } else {
+          // optional fallback behaviour if host failed
+          console.warn('Host failed to show guest:', msg.reason || msg.error);
+        }
+        return;
+      }
+    } catch (e) {
+      // swallow parsing errors
+    }
+  }, false);
 
-  /* Frame requests a visibility toggle */
-  if (d.type === 'show-host') { showHost(); return; }
-  if (d.type === 'show-guest') { showGuest(); return; }
-}, false);
-</script>
-</body></html>
+  // Make sure guest input is focusable on load (but don't steal focus until asked)
+  document.addEventListener('DOMContentLoaded', function() {
+    var el = getGuestInputElement();
+    if (el) {
+      ensureFocusable(el, '-1'); // make programmatically focusable but not in tab order by default
+    }
+  }, false);
+
+  // Expose a convenience function to request host to show the guest (if needed)
+  window.requestHostShowGuest = function() {
+    try {
+      window.parent.postMessage({ type: 'guest-action', action: 'show-guest' }, '*');
+    } catch (e) {}
+  };
+})();
