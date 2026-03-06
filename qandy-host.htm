@@ -1017,18 +1017,58 @@ function hostMessageHandler(ev) {
   if (d.type === 'guest-action' && typeof d.action === 'string') {
     try {
       switch(d.action) {
+        case 'show-guest':
+          console.log('Guest requested to show guest');
+          var hostEl = document.getElementById('txt');
+          if (hostEl) {
+            hostEl.style.display = 'block';
+            hostEl.style.visibility = 'hidden';
+            hostEl.style.opacity = '1';
+            hostEl.style.pointerEvents = 'auto';
+          }
+     
+          var kbContainer = document.getElementById('keyboard-container');
+          if (kbContainer) {
+            kbContainer.style.display = 'block';
+            kbContainer.style.visibility = 'hidden';
+          }
+    
+          try { hostEl.focus(); } catch (e) {}
+          // Focus the host element for user interaction
+          try {
+            // Ensure host element is focusable
+            if (hostEl && !hostEl.hasAttribute('tabindex')) {
+              hostEl.setAttribute('tabindex', '0'); // makes the div focusable
+              // optional: avoid visible focus outline if you don't want it
+              hostEl.style.outline = 'none';
+            }
+            // If an iframe currently has focus, blur it so focus can move to the parent
+            try {
+              if (document.activeElement && document.activeElement.tagName === 'IFRAME') {
+                try { document.activeElement.blur(); } catch (e) {}
+              }
+              // Also explicitly blur the guest iframe reference if we have it
+              if (iframe && typeof iframe.blur === 'function') {
+                try { iframe.blur(); } catch (e) {}
+              }
+            } catch (e) {}
+            // Bring the top-level window into focus (may be restricted by browser, but try)
+            try { window.focus(); } catch (e) {}
+            // Finally focus the host element
+            try { if (hostEl) hostEl.focus(); } catch (e) {}
+          } catch (e) {
+            console.error('Error showing host:', e);
+            iframe.contentWindow.postMessage({ 
+              type: 'action-result', 
+              action: 'show-host', 
+              success: false, 
+              error: String(e) 
+            }, '*');
+          }
+
         case 'show-host':
           console.log('Guest requested to show host');
           try {
-            // Hide the guest iframe
-            if (iframe) {
-              //iframe.style.display = 'none';
-              //iframe.style.visibility = 'hidden';
-              //iframe.style.opacity = '0';
-              //iframe.style.pointerEvents = 'none';
-              //iframe.style.zIndex = '-9999';
-            }
-    
             // Make sure host elements are visible
             var hostEl = document.getElementById('txt');
             if (hostEl) {
@@ -1078,6 +1118,9 @@ function hostMessageHandler(ev) {
               action: 'show-host', 
               success: true 
             }, '*');
+            
+            
+            
           } catch (e) {
             console.error('Error showing host:', e);
             iframe.contentWindow.postMessage({ 
@@ -3130,69 +3173,14 @@ function init_command_js() {
         }
         pokeRefresh();
         return;
- 
       case 'user':
         try {
-          // Mirror show-host behavior in reverse but DO NOT resize/position the guest iframe/container.
-          // Hide/disable host UI so it does not visually or interactively cover the guest.
-          var hostEl = document.getElementById('txt') || document.getElementById('qandy') || document.getElementById('host') || document.body;
-          if (hostEl) {
-            try {
-              hostEl.style.pointerEvents = 'none';
-              hostEl.style.visibility = 'hidden';
-              hostEl.style.opacity = '0';
-              hostEl.style.zIndex = '-1';
-            } catch (e) { /* ignore style errors */ }
-          }
-
-          // Hide keyboard container if present (show-host makes it visible; reverse hides it)
-          var kbContainer = document.getElementById('keyboard-container');
-          if (kbContainer) {
-            try {
-              kbContainer.style.display = 'none';
-              kbContainer.style.visibility = 'hidden';
-            } catch (e) { /* ignore */ }
-          }
-
-          // Locate guest iframe robustly but DO NOT change its size/position/style other than focusing.
-          var targetIframe = iframe || window._vmIframe || document.getElementById('guest-iframe') || document.getElementById('vm-iframe') || document.querySelector('iframe');
-
-          // Try to blur the host so focus can move to guest (mirror show-host focus strategy)
-          try {
-            if (document.activeElement && document.activeElement.tagName === 'IFRAME') {
-              try { document.activeElement.blur(); } catch (e) {}
-            }
-            if (hostEl && hostEl.hasAttribute && hostEl.hasAttribute('tabindex')) {
-              try { hostEl.blur && hostEl.blur(); } catch (e) {}
-            }
-          } catch (e) { /* ignore */ }
-
-          // Bring top-level window into focus (may be limited by browser)
-          try { window.focus(); } catch (e) {}
-
-          // Finally focus the guest (element and contentWindow). Do NOT change layout.
-          try { if (targetIframe && typeof targetIframe.focus === 'function') targetIframe.focus(); } catch (e) {}
-          try { if (targetIframe && targetIframe.contentWindow && typeof targetIframe.contentWindow.focus === 'function') targetIframe.contentWindow.focus(); } catch (e) {}
-
-          // Update virtual-host state to 'guest' for consistency with show-host
-          try { if (window.__QANDY_VIRTUALHOST_STATE) window.__QANDY_VIRTUALHOST_STATE.current = 'guest'; } catch (e) {}
-
-          // Notify guest about the result if possible (keeps guest side handlers in sync)
-          try {
-            if (targetIframe && targetIframe.contentWindow && typeof targetIframe.contentWindow.postMessage === 'function') {
-              targetIframe.contentWindow.postMessage({ type: 'action-result', action: 'show-guest', success: true }, '*');
-            }
-          } catch (e) { /* ignore */ }
-
-          print("Guest brought to front\n");
+          window.parent.postMessage({ type: 'guest-action', action: 'show-guest', success: true }, '*');
         } catch (e) {
-          print("Error bringing guest forward: " + String(e) + "\n");
+          print("Error bringing host forward: " + String(e) + "\n");
         }
         pokeRefresh();
-        return;        
-
-
-
+        return;
 
       default:
         // fall through to existing handlers below
