@@ -1019,52 +1019,49 @@ function hostMessageHandler(ev) {
       switch(d.action) {
         case 'show-guest':
           console.log('Guest requested to show guest');
-          var hostEl = document.getElementById('txt');
-          if (hostEl) {
-            hostEl.style.display = 'block';
-            hostEl.style.visibility = 'hidden';
-            hostEl.style.opacity = '1';
-            hostEl.style.pointerEvents = 'auto';
-          }
-     
-          var kbContainer = document.getElementById('keyboard-container');
-          if (kbContainer) {
-            kbContainer.style.display = 'block';
-            kbContainer.style.visibility = 'hidden';
-          }
-    
-          try { hostEl.focus(); } catch (e) {}
-          // Focus the host element for user interaction
           try {
-            // Ensure host element is focusable
-            if (hostEl && !hostEl.hasAttribute('tabindex')) {
-              hostEl.setAttribute('tabindex', '0'); // makes the div focusable
-              // optional: avoid visible focus outline if you don't want it
-              hostEl.style.outline = 'none';
+            // Hide host elements
+            var hostEl = document.getElementById('txt');
+            if (hostEl) {
+              hostEl.style.display = 'none';
+              hostEl.style.visibility = 'hidden';
             }
-            // If an iframe currently has focus, blur it so focus can move to the parent
+
+            var kbContainer = document.getElementById('keyboard-container');
+            if (kbContainer) {
+              kbContainer.style.display = 'none';
+              kbContainer.style.visibility = 'hidden';
+            }
+
+            // Show the guest iframe
+            if (iframe) {
+              iframe.style.display = 'block';
+              iframe.style.visibility = 'visible';
+            }
+
+            // Transfer focus to the guest iframe's content window
             try {
-              if (document.activeElement && document.activeElement.tagName === 'IFRAME') {
-                try { document.activeElement.blur(); } catch (e) {}
-              }
-              // Also explicitly blur the guest iframe reference if we have it
-              if (iframe && typeof iframe.blur === 'function') {
-                try { iframe.blur(); } catch (e) {}
+              if (iframe && iframe.contentWindow) {
+                iframe.contentWindow.focus();
               }
             } catch (e) {}
-            // Bring the top-level window into focus (may be restricted by browser, but try)
-            try { window.focus(); } catch (e) {}
-            // Finally focus the host element
-            try { if (hostEl) hostEl.focus(); } catch (e) {}
+
+            // Notify guest to restore its input and focus
+            iframe.contentWindow.postMessage({
+              type: 'action-result',
+              action: 'show-guest',
+              success: true
+            }, '*');
           } catch (e) {
-            console.error('Error showing host:', e);
-            iframe.contentWindow.postMessage({ 
-              type: 'action-result', 
-              action: 'show-host', 
-              success: false, 
-              error: String(e) 
+            console.error('Error showing guest:', e);
+            iframe.contentWindow.postMessage({
+              type: 'action-result',
+              action: 'show-guest',
+              success: false,
+              error: String(e)
             }, '*');
           }
+          break;
 
         case 'show-host':
           console.log('Guest requested to show host');
@@ -3165,23 +3162,34 @@ function init_command_js() {
         print("RUN=" + RUN + "\n");
         print("Parent is: " + (window.parent === window ? "self" : "parent iframe") + "\n\n");
         return;
+
       case 'root':
-        try {
-          window.parent.postMessage({ type: 'guest-action', action: 'show-host', success: true }, '*');
-        } catch (e) {
-          print("Error bringing host forward: " + String(e) + "\n");
-        }
-        pokeRefresh();
-        return;
-      case 'user':
-        try {
-          window.parent.postMessage({ type: 'guest-action', action: 'show-guest', success: true }, '*');
-        } catch (e) {
-          print("Error bringing host forward: " + String(e) + "\n");
+        if (GUEST) {
+          try {
+            window.parent.postMessage({ type: 'guest-action', action: 'show-host', success: true }, '*');
+          } catch (e) {
+            print("Error bringing host forward: " + String(e) + "\n");
+          }
         }
         pokeRefresh();
         return;
 
+      case 'user':
+        if (HOST) {
+          try {
+            var hostEl = document.getElementById('txt');
+            var iframe = window._vmIframe;
+            if (hostEl) { hostEl.style.display = 'none'; }
+            iframe.style.visibility = 'visible';
+            iframe.contentWindow.focus();
+            iframe.contentWindow.postMessage({ type: 'action-result', action: 'show-guest', success: true }, '*');
+          } catch (e) {
+            print("Error showing guest: " + String(e) + "\n");
+          }
+        }
+        pokeRefresh();
+        return;
+      
       default:
         // fall through to existing handlers below
         break;

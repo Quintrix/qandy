@@ -3180,10 +3180,13 @@ function init_command_js() {
             var hostEl = document.getElementById('txt');
             var iframe = window._vmIframe;
             if (hostEl) { hostEl.style.display = 'none'; }
+            iframe.style.visibility = 'visible';
+            iframe.contentWindow.focus();
+            iframe.contentWindow.postMessage({ type: 'action-result', action: 'show-guest', success: true }, '*');
           } catch (e) {
             print("Error showing guest: " + String(e) + "\n");
           }
-        } 
+        }
         pokeRefresh();
         return;
       
