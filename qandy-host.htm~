@@ -1056,34 +1056,15 @@ function hostMessageHandler(ev) {
             try { window.focus(); } catch (e) {}
             // Finally focus the host element
             try { if (hostEl) hostEl.focus(); } catch (e) {}
-        } catch (e) {
-          console.error('Error showing host:', e);
-          iframe.contentWindow.postMessage({ 
-            type: 'action-result', 
-            action: 'show-host', 
-            success: false, 
-            error: String(e) 
-          }, '*');
-        }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+          } catch (e) {
+            console.error('Error showing host:', e);
+            iframe.contentWindow.postMessage({ 
+              type: 'action-result', 
+              action: 'show-host', 
+              success: false, 
+              error: String(e) 
+            }, '*');
+          }
 
         case 'show-host':
           console.log('Guest requested to show host');
