@@ -1124,18 +1124,7 @@ function isAudioUnlocked() {
               action: 'show-host', 
               success: true 
             }, '*');
-            if (!isAudioUnlocked()) {
-              print("Scripts run as ROOT can access\n");
-              print("global scope, file:///, and\n");
-              print("localStorage.\n\n");
-              print("Only run trusted scripts in\n");
-              print("ROOT mode.\n\n");
-              print("Input \'user\' to exit ROOT mode.\n\n");
-              print("Press Any Key:");
-              window._qandy_pendingRootConfirm = true;
-              confirmSound=1;
-              function unlockAudio() {}
-            }
+            if (!isAudioUnlocked()) { init_sound_js(); }
           } catch (e) {
             console.error('Error showing host:', e);
             iframe.contentWindow.postMessage({ 
@@ -3318,6 +3307,33 @@ RUN="qandy.js";
 
 window.button=function(b, event) {
   pokeCursorOff();
+  // Check if we need to unlock audio on first host keypress
+  if (window._qandy_hostAudioPending) {
+    window._qandy_hostAudioPending = false;  // Clear flag immediately
+    try {
+      // Create and resume audio context on this user gesture
+      if (!window.audioContext) {
+        window.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      // Resume if suspended
+      if (window.audioContext && window.audioContext.state === 'suspended' && 
+          typeof window.audioContext.resume === 'function') {
+        window.audioContext.resume().catch(function(err) {
+          console.warn('Failed to resume audio context:', err);
+        });
+      }
+      // Also try the module's audio context if it exists
+      if (window._qandy_audio && window._qandy_audio.ctx && 
+          typeof window._qandy_audio.ctx.resume === 'function' &&
+          window._qandy_audio.ctx.state === 'suspended') {
+        window._qandy_audio.ctx.resume().catch(function(err) {
+          console.warn('Failed to resume module audio context:', err);
+        });
+      }
+    } catch (e) { 
+      console.warn('Host audio initialization failed:', e);
+    }
+  }
   if (event && typeof event.shiftKey !== 'undefined') shift = !!event.shiftKey;
   if (confirmSound==1) {
     try {
