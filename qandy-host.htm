@@ -1017,18 +1017,58 @@ function hostMessageHandler(ev) {
   if (d.type === 'guest-action' && typeof d.action === 'string') {
     try {
       switch(d.action) {
+        case 'show-guest':
+          console.log('Guest requested to show guest');
+          var hostEl = document.getElementById('txt');
+          if (hostEl) {
+            hostEl.style.display = 'block';
+            hostEl.style.visibility = 'hidden';
+            hostEl.style.opacity = '1';
+            hostEl.style.pointerEvents = 'auto';
+          }
+     
+          var kbContainer = document.getElementById('keyboard-container');
+          if (kbContainer) {
+            kbContainer.style.display = 'block';
+            kbContainer.style.visibility = 'hidden';
+          }
+    
+          try { hostEl.focus(); } catch (e) {}
+          // Focus the host element for user interaction
+          try {
+            // Ensure host element is focusable
+            if (hostEl && !hostEl.hasAttribute('tabindex')) {
+              hostEl.setAttribute('tabindex', '0'); // makes the div focusable
+              // optional: avoid visible focus outline if you don't want it
+              hostEl.style.outline = 'none';
+            }
+            // If an iframe currently has focus, blur it so focus can move to the parent
+            try {
+              if (document.activeElement && document.activeElement.tagName === 'IFRAME') {
+                try { document.activeElement.blur(); } catch (e) {}
+              }
+              // Also explicitly blur the guest iframe reference if we have it
+              if (iframe && typeof iframe.blur === 'function') {
+                try { iframe.blur(); } catch (e) {}
+              }
+            } catch (e) {}
+            // Bring the top-level window into focus (may be restricted by browser, but try)
+            try { window.focus(); } catch (e) {}
+            // Finally focus the host element
+            try { if (hostEl) hostEl.focus(); } catch (e) {}
+          } catch (e) {
+            console.error('Error showing host:', e);
+            iframe.contentWindow.postMessage({ 
+              type: 'action-result', 
+              action: 'show-host', 
+              success: false, 
+              error: String(e) 
+            }, '*');
+          }
+
         case 'show-host':
           console.log('Guest requested to show host');
           try {
-            // Hide the guest iframe
-            if (iframe) {
-              //iframe.style.display = 'none';
-              //iframe.style.visibility = 'hidden';
-              //iframe.style.opacity = '0';
-              //iframe.style.pointerEvents = 'none';
-              //iframe.style.zIndex = '-9999';
-            }
-    
             // Make sure host elements are visible
             var hostEl = document.getElementById('txt');
             if (hostEl) {
@@ -1078,6 +1118,9 @@ function hostMessageHandler(ev) {
               action: 'show-host', 
               success: true 
             }, '*');
+            
+            
+            
           } catch (e) {
             console.error('Error showing host:', e);
             iframe.contentWindow.postMessage({ 
@@ -1088,71 +1131,6 @@ function hostMessageHandler(ev) {
             }, '*');
           }
           break;
-        case 'show-guest':
-          console.log('Guest requested to show guest');
-          try {
-            // Prefer the local iframe variable; fallback to global if set by createGuest
-            var giframe = iframe || window._vmIframe || document.querySelector('iframe');
-            var hostEl = document.getElementById('txt') || document.getElementById('qandy') || document.body;
-            if (!giframe) throw new Error('guest iframe not found');
-            // Hide/disable host UI so it doesn't visually cover the guest
-            if (hostEl) {
-              try {
-                hostEl.style.pointerEvents = 'none';
-                hostEl.style.visibility = 'hidden';
-                hostEl.style.opacity = '0';
-                hostEl.style.zIndex = '-1';
-              } catch (e) { /* ignore style failures */ }
-            }
-            // Position and size the iframe to cover the host area (best effort)
-            //try {
-            //  var rect = hostEl && hostEl.getBoundingClientRect && hostEl.getBoundingClientRect();
-            //  if (!rect || !rect.width || !rect.height) {
-            //    rect = { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
-            //  }
-            //  giframe.style.position = 'fixed';
-            //  giframe.style.left = rect.left + 'px';
-            //  giframe.style.top = rect.top + 'px';
-            //  giframe.style.width = rect.width + 'px';
-            //  giframe.style.height = rect.height + 'px';
-            //} catch (e) {}
-            //// Make sure iframe is visible and interactive
-            //try {        
-            //  giframe.style.display = 'block';
-            //  giframe.style.border = '0';
-            //  giframe.style.visibility = 'visible';
-            //  giframe.style.opacity = '1';
-            //  giframe.style.pointerEvents = 'auto';
-            //  giframe.style.zIndex = '2147483647';
-            //  giframe.style.background = 'transparent';
-            //} catch (e) {}
-        
-    // Try to focus the guest (both element and contentWindow)
-    try { giframe.focus && giframe.focus(); } catch (e) {}
-    try { giframe.contentWindow && giframe.contentWindow.focus && giframe.contentWindow.focus(); } catch (e) {}
-
-    // update virtual host state if present
-    try { if (window.__QANDY_VIRTUALHOST_STATE) window.__QANDY_VIRTUALHOST_STATE.current = 'guest'; } catch (e) {}
-
-    // reply to the guest that the action succeeded
-    try {
-      var target = (giframe.contentWindow || (iframe && iframe.contentWindow) || window);
-      target.postMessage({ type: 'action-result', action: 'show-guest', success: true }, '*');
-    } catch (e) {}
-  } catch (e) {
-    console.error('Error showing guest:', e);
-    try {
-      (iframe && iframe.contentWindow || window).postMessage({
-        type: 'action-result',
-        action: 'show-guest',
-        success: false,
-        error: String(e)
-      }, '*');
-    } catch (e2) {}
-  }
-  break;
-  
-  
       }
     } catch (e) {
       console.error('Error handling guest action:', e);
@@ -3197,36 +3175,13 @@ function init_command_js() {
         return;
       case 'user':
         try {
-          if (typeof virtualHost === 'function') {
-            virtualHost(0); // show guest
-            print("Guest brought to front\n");
-          } else {
-            var vm = document.getElementById('vm-container');
-            var iframe = vm ? vm.querySelector('iframe') : (document.getElementById('vm-iframe') || document.querySelector('iframe'));
-            if (vm) {
-              vm.style.setProperty('position','fixed','important');
-              // position vm over host if possible
-              var hostEl = document.getElementById('qandy') || document.getElementById('txt') || document.body;
-               try {
-                var rect = hostEl.getBoundingClientRect();
-                vm.style.setProperty('left', rect.left + 'px', 'important');
-                vm.style.setProperty('top', rect.top + 'px', 'important');
-                vm.style.setProperty('width', rect.width + 'px', 'important');
-                vm.style.setProperty('height', rect.height + 'px', 'important');
-              } catch(e){}
-              vm.style.setProperty('z-index','2147483647','important');
-              vm.style.setProperty('pointer-events','auto','important');
-            } else if (iframe) {
-              iframe.style.setProperty('z-index','2147483647','important');
-              iframe.style.setProperty('pointer-events','auto','important');
-            }
-             print("Guest brought to front (fallback)\n");
-          }
+          window.parent.postMessage({ type: 'guest-action', action: 'show-guest', success: true }, '*');
         } catch (e) {
-          print("Error bringing guest forward: " + String(e) + "\n");
+          print("Error bringing host forward: " + String(e) + "\n");
         }
         pokeRefresh();
         return;
+
       default:
         // fall through to existing handlers below
         break;
@@ -4026,19 +3981,14 @@ pokeCursorOn(); pokeRefresh();
 //
 
 if (GUEST) {
+  // guest system ready
   var CURBAUD=9600; // baud rate to display text
-  print("\n[cyan]Qandy Pocket\nComputer v1.j\n\n[yellow]Prototype Release\n\n[white]\nQ:");
-  //(async function(){
-  //  if (await dosExists('autoexec.js')) {
-  //    const txt = await dosLoad('autoexec.js');
-  //    if (txt !== null) hostScript(txt);    
-  //  }
-  //})();
-  // guest system ready 
+  print("\n[cyan]Qandy Pocket\nComputer v1.j\n\n[yellow]Qandy Guest User\n[white]\n");
+
 } else {
   // host system ready
   var CURBAUD=115200; // baud rate to display text
-  print("\nroot:");
+  print("\n[cyan]Qandy Pocket\nComputer v1.j\n\n[yellow]Qandy Root Access\n[white]\n");
 }
 
 //mySearch=location.search.substr(1).split("&")
