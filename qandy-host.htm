@@ -2847,6 +2847,7 @@ function init_keyboard_js() {
       el.innerHTML = (label === ' ' && base === ' ') ? 'SPACE' : label;
     });
   }
+  window.updateKeyLabels = updateKeyLabels;
 
   // Create a mapping from keyCode to element ID for quick lookup
   window.keyCodeToId = {};
@@ -3133,12 +3134,43 @@ function init_keyboard_js() {
 
 })(window);
 
+ if (typeof updateKeyLabels === 'function') {
+  // Replace local references inside updateKeyLabels with window.* as needed.
+  // If you can't edit the body in-place, export a wrapper that ensures window-safety:
+  var _updateKeyLabels = updateKeyLabels;
+  window.updateKeyLabels = function() {
+    // Normalize modifier values from window (avoid referencing undeclared locals)
+    window.altActive = !!window.alt || !!window.altPhysical;
+    window.shiftActive = !!window.shift;
+    window.capsActive = !!window.caps;
+    // Call the original implementation (which will now see window.* variables)
+    try { return _updateKeyLabels(); } catch (e) { /* fall through */ }
+  };
+ } else {
+  // fallback no-op to avoid undefined errors
+  window.updateKeyLabels = function() {};
+ }
+
+ // Export highlight/unhighlight and internal maps/timeouts so host code can call them
+ if (typeof highlightKey === 'function') window.highlightKey = highlightKey;
+ if (typeof unhighlightKey === 'function') window.unhighlightKey = unhighlightKey;
+
+ // Ensure the keyCode map and timeout store are reachable from outside the closure
+ if (typeof keyCodeToId !== 'undefined') window.keyCodeToId = keyCodeToId;
+ if (typeof keyTimeouts !== 'undefined') window.keyTimeouts = keyTimeouts;
+
+ // Also export keyboardData and key maps if needed elsewhere
+ if (typeof keyboardData !== 'undefined') window.keyboardData = keyboardData;
+ if (typeof normalKeys !== 'undefined') window.normalKeys = normalKeys;
+ if (typeof shiftedKeys !== 'undefined') window.shiftedKeys = shiftedKeys;
+ if (typeof altKeys !== 'undefined') window.altKeys = altKeys;
+ if (typeof altShiftKeys !== 'undefined') window.altShiftKeys = altShiftKeys;
+
  // Signal that keyboard.js is ready
  if (typeof window.qandySignalReady === 'function') {
   window.qandySignalReady('keyboard.js');
  }
 }
-
 
 //
 // command.js (modified)
