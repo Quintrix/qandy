@@ -334,7 +334,7 @@ var historyIndex = -1;    // Current position in history (-1 = not browsing, typ
 var maxHistorySize = 50;  // Maximum number of commands to remember
 var tempCommand = "";     // Temporary storage for command being typed when browsing history
 
-var CURSOR=4; // cursor type 0=off, 1=line, 3=blink line, 4=block, 5=blink block  
+var CURSOR=5; // cursor type 0=off, 1=line, 3=blink line, 4=block, 5=blink block  
 var CURX = 0;    // cursor x
 var CURY = 0;    // cursor y
 var CURP = 0;    // cursor p 
@@ -342,8 +342,8 @@ var CURP = 0;    // cursor p
 var CURANSI=true;   // cursor text ANSI on
 var CURFG=37;       // cursor text fg color white
 var CURBG=40;       // cursor text bg color black
-var CURATTR=0;      // cursor text attr 
-var CURBAUD=0;      // baud rate to display text
+var CURATTR=0;;     // cursor text attr 
+var CURBAUD=115200; // baud rate to display text
 
 // video.js
 var W=32; // screen width
@@ -446,7 +446,6 @@ var alt=0;   // alt key pressed
 var ctrlPhysical=false;  // track if ctrl was activated by physical keyboard
 var altPhysical=false;   // track if alt was activated by physical keyboard
 var keyboard=1; // turn keyboard input on/off
-var confirmSound=0; // used to activate host sound on first root 
 
 var LINE ="";  // input line
 var LINEX=0;   // start of input cursor x
@@ -1013,24 +1012,8 @@ function hostMessageHandler(ev) {
       iframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: null, error: String(e) }, '*');
     }
   }
-
-
-function isAudioUnlocked() {
-  try {
-    // Primary flag we set in the unlock helper
-    if (window._qandy_audio && window._qandy_audio.unlocked) return true;
-    // Check AudioContext state(s) if present
-    var ctx = (window._qandy_audio && window._qandy_audio.ctx) || window.audioContext || null;
-    if (ctx && ctx.state === 'running') return true;
-    // Fallback: some pages put audio context elsewhere
-    if (window.audioCtx && window.audioCtx.state === 'running') return true;
-  } catch (e) {
-    // ignore errors and treat as locked
-  }
-  return false;
-}
-
- 
+  
+  // NEW: Handle guest request to show/hide host
   if (d.type === 'guest-action' && typeof d.action === 'string') {
     try {
       switch(d.action) {
@@ -1108,23 +1091,33 @@ function isAudioUnlocked() {
                 // optional: avoid visible focus outline if you don't want it
                 hostEl.style.outline = 'none';
               }
+
               // If an iframe currently has focus, blur it so focus can move to the parent
               try {
-                if (document.activeElement && document.activeElement.tagName === 'IFRAME') { try { document.activeElement.blur(); } catch (e) {} }
+                if (document.activeElement && document.activeElement.tagName === 'IFRAME') {
+                  try { document.activeElement.blur(); } catch (e) {}
+                }
                 // Also explicitly blur the guest iframe reference if we have it
-                if (iframe && typeof iframe.blur === 'function') { try { iframe.blur(); } catch (e) {}}
+                if (iframe && typeof iframe.blur === 'function') {
+                  try { iframe.blur(); } catch (e) {}
+                }
               } catch (e) {}
+
               // Bring the top-level window into focus (may be restricted by browser, but try)
               try { window.focus(); } catch (e) {}
+
               // Finally focus the host element
               try { if (hostEl) hostEl.focus(); } catch (e) {}
             } catch (e) {}            
+    
             iframe.contentWindow.postMessage({ 
               type: 'action-result', 
               action: 'show-host', 
               success: true 
             }, '*');
-            if (!isAudioUnlocked()) { init_sound_js(); }
+            
+            
+            
           } catch (e) {
             console.error('Error showing host:', e);
             iframe.contentWindow.postMessage({ 
@@ -3307,47 +3300,7 @@ RUN="qandy.js";
 
 window.button=function(b, event) {
   pokeCursorOff();
-  // Check if we need to unlock audio on first host keypress
-  if (window._qandy_hostAudioPending) {
-    window._qandy_hostAudioPending = false;  // Clear flag immediately
-    try {
-      // Create and resume audio context on this user gesture
-      if (!window.audioContext) {
-        window.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      }
-      // Resume if suspended
-      if (window.audioContext && window.audioContext.state === 'suspended' && 
-          typeof window.audioContext.resume === 'function') {
-        window.audioContext.resume().catch(function(err) {
-          console.warn('Failed to resume audio context:', err);
-        });
-      }
-      // Also try the module's audio context if it exists
-      if (window._qandy_audio && window._qandy_audio.ctx && 
-          typeof window._qandy_audio.ctx.resume === 'function' &&
-          window._qandy_audio.ctx.state === 'suspended') {
-        window._qandy_audio.ctx.resume().catch(function(err) {
-          console.warn('Failed to resume module audio context:', err);
-        });
-      }
-    } catch (e) { 
-      console.warn('Host audio initialization failed:', e);
-    }
-  }
   if (event && typeof event.shiftKey !== 'undefined') shift = !!event.shiftKey;
-  if (confirmSound==1) {
-    try {
-    // Try to resume the existing audio context if it's suspended
-    if (window.audioContext && typeof window.audioContext.resume === 'function') {
-    window.audioContext.resume().catch(function(){});
-    }
-    // Also try the module's audio context if exposed
-    if (window._qandy_audio && window._qandy_audio.ctx && 
-    typeof window._qandy_audio.ctx.resume === 'function') {
-    window._qandy_audio.ctx.resume().catch(function(){});
-    }
-    } catch (e) { conoloe.info("<host> audio init failed"); }
-  }
   var k = "", l = "";
   if (b===32) { event.preventDefault(); }
   switch (b) {
@@ -3629,7 +3582,6 @@ window.button=function(b, event) {
           }
         } else if (k === "enter") {
           event.preventDefault();
-          if (window.QandyKeyboard && QandyKeyboard.handleEnter()) { return; }
           if (window.QandyKeyboard && QandyKeyboard.handleEnter()) { return; }
           if (SSTART>-1) { pokeSelect(false); SSTART = -1; SEND = -1; }
           if (LINE !== undefined) {
@@ -4041,12 +3993,12 @@ pokeCursorOn(); pokeRefresh();
 
 if (GUEST) {
   // guest system ready
-  var CURBAUD=2400; // baud rate to display text
+  var CURBAUD=9600; // baud rate to display text
   print("\n[cyan]Qandy Pocket\nComputer v1.j\n\n[yellow]Qandy Guest User\n[white]\n");
 
 } else {
   // host system ready
-  var CURBAUD=9600; // baud rate to display text
+  var CURBAUD=115200; // baud rate to display text
   print("\n[cyan]Qandy Pocket\nComputer v1.j\n\n[yellow]Qandy Root Access\n[white]\n");
 }
 
