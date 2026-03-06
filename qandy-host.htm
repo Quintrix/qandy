@@ -2847,6 +2847,7 @@ function init_keyboard_js() {
       el.innerHTML = (label === ' ' && base === ' ') ? 'SPACE' : label;
     });
   }
+  window.updateKeyLabels = updateKeyLabels;
 
   // Create a mapping from keyCode to element ID for quick lookup
   window.keyCodeToId = {};

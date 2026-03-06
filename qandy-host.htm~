@@ -1124,7 +1124,7 @@ function isAudioUnlocked() {
               action: 'show-host', 
               success: true 
             }, '*');
-            if (!isAudioUnlocked()) { init_sound_js(); alert("here"); }
+            if (!isAudioUnlocked()) { init_sound_js(); }
           } catch (e) {
             console.error('Error showing host:', e);
             iframe.contentWindow.postMessage({ 
