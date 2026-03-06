@@ -3993,12 +3993,12 @@ pokeCursorOn(); pokeRefresh();
 
 if (GUEST) {
   // guest system ready
-  var CURBAUD=2400; // baud rate to display text
+  var CURBAUD=9600; // baud rate to display text
   print("\n[cyan]Qandy Pocket\nComputer v1.j\n\n[yellow]Qandy Guest User\n[white]\n");
 
 } else {
   // host system ready
-  var CURBAUD=9600; // baud rate to display text
+  var CURBAUD=115200; // baud rate to display text
   print("\n[cyan]Qandy Pocket\nComputer v1.j\n\n[yellow]Qandy Root Access\n[white]\n");
 }
 
