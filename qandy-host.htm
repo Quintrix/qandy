@@ -446,6 +446,7 @@ var alt=0;   // alt key pressed
 var ctrlPhysical=false;  // track if ctrl was activated by physical keyboard
 var altPhysical=false;   // track if alt was activated by physical keyboard
 var keyboard=1; // turn keyboard input on/off
+var confirmSound=0; // used to activate host sound on first root 
 
 var LINE ="";  // input line
 var LINEX=0;   // start of input cursor x
@@ -1132,8 +1133,9 @@ function isAudioUnlocked() {
               print("Input \'user\' to exit ROOT mode.\n\n");
               print("Press Any Key:");
               window._qandy_pendingRootConfirm = true;
-              return; 
-            }            
+              confirmSound=1;
+              function unlockAudio() {}
+            }
           } catch (e) {
             console.error('Error showing host:', e);
             iframe.contentWindow.postMessage({ 
@@ -3317,6 +3319,19 @@ RUN="qandy.js";
 window.button=function(b, event) {
   pokeCursorOff();
   if (event && typeof event.shiftKey !== 'undefined') shift = !!event.shiftKey;
+  if (confirmSound==1) {
+    try {
+    // Try to resume the existing audio context if it's suspended
+    if (window.audioContext && typeof window.audioContext.resume === 'function') {
+    window.audioContext.resume().catch(function(){});
+    }
+    // Also try the module's audio context if exposed
+    if (window._qandy_audio && window._qandy_audio.ctx && 
+    typeof window._qandy_audio.ctx.resume === 'function') {
+    window._qandy_audio.ctx.resume().catch(function(){});
+    }
+    } catch (e) { conoloe.info("<host> audio init failed"); }
+  }
   var k = "", l = "";
   if (b===32) { event.preventDefault(); }
   switch (b) {

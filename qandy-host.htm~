@@ -1132,8 +1132,9 @@ function isAudioUnlocked() {
               print("Input \'user\' to exit ROOT mode.\n\n");
               print("Press Any Key:");
               window._qandy_pendingRootConfirm = true;
-              return; 
-            }            
+              function unlockAudio() {
+              }
+            }
           } catch (e) {
             console.error('Error showing host:', e);
             iframe.contentWindow.postMessage({ 
