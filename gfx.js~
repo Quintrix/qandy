@@ -1,9 +1,4 @@
 
-//
-// script needs to create this div
-// <div id="pop" class="pop" onMouseOver='PopUpVis="visible";' onMouseOut='PopUpVis=PForce; PUV=setTimeout("document.getElementById(\"pop\").style.visibility=PopUpVis;",100);'></div>
-//
-
 function tiles() {
   let topOffset = 50;   // historic layout: top = 50 + y*32
   let leftOffset = 54;  // historic layout: left = 54 + x*32
