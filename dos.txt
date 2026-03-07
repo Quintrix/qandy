@@ -1,9 +1,21 @@
 
-We are going to re-write the dos.js script, there are no functions using the existing code so nothing needs to be "backwards compatiable", everything in this script is a fresh start. Ignore previous versions of dos.js, let us re-write this script from the ground up to avoid costly bugs and incompatibilities with previous code.
+We are going to re-write the dos.js script, there are no functions using this existing code so nothing needs to be "backwards compatiable", everything in this script is a fresh start. Ignore previous versions of dos.js so there is no need to preserve ang legacy code. 
 
-The variables DEVICE= and DOS= have been removed from the qandy8.htm global declarations and are now to be considered local variables. 
+This script is for <host> disk operations that has global scope with access to file:/// and localStorage.  
 
-I want to remove the "harddrive" and "server" devices along with any routines that use them as it has been decided they are a security threat. Replace them with a "rs232" device which will up the browser's "upload" and "download" functions to save and load files to and from the qandy and the user's harddrive.
+The manifest should be renamed to "dir.txt" and only needs to keep track of filename and filesize.  
+This file can exist on any "device", ie: file:/// and localStorage. The only file attributes this dir.txt file needs to keep track of is the filename, filesize, and timestamp.
+
+Filename should include the extension (.js .txt .prg etc) to determine if it is executable. If the first letter of a filename is an explaination mark (!) it is considered "important" and therefore read-only. The ! is optional in the user input for filename, so !piano.prg is the same as piano.prg. To delete such a file, the user must first rename it to remove the write-protection.
+
+Filesize should be number of bytes, the display routines can convert it to human-readable format. Timestamp should be yyyymmddhhmmss format (first mm month second mm minute). This would be an exmaple dir.txt file that could be included in the same directory as qandy-host.htm:
+ 
+!qandy.js|30231|20260301021149
+video.txt|210000|20260301021149
+ascii.prg|12400|20260301021149
+notes.txt|1234|20260301021149
+
+I want to add "file" for file:/// to the list of supported devices, this should be the new default device so a user's first experience with the Qandy will be the pre-installed default scripts and programs that us developers include in the deployment (ie: piano.prg).   
 
 This is the dos.txt file which contains the instructions for the user, please use the same variable names as in the instructions so the instructions are not just for the end user, but for future programmers as well. 
 
@@ -14,33 +26,61 @@ This is the dos.txt file which contains the instructions for the user, please us
                        Disk Operating System
 
 
-             DOS="name" — set to true after user confirms DOS installation, all DOS
-                          functions should be inside "if (DOS) {}" checks    
+         DOS=true/false — set to true if DOS is enabled, all DOS functions should
+                          be inside "if (DOS) {}" checks    
 
-       dosMount(device) — sets the active device to access, default "local" for localStorage
+       dosMount(device) — sets the active device to access, default "file" for file:///
       
           DEVICE="name" — local var for active device
       
         dosBackup(data) — formats active device with JSON strong, if data is omitted
                           returns JSON string with contents of device for backup
      
-              dosList() — returns string with list of files separated by new lines
+              dosList() — returns string with list of filenames separated by new lines
+              
+              dosDir(h) — returns string with list of filenames, filesizes, and
+                          timestamps. h is for "human readable", if set to 0 raw
+                          filesizes and timestamps are used, but if set to 1 it
+                          displays sizes as 1b 1k 1m (bytes, kilobytes, megabytes)
+                          and timestamps are formated mm/dd/yyyy hh:mm:ss. The h=1
+                          can be formated with space indents, ie:
+
+                          video.txt 21k
+                            03-01-2026 02:11:49
+                          ascii.prg 12m
+                            03-01-2026 02:11:49
+
+                          and h=0 can be formated the same way:
+
+                          video.txt 210000
+                            20260301021149
+                          ascii.prg 12400
+                            20260301021149
+
+          
                       
      dosSave(file,data) — saves var data as filename to active device, if filename
-                          begins with > (">filename") append data to existing file
+                          begins with > (">filename") append data to existing file,
+                          do not allow append on filenames that start with ! in the
+                          dir.txt for write-protect mode. Do not allow the dir.txt
+                          file to be saved, it is write-protect by detault.
 
-          dosLoad(file) — returns contents of filename from active device as string
-
+          dosLoad(file) — returns contents of filename from active device as string,
+                          if file is dir.txt return contents of formated directory
+                          via dosDir(1)
+                          
     dosCopy(file, dest) — copies file into clipboard for dosPaste command, 
                           if dest is provided it also copies the file into
                           the dest file, returns error if dest already exists
                           
-         dosPaste(dest) — pastes the clipboard contents into dest, returns
-                          error if dest already exists
+         dosPaste(dest) — pastes the clipboard contents into dest, will append
+                          the data to existing dest if dest starts with ">" character,
+                          otherwise returns error if file already exists.
 
   dosRename(file, dest) — renames file to dest 
 
-          dosType(file) — print() file to display screen
+          dosType(file) — print() file to display screen, if file is dir.txt
+                          then print the results of dosDir(0)
             
         dosDelete(file) — deletes filename from active device 
 
@@ -54,9 +94,10 @@ This is the dos.txt file which contains the instructions for the user, please us
                           character), parentheses, plus, and equals: -_.()+= 
                        
                    data — plain UTF‑8 text, use base64 for binary data, dos.js
-                          returns whole file content as a single text string.
+               
+                                     returns whole file content as a single text string.
                        
-                 device — harddrive, server, file, url, local, echo, or none.
+                 device — file, local, echo, or none.
                  
 
 

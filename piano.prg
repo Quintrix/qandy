@@ -47,12 +47,13 @@ function drawPiano() {
   
   // Compact piano keyboard (32 chars max)
 
-  keyWht=("  [down][left][left]  [down][left][left]  [down][left][left]  [down][left][left]  [down][left][left]  ");
-  keyBlk=("▌ ▐[down][left][left][left]▌ ▐[down][left][left][left]▌ ▐");  
+  keyWht="  [down][left][left]  [down][left][left]  "
+  keyBlk="▌ ▐[down][left][left][left]▌ ▐[down][left][left][left]▌ ▐";  
   
      
   
   pokeCursorOff();
+   print("[white][-black]");
    print("\033[7;5H[-white]"+keyWht+"[-black]");
    print("\033[7;8H[-white]"+keyWht+"[-black]");
   print("\033[7;11H[-white]"+keyWht+"[-black]");
@@ -61,35 +62,30 @@ function drawPiano() {
   print("\033[7;20H[-white]"+keyWht+"[-black]");
   print("\033[7;23H[-white]"+keyWht+"[-black]");
   print("\033[7;26H[-white]"+keyWht+"[-black]");
-  
-   print("[white][-black]");
+
+  // this section of keyboard can be updated
+  // to highlight current key(s) being played
    print("\033[7;6H[-black]"+keyBlk+"[-black]");
   print("\033[7;9H[-black]"+keyBlk+"[-black]");
   print("\033[7;15H[-black]"+keyBlk+"[-black]");
   print("\033[7;18H[-black]"+keyBlk+"[-black]");
   print("\033[7;21H[-black]"+keyBlk+"[-black]");
 
-  print("[cyan]\033[14;5H[white]C  D  E  F   G  A  B  C\n\n");
+   print("\033[10;5H[-white]"+keyWht+"[-black]");
+   print("\033[10;8H[-white]"+keyWht+"[-black]");
+  print("\033[10;11H[-white]"+keyWht+"[-black]");
+  print("\033[10;14H[-white]"+keyWht+"[-black]");
+  print("\033[10;17H[-white]"+keyWht+"[-black]");
+  print("\033[10;20H[-white]"+keyWht+"[-black]");
+  print("\033[10;23H[-white]"+keyWht+"[-black]");
+  print("\033[10;26H[-white]"+keyWht+"[-black]");
+
+  print("\033[14;5H[cyan]C  D  E  F   G  A  B  C\n\n");
   
-  
-   
-  
-  //print("\n");
-  //print("\x1b[1;33mKeys:\x1b[0m White:\x1b[37mA-K\x1b[0m Black:\x1b[37mWETYU\x1b[0m\n");
-  //print("\x1b[1;33mESC:\x1b[0m Quit\n");
-  //print("\n");
-  //print("\x1b[1;33mSongs:\x1b[0m\n");
-  //print(" \x1b[32mplayScale()\x1b[0m\n");
-  //print(" \x1b[32mplayTwinkleTwinkle()\x1b[0m\n");
-  //print(" \x1b[32mplayMaryHadALamb()\x1b[0m\n");
-  //print(" \x1b[32mplayHappyBirthday()\x1b[0m\n");
-  //print("\n");
-  //print("Now playing:\n"); // Placeholder for note display
 }
 
-// Key press handler for piano keys
-function pianoKeyHandler(key) {
-  // Note: ESC key is handled universally by qandy2.htm
+function keydown(key) {
+  // Note: ESC key is handled universally by qandy-host.htm
   // It will terminate the script and return to OS automatically
   
   // Convert to lowercase for comparison
@@ -106,21 +102,6 @@ function pianoKeyHandler(key) {
       updateNowPlayingDisplay();
     }
     
-    return true;
-  }
-  
-  return false;
-}
-
-// Key release handler for piano keys
-function pianoKeyUpHandler(key) {
-  // Convert to lowercase for comparison
-  var keyLower = key.toLowerCase();
-  
-  // Check if this key was a piano key
-  if (pianoKeyMap[keyLower] && pressedKeys[keyLower]) {
-    delete pressedKeys[keyLower];
-    updateNowPlayingDisplay();
     return true;
   }
   
@@ -155,6 +136,7 @@ function updateNowPlayingDisplay() {
     print("\x1b[1;35m♫ Chord: " + keysList.join('+') + " → " + notesList.join('+') + "\x1b[0m");
   }
 }
+function updateNowPlayingDisplay() {}
 
 // Example songs using the music API
 
@@ -237,45 +219,18 @@ function playChordProgression() {
   setTimeout(function() { playCMajorChord(); }, 2400);
 }
 
-// Override the keydown function to handle piano keys
-var originalKeydown = typeof keydown !== 'undefined' ? keydown : null;
-
 function keydown(key) {
-  // Try to handle as piano key first
-  if (pianoKeyHandler(key)) {
-    return;
+  var keyLower = key.toLowerCase();
+  if (pianoKeyMap[keyLower] && pressedKeys[keyLower]) {
+    delete pressedKeys[keyLower];
+    updateNowPlayingDisplay();
+    return true;
   }
-  
-  // Otherwise, call original keydown if it exists
-  if (originalKeydown) {
-    originalKeydown(key);
-  }
-}
-
-// Override the keyup function to handle piano key releases
-var originalKeyup = typeof keyup !== 'undefined' ? keyup : null;
-
-function keyup(key) {
-  // Try to handle as piano key first
-  if (pianoKeyUpHandler(key)) {
-    return;
-  }
-  
-  // Otherwise, call original keyup if it exists
-  if (originalKeyup) {
-    originalKeyup(key);
-  }
+  return false;
 }
 
 // Function to initialize the piano display
-initializePiano = function() {
-  drawPiano();
-  // Don't print extra messages that would cause scrolling
-  // The piano keyboard display already shows all needed information
-};
-
-// If sound.js is already loaded, initialize immediately
-// Otherwise, initialization happens in the onload callback above
+initializePiano = function() { drawPiano(); };
 if (typeof beep !== 'undefined' && typeof playNote !== 'undefined') {
   initializePiano();
 }

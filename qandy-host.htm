@@ -3282,25 +3282,28 @@ function init_command_js() {
   } else {
     // system commands
     print("\n");
-
     // Normalize command
-    var trimmedCmd = String(cmd || '').trim();
-
-    switch (trimmedCmd.toLowerCase()) {
-      case 'whoami':  // NEW: Debug command
+    var cmd=String(cmd || '').trim();
+    switch (cmd) {
+      case 'cls':
+        SYNC=0; pokeCursorOff();
+        pokeText(0,0," ",800); pokeColor(0,0,CURFG, CURBG, 800); pokeAttr(0,0,0, 800);
+        CURX=0; CURY=0; LINEX=0; LINEY=0;
+        SYNC=1; pokeRefresh;
+        pokeCursorOn();
+      case 'whoami':
         var context = HOST ? "HOST (root access)" : "GUEST (user sandbox)";
         print("\nContext: " + context + "\n");
         print("Window URL: " + window.location.href + "\n");
         print("Has file:// access: " + (typeof document.createElement('script').onerror === 'function' ? "yes" : "maybe") + "\n");
         print("localStorage accessible: " + (typeof localStorage !== 'undefined' ? "yes" : "no") + "\n\n");
         return;
-      case 'hostname':  // NEW: Show full context info
+      case 'hostname':
         print("\nHOST=" + HOST + "\n");
         print("GUEST=" + GUEST + "\n");
         print("RUN=" + RUN + "\n");
         print("Parent is: " + (window.parent === window ? "self" : "parent iframe") + "\n\n");
         return;
-
       case 'root':
         if (GUEST) {
           try {
@@ -3311,7 +3314,6 @@ function init_command_js() {
         }
         pokeRefresh();
         return;
-
       case 'user':
         if (HOST) {
           try {
@@ -3350,23 +3352,17 @@ function init_command_js() {
                 guestKb.style.zIndex = String(Math.max(parseInt(guestKb.style.zIndex || 0,10) || (vmZ + 1), vmZ + 1));
               } catch (e) {}
             }
-
             if (hostEl) { hostEl.style.pointerEvents = 'none'; }
             if (hostKb) { hostKb.style.pointerEvents = 'none'; hostKb.style.visibility = 'hidden'; }
-
-
             try {
               if (iframe) {
                 iframe.setAttribute && iframe.setAttribute('tabindex', '0'); // make focusable
                 try { iframe.focus(); } catch (e) { console.warn('iframe.focus failed', e); }
-                // If same-origin, try to focus the contentWindow as well
                 try { if (iframe.contentWindow && typeof iframe.contentWindow.focus === 'function') iframe.contentWindow.focus(); } catch (e) { console.warn('iframe.contentWindow.focus failed', e); }
-                // Also try to focus the guest document body (if accessible)
                 try { 
                   var doc = iframe.contentDocument || (iframe.contentWindow && iframe.contentWindow.document);
                   if (doc && doc.body && typeof doc.body.focus === 'function') doc.body.focus();
                 } catch (e) { /* cross-origin or not accessible; ignore */ }
-                // Some browsers need a short delay to accept keyboard focus after layout changes
                 setTimeout(function() {
                   try { iframe.focus(); } catch (e) {}
                   try { if (iframe.contentWindow && typeof iframe.contentWindow.focus === 'function') iframe.contentWindow.focus(); } catch (e) {}
@@ -3375,13 +3371,6 @@ function init_command_js() {
             } catch (errFocus) {
               console.warn('focus restore attempted but failed', errFocus);
             }
-
-            //if (guestKb) { guestKb.style.display = 'block'; guestKb.style.visibility = 'visible'; guestKb.style.pointerEvents = 'auto'; guestKb.style.zIndex = String((parseInt(iframe && iframe.style.zIndex,10) || 1001) + 1); }
-            //try { if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur(); } catch (e) {}
-            //try { iframe && iframe.setAttribute && iframe.setAttribute('tabindex','-1'); } catch(e){}
-            //try { if (iframe && typeof iframe.focus === 'function') iframe.focus(); } catch(e){ console.warn('iframe.focus failed', e); }
-            // Best-effort: also call contentWindow.focus() if accessible (same-origin)
-            //try { if (iframe && iframe.contentWindow && typeof iframe.contentWindow.focus === 'function') iframe.contentWindow.focus(); } catch(e) { /* ignore cross-origin */ }
             console.log('Attempted to focus guest iframe; activeElement is:', document.activeElement);
           } catch (err) {
             console.error('focusGuestIframe failed', err);
@@ -3396,33 +3385,35 @@ function init_command_js() {
     }
 
     // existing .js loader
-    if (trimmedCmd.slice(-3) === ".js") {
+    if (cmd.slice(-3) === ".js") {
       //keysoff();
-      var scriptName = String(trimmedCmd || '').trim();
+      var scriptName = String(cmd || '').trim();
       const prg=document.createElement('script');
-      prg.src=trimmedCmd;
+      prg.src=cmd;
       prg.onload = {  }
       prg.onerror=() => { print("Error loading program\n"); keyon = 1; }
       document.head.appendChild(prg);
       line="";
-    } else if (trimmedCmd.substr(0,3) === "cls") {
-       SYNC=0;   
-       pokeCursorOff();
-       pokeText(0,0," ",800);
-       pokeColor(0,0,CURFG, CURBG, 800);
-       pokeAttr(0,0,0, 800);
-       CURX=0; CURY=0; LINEX=0; LINEY=0;
-       SYNC=1;
-       pokeRefresh;
-       pokeCursorOn();
     } else {
-      evalCode(cmd);
-      pokeCursorOn();
-      LINE=""; CURP = 0;
-      LINEX = CURX; LINEY = CURY;
-      return;
+      if (cmd.slice(-4) === ".prg") {
+        //keysoff();
+        var scriptName = String(cmd || '').trim();
+        var scriptName = scriptName.substring(0,-4)+".prg"; 
+        const prg=document.createElement('script');
+        prg.src=cmd;
+        prg.onload = {  }
+        prg.onerror=() => { print("Error loading program\n"); keyon = 1; }
+        document.head.appendChild(prg);
+        line="";
+      } else {
+        evalCode(cmd);
+        pokeCursorOn();
+        LINE=""; CURP = 0;
+        LINEX = CURX; LINEY = CURY;
+        return;
+      }
+      pokeRefresh();
     }
-    pokeRefresh();
   }
 }
 

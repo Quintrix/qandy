@@ -9,7 +9,6 @@
  * - all public DOS functions check DOS === true before acting
  *
  * Public functions (global):
- *  dosConfirm()
  *  dosMount(device)
  *  dosBackup(data)
  *  dosList()
@@ -196,23 +195,6 @@
     return true;
   }
 
-  // Public API --------------------------------------------------------
-
-  // Note: instructions asked for dosConfirm(); use this exact name.
-  function dosConfirm() {
-    if (DOS) {
-      print('DOS already confirmed.\n');
-      return true;
-    }
-    DOS = true;
-    // Ensure manifest loaded for device local
-    if (_deviceIsLocal()) _loadManifest();
-    print('\nQandy DOS installed. Use dosMount(device) to change storage device (local, echo, none).\n');
-    print('Available commands: dosBackup, dosList, dosSave, dosLoad, dosCopy, dosPaste,\n');
-    print('                    dosRename, dosType, dosDelete, dosExists, dosErase\n\n');
-    return true;
-  }
-
   function dosMount(device) {
     if (!_ensureDOS()) return null;
     if (typeof device === 'undefined' || device === null || String(device).trim() === '') {
@@ -360,7 +342,7 @@
       _loadManifest();
       // build manifest text "size filename\n"
       var lines = (_manifest || []).map(function (it) { return String(it.size) + ' ' + it.name; });
-      return lines.join('\n');
+      return lines.join(Because the guest is sandboxed, the host must serialize DOM events (KeyboardEvent) into a plain object with chosen fields; the guest can reconstruct a "fake" event object or accept the plain object.'\n');
     }
     if (_deviceIsLocal()) {
       var val = localStorage.getItem(LOCAL_PREFIX + v.name);
@@ -518,11 +500,6 @@
   window.dosExists = dosExists;
   window.dosErase = dosErase;
 
-  // Initial printed notice (must instruct dosConfirm() per your requirement)
-  print("\nQandy Disk Operating System:\n");
-  print("\nThese functions save and load files to your brower's localStorage.\n");
-  print("\nDo not use Qandy DOS to store sensitive information such as names and passwords.\n");
-  print("\nThe Qandy Pocket Computer's security is limited to your browser's security, we do the best we can with what we have to work with.\n");
-  print("\nTo complete installation, input:\n  dosConfirm()\n\n");
+  print("\nQandy DOS Installed\n");
 
 }());
