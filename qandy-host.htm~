@@ -770,7 +770,6 @@ function powerOn() {
       console.warn('qandy: error while initializing sound', e);
     }
 
-    console.log("LINE 771 HOST="+HOST);
     // Remove overlay and observers, continue startup
     if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
     if (ro) try { ro.disconnect(); } catch (e) {}
@@ -975,7 +974,6 @@ async function assembleGuestHtml(options) {
     //document.getElementById('pop')?.style.setProperty('display','none');
     //document.getElementById('qpc')?.style.setProperty('display','none');
 
-
 function hostMessageHandler(ev) {
   // ensure message is from our iframe - this line is error can't access property "contentWindow", iframe is undefined 
   //if (!iframe.contentWindow || ev.source !== iframe.contentWindow) {
@@ -1067,6 +1065,9 @@ function hostMessageHandler(ev) {
           }
           break;
         case 'show-host':
+        
+          alert(isAudioUnlocked());        
+        
           console.log('Guest requested to show host');
           // Hide guest VM and guest keyboard only; keep host UI visible
           try {
