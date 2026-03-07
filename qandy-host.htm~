@@ -3352,19 +3352,19 @@ function init_command_js() {
               } catch (e) {}
             }
 
-           // Hide/disable host UI so guest gets events
-           if (hostEl) { hostEl.style.pointerEvents = 'none'; }
-           if (hostKb) { hostKb.style.pointerEvents = 'none'; hostKb.style.visibility = 'hidden'; }
-           if (guestKb) { guestKb.style.display = 'block'; guestKb.style.visibility = 'visible'; guestKb.style.pointerEvents = 'auto'; guestKb.style.zIndex = String((parseInt(iframe && iframe.style.zIndex,10) || 1001) + 1); }
-           try { if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur(); } catch (e) {}
-           try { iframe && iframe.setAttribute && iframe.setAttribute('tabindex','-1'); } catch(e){}
-           try { if (iframe && typeof iframe.focus === 'function') iframe.focus(); } catch(e){ console.warn('iframe.focus failed', e); }
-           // Best-effort: also call contentWindow.focus() if accessible (same-origin)
-           //try { if (iframe && iframe.contentWindow && typeof iframe.contentWindow.focus === 'function') iframe.contentWindow.focus(); } catch(e) { /* ignore cross-origin */ }
-           console.log('Attempted to focus guest iframe; activeElement is:', document.activeElement);
-         } catch (err) {
-           console.error('focusGuestIframe failed', err);
-         }
+            // Hide/disable host UI so guest gets events
+            if (hostEl) { hostEl.style.pointerEvents = 'none'; }
+            if (hostKb) { hostKb.style.pointerEvents = 'none'; hostKb.style.visibility = 'hidden'; }
+            if (guestKb) { guestKb.style.display = 'block'; guestKb.style.visibility = 'visible'; guestKb.style.pointerEvents = 'auto'; guestKb.style.zIndex = String((parseInt(iframe && iframe.style.zIndex,10) || 1001) + 1); }
+            try { if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur(); } catch (e) {}
+            try { iframe && iframe.setAttribute && iframe.setAttribute('tabindex','-1'); } catch(e){}
+            try { if (iframe && typeof iframe.focus === 'function') iframe.focus(); } catch(e){ console.warn('iframe.focus failed', e); }
+            // Best-effort: also call contentWindow.focus() if accessible (same-origin)
+            //try { if (iframe && iframe.contentWindow && typeof iframe.contentWindow.focus === 'function') iframe.contentWindow.focus(); } catch(e) { /* ignore cross-origin */ }
+            console.log('Attempted to focus guest iframe; activeElement is:', document.activeElement);
+          } catch (err) {
+            console.error('focusGuestIframe failed', err);
+          }
         }
         pokeRefresh();
         return;      
