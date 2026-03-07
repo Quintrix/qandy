@@ -1095,11 +1095,11 @@ function hostMessageHandler(ev) {
               console.warn('postMessage failed (cross-origin?)', e);
             }
           }
-          setTimeout(function() {
-            if (vm) { vm.style.display = 'none'; vm.style.visibility = 'hidden'; vm.style.pointerEvents = 'none'; try{ vm.style.zIndex='-1'; }catch(e){} }
-            if (iframe && iframe.style) { iframe.style.display = 'none'; iframe.style.visibility = 'hidden'; iframe.style.pointerEvents = 'none'; try{ iframe.style.zIndex='-1'; }catch(e){} }
-            console.log('Host-side guest container/iframe hidden');
-          }, 500);
+          //setTimeout(function() {
+          //  if (vm) { vm.style.display = 'none'; vm.style.visibility = 'hidden'; vm.style.pointerEvents = 'none'; try{ vm.style.zIndex='-1'; }catch(e){} }
+          //  if (iframe && iframe.style) { iframe.style.display = 'none'; iframe.style.visibility = 'hidden'; iframe.style.pointerEvents = 'none'; try{ iframe.style.zIndex='-1'; }catch(e){} }
+          //  console.log('Host-side guest container/iframe hidden');
+          //}, 500);
           break;
        }
     } catch (e) {

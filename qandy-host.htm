@@ -1087,19 +1087,7 @@ function hostMessageHandler(ev) {
           console.log('Guest requested to show host');
           var iframe = document.getElementById('vm-iframe') || window._vmIframe || null;
           var vm = document.getElementById('vm-container') || window._vmContainer || null;
-          if (iframe && iframe.contentWindow) {
-            try {
-              iframe.contentWindow.postMessage({ type: 'guest-action', action: 'show-host', reason: 'host-request-hide' }, '*');
-              console.log('Sent guest request to hide itself (postMessage). Will also hide host-side container in 500ms if still visible.');
-            } catch (e) {
-              console.warn('postMessage failed (cross-origin?)', e);
-            }
-          }
-          //setTimeout(function() {
-          //  if (vm) { vm.style.display = 'none'; vm.style.visibility = 'hidden'; vm.style.pointerEvents = 'none'; try{ vm.style.zIndex='-1'; }catch(e){} }
-          //  if (iframe && iframe.style) { iframe.style.display = 'none'; iframe.style.visibility = 'hidden'; iframe.style.pointerEvents = 'none'; try{ iframe.style.zIndex='-1'; }catch(e){} }
-          //  console.log('Host-side guest container/iframe hidden');
-          //}, 500);
+
           break;
        }
     } catch (e) {
