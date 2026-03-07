@@ -69,7 +69,7 @@ function drawPiano() {
   print("\033[7;18H[-black]"+keyBlk+"[-black]");
   print("\033[7;21H[-black]"+keyBlk+"[-black]");
 
-  print("\033[14;5H[cyan]C  D  E  F   G  A  B  C\n\n");
+  print("[cyan]\033[14;5H[white]C  D  E  F   G  A  B  C\n\n");
   
   
    
