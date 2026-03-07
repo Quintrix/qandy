@@ -11,8 +11,6 @@ if (typeof window.print === 'function' && window.print.toString().indexOf('[nati
 </script>
 </head><body><p><br>
 <div id=txt class="txt"></div>
-<div id="pop" class="pop" onMouseOver='PopUpVis="visible";' onMouseOut='PopUpVis=PForce; PUV=setTimeout("document.getElementById(\"pop\").style.visibility=PopUpVis;",100);'></div>
-<div id="keyboard-container"></div>
 <script>
 // inject style sheet into header for virutal machine  
 (function () {
@@ -313,7 +311,9 @@ html { -webkit-text-size-adjust: 100%; }     /* keep text size stable across zoo
   head.appendChild(style);
 })();
 </script>
+
 <script>
+
 // Define Global Variables
 
 // sound.js
@@ -770,7 +770,6 @@ function powerOn() {
       console.warn('qandy: error while initializing sound', e);
     }
 
-    console.log("LINE 771 HOST="+HOST);
     // Remove overlay and observers, continue startup
     if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
     if (ro) try { ro.disconnect(); } catch (e) {}
@@ -973,16 +972,16 @@ async function assembleGuestHtml(options) {
     document.getElementById('txt')?.style.setProperty('display','none');
     document.getElementById('keyboard-container')?.style.setProperty('display','none');
     //document.getElementById('pop')?.style.setProperty('display','none');
-    document.getElementById('qpc')?.style.setProperty('display','none');
-
+    //document.getElementById('qpc')?.style.setProperty('display','none');
 
 function hostMessageHandler(ev) {
-  // ensure message is from our iframe
-  if (!iframe.contentWindow || ev.source !== iframe.contentWindow) return;
+  // ensure message is from our iframe - this line is error can't access property "contentWindow", iframe is undefined 
+  //if (!iframe.contentWindow || ev.source !== iframe.contentWindow) {
+  //  console.log("Message is not from our iframe");
+  //  return;
+  //}
   var d = ev.data || {}; if (!d || typeof d !== 'object') return;
   
-  // EXISTING: Handle script requests from guest iframe
-  // Forward to qandy-main.htm (parent) which acts as the file server
   if (d.type === 'request-script' && typeof d.name === 'string') {
     var reqId = d.id; var name = d.name;
     window._fwdScriptCnt = (window._fwdScriptCnt || 0) + 1;
@@ -1014,23 +1013,21 @@ function hostMessageHandler(ev) {
     }
   }
 
-
-function isAudioUnlocked() {
-  try {
-    // Primary flag we set in the unlock helper
-    if (window._qandy_audio && window._qandy_audio.unlocked) return true;
-    // Check AudioContext state(s) if present
-    var ctx = (window._qandy_audio && window._qandy_audio.ctx) || window.audioContext || null;
-    if (ctx && ctx.state === 'running') return true;
-    // Fallback: some pages put audio context elsewhere
-    if (window.audioCtx && window.audioCtx.state === 'running') return true;
-  } catch (e) {
-    // ignore errors and treat as locked
+  function isAudioUnlocked() {
+    try {
+      // Primary flag we set in the unlock helper
+      if (window._qandy_audio && window._qandy_audio.unlocked) return true;
+      // Check AudioContext state(s) if present
+      var ctx = (window._qandy_audio && window._qandy_audio.ctx) || window.audioContext || null;
+      if (ctx && ctx.state === 'running') return true;
+      // Fallback: some pages put audio context elsewhere
+      if (window.audioCtx && window.audioCtx.state === 'running') return true;
+    } catch (e) {
+      // ignore errors and treat as locked
+    }
+    return false;
   }
-  return false;
-}
 
- 
   if (d.type === 'guest-action' && typeof d.action === 'string') {
     try {
       switch(d.action) {
@@ -1039,30 +1036,18 @@ function isAudioUnlocked() {
           try {
             // Hide host elements
             var hostEl = document.getElementById('txt');
-            if (hostEl) {
-              hostEl.style.display = 'none';
-              hostEl.style.visibility = 'hidden';
-            }
-
-            var kbContainer = document.getElementById('keyboard-container');
-            if (kbContainer) {
-              kbContainer.style.display = 'none';
-              kbContainer.style.visibility = 'hidden';
-            }
-
-            // Show the guest iframe
-            if (iframe) {
-              iframe.style.display = 'block';
-              iframe.style.visibility = 'visible';
-            }
-
+            if (hostEl) { hostEl.style.display = 'none'; hostEl.style.visibility = 'hidden'; hostEl.style.pointerEvents = 'none'; }
+            var hostKb = document.getElementById('host-keyboard');
+            if (hostKb) { hostKb.style.display = 'block'; hostKb.style.visibility = 'visible'; hostKb.style.pointerEvents = 'auto'; }
+            var guestKb = document.getElementById('guest-keyboard') || document.getElementById('keyboard-container');
+            if (guestKb) { guestKb.style.display = 'none'; guestKb.style.visibility = 'hidden'; guestKb.style.pointerEvents = 'none'; }
+            if (iframe) { iframe.style.display = 'block'; iframe.style.visibility = 'visible'; }
             // Transfer focus to the guest iframe's content window
             try {
               if (iframe && iframe.contentWindow) {
                 iframe.contentWindow.focus();
               }
             } catch (e) {}
-
             // Notify guest to restore its input and focus
             iframe.contentWindow.postMessage({
               type: 'action-result',
@@ -1079,63 +1064,63 @@ function isAudioUnlocked() {
             }, '*');
           }
           break;
-
         case 'show-host':
+          if (isAudioUnlocked()===false) { init_sound_js(); }        
           console.log('Guest requested to show host');
+          // Hide guest VM and guest keyboard only; keep host UI visible
           try {
-            // Make sure host elements are visible
-            var hostEl = document.getElementById('txt');
+            // Ensure host text area is visible / interactive
+            var hostEl = document.getElementById('txt') || document.getElementById('qandy') || document.body;
             if (hostEl) {
-              hostEl.style.display = 'block';
-              hostEl.style.visibility = 'visible';
-              hostEl.style.opacity = '1';
-              hostEl.style.pointerEvents = 'auto';
-            }
-    
-            var kbContainer = document.getElementById('keyboard-container');
-            if (kbContainer) {
-              kbContainer.style.display = 'block';
-              kbContainer.style.visibility = 'visible';
-            }
-    
-            // Try to focus the host
-            try { hostEl.focus(); } catch (e) {}
-            // Focus the host element for user interaction
-            try {
-              // Ensure host element is focusable
-              if (hostEl && !hostEl.hasAttribute('tabindex')) {
-                hostEl.setAttribute('tabindex', '0'); // makes the div focusable
-                // optional: avoid visible focus outline if you don't want it
-                hostEl.style.outline = 'none';
-              }
-              // If an iframe currently has focus, blur it so focus can move to the parent
-              try {
-                if (document.activeElement && document.activeElement.tagName === 'IFRAME') { try { document.activeElement.blur(); } catch (e) {} }
-                // Also explicitly blur the guest iframe reference if we have it
-                if (iframe && typeof iframe.blur === 'function') { try { iframe.blur(); } catch (e) {}}
-              } catch (e) {}
-              // Bring the top-level window into focus (may be restricted by browser, but try)
-              try { window.focus(); } catch (e) {}
-              // Finally focus the host element
-              try { if (hostEl) hostEl.focus(); } catch (e) {}
-            } catch (e) {}            
-            iframe.contentWindow.postMessage({ 
-              type: 'action-result', 
-              action: 'show-host', 
-              success: true 
-            }, '*');
-            if (!isAudioUnlocked()) { init_sound_js(); }
-          } catch (e) {
-            console.error('Error showing host:', e);
-            iframe.contentWindow.postMessage({ 
-              type: 'action-result', 
-              action: 'show-host', 
-              success: false, 
-              error: String(e) 
-            }, '*');
+            hostEl.style.display = 'block';
+            hostEl.style.visibility = 'visible';
+            hostEl.style.pointerEvents = 'auto';
+            hostEl.style.opacity = hostEl.style.opacity || '1';
           }
-          break;
-      }
+          // Ensure legacy wrapper is visible so host keyboard (child) can be shown
+          var wrapper = document.getElementById('keyboard-container');
+          if (wrapper) {
+            wrapper.style.display = 'block';
+            wrapper.style.visibility = 'visible';
+            wrapper.style.pointerEvents = 'auto';
+          }
+          // Show host-keyboard explicitly
+          var hostKb = document.getElementById('host-keyboard');
+          if (hostKb) {
+            hostKb.style.display = 'block';
+            hostKb.style.visibility = 'visible';
+            hostKb.style.pointerEvents = 'auto';
+            hostKb.style.position = hostKb.style.position || 'absolute';
+            hostKb.style.zIndex = hostKb.style.zIndex || '110';
+          }
+          // Hide guest-keyboard only
+          var guestKb = document.getElementById('guest-keyboard');
+          if (guestKb) {
+            guestKb.style.display = 'none';
+            guestKb.style.visibility = 'hidden';
+            guestKb.style.pointerEvents = 'none';
+          }
+          // Hide vm-container and/or iframe (guest VM)
+          var vm = document.getElementById('vm-container') || window._vmContainer || null;
+          if (vm) {
+            vm.style.display = 'none';
+            vm.style.visibility = 'hidden';
+            vm.style.pointerEvents = 'none';
+            try { vm.style.zIndex = '-1'; } catch (e) {}
+          }
+          var iframe = document.getElementById('vm-iframe') || window._vmIframe || null;
+          if (iframe) {
+            iframe.style.display = 'none';
+            iframe.style.visibility = 'hidden';
+            iframe.style.pointerEvents = 'none';
+            try { iframe.style.zIndex = '-1'; } catch (e) {}
+          }
+          console.log('Host shown; guest hidden.');
+        } catch (err) {
+          console.error('showHostHideGuest failed', err);
+        }
+        break;
+       }
     } catch (e) {
       console.error('Error handling guest action:', e);
       iframe.contentWindow.postMessage({ 
@@ -2762,63 +2747,109 @@ function init_keyboard_js() {
     //cursor(0);
   }
  
+  function _selectKeyboardContainer(prefer) {
+    // prefer can be 'host' or 'guest' or undefined
+    if (typeof window._getKeyboardContainer === 'function') {
+      try {
+        var el = window._getKeyboardContainer(prefer);
+        if (el) return el;
+      } catch (e) { /* ignore and fallback */ }
+    }
+    if (prefer === 'guest') {
+      return document.getElementById('guest-keyboard')
+        || document.getElementById('host-keyboard')
+        || document.getElementById('keyboard-container')
+        || document.body;
+    }
+    // default prefer host
+    return document.getElementById('host-keyboard')
+      || document.getElementById('guest-keyboard')
+      || document.getElementById('keyboard-container')
+      || document.body;
+  }
+
   keyboardData.forEach(function(key) {
     var btn = document.createElement('div');
-    btn.id = key.id;
+    var owner = (typeof HOST !== 'undefined' && HOST) ? 'host' : 'guest';
+    btn.id = owner + '-' + key.id;
+    btn.dataset.owner = owner;
+    btn.dataset.logicalId = key.id;
     btn.innerHTML = key.label;
-  
-    // inside initKeyboard() after btn.innerHTML = key.label;
+    // canonical single-char mapping
     if (key.label === 'SPACE') btn.dataset.keyChar = ' ';
     else if (key.label && key.label.length === 1) btn.dataset.keyChar = key.label;
-    else btn.dataset.keyChar = '';  
-  
-    // Assign appropriate CSS class based on width
+    else btn.dataset.keyChar = '';
+    // assign CSS class by width
     if (key.width === 28) {
-     btn.className = 'k1';
+      btn.className = 'k1';
     } else if (key.width === 40) {
-     // Check if it's the ENTER key specifically
-     if (key.id === 'enter') {
-      btn.className = 'k-enter';  // ENTER key
-     } else {
-      btn.className = 'k-ctrl';  // CAPS key and other 40px keys
-     }
+      if (key.id === 'enter') btn.className = 'k-enter';
+      else btn.className = 'k-ctrl';
     } else if (key.width === 52) {
-     btn.className = 'k2';
+      btn.className = 'k2';
     } else if (key.width === 81) {
-     btn.className = 'k-space';  // SPACE key
+      btn.className = 'k-space';
     } else if (key.width === 109) {
-     btn.className = 'k4';
+      btn.className = 'k4';
     }
-  
-    if (key.width === 40 || key.width === 81) { btn.style.width = key.width + 'px'; } 
+
+    if (key.width === 40 || key.width === 81) { btn.style.width = key.width + 'px'; }
     if (key.id === 'ctrl' || key.id === 'alt') { btn.style.fontSize = '9px'; }
-    btn.style.left = key.x + 'px'; btn.style.top = key.y + 'px';
+    btn.style.left = key.x + 'px';
+    btn.style.top = key.y + 'px';
     btn.onclick = function() { button(key.keyCode); };
-    document.getElementById('keyboard-container').appendChild(btn);
-   });
-   updateKeyLabels();
 
-  function updateKeyLabels() {
-    // Decide current modifier priority:
-    // If ALT active (virtual or physical) -> show ALT labels (shifted if Shift also active)
-    window.altActive = !!alt || !!altPhysical;
-    window.shiftActive = !!window.shift;
-    window.capsActive = !!window.caps;
+    // Append into the selected container (defensive: ensure it exists)
+    try {
+      (kbContainer || document.body).appendChild(btn);
+    } catch (e) {
+      // fallback: try to find container again (in case DOM changed)
+      var retry = _selectKeyboardContainer('host') || document.body;
+      retry.appendChild(btn);
+    }
+  });
 
-    keyboardData.forEach(function(key) {
-      var el = document.getElementById(key.id);
-      if (!el) return;
-      var base = el.dataset.keyChar; // single-char canonical base (could be 'a' or 'A' etc)
-      if (!base || base.length === 0) return;
-      var lookup = base.toLowerCase(); var label = base;
-      if (altActive) {
-        // ALT is active: prefer altShiftKeys (if Shift also active), then altKeys
-        if (shiftActive && typeof altShiftKeys === 'object' && altShiftKeys.hasOwnProperty(lookup)) {
-          label = altShiftKeys[lookup];
-        } else if (typeof altKeys === 'object' && altKeys.hasOwnProperty(lookup)) {
-          label = altKeys[lookup];
-        } else if (shiftActive && typeof shiftedKeys === 'object' && shiftedKeys.hasOwnProperty(lookup)) {
-          // fallback to shiftedKeys if no alt mapping available
+  updateKeyLabels();
+
+// Replace existing updateKeyLabels() with this version
+function updateKeyLabels() {
+  // Normalize modifier state from globals (same logic as before)
+  window.altActive = !!window.alt || !!window.altPhysical;
+  window.shiftActive = !!window.shift;
+  window.capsActive = !!window.caps;
+
+  // owners to update (host and guest). Order: update host first (if you prefer)
+  var owners = ['host', 'guest'];
+
+  // helper to pick label for a logical key given modifier state
+  function pickLabel(base) {
+    if (!base || base.length === 0) return base;
+    var lookup = String(base).toLowerCase();
+    var label = base;
+
+    if (window.altActive) {
+      if (window.shiftActive && typeof altShiftKeys === 'object' && altShiftKeys.hasOwnProperty(lookup)) {
+        label = altShiftKeys[lookup];
+      } else if (typeof altKeys === 'object' && altKeys.hasOwnProperty(lookup)) {
+        label = altKeys[lookup];
+      } else if (window.shiftActive && typeof shiftedKeys === 'object' && shiftedKeys.hasOwnProperty(lookup)) {
+        label = shiftedKeys[lookup];
+      } else if (typeof normalKeys === 'object' && normalKeys.hasOwnProperty(lookup)) {
+        label = normalKeys[lookup];
+      } else {
+        label = base;
+      }
+    } else {
+      if (window.capsActive) {
+        if (typeof shiftedKeys === 'object' && shiftedKeys.hasOwnProperty(lookup)) {
+          label = shiftedKeys[lookup];
+        } else if (typeof normalKeys === 'object' && normalKeys.hasOwnProperty(lookup)) {
+          label = normalKeys[lookup];
+        } else {
+          label = base;
+        }
+      } else if (window.shiftActive) {
+        if (typeof shiftedKeys === 'object' && shiftedKeys.hasOwnProperty(lookup)) {
           label = shiftedKeys[lookup];
         } else if (typeof normalKeys === 'object' && normalKeys.hasOwnProperty(lookup)) {
           label = normalKeys[lookup];
@@ -2826,28 +2857,93 @@ function init_keyboard_js() {
           label = base;
         }
       } else {
-        // No ALT: existing CAPS/SHIFT logic
-        if (capsActive) {
-          // caps acts like shift for letters — show shifted label if available
-          if (shiftActive) {
-            // both shift and caps: show shifted label if present
-            label = (typeof shiftedKeys === 'object' && shiftedKeys.hasOwnProperty(lookup)) ? shiftedKeys[lookup] : base.toUpperCase();
-          } else {
-            label = (typeof shiftedKeys === 'object' && shiftedKeys.hasOwnProperty(lookup)) ? shiftedKeys[lookup] : base.toUpperCase();
-          }
+        if (typeof normalKeys === 'object' && normalKeys.hasOwnProperty(lookup)) {
+          label = normalKeys[lookup];
         } else {
-          // no caps: show shifted if shift is pressed (transient)
-          if (shiftActive && typeof shiftedKeys === 'object' && shiftedKeys.hasOwnProperty(lookup)) {
-            label = shiftedKeys[lookup];
-          } else {
-            label = (typeof normalKeys === 'object' && normalKeys.hasOwnProperty(lookup)) ? normalKeys[lookup] : base;
-          }
+          label = base;
         }
       }
-      el.innerHTML = (label === ' ' && base === ' ') ? 'SPACE' : label;
-    });
+    }
+    return String(label);
   }
-  window.updateKeyLabels = updateKeyLabels;
+
+  // iterate all logical keys and update per-owner DOM elements
+  if (!Array.isArray(keyboardData)) return false;
+  keyboardData.forEach(function(key) {
+    // For each owner prefix, try to find the element and update it
+    owners.forEach(function(owner) {
+      var domId = owner + '-' + key.id;
+      var el = document.getElementById(domId);
+      // fallback to legacy id (no prefix) for migration support
+      if (!el) el = document.getElementById(key.id);
+
+      if (!el) return; // not present in this document
+
+      // Determine base character for label selection:
+      // prefer dataset.keyChar (set during creation), else fall back to logical label, else current text
+      var base = (el.dataset && el.dataset.keyChar) ? el.dataset.keyChar :
+                 (typeof key.label === 'string' ? key.label : '') ;
+
+      // If dataset.keyChar missing and we can set it, do so (helps future updates)
+      try { if ((!el.dataset || !el.dataset.keyChar) && base) el.dataset.keyChar = base; } catch (e) {}
+
+      // compute desired label
+      var newLabel = pickLabel(base);
+
+      // update DOM content safely (use textContent)
+      try {
+        if (el.textContent !== newLabel) el.textContent = newLabel;
+        // accessibility hint
+        el.setAttribute && el.setAttribute('aria-label', 'key ' + newLabel);
+      } catch (e) {
+        // ignore DOM exceptions
+      }
+
+      // Visual locked appearance for some special keys (per-owner)
+      // caps
+      if (key.id === 'caps') {
+        try {
+          if (window.caps) {
+            el.style.backgroundColor = '#fff';
+            el.style.color = '#000';
+          } else {
+            el.style.backgroundColor = '';
+            el.style.color = '';
+          }
+        } catch (e) {}
+      }
+
+      // ctrl
+      if (key.id === 'ctrl') {
+        try {
+          if (ctrl || ctrlPhysical) {
+            el.style.backgroundColor = ctrlPhysical ? '#bbb' : '#fff';
+            el.style.color = '#000';
+          } else {
+            el.style.backgroundColor = '';
+            el.style.color = '';
+          }
+        } catch (e) {}
+      }
+
+      // alt
+      if (key.id === 'alt') {
+        try {
+          if (alt || altPhysical) {
+            el.style.backgroundColor = altPhysical ? '#444' : '#fff';
+            el.style.color = '#000';
+          } else {
+            el.style.backgroundColor = '';
+            el.style.color = '';
+          }
+        } catch (e) {}
+      }
+    }); // end owners.forEach
+  }); // end keyboardData.forEach
+
+  return true;
+}
+window.updateKeyLabels = updateKeyLabels;
 
   // Create a mapping from keyCode to element ID for quick lookup
   window.keyCodeToId = {};
@@ -3220,18 +3316,80 @@ function init_command_js() {
         if (HOST) {
           try {
             var hostEl = document.getElementById('txt');
-            var iframe = window._vmIframe;
-            if (hostEl) { hostEl.style.display = 'none'; }
-            iframe.style.visibility = 'visible';
-            iframe.contentWindow.focus();
-            iframe.contentWindow.postMessage({ type: 'action-result', action: 'show-guest', success: true }, '*');
-          } catch (e) {
-            print("Error showing guest: " + String(e) + "\n");
+            var hostKb = document.getElementById('host-keyboard');
+            var guestKb = document.getElementById('guest-keyboard');
+            var vm = document.getElementById('vm-container') || window._vmContainer || null;
+            var iframe = document.getElementById('vm-iframe') || window._vmIframe || null;
+            if (hostEl) { hostEl.style.display = 'none'; hostEl.style.visibility = 'hidden'; hostEl.style.pointerEvents = 'none'; }
+            if (hostKb) { hostKb.style.display = 'none'; hostKb.style.visibility = 'hidden'; hostKb.style.pointerEvents = 'none'; }
+            // Show guest container / iframe and bring it to front
+            if (vm) {
+              vm.style.display = 'block';
+              vm.style.visibility = 'visible';
+              vm.style.pointerEvents = 'auto';
+              // ensure vm is above host
+              try {
+                vm.style.position = vm.style.position || 'absolute';
+                vm.style.zIndex = String(Math.max(parseInt(vm.style.zIndex || 0, 10) || 100, 1000));
+              } catch (e) {}
+            }
+            if (iframe) {
+              iframe.style.display = 'block';
+              iframe.style.visibility = 'visible';
+              iframe.style.pointerEvents = 'auto';
+              try { iframe.style.zIndex = vm && vm.style && vm.style.zIndex ? String(parseInt(vm.style.zIndex,10) + 1) : '1001'; } catch (e) {}
+            }
+            if (guestKb) {
+              guestKb.style.display = 'block';
+              guestKb.style.visibility = 'visible';
+              guestKb.style.pointerEvents = 'auto';
+              try {
+                guestKb.style.position = guestKb.style.position || 'absolute';
+                // put guest keyboard above vm-container
+                var vmZ = vm && vm.style && vm.style.zIndex ? parseInt(vm.style.zIndex,10) : 1000;
+                guestKb.style.zIndex = String(Math.max(parseInt(guestKb.style.zIndex || 0,10) || (vmZ + 1), vmZ + 1));
+              } catch (e) {}
+            }
+
+            if (hostEl) { hostEl.style.pointerEvents = 'none'; }
+            if (hostKb) { hostKb.style.pointerEvents = 'none'; hostKb.style.visibility = 'hidden'; }
+
+
+            try {
+              if (iframe) {
+                iframe.setAttribute && iframe.setAttribute('tabindex', '0'); // make focusable
+                try { iframe.focus(); } catch (e) { console.warn('iframe.focus failed', e); }
+                // If same-origin, try to focus the contentWindow as well
+                try { if (iframe.contentWindow && typeof iframe.contentWindow.focus === 'function') iframe.contentWindow.focus(); } catch (e) { console.warn('iframe.contentWindow.focus failed', e); }
+                // Also try to focus the guest document body (if accessible)
+                try { 
+                  var doc = iframe.contentDocument || (iframe.contentWindow && iframe.contentWindow.document);
+                  if (doc && doc.body && typeof doc.body.focus === 'function') doc.body.focus();
+                } catch (e) { /* cross-origin or not accessible; ignore */ }
+                // Some browsers need a short delay to accept keyboard focus after layout changes
+                setTimeout(function() {
+                  try { iframe.focus(); } catch (e) {}
+                  try { if (iframe.contentWindow && typeof iframe.contentWindow.focus === 'function') iframe.contentWindow.focus(); } catch (e) {}
+                }, 50);
+              }
+            } catch (errFocus) {
+              console.warn('focus restore attempted but failed', errFocus);
+            }
+
+            //if (guestKb) { guestKb.style.display = 'block'; guestKb.style.visibility = 'visible'; guestKb.style.pointerEvents = 'auto'; guestKb.style.zIndex = String((parseInt(iframe && iframe.style.zIndex,10) || 1001) + 1); }
+            //try { if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur(); } catch (e) {}
+            //try { iframe && iframe.setAttribute && iframe.setAttribute('tabindex','-1'); } catch(e){}
+            //try { if (iframe && typeof iframe.focus === 'function') iframe.focus(); } catch(e){ console.warn('iframe.focus failed', e); }
+            // Best-effort: also call contentWindow.focus() if accessible (same-origin)
+            //try { if (iframe && iframe.contentWindow && typeof iframe.contentWindow.focus === 'function') iframe.contentWindow.focus(); } catch(e) { /* ignore cross-origin */ }
+            console.log('Attempted to focus guest iframe; activeElement is:', document.activeElement);
+          } catch (err) {
+            console.error('focusGuestIframe failed', err);
           }
         }
         pokeRefresh();
-        return;
-      
+        return;      
+
       default:
         // fall through to existing handlers below
         break;
@@ -3472,7 +3630,13 @@ window.button=function(b, event) {
   if (k === "alt") {
     alt = !alt;
     var el2 = document.getElementById("alt");
-    if (el2) { el2.style.backgroundColor = alt ? "#fff" : "#222"; el2.style.color = alt ? "#000" : "#fff"; }
+    if (el2) {
+      if (alt) { 
+       el2.style.backgroundColor = "#fff"; el2.style.color = "#000";
+      } else {
+       el2.style.backgroundColor = "#000"; el2.style.color = "#fff";    
+      }
+    }    
     updateKeyLabels();
     pokeCursorOn(); return;
   }
@@ -3784,7 +3948,6 @@ document.addEventListener('keydown', function (event) {
  press(event);
 });
 
-
 document.addEventListener('keyup', function (event) { pressup(event); });
 document.addEventListener('paste', function (event) {
  if (keyon) {
@@ -3806,6 +3969,7 @@ document.addEventListener('paste', function (event) {
 
 window.press=function(event) { 
  key=""; k=event.keyCode; shift=event.shiftKey;
+ if (HOST) { kid="host-"; } else { kid="guest-"; }
 
  // Handle physical CapsLock keypress (keyCode 20)
  if (event.keyCode === 20) {
@@ -3827,8 +3991,8 @@ window.press=function(event) {
      }
    }
 
-   caps = !!newCaps;
-   l = document.getElementById("kcaps") || document.getElementById("caps");
+   caps = !!newCaps;  
+   l = document.getElementById(kid+"kcaps") || document.getElementById(kid+"caps");
    if (l) {
      if (caps) { l.style.backgroundColor = "#fff"; l.style.color = "#000"; }
      else { l.style.backgroundColor = "#222"; l.style.color = "#fff"; }
@@ -3849,7 +4013,7 @@ window.press=function(event) {
      unhighlightKey('caps');
    } else {
      // Ensure locked appearance
-     if (l) { l.style.backgroundColor = "#fff"; l.style.color = "#000"; }
+     if (l) { l.style.backgroundColor = "#ddd"; l.style.color = "#000"; }
    }
 
   // Prevent default browser handling side-effects and stop further processing for this key event
@@ -3865,21 +4029,21 @@ window.press=function(event) {
  if (event.keyCode === 18 || event.altKey) { event.preventDefault(); }
  if (event.keyCode === 27) { event.preventDefault(); }
  if (event.keyCode === 16) {
-  var capsBtn = document.getElementById("caps");
+  var capsBtn = document.getElementById(kid+"caps");
   if (capsBtn) { capsBtn.style.backgroundColor = "#444"; capsBtn.style.color = "#fff"; }
   updateKeyLabels();
  }
  if (event.keyCode === 17 && !ctrl) {
   ctrl=1; ctrlPhysical=true;
-  document.getElementById("ctrl").style.backgroundColor = "#0a0";
-  document.getElementById("ctrl").style.color = "#000";
+  document.getElementById(kid+"ctrl").style.backgroundColor = "#ddd";
+  document.getElementById(kid+"ctrl").style.color = "#000";
   return;
  }
  if (event.keyCode === 18 && !alt) {
   highlightKey(k);
   alt = 1; altPhysical = true;
-  document.getElementById("alt").style.backgroundColor = "#0a0";
-  document.getElementById("alt").style.color = "#000";
+  document.getElementById(kid+"alt").style.backgroundColor = "#fff";
+  document.getElementById(kid+"alt").style.color = "#000";
   updateKeyLabels();
  }
  // For Ctrl+key combos, pass specific ones through to button() (Ctrl+C, Ctrl+A)
@@ -3900,6 +4064,7 @@ window.press=function(event) {
 
 window.pressup=function(event) {
   // Prevent browser from handling ALT key - must be done before any conditionals
+  if (HOST) { kid="host-"; } else { kid="guest-"; }
   if (event.keyCode === 18 || event.altKey) {
     event.preventDefault(); // Prevent browser menu from opening
   }
@@ -3908,8 +4073,8 @@ window.pressup=function(event) {
   if (event.keyCode === 17 && ctrlPhysical) {
     ctrl = 0;
     ctrlPhysical = false;
-    document.getElementById("ctrl").style.backgroundColor = "#222";
-    document.getElementById("ctrl").style.color = "#fff";
+    document.getElementById(kid+"ctrl").style.backgroundColor = "#222";
+    document.getElementById(kid+"ctrl").style.color = "#fff";
     return;
   }
 
@@ -3925,8 +4090,8 @@ window.pressup=function(event) {
   if (event.keyCode === 18 && altPhysical) {
     alt = 0;
     altPhysical = false;
-    document.getElementById("alt").style.backgroundColor = "#222";
-    document.getElementById("alt").style.color = "#fff";
+    document.getElementById(kid+"alt").style.backgroundColor = "#fff";
+    document.getElementById(kid+"alt").style.color = "#000";
     updateKeyLabels();
     return;
   }
@@ -4034,12 +4199,22 @@ function exit() {
   RUN="qandy.js"
 }
 
+function keyGuest() {
+
+}
+
 function clearScreen() { cls(); }
-function cls() {
-  pokeCursorOff();
-  pokeText(0,0," ",800);
-  CURX=0; CURY=0; LINEX=0; LINEY=0;
-  pokeCursorOn();  
+
+window.cls=function() {
+ for (var ry = 0; ry < H; ry++) {
+  for (var rx = 0; rx < W; rx++) {
+   VIDEO[ry][rx] = ' ';
+   FCOLOR[ry][rx]= CURFG;
+   BCOLOR[ry][rx]= CURBG;
+   ATTR[ry][rx] = 0;
+  }
+ }
+ if (typeof pokeRefresh === 'function') pokeRefresh();
 }
 
 // public print(...) replacement
@@ -4066,6 +4241,9 @@ window.print=function(t) {
 
 
 pokeCursorOn(); pokeRefresh();
+
+keyGuest();
+
 
 //
 // system ready
