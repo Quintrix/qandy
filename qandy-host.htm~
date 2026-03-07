@@ -977,8 +977,11 @@ async function assembleGuestHtml(options) {
 
 
 function hostMessageHandler(ev) {
-  // ensure message is from our iframe
-  // if (!iframe.contentWindow || ev.source !== iframe.contentWindow) return;
+  // ensure message is from our iframe - this line is error can't access property "contentWindow", iframe is undefined 
+  //if (!iframe.contentWindow || ev.source !== iframe.contentWindow) {
+  //  console.log("Message is not from our iframe");
+  //  return;
+  //}
   var d = ev.data || {}; if (!d || typeof d !== 'object') return;
   
   if (d.type === 'request-script' && typeof d.name === 'string') {
@@ -1035,37 +1038,18 @@ function hostMessageHandler(ev) {
           try {
             // Hide host elements
             var hostEl = document.getElementById('txt');
-            if (hostEl) {
-              hostEl.style.display = 'none';
-              hostEl.style.visibility = 'hidden';
-              hostEl.style.pointerEvents = 'none';
-            }
-
+            if (hostEl) { hostEl.style.display = 'none'; hostEl.style.visibility = 'hidden'; hostEl.style.pointerEvents = 'none'; }
             var hostKb = document.getElementById('host-keyboard');
-            if (hostKb) {
-            hostKb.style.display = 'block';
-            hostKb.style.visibility = 'visible';
-            hostKb.style.pointerEvents = 'auto';
-          }
-          var guestKb = document.getElementById('guest-keyboard') || document.getElementById('keyboard-container');
-          if (guestKb) {
-            guestKb.style.display = 'none';
-            guestKb.style.visibility = 'hidden';
-            guestKb.style.pointerEvents = 'none';
-          }
-          // Show the guest iframe
-          if (iframe) {
-            iframe.style.display = 'block';
-            iframe.style.visibility = 'visible';
-          }
-
+            if (hostKb) { hostKb.style.display = 'block'; hostKb.style.visibility = 'visible'; hostKb.style.pointerEvents = 'auto'; }
+            var guestKb = document.getElementById('guest-keyboard') || document.getElementById('keyboard-container');
+            if (guestKb) { guestKb.style.display = 'none'; guestKb.style.visibility = 'hidden'; guestKb.style.pointerEvents = 'none'; }
+            if (iframe) { iframe.style.display = 'block'; iframe.style.visibility = 'visible'; }
             // Transfer focus to the guest iframe's content window
             try {
               if (iframe && iframe.contentWindow) {
                 iframe.contentWindow.focus();
               }
             } catch (e) {}
-
             // Notify guest to restore its input and focus
             iframe.contentWindow.postMessage({
               type: 'action-result',
@@ -1082,25 +1066,61 @@ function hostMessageHandler(ev) {
             }, '*');
           }
           break;
-
         case 'show-host':
           console.log('Guest requested to show host');
-          var iframe = document.getElementById('vm-iframe') || window._vmIframe || null;
-          var vm = document.getElementById('vm-container') || window._vmContainer || null;
-          if (iframe && iframe.contentWindow) {
-            try {
-              iframe.contentWindow.postMessage({ type: 'guest-action', action: 'show-host', reason: 'host-request-hide' }, '*');
-              console.log('Sent guest request to hide itself (postMessage). Will also hide host-side container in 500ms if still visible.');
-            } catch (e) {
-              console.warn('postMessage failed (cross-origin?)', e);
-            }
+          // Hide guest VM and guest keyboard only; keep host UI visible
+          try {
+            // Ensure host text area is visible / interactive
+            var hostEl = document.getElementById('txt') || document.getElementById('qandy') || document.body;
+            if (hostEl) {
+            hostEl.style.display = 'block';
+            hostEl.style.visibility = 'visible';
+            hostEl.style.pointerEvents = 'auto';
+            hostEl.style.opacity = hostEl.style.opacity || '1';
           }
-          //setTimeout(function() {
-          //  if (vm) { vm.style.display = 'none'; vm.style.visibility = 'hidden'; vm.style.pointerEvents = 'none'; try{ vm.style.zIndex='-1'; }catch(e){} }
-          //  if (iframe && iframe.style) { iframe.style.display = 'none'; iframe.style.visibility = 'hidden'; iframe.style.pointerEvents = 'none'; try{ iframe.style.zIndex='-1'; }catch(e){} }
-          //  console.log('Host-side guest container/iframe hidden');
-          //}, 500);
-          break;
+          // Ensure legacy wrapper is visible so host keyboard (child) can be shown
+          var wrapper = document.getElementById('keyboard-container');
+          if (wrapper) {
+            wrapper.style.display = 'block';
+            wrapper.style.visibility = 'visible';
+            wrapper.style.pointerEvents = 'auto';
+          }
+          // Show host-keyboard explicitly
+          var hostKb = document.getElementById('host-keyboard');
+          if (hostKb) {
+            hostKb.style.display = 'block';
+            hostKb.style.visibility = 'visible';
+            hostKb.style.pointerEvents = 'auto';
+            hostKb.style.position = hostKb.style.position || 'absolute';
+            hostKb.style.zIndex = hostKb.style.zIndex || '110';
+          }
+          // Hide guest-keyboard only
+          var guestKb = document.getElementById('guest-keyboard');
+          if (guestKb) {
+            guestKb.style.display = 'none';
+            guestKb.style.visibility = 'hidden';
+            guestKb.style.pointerEvents = 'none';
+          }
+          // Hide vm-container and/or iframe (guest VM)
+          var vm = document.getElementById('vm-container') || window._vmContainer || null;
+          if (vm) {
+            vm.style.display = 'none';
+            vm.style.visibility = 'hidden';
+            vm.style.pointerEvents = 'none';
+            try { vm.style.zIndex = '-1'; } catch (e) {}
+          }
+          var iframe = document.getElementById('vm-iframe') || window._vmIframe || null;
+          if (iframe) {
+            iframe.style.display = 'none';
+            iframe.style.visibility = 'hidden';
+            iframe.style.pointerEvents = 'none';
+            try { iframe.style.zIndex = '-1'; } catch (e) {}
+          }
+          console.log('Host shown; guest hidden.');
+        } catch (err) {
+          console.error('showHostHideGuest failed', err);
+        }
+        break;
        }
     } catch (e) {
       console.error('Error handling guest action:', e);
@@ -3297,18 +3317,58 @@ function init_command_js() {
         if (HOST) {
           try {
             var hostEl = document.getElementById('txt');
-            var iframe = window._vmIframe;
-            if (hostEl) { hostEl.style.display = 'none'; }
-            iframe.style.visibility = 'visible';
-            iframe.contentWindow.focus();
-            iframe.contentWindow.postMessage({ type: 'action-result', action: 'show-guest', success: true }, '*');
-          } catch (e) {
-            print("Error showing guest: " + String(e) + "\n");
-          }
+            var hostKb = document.getElementById('host-keyboard');
+            var guestKb = document.getElementById('guest-keyboard');
+            var vm = document.getElementById('vm-container') || window._vmContainer || null;
+            var iframe = document.getElementById('vm-iframe') || window._vmIframe || null;
+            if (hostEl) { hostEl.style.display = 'none'; hostEl.style.visibility = 'hidden'; hostEl.style.pointerEvents = 'none'; }
+            if (hostKb) { hostKb.style.display = 'none'; hostKb.style.visibility = 'hidden'; hostKb.style.pointerEvents = 'none'; }
+            // Show guest container / iframe and bring it to front
+            if (vm) {
+              vm.style.display = 'block';
+              vm.style.visibility = 'visible';
+              vm.style.pointerEvents = 'auto';
+              // ensure vm is above host
+              try {
+                vm.style.position = vm.style.position || 'absolute';
+                vm.style.zIndex = String(Math.max(parseInt(vm.style.zIndex || 0, 10) || 100, 1000));
+              } catch (e) {}
+            }
+            if (iframe) {
+              iframe.style.display = 'block';
+              iframe.style.visibility = 'visible';
+              iframe.style.pointerEvents = 'auto';
+              try { iframe.style.zIndex = vm && vm.style && vm.style.zIndex ? String(parseInt(vm.style.zIndex,10) + 1) : '1001'; } catch (e) {}
+            }
+            if (guestKb) {
+              guestKb.style.display = 'block';
+              guestKb.style.visibility = 'visible';
+              guestKb.style.pointerEvents = 'auto';
+              try {
+                guestKb.style.position = guestKb.style.position || 'absolute';
+                // put guest keyboard above vm-container
+                var vmZ = vm && vm.style && vm.style.zIndex ? parseInt(vm.style.zIndex,10) : 1000;
+                guestKb.style.zIndex = String(Math.max(parseInt(guestKb.style.zIndex || 0,10) || (vmZ + 1), vmZ + 1));
+              } catch (e) {}
+            }
+
+           // Hide/disable host UI so guest gets events
+           if (hostEl) { hostEl.style.pointerEvents = 'none'; }
+           if (hostKb) { hostKb.style.pointerEvents = 'none'; hostKb.style.visibility = 'hidden'; }
+           if (guestKb) { guestKb.style.display = 'block'; guestKb.style.visibility = 'visible'; guestKb.style.pointerEvents = 'auto'; guestKb.style.zIndex = String((parseInt(iframe && iframe.style.zIndex,10) || 1001) + 1); }
+           try { if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur(); } catch (e) {}
+           try { iframe && iframe.setAttribute && iframe.setAttribute('tabindex','-1'); } catch(e){}
+           try { if (iframe && typeof iframe.focus === 'function') iframe.focus(); } catch(e){ console.warn('iframe.focus failed', e); }
+           // Best-effort: also call contentWindow.focus() if accessible (same-origin)
+           //try { if (iframe && iframe.contentWindow && typeof iframe.contentWindow.focus === 'function') iframe.contentWindow.focus(); } catch(e) { /* ignore cross-origin */ }
+           console.log('Attempted to focus guest iframe; activeElement is:', document.activeElement);
+         } catch (err) {
+           console.error('focusGuestIframe failed', err);
+         }
         }
         pokeRefresh();
-        return;
-      
+        return;      
+
       default:
         // fall through to existing handlers below
         break;
