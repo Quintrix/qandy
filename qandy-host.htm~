@@ -975,6 +975,7 @@ async function assembleGuestHtml(options) {
     //document.getElementById('pop')?.style.setProperty('display','none');
     //document.getElementById('qpc')?.style.setProperty('display','none');
 
+
 function hostMessageHandler(ev) {
   // ensure message is from our iframe - this line is error can't access property "contentWindow", iframe is undefined 
   //if (!iframe.contentWindow || ev.source !== iframe.contentWindow) {
