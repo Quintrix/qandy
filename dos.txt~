@@ -54,10 +54,13 @@ This is the dos.txt file which contains the instructions for the user, please us
                           character), parentheses, plus, and equals: -_.()+= 
                        
                    data — plain UTF‑8 text, use base64 for binary data, dos.js
-                          returns whole file content as a single text string.
+                          returns whole file content as single text string.
                        
-                 device — harddrive, server, file, url, local, echo, or none.
+                 device — local, echo, or none.
                  
+                          We may in the future offer updates that would enable
+                          "harddrive" or "server" options for advanced users
+                          that understand the risks. 
 
 
  
