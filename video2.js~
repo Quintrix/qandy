@@ -11,7 +11,7 @@
 
   // Configuration - tune to match your DOM cell size
   var CHAR_W = 8;
-  var CHAR_H = 15;
+  var CHAR_H = 16;
   var FONT = "14px monospace";
   var FIRST_CHAR = 32;
   var LAST_CHAR = 126;
