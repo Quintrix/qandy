@@ -223,10 +223,10 @@ body { margin: 0; background-color: #333; }
   background-color: var(--bg);
   display: inline-block;
   white-space: pre;
-  line-height: 1;
-  font-family: monospace;
   padding: 0;
   margin: 0;
+  line-height: 1;
+  font-family: monospace;
 }
 
 /* Inverse: swap fg/bg */
@@ -493,7 +493,7 @@ var altShiftKeys = {
   "1":"↑", "2":"↓", "3":"←", "4":"→", "5":"↔", "6":"↕", "7":"★", "8":"☆", "9":"◆", "0":"◇",
   "q":"╭", "w":"╌", "e":"╮", "r":"╞", "t":"╡", "y":"╰", "u":"╴", "i":"╯", "o":"╎", "p":"╪",
   "a":"┏", "s":"━", "d":"┓", "f":"┣", "g":"┫", "h":"┗", "j":"┻", "k":"┛", "l":"┃", "'":"′",
-  "z":"▔", "x":"▁", "c":"▪", "v":"▸", "b":"◂", "n":"▴", "m":"▾", ";":"╋",
+  "zhttps://quintrix.github.io/qandy/":"▔", "x":"▁", "c":"▪", "v":"▸", "b":"◂", "n":"▴", "m":"▾", ";":"╋",
   " ":"·", ",":"◊", ".":"●", "/":"○"
 };
 var keyboardData = [
@@ -3498,7 +3498,46 @@ RUN="qandy.js";
 window.button=function(b, event) {
   pokeCursorOff();
   // Check if we need to unlock audio on first host keypress
+  if (window._qandy_hostAudioPending) {
+    window._qandy_hostAudioPending = false;  // Clear flag immediately
+    try {
+      // Create and resume audio context on this user gesture
+      if (!window.audioContext) {
+        window.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      // Resume if suspended
+      if (window.audioContext && window.audioContext.state === 'suspended' && 
+          typeof window.audioContext.resume === 'function') {
+        window.audioContext.resume().catch(function(err) {
+          console.warn('Failed to resume audio context:', err);
+        });
+      }
+      // Also try the module's audio context if it exists
+      if (window._qandy_audio && window._qandy_audio.ctx && 
+          typeof window._qandy_audio.ctx.resume === 'function' &&
+          window._qandy_audio.ctx.state === 'suspended') {
+        window._qandy_audio.ctx.resume().catch(function(err) {
+          console.warn('Failed to resume module audio context:', err);
+        });
+      }
+    } catch (e) { 
+      console.warn('Host audio initialization failed:', e);
+    }
+  }
   if (event && typeof event.shiftKey !== 'undefined') shift = !!event.shiftKey;
+  if (confirmSound==1) {
+    try {
+    // Try to resume the existing audio context if it's suspended
+    if (window.audioContext && typeof window.audioContext.resume === 'function') {
+    window.audioContext.resume().catch(function(){});
+    }
+    // Also try the module's audio context if exposed
+    if (window._qandy_audio && window._qandy_audio.ctx && 
+    typeof window._qandy_audio.ctx.resume === 'function') {
+    window._qandy_audio.ctx.resume().catch(function(){});
+    }
+    } catch (e) { conoloe.info("<host> audio init failed"); }
+  }
   var k = "", l = "";
   if (b===32) { event.preventDefault(); }
   switch (b) {
@@ -3900,6 +3939,7 @@ window.button=function(b, event) {
   } else {
     if (RUN) { keydown(k || l); }
   }
+  if (SOUND && typeof beep === 'function') { try { beep(900, 25, 0.01); } catch (e) {}} 
   pokeCursorOn();
 }
 
@@ -4189,56 +4229,12 @@ window.print=function(t) {
   text = text.replace(/\[magenta\]/g, ANSImagenta);
   text = text.replace(/\[cyan\]/g, ANSIcyan);
   text = text.replace(/\[white\]/g, ANSIwhite);
-
-  text = text.replace(/\[bblue\]/g, ANSIblue_bright);
-  text = text.replace(/\[bblack\]/g, ANSIblack_bright);
-  text = text.replace(/\[bred\]/g, ANSIred_bright);
-  text = text.replace(/\[bgreen\]/g, ANSIgreen_bright);
-  text = text.replace(/\[byellow\]/g, ANSIyellow_bright);
-  text = text.replace(/\[bmagenta\]/g, ANSImagenta_bright);
-  text = text.replace(/\[bcyan\]/g, ANSIcyan_bright);
-  text = text.replace(/\[bwhite\]/g, ANSIwhite_bright);
-
-  text = text.replace(/\[-blue\]/g, ANSIbgblue);
-  text = text.replace(/\[-black\]/g, ANSIbgblack);
-  text = text.replace(/\[-red\]/g, ANSIbgred);
-  text = text.replace(/\[-green\]/g, ANSIbggreen);
-  text = text.replace(/\[-yellow\]/g, ANSIbgyellow);
-  text = text.replace(/\[-magenta\]/g, ANSIbgmagenta);
-  text = text.replace(/\[-cyan\]/g, ANSIbgcyan);
-  text = text.replace(/\[-white\]/g, ANSIbgwhite);
-
-  text = text.replace(/\[-bblue\]/g, ANSIbgblue_bright);
-  text = text.replace(/\[-bblack\]/g, ANSIbgblack_bright);
-  text = text.replace(/\[-bred\]/g, ANSIbgred_bright);
-  text = text.replace(/\[-bgreen\]/g, ANSIbggreen_bright);
-  text = text.replace(/\[-byellow\]/g, ANSIbgyellow_bright);
-  text = text.replace(/\[-bmagenta\]/g, ANSIbgmagenta_bright);
-  text = text.replace(/\[-bcyan\]/g, ANSIbgcyan_bright);
-  text = text.replace(/\[-bwhite\]/g, ANSIbgwhite_bright);
-
-  text = text.replace(/\[bold\]/g, ANSIbold);
-  text = text.replace(/\[dim\]/g, ANSIdim);
-  text = text.replace(/\[italic\]/g, ANSIitalic);
-  text = text.replace(/\[line\]/g, ANSIunderline);
-  text = text.replace(/\[inverse\]/g, ANSIinverse);
-  text = text.replace(/\[hidden\]/g, ANSIhidden);
-  text = text.replace(/\[strike\]/g, ANSIstrikethrough);
-  text = text.replace(/\[blink\]/g, "\033[5m");
-  text = text.replace(/\[reset\]/g, ANSIresetAll);
-
-  text = text.replace(/\[up\]/g, "\x1b[A");
-  text = text.replace(/\[down\]/g, "\x1b[B");
-  text = text.replace(/\[right\]/g, "\x1b[C");
-  text = text.replace(/\[left\]/g, "\x1b[D");
-  text = text.replace(/\[home\]/g, "\x1b[H");
-  text = text.replace(/\[cls\]/g, "\033[2J");
-
-  // pokeCursor(text);
   
+  // enqueue the print and start processor
   var q = window._qandy_print_queue;
   return new Promise(function(resolve) {
     q.items.push({ text: text, resolve: resolve });
+    // kick the processor (it is safe if already running)
     _processPrintQueue();
   });
 }
@@ -4257,6 +4253,7 @@ if (GUEST) {
   // guest system ready
   var CURBAUD=2400; // baud rate to display text
   print("\n[cyan]Qandy Pocket\nComputer v1.j\n\n[yellow]Qandy Guest User\n[white]\n");
+
 } else {
   // host system ready
   var CURBAUD=9600; // baud rate to display text
