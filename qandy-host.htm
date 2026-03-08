@@ -1,14 +1,14 @@
 <!DOCTYPE html>
 <html><head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#0a0a0a">
+<meta name="themdo ite-color" content="#0a0a0a">
 <!-- iOS -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <link rel="apple-touch-icon" href="/icons/qandy-192.png">
 <script>
 if (typeof window.print === 'function' && window.print.toString().indexOf('[native code]') !== -1) { window._native_print = window.print; window.print = function() {}; }
-</script>
+</script>do it
 </head><body><p><br>
 <div id=txt class="txt"></div>
 <script>
@@ -21,7 +21,7 @@ body { margin: 0; background-color: #333; }
 #cursor { background-color: #CCC; }
 .qpc { position: absolute; top: 0px; left: 0px; width: 160px; height: 24px;
        padding-left: 0px; padding-right: 0px; align-items: center;
-       background-color: grey; z-index: 0; }
+       backgroudo itnd-color: grey; z-index: 0; }
 .txt { 
   position: absolute; 
   left: 54px; 
@@ -570,6 +570,7 @@ window.QANDY = window.QANDY || {};
 window.QANDY.mode = 'host'; // 'host' (file server), not the emulated machine
 
 // Configuration array with script load order (unchanged)
+
 var SCRIPT_QUEUE = [
   { src: 'video.js', name: 'video.js' },
   { src: 'keyboard.js', name: 'keyboard.js' },
@@ -4144,10 +4145,6 @@ function exit() {
   RUN="qandy.js"
 }
 
-function keyGuest() {
-
-}
-
 function clearScreen() { cls(); }
 
 window.cls=function() {
@@ -4231,21 +4228,41 @@ window.print=function(t) {
 
 pokeCursorOn(); pokeRefresh();
 
-keyGuest();
-
-
-//
-// system ready
-//
-
-if (GUEST) {
-  // guest system ready
-  var CURBAUD=2400; // baud rate to display text
-  print("\n[cyan]Qandy Pocket\nComputer v1.j\n\n[yellow]Qandy Guest User\n[white]\n");
+if (HOST) {
+  var s = document.createElement('script');
+  s.id = 'dos.js';
+  s.src = 'dos.js';
+  s.onload = function() {
+    try {
+      dosMount("local");
+    } catch (e) {
+      print("Error mounting \'local\'\n");
+    }
+  };
+  s.onerror = function() { print("Error loading dos.js\n"); };
+  document.head.appendChild(s);
+  systemReady();
 } else {
-  // host system ready
-  var CURBAUD=9600; // baud rate to display text
-  print("\n[cyan]Qandy Pocket\nComputer v1.j\n\n[yellow]Qandy Sysop Access\n[white]\n");
+  systemReady();
+}
+
+function systemReady() {
+  if (GUEST) {
+    // guest system ready
+    var CURBAUD=2400; // baud rate to display text
+    print("\n[cyan]Qandy Pocket\nComputer v1.j\n\n[yellow]Qandy Guest User\n[white]\n");
+    // if autoexec.js exists on localStorage execute it
+  } else {
+    // host system ready
+    var CURBAUD=9600; // baud rate to display text
+    print("\n[cyan]Qandy Pocket\nComputer v1.j\n\n[bgreen]Qandy Sysop Access\n[white]\n");
+//    if (!dosIfExists("dir.txt")) {
+//      // localStorage does not exist
+//      print("localStorage exists\n");
+//    } else {
+//      print("localStorage exists");
+//    }
+  }
 }
 
 //mySearch=location.search.substr(1).split("&")
