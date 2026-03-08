@@ -4230,8 +4230,8 @@ pokeCursorOn(); pokeRefresh();
 
 if (HOST) {
   var s = document.createElement('script');
-  s.id = 'dos.js';
-  s.src = 'dos.js';
+  s.id = 'dos3.js';
+  s.src = 'dos3.js';
   s.onload = function() {
     try {
       dosMount("local");
@@ -4255,7 +4255,7 @@ function systemReady() {
   } else {
     // host system ready
     var CURBAUD=9600; // baud rate to display text
-    print("\n[cyan]Qandy Pocket\nComputer v1.j\n\n[yellow]Qandy Sysop Access\n[white]\n");
+    print("\n[cyan]Qandy Pocket\nComputer v1.j\n\n[bgreen]Qandy Sysop Access\n[white]\n");
 //    if (!dosIfExists("dir.txt")) {
 //      // localStorage does not exist
 //      print("localStorage exists\n");
