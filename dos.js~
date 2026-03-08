@@ -298,7 +298,7 @@ print("DOS enabled");
     } else if (device === 'none') {
       return null;
     } else if (device === 'file') {
-      var obj=document.createElement('object');
+      obj=document.createElement('object');
       obj.id = 'dosLoad';
       obj.setAttribute('data', filename);
       obj.setAttribute('type', 'text/plain');

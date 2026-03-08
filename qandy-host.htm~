@@ -322,8 +322,7 @@ var SOUND=true;       // enable/disable sound card
 // qandy.js
 var HOST=1;     // host machine
 var GUEST=0;    // guest machine
-var ROOT=0;     // root access, to replace devteam   
-var DEVTEAM=0;  // developer mode
+var SYSOP=0;    // sysop access   
 var RUN= "";    // current script running starting with qandy.js 
 var RUNIN="";   // input mode set by running script, line or key
 var RUNOUT="";  // output display set by running script, gfx or txt
@@ -446,7 +445,6 @@ var alt=0;   // alt key pressed
 var ctrlPhysical=false;  // track if ctrl was activated by physical keyboard
 var altPhysical=false;   // track if alt was activated by physical keyboard
 var keyboard=1; // turn keyboard input on/off
-var confirmSound=0; // used to activate host sound on first root 
 
 var LINE ="";  // input line
 var LINEX=0;   // start of input cursor x
@@ -823,22 +821,18 @@ function init() {
   console.info("Initalizing HOST="+HOST);
   if (document.readyState === 'loading') {
     if (HOST==true) {
-    console.log("LINE 824 HOST="+HOST);
-      // powerup to qandy root
+      console.log("poweron <host> machine");
       setTimeout(startScriptLoading, 0);
     } else {
-      console.log("LINE 828 HOST="+HOST);
-      // power up to qandy user
+      console.log("poweron <guest> machine");
       document.addEventListener('DOMContentLoaded', powerOn);
     }
   } else {
     if (HOST==true) {
-      console.log("LINE 834 HOST="+HOST);
-      // powerup to qandy root
+      console.log("poweron <host> machine");
       setTimeout(startScriptLoading, 0);
     } else {
-      console.log("LINE 838 HOST="+HOST);
-      // power up to qandy user
+      console.log("poweron <guest> machine");
       document.addEventListener('DOMContentLoaded', powerOn);
     }
   }
@@ -847,7 +841,7 @@ function init() {
 // Build guest HTML and embed HOST_SCRIPTS map (filename -> source string)
 async function assembleGuestHtml(options) {
  // should this be if GUEST==true?
- if (ROOT==false) {  
+ if (HOST==false) {  
   options = options || {};
 
   // Build HTML parts
@@ -3292,7 +3286,7 @@ function init_command_js() {
         SYNC=1; pokeRefresh;
         pokeCursorOn();
       case 'whoami':
-        var context = HOST ? "HOST (root access)" : "GUEST (user sandbox)";
+        var context = HOST ? "HOST (sysop access)" : "GUEST (user sandbox)";
         print("\nContext: " + context + "\n");
         print("Window URL: " + window.location.href + "\n");
         print("Has file:// access: " + (typeof document.createElement('script').onerror === 'function' ? "yes" : "maybe") + "\n");
@@ -3304,7 +3298,7 @@ function init_command_js() {
         print("RUN=" + RUN + "\n");
         print("Parent is: " + (window.parent === window ? "self" : "parent iframe") + "\n\n");
         return;
-      case 'root':
+      case 'sysop':
         if (GUEST) {
           try {
             window.parent.postMessage({ type: 'guest-action', action: 'show-host', success: true }, '*');
@@ -4251,7 +4245,7 @@ if (GUEST) {
 } else {
   // host system ready
   var CURBAUD=9600; // baud rate to display text
-  print("\n[cyan]Qandy Pocket\nComputer v1.j\n\n[yellow]Qandy Root Access\n[white]\n");
+  print("\n[cyan]Qandy Pocket\nComputer v1.j\n\n[yellow]Qandy Sysop Access\n[white]\n");
 }
 
 //mySearch=location.search.substr(1).split("&")
