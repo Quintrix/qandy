@@ -8,7 +8,7 @@
 <link rel="apple-touch-icon" href="/icons/qandy-192.png">
 <script>
 if (typeof window.print === 'function' && window.print.toString().indexOf('[native code]') !== -1) { window._native_print = window.print; window.print = function() {}; }
-</script>do it
+</script>
 </head><body><p><br>
 <div id=txt class="txt"></div>
 <script>
@@ -4244,6 +4244,7 @@ if (HOST) {
   systemReady();
 } else {
   systemReady();
+  alert(GUEST);
 }
 
 function systemReady() {
