@@ -29,14 +29,10 @@
 
 (function () {
   'use strict';
-
-print("DOS enabled");
-
-  // ===== Global Variables =====
-  window.DOS = false;     // User must enable DOS via dosMount() or similar
-  window.DEVICE = 'file'; // Default device is file:/// access
-  
-  // ===== Device Configuration =====
+  if (!HOST) { return "Error: no access\n"; }
+  window.DOS = true;
+  window.DEVICE = 'local';
+  print("DOS enabled for \'"+window.DEVICE+"\'\n");
   var DEVICES = {
     'file': {
       name: 'file',
@@ -65,93 +61,26 @@ print("DOS enabled");
     }
   };
 
-  // ===== Manifest Configuration =====
   var MANIFEST_FILENAME = 'dir.txt';
-
-  // ===== File Validation =====
   var MAX_FILENAME_LENGTH = 255;
   var VALID_FILENAME_RE = /^[A-Za-z0-9 \-_.()+=]+$/; // No leading dot, no leading !
   var VALID_FILENAME_WITH_PROTECTION_RE = /^!?[A-Za-z0-9 \-_.()+=]+$/; // Allow ! at start
-
-  // ===== In-Memory State =====
-  var _clipboard = null; // { filename: string, content: string } for dosCopy/dosPaste
-
-  // ===== Utility Functions =====
-
-  /**
-   * Calculate UTF-8 byte length of a string
-   */
-  function _getByteLength(str) {
-    try {
-      return new TextEncoder().encode(String(str)).length;
-    } catch (e) {
-      return String(str).length;
-    }
-  }
-
-  /**
-   * Normalize filename: trim spaces, standardize
-   */
-  function _normalizeFilename(name) {
-    if (typeof name !== 'string') {
-      name = String(name == null ? '' : name);
-    }
-    return name.trim();
-  }
-
-  /**
-   * Check if filename starts with ! (write-protected)
-   */
-  function _isProtected(filename) {
-    filename = _normalizeFilename(filename);
-    return filename.charAt(0) === '!';
-  }
-
-  /**
-   * Strip leading ! from filename for storage/comparison
-   */
-  function _stripProtection(filename) {
-    filename = _normalizeFilename(filename);
-    if (filename.charAt(0) === '!') {
-      return filename.substring(1);
-    }
-    return filename;
-  }
-
-  /**
-   * Validate filename (without ! prefix)
-   * Returns { ok: boolean, reason: string }
-   */
+  var _clipboard = null; 
+  function _getByteLength(str) { try { return new TextEncoder().encode(String(str)).length; } catch (e) { return String(str).length; }}
+  function _normalizeFilename(name) { if (typeof name !== 'string') { name = String(name == null ? '' : name); } return name.trim(); }
+  function _isProtected(filename) { filename = _normalizeFilename(filename); return filename.charAt(0) === '!'; }
+  function _stripProtection(filename) { filename = _normalizeFilename(filename); if (filename.charAt(0) === '!') { return filename.substring(1); } return filename; }
   function _validateFilename(name) {
     var filename = _stripProtection(name);
     filename = _normalizeFilename(filename);
-
-    if (!filename) {
-      return { ok: false, reason: 'empty filename' };
-    }
-
-    if (filename.charAt(0) === '.') {
-      return { ok: false, reason: 'filename cannot start with .' };
-    }
-
-    if (!VALID_FILENAME_RE.test(filename)) {
-      return { ok: false, reason: 'invalid characters in filename' };
-    }
-
-    if (_getByteLength(filename) > MAX_FILENAME_LENGTH) {
-      return { ok: false, reason: 'filename exceeds 255 bytes' };
-    }
-
+    if (!filename) { return { ok: false, reason: 'empty filename' }; }
+    if (filename.charAt(0) === '.') { return { ok: false, reason: 'filename cannot start with .' }; }
+    if (!VALID_FILENAME_RE.test(filename)) { return { ok: false, reason: 'invalid characters in filename' }; }
+    if (_getByteLength(filename) > MAX_FILENAME_LENGTH) { return { ok: false, reason: 'filename exceeds 255 bytes' }; }
     return { ok: true, filename: filename };
   }
-
-  /**
-   * Format timestamp: return yyyymmddhhmmss string
-   */
   function _formatTimestamp(date) {
-    if (!date) {
-      date = new Date();
-    }
+    if (!date) { date = new Date(); }
     var yyyy = String(date.getFullYear());
     var mm = String(date.getMonth() + 1).padStart(2, '0');
     var dd = String(date.getDate()).padStart(2, '0');
@@ -160,14 +89,8 @@ print("DOS enabled");
     var ss = String(date.getSeconds()).padStart(2, '0');
     return yyyy + mm + dd + hh + min + ss;
   }
-
-  /**
-   * Parse timestamp string yyyymmddhhmmss into Date object
-   */
   function _parseTimestamp(ts) {
-    if (!ts || ts.length < 14) {
-      return new Date();
-    }
+    if (!ts || ts.length < 14) { return new Date(); }
     var yyyy = parseInt(ts.substring(0, 4), 10);
     var mm = parseInt(ts.substring(4, 6), 10) - 1; // Month is 0-indexed
     var dd = parseInt(ts.substring(6, 8), 10);
@@ -177,10 +100,6 @@ print("DOS enabled");
     return new Date(yyyy, mm, dd, hh, min, ss);
   }
 
-  /**
-   * Format file size for human-readable display
-   * Returns string like "1b", "1k", "1m"
-   */
   function _formatFileSize(bytes) {
     bytes = parseInt(bytes, 10) || 0;
     if (bytes === 0) return '0b';
@@ -189,10 +108,6 @@ print("DOS enabled");
     return Math.round(bytes / 1048576) + 'm';
   }
 
-  /**
-   * Format timestamp for human-readable display
-   * Returns string like "03-01-2026 02:11:49"
-   */
   function _formatTimestampHuman(ts) {
     var date = _parseTimestamp(ts);
     var mm = String(date.getMonth() + 1).padStart(2, '0');
@@ -204,35 +119,23 @@ print("DOS enabled");
     return mm + '-' + dd + '-' + yyyy + ' ' + hh + ':' + min + ':' + ss;
   }
 
-  /**
-   * Load dir.txt manifest from current device
-   * Returns array of { filename, filesize, timestamp, protected }
-   */
   function _loadManifest() {
     var device = window.DEVICE || 'file';
     var content = _loadFileFromDevice(MANIFEST_FILENAME, device);
     var content = _loadFileFromDevice(MANIFEST_FILENAME, device);
     var manifest = [];
-
-    if (!content) {
-      return manifest;
-    }
-
+    if (!content) { return manifest; }
     var lines = content.split('\n');
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i].trim();
       if (!line) continue;
-
       var parts = line.split('|');
       if (parts.length < 3) continue;
-
       var filename = parts[0].trim();
       var filesize = parts[1].trim();
       var timestamp = parts[2].trim();
-
       var protected_flag = _isProtected(filename);
       filename = _stripProtection(filename);
-
       manifest.push({
         filename: filename,
         filesize: parseInt(filesize, 10) || 0,
@@ -240,34 +143,21 @@ print("DOS enabled");
         protected: protected_flag
       });
     }
-
     return manifest;
   }
-
-  /**
-   * Save dir.txt manifest to current device
-   */
   function _saveManifest(manifest) {
     var device = window.DEVICE || 'file';
     var lines = [];
-
     for (var i = 0; i < manifest.length; i++) {
       var entry = manifest[i];
       var line = '';
-      if (entry.protected) {
-        line += '!';
-      }
+      if (entry.protected) { line += '!'; }
       line += entry.filename + '|' + entry.filesize + '|' + entry.timestamp;
       lines.push(line);
     }
-
     var content = lines.join('\n');
     _saveFileToDevice(MANIFEST_FILENAME, content, device);
   }
-
-  /**
-   * Find entry in manifest by filename (case-insensitive, strips !)
-   */
   function _findManifestEntry(filename, manifest) {
     filename = _stripProtection(_normalizeFilename(filename));
     for (var i = 0; i < manifest.length; i++) {
@@ -277,15 +167,9 @@ print("DOS enabled");
     }
     return null;
   }
-
-  /**
-   * Load file from current device
-   * Internal helper function
-   */
   function _loadFileFromDevice(filename, device) {
     device = device || window.DEVICE || 'file';
     filename = _stripProtection(_normalizeFilename(filename));
-
     if (device === 'local') {
       var key = DEVICES.local.prefix + filename;
       try {
@@ -298,33 +182,13 @@ print("DOS enabled");
     } else if (device === 'none') {
       return null;
     } else if (device === 'file') {
-      var obj=document.createElement('object');
-      obj.id = 'dosLoad';
-      obj.setAttribute('data', filename);
-      obj.setAttribute('type', 'text/plain');
-      obj.style.display = 'none';
-      obj.onload = function() {
-        try {
-          const content = obj.contentDocument.body.innerText;
-          console.log("File loaded successfully:", content);
-        } catch (e) {
-        	 print("File Error\n");
-          return null;
-        }
-      };
-      document.body.appendChild(obj);
+    	// non-functional 
     }
     return null;
   }
-
-  /**
-   * Save file to current device
-   * Internal helper function
-   */
   function _saveFileToDevice(filename, content, device) {
     device = device || window.DEVICE || 'file';
     filename = _stripProtection(_normalizeFilename(filename));
-
     if (device === 'local') {
       var key = DEVICES.local.prefix + filename;
       try {
@@ -344,11 +208,6 @@ print("DOS enabled");
     }
     return false;
   }
-
-  /**
-   * Delete file from current device
-   * Internal helper function
-   */
   function _deleteFileFromDevice(filename, device) {
     device = device || window.DEVICE || 'file';
     filename = _stripProtection(_normalizeFilename(filename));
@@ -372,15 +231,9 @@ print("DOS enabled");
     }
     return false;
   }
-
-  /**
-   * Check if file exists on current device
-   * Internal helper function
-   */
   function _fileExistsOnDevice(filename, device) {
     device = device || window.DEVICE || 'file';
     filename = _stripProtection(_normalizeFilename(filename));
-
     if (device === 'local') {
       var key = DEVICES.local.prefix + filename;
       try {
@@ -394,43 +247,20 @@ print("DOS enabled");
       return false;
     } else if (device === 'file') {
       // file:/// access - check manifest
-      var manifest = _loadManifest();
-      return _findManifestEntry(filename, manifest) !== null;
+      // var manifest = _loadManifest();
+      // return _findManifestEntry(filename, manifest) !== null;
     }
     return false;
   }
 
-  // ===== Public API =====
-
-  /**
-   * dosMount(device)
-   * Sets the active device to access. Default "file" for file:///
-   */
   window.dosMount = function (device) {
-    if (!window.DOS) {
-      return { error: 'DOS not enabled' };
-    }
-
-    if (!DEVICES.hasOwnProperty(device)) {
-      return { error: 'unsupported device: ' + device };
-    }
-
-    window.DEVICE = device;
-    return { ok: true, device: device };
+    if (!window.DOS) { return { error: 'DOS not enabled' }; }
+    if (!DEVICES.hasOwnProperty(device)) { return { error: 'unsupported device: ' + device }; }
+    window.DEVICE = device; return { ok: true, device: device };
   };
-
-  /**
-   * dosBackup(data)
-   * Formats active device with JSON string. If data is omitted,
-   * returns JSON string with contents of device for backup.
-   */
   window.dosBackup = function (data) {
-    if (!window.DOS) {
-      return { error: 'DOS not enabled' };
-    }
-
+    if (!window.DOS) { return { error: 'DOS not enabled' }; }
     var device = window.DEVICE || 'file';
-
     if (typeof data !== 'undefined') {
       // Restore from backup
       try {
@@ -480,44 +310,22 @@ print("DOS enabled");
     }
   };
 
-  /**
-   * dosList()
-   * Returns string with list of filenames separated by newlines
-   */
   window.dosList = function () {
-    if (!window.DOS) {
-      return '';
-    }
-
+    if (!window.DOS) { return ''; }
     var manifest = _loadManifest();
     var lines = [];
-
-    for (var i = 0; i < manifest.length; i++) {
-      lines.push(manifest[i].filename);
-    }
-
+    for (var i = 0; i < manifest.length; i++) { lines.push(manifest[i].filename); }
     return lines.join('\n');
   };
 
-  /**
-   * dosDir(h)
-   * Returns string with list of filenames, filesizes, and timestamps.
-   * h=0: raw filesizes and timestamps (yyyymmddhhmmss)
-   * h=1: human-readable sizes (b, k, m) and timestamps (mm-dd-yyyy hh:mm:ss)
-   */
   window.dosDir = function (h) {
-    if (!window.DOS) {
-      return '';
-    }
-
+    if (!window.DOS) { return ''; }
     h = h ? 1 : 0; // Default to raw (h=0)
     var manifest = _loadManifest();
     var lines = [];
-
     for (var i = 0; i < manifest.length; i++) {
       var entry = manifest[i];
       var line = entry.filename;
-
       if (h === 1) {
         line += ' ' + _formatFileSize(entry.filesize);
         lines.push(line);
@@ -528,72 +336,32 @@ print("DOS enabled");
         lines.push('  ' + entry.timestamp);
       }
     }
-
     return lines.join('\n');
   };
 
-  /**
-   * dosSave(file, data)
-   * Saves data as filename to active device.
-   * If filename begins with ">", append to existing file.
-   * Do not allow append on write-protected files.
-   * Do not allow saving dir.txt (write-protected by default).
-   */
   window.dosSave = function (file, data) {
-    if (!window.DOS) {
-      return { error: 'DOS not enabled' };
-    }
-
+    if (!window.DOS) { return "DOS not enabled" }; 
     var device = window.DEVICE || 'file';
-
-    // Check if this is the manifest file
-    if (_stripProtection(_normalizeFilename(file)) === MANIFEST_FILENAME) {
-      return { error: 'cannot write dir.txt, it is write-protected' };
-    }
-
-    // Check for append mode
+    if (_stripProtection(_normalizeFilename(file)) === MANIFEST_FILENAME) { return "File error (read only)\n"; }
     var append = false;
-    if (file.charAt(0) === '>') {
-      append = true;
-      file = file.substring(1);
-    }
-
+    if (file.charAt(0) === '>') { append = true; file = file.substring(1); }
     var validation = _validateFilename(file);
-    if (!validation.ok) {
-      return { error: validation.reason };
-    }
-
+    if (!validation.ok) { return validation.reason+"\n"; }
     var filename = validation.filename;
     var manifest = _loadManifest();
     var existingEntry = _findManifestEntry(filename, manifest);
-
-    // Check write-protect on append
-    if (append && existingEntry && existingEntry.entry.protected) {
-      return { error: 'cannot append to write-protected file' };
-    }
-
-    // Handle append mode
+    if (append && existingEntry && existingEntry.entry.protected) { return "File error (read only)\n"; }
     var content = String(data || '');
     if (append && existingEntry) {
       var existing = _loadFileFromDevice(filename, device);
-      if (existing) {
-        content = existing + content;
-      }
+      if (existing) { content = existing + content; }
     }
-
-    // Save file to device
     var success = _saveFileToDevice(filename, content, device);
-    if (!success) {
-      return { error: 'failed to save file to device' };
-    }
-
-    // Update manifest
+    if (!success) { return "File error\n"; }
     if (existingEntry) {
-      // Update existing entry
       existingEntry.entry.filesize = _getByteLength(content);
       existingEntry.entry.timestamp = _formatTimestamp();
     } else {
-      // Create new entry
       manifest.push({
         filename: filename,
         filesize: _getByteLength(content),
@@ -601,70 +369,33 @@ print("DOS enabled");
         protected: false
       });
     }
-
     _saveManifest(manifest);
-    return { ok: true, filename: filename };
+    return true;
   };
 
-  /**
-   * dosLoad(file)
-   * Returns contents of filename from active device as string.
-   * If file is dir.txt, return formatted directory via dosDir(1)
-   */
   window.dosLoad = function (file) {
     if (!window.DOS) { return ''; }
     file = _normalizeFilename(file);
     // Special handling for dir.txt
-    if (file === MANIFEST_FILENAME || file === '!' + MANIFEST_FILENAME) { return window.dosDir(1); }
+    if (file === MANIFEST_FILENAME || file === '!' + MANIFEST_FILENAME) { return window.dosDir(); }
     var filename = _stripProtection(file);
     return _loadFileFromDevice(filename, window.DEVICE) || '';
   };
 
-  /**
-   * dosCopy(file, dest)
-   * Copies file into clipboard for dosPaste command.
-   * If dest is provided, also copies the file into the dest file.
-   * Returns error if dest already exists.
-   */
   window.dosCopy = function (file, dest) {
-    if (!window.DOS) {
-      return { error: 'DOS not enabled' };
-    }
-
+    if (!window.DOS) { return { error: 'DOS not enabled' }; }
     var device = window.DEVICE || 'file';
     file = _normalizeFilename(file);
-
-    // Load source file
     var content = _loadFileFromDevice(file, device);
-    if (content === null) {
-      return { error: 'file not found: ' + file };
-    }
-
-    // Store in clipboard
-    _clipboard = {
-      filename: file,
-      content: content
-    };
-
-    // If dest provided, also copy to dest file
+    if (content === null) { return { error: 'file not found: ' + file }; }
+    _clipboard = { filename: file, content: content };
     if (typeof dest !== 'undefined' && dest) {
       var validation = _validateFilename(dest);
-      if (!validation.ok) {
-        return { error: validation.reason };
-      }
-
+      if (!validation.ok) { return { error: validation.reason }; }
       var filename = validation.filename;
-      if (_fileExistsOnDevice(filename, device)) {
-        return { error: 'destination file already exists: ' + filename };
-      }
-
-      // Save to destination
+      if (_fileExistsOnDevice(filename, device)) { return { error: 'destination file already exists: ' + filename }; }
       var success = _saveFileToDevice(filename, content, device);
-      if (!success) {
-        return { error: 'failed to copy to destination' };
-      }
-
-      // Update manifest
+      if (!success) { return { error: 'failed to copy to destination' }; }
       var manifest = _loadManifest();
       manifest.push({
         filename: filename,
@@ -674,57 +405,37 @@ print("DOS enabled");
       });
       _saveManifest(manifest);
     }
-
     return { ok: true, filename: file, clipboard: true };
   };
 
-  /**
-   * dosPaste(dest)
-   * Pastes clipboard contents into dest.
-   * Will append if dest starts with ">", otherwise returns error if exists.
-   */
-  window.dosPaste = function (dest) {
-    if (!window.DOS) {
-      return { error: 'DOS not enabled' };
+  window.dosPaste = async function (dest) {
+    if (!window.DOS) { return "DOS disabled"; }
+    let content = null;
+    if (typeof _clipboard !== 'undefined' && _clipboard && _clipboard.content) {
+      content = _clipboard.content;
+    } else if (navigator.clipboard && typeof navigator.clipboard.readText === 'function') {
+      try {
+        content = await navigator.clipboard.readText();
+      } catch (err) {
+        // Clipboard read may be denied or require a user gesture / secure context
+        return { error: 'unable to read system clipboard: ' + (err && err.message ? err.message : err) };
+      }
     }
-
-    if (!_clipboard) {
-      return { error: 'clipboard is empty' };
-    }
-
-    var device = window.DEVICE || 'file';
+    if (!content) { return "clipboard is empty"; }
+    var device = window.DEVICE || 'local';
     var append = false;
-
-    if (dest.charAt(0) === '>') {
-      append = true;
-      dest = dest.substring(1);
-    }
-
+    if (dest.charAt(0) === '>') { append = true; dest = dest.substring(1); }
     var validation = _validateFilename(dest);
-    if (!validation.ok) {
-      return { error: validation.reason };
-    }
-
+    if (!validation.ok) { return { error: validation.reason }; }
     var filename = validation.filename;
-    var content = _clipboard.content;
-
-    // Handle append mode
     if (append) {
       var existing = _loadFileFromDevice(filename, device);
-      if (existing) {
-        content = existing + content;
-      }
+      if (existing) { content = existing + content; }
     } else if (_fileExistsOnDevice(filename, device)) {
       return { error: 'destination file already exists: ' + filename };
     }
-
-    // Save file
     var success = _saveFileToDevice(filename, content, device);
-    if (!success) {
-      return { error: 'failed to paste file' };
-    }
-
-    // Update manifest
+    if (!success) { return { error: 'failed to paste file' }; }
     var manifest = _loadManifest();
     var existingEntry = _findManifestEntry(filename, manifest);
     if (existingEntry) {
@@ -739,131 +450,64 @@ print("DOS enabled");
       });
     }
     _saveManifest(manifest);
-
     return { ok: true, filename: filename };
   };
 
-  /**
-   * dosRename(file, dest)
-   * Renames file to dest
-   */
   window.dosRename = function (file, dest) {
-    if (!window.DOS) {
-      return { error: 'DOS not enabled' };
-    }
-
+    if (!window.DOS) { return "DOS disabled"; }
     var device = window.DEVICE || 'file';
     file = _normalizeFilename(file);
-
     var validation = _validateFilename(dest);
-    if (!validation.ok) {
-      return { error: validation.reason };
-    }
-
+    if (!validation.ok) { return "File error: "+validation.reason; }
     var newFilename = validation.filename;
     var oldFilename = _stripProtection(file);
-
-    // Load file content
     var content = _loadFileFromDevice(oldFilename, device);
-    if (content === null) {
-      return { error: 'file not found: ' + oldFilename };
-    }
-
-    // Check if destination exists
-    if (_fileExistsOnDevice(newFilename, device)) {
-      return { error: 'destination file already exists: ' + newFilename };
-    }
-
-    // Load manifest and find entry
+    if (content === null) { return "File not found\n"; }
+    if (_fileExistsOnDevice(newFilename, device)) { return "File already exists\n"; }
     var manifest = _loadManifest();
     var existingEntry = _findManifestEntry(oldFilename, manifest);
-    if (!existingEntry) {
-      return { error: 'file not found in manifest: ' + oldFilename };
-    }
-
+    if (!existingEntry) { return "File not found"; }
     // Delete old file and save with new name
     _deleteFileFromDevice(oldFilename, device);
     _saveFileToDevice(newFilename, content, device);
-
-    // Update manifest entry
     existingEntry.entry.filename = newFilename;
     _saveManifest(manifest);
-
-    return { ok: true, oldFilename: oldFilename, newFilename: newFilename };
+    return true;
   };
 
-  /**
-   * dosType(file)
-   * Print file to display screen (uses print() function).
-   * If file is dir.txt, print results of dosDir(0)
-   */
   window.dosType = function (file) {
-    if (!window.DOS) {
-      return;
-    }
-
+    if (!window.DOS) { return; }
     file = _normalizeFilename(file);
-
     var content;
     if (file === MANIFEST_FILENAME || file === '!' + MANIFEST_FILENAME) {
       content = window.dosDir(0);
     } else {
       content = window.dosLoad(file);
     }
-
     if (typeof print !== 'undefined') {
       print(content);
     } else if (typeof console !== 'undefined') {
       console.log(content);
     }
   };
-
-  /**
-   * dosDelete(file)
-   * Deletes filename from active device.
-   * Must first remove write-protection (!) to delete.
-   */
   window.dosDelete = function (file) {
-    if (!window.DOS) {
-      return { error: 'DOS not enabled' };
-    }
-
+    if (!window.DOS) { return { error: 'DOS not enabled\n' }; }
     var device = window.DEVICE || 'file';
     file = _normalizeFilename(file);
-
-    // Check if file is write-protected (cannot delete)
-    if (_isProtected(file)) {
-      return { error: 'file is write-protected, rename it to remove protection first' };
-    }
-
+    if (_isProtected(file)) { return "File error (read only)\n"; }
     var filename = _stripProtection(file);
-
-    // Delete from device
     var success = _deleteFileFromDevice(filename, device);
-    if (!success) {
-      return { error: 'failed to delete file' };
-    }
-
-    // Update manifest
+    if (!success) { return "File error\n"; }
     var manifest = _loadManifest();
     var existingEntry = _findManifestEntry(filename, manifest);
     if (existingEntry) {
       manifest.splice(existingEntry.index, 1);
       _saveManifest(manifest);
     }
-
     return { ok: true, filename: filename };
   };
-
-  /**
-   * dosExists(file)
-   * Returns true if filename exists on active device
-   */
   window.dosExists = function (file) {
-    if (!window.DOS) {
-      return false;
-    }
-
+    if (!window.DOS) { return false; }
     file = _normalizeFilename(file);
     var filename = _stripProtection(file);
     return _fileExistsOnDevice(filename, window.DEVICE);
