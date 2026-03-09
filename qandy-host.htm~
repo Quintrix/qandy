@@ -1602,23 +1602,13 @@ window.pokeCursor = function(t) {
           // not implemented (cursor to end)
         } else if (params[0] === 1) {
           // not implemented (start to cursor)
-        } else if (params[0] === 2) {
+        } else { 
+          if (params[0] === 2) {
           // clear entire screen
-          try {
-            if (typeof cls === 'function') cls();
-            else {
-              for (var ry = 0; ry < H; ry++) {
-                for (var rx = 0; rx < W; rx++) {
-                  VIDEO[ry][rx] = ' ';
-                  FCOLOR[ry][rx]= CURFG;
-                  BCOLOR[ry][rx]= CURBG;
-                  ATTR[ry][rx] = 0;
-                }
-              }
-              if (typeof pokeRefresh === 'function') pokeRefresh();
-            }
-          } catch (e) { /* ignore */ }
-        }
+          // this needs updated to use its own internal function
+          cls();
+        }            
+       }
         break;
       default:
         // unsupported CSI — ignore
@@ -1781,7 +1771,7 @@ window.pokeText = function(x, y, t, n) {
         cx = 0;
         cy++;
         if (typeof H === 'number' && cy >= H) { // reached bottom of screen
-          try { if (typeof pokeRefresh === 'function') pokeRefresh(); } catch(e) {}
+          if (SYNC) { pokeRefresh(); } 
           return false;
         }
         continue;
@@ -1790,11 +1780,11 @@ window.pokeText = function(x, y, t, n) {
         cx = 0;
         cy++;
         if (typeof H === 'number' && cy >= H) {
-          try { if (typeof pokeRefresh === 'function') pokeRefresh(); } catch(e) {}
+          if (SYNC) { pokeRefresh(); } 
           return false;
         }
       }
-      pokeCell(cx, cy, c);
+      VIDEO[cy][cx]=c;
       cx++;
     }
   }
@@ -1948,8 +1938,14 @@ window.peekChar = function(x, y) {
 
 
 window.ANSI = {
-  colors: { 30: 'black', 31: 'red', 32: 'green', 33: 'yellow', 34: 'blue', 35: 'magenta', 36: 'cyan', 37: 'white', 90: 'black', 91: 'red', 92: 'green', 93: 'yellow', 94: 'blue', 95: 'magenta', 96: 'cyan', 97: 'white' },
-  bgColors: { 40: 'black', 41: 'red', 42: 'green', 43: 'yellow', 44: 'blue', 45: 'magenta', 46: 'cyan', 47: 'white', 100: 'black', 101: 'red', 102: 'green', 103: 'yellow', 104: 'blue', 105: 'magenta', 106: 'cyan', 107: 'white' },
+  colors: {
+    30: '#000000', 31: '#aa0000', 32: '#00aa00', 33: '#aa5500', 34: '#0000aa', 35: '#aa00aa', 36: '#00aaaa', 37: '#aaaaaa',
+    90: '#555555', 91: '#ff5555', 92: '#55ff55', 93: '#ffff55', 94: '#5555ff', 95: '#ff55ff', 96: '#55ffff', 97: '#ffffff'
+  },
+  bgColors: {
+    40: '#000000', 41: '#aa0000', 42: '#00aa00', 43: '#aa5500', 44: '#0000aa', 45: '#aa00aa', 46: '#00aaaa', 47: '#aaaaaa',
+    100: '#555555', 101: '#ff5555', 102: '#55ff55', 103: '#ffff55', 104: '#5555ff', 105: '#ff55ff', 106: '#55ffff', 107: '#ffffff'
+  },
   render: function(text) {
     let html = ''; let currentColor = 'white'; let currentBgColor = 'black'; let bold = false; let inverse = false; let cX = 0; let cY = 0;
     const ansiRegex = /\x1b\[([\d;]*)([A-Za-z])/g; let lastIndex = 0; let match;
@@ -2241,7 +2237,6 @@ window.pokeBG = function(x, y, bg, count) {
     return (typeof window.defaultBg !== 'undefined') ? window.defaultBg : 40;
   }
 
-  // Validate coords
   if (typeof validateCoords === 'function') {
     if (!validateCoords(x, y)) return false;
   } else {
@@ -2254,10 +2249,6 @@ window.pokeBG = function(x, y, bg, count) {
   var maxRemaining = Math.max(0, W * H - (y * W + x));
   if (count > maxRemaining) count = maxRemaining;
   if (count <= 0) return false;
-
-  // ensure banks exist
-  if (!window.BCOLOR) BCOLOR = [];
-  if (!BCOLOR[y]) BCOLOR[y] = new Uint8Array(W);
 
   // resolve numeric code from name or number
   var bgCode;
@@ -2272,20 +2263,11 @@ window.pokeBG = function(x, y, bg, count) {
     bgCode = (typeof window.defaultBg !== 'undefined') ? window.defaultBg : 40;
   }
 
-  // write span
+  // this does not advance cursor to next line!!
   for (var i = 0; i < count; i++) {
-    var cx = x + i;
-    BCOLOR[y][cx] = bgCode;
-    if (window.COLOR && COLOR[y] && COLOR[y][cx]) COLOR[y][cx].bgcolor = bgCode;
+    var cx = x + i; BCOLOR[y][cx] = bgCode;
   }
-
-  // refresh
-  if (typeof pokeRefreshRow === 'function') {
-    try { pokeRefreshRow(x, y, count); } catch (e) { for (var r = 0; r < count; r++) try { pokeRefresh(x + r, y); } catch(e){} }
-  } else {
-    for (var j = 0; j < count; j++) try { pokeRefresh(x + j, y); } catch(e){}
-  }
-
+  if (SYNC) { pokeRefresh(x, y, count); } 
   return count;
 };
 
@@ -2792,7 +2774,11 @@ function init_keyboard_js() {
     if (key.id === 'ctrl' || key.id === 'alt') { btn.style.fontSize = '9px'; }
     btn.style.left = key.x + 'px';
     btn.style.top = key.y + 'px';
-    btn.onclick = function() { button(key.keyCode); };
+    btn.onclick = function() {
+      var keyData = {keyCode: key.keyCode, key: String.fromCharCode(key.keyCode), shiftKey: !!shift, ctrlKey: !!ctrl, altKey: !!alt, source: 'virtual', originalEvent: null};
+      dispatchKeyboardEvent('keydown', keyData);
+      setTimeout(function() { dispatchKeyboardEvent('keyup', keyData); }, 50);
+    };
 
     // Append into the selected container (defensive: ensure it exists)
     try {
@@ -3283,9 +3269,11 @@ function init_command_js() {
       case 'cls':
         SYNC=0; pokeCursorOff();
         pokeText(0,0," ",800); pokeColor(0,0,CURFG, CURBG, 800); pokeAttr(0,0,0, 800);
+        pokeRefresh();
+        SYNC=1;
         CURX=0; CURY=0; LINEX=0; LINEY=0;
-        SYNC=1; pokeRefresh;
         pokeCursorOn();
+        return;
       case 'whoami':
         var context = HOST ? "HOST (sysop access)" : "GUEST (user sandbox)";
         print("\nContext: " + context + "\n");
@@ -3486,7 +3474,7 @@ window.button=function(b, event) {
   // Check if we need to unlock audio on first host keypress
   if (event && typeof event.shiftKey !== 'undefined') shift = !!event.shiftKey;
   var k = "", l = "";
-  if (b===32) { event.preventDefault(); }
+  if (b===32 && event) { event.preventDefault(); }
   switch (b) {
     case 16: // SHIFT
       if (event && typeof event.shiftKey !== 'undefined') shift = !!event.shiftKey;
@@ -3599,14 +3587,12 @@ window.button=function(b, event) {
   }
 
   if (keyboard) {
-    // If program is running and has keydown, send it there first
     if (RUN && typeof keydown !== 'undefined') {
-      try { keydown(k || l); } catch (e) {
-        print("ERROR: keydown();\n\n");
-      }
+      var kd = {keyCode: b, key: k || l, shiftKey: !!shift, ctrlKey: !!ctrl, altKey: !!alt, source: event ? 'physical' : 'virtual', originalEvent: event || null};
+      dispatchKeyboardEvent('keydown', kd);
     } else {
       if (k === "back") {
-        event.preventDefault();
+        event && event.preventDefault();
         if (window.QandyKeyboard && QandyKeyboard.handleBackspace()) {
           // consumed (masked mode)
           pokeCursorOn(CURSOR); // or pokeCursorOn() depending on signature
@@ -3637,7 +3623,7 @@ window.button=function(b, event) {
           pokeCursorOn();
           return;
     	  } else if (k === "delete") {
-          event.preventDefault();
+          event && event.preventDefault();
           var str = String(LINE || "");
           var maxLen = str.length;
           var s = Math.max(0, Math.min(SSTART, SEND));
@@ -3657,7 +3643,7 @@ window.button=function(b, event) {
           SEND = -1;
           pokeInput();
         } else if (k === "left") {
-          event.preventDefault();
+          event && event.preventDefault();
           if (CURP > 0) {
             if (shift) {
               if (SSTART === -1) SSTART = CURP;   // anchor at the starting cursor pos
@@ -3678,7 +3664,7 @@ window.button=function(b, event) {
             }
           }
         } else if (k === "right") {
-          event.preventDefault();
+          event && event.preventDefault();
           if (CURP < LINE.length) {
             if (shift) {
               if (SSTART === -1) SSTART = CURP;
@@ -3697,7 +3683,7 @@ window.button=function(b, event) {
             }
           }
         } else if (k === "home") {
-          event.preventDefault();
+          event && event.preventDefault();
           if (shift) {
             if (SSTART === -1) SSTART = CURP; // anchor
             SEND = 0;
@@ -3715,7 +3701,7 @@ window.button=function(b, event) {
             CURX = absCol % W;
           }        
         } else if (k === "end") {
-          event.preventDefault();
+          event && event.preventDefault();
           if (shift) {
             if (SSTART === -1) SSTART = CURP;
             SEND = LINE.length;
@@ -3732,7 +3718,7 @@ window.button=function(b, event) {
             CURX = absCol % W;
           }        
         } else if (k === "up") {
-          event.preventDefault();
+          event && event.preventDefault();
           if (commandHistory && commandHistory.length > 0) {
             // On first history navigation, save current typing to restore later
             if (historyIndex === -1) {
@@ -3753,7 +3739,7 @@ window.button=function(b, event) {
             pokeInput();
           }
         } else if (k === "down") {
-          event.preventDefault();
+          event && event.preventDefault();
           if (historyIndex !== -1) {
             if (historyIndex < commandHistory.length - 1) {
               historyIndex++;
@@ -3771,7 +3757,7 @@ window.button=function(b, event) {
             pokeInput();
           }
         } else if (k === "enter") {
-          event.preventDefault();
+          event && event.preventDefault();
           if (window.QandyKeyboard && QandyKeyboard.handleEnter()) { return; }
           if (window.QandyKeyboard && QandyKeyboard.handleEnter()) { return; }
           if (SSTART>-1) { pokeSelect(false); SSTART = -1; SEND = -1; }
@@ -3884,7 +3870,10 @@ window.button=function(b, event) {
         }
     } // end else (not run+keydown)
   } else {
-    if (RUN) { keydown(k || l); }
+    if (RUN && typeof keydown !== 'undefined') {
+      var kd2 = {keyCode: b, key: k || l, shiftKey: !!shift, ctrlKey: !!ctrl, altKey: !!alt, source: event ? 'physical' : 'virtual', originalEvent: event || null};
+      dispatchKeyboardEvent('keydown', kd2);
+    }
   }
   pokeCursorOn();
 }
@@ -4045,9 +4034,25 @@ window.pressup=function(event) {
   // Route keyup to active script if run is set
   if (RUN && typeof keyup !== 'undefined') {
     var k = String.fromCharCode(event.keyCode);
-    keyup(k);
+    var keyData = {keyCode: event.keyCode, key: k, shiftKey: !!shift, ctrlKey: !!ctrl, altKey: !!alt, source: 'physical', originalEvent: event};
+    dispatchKeyboardEvent('keyup', keyData);
   }
 }
+
+window.dispatchKeyboardEvent = function(eventType, keyData) {
+  if (eventType === 'keydown') {
+    if (RUN && typeof keydown !== 'undefined') {
+      try { keydown(keyData.key, keyData); } catch (e) { print("ERROR: keydown();\n\n"); }
+      return; // program handled it; Qandy does not process (backward compatible)
+    }
+    // No program running: fall back to Qandy's button() handler
+    button(keyData.keyCode, keyData.originalEvent);
+  } else if (eventType === 'keyup') {
+    if (RUN && typeof keyup !== 'undefined') {
+      try { keyup(keyData.key, keyData); } catch (e) {}
+    }
+  }
+};
 
 window.hostScript=function(name) {
   if (!name || typeof name !== 'string') return false;
@@ -4148,15 +4153,12 @@ function exit() {
 function clearScreen() { cls(); }
 
 window.cls=function() {
- for (var ry = 0; ry < H; ry++) {
-  for (var rx = 0; rx < W; rx++) {
-   VIDEO[ry][rx] = ' ';
-   FCOLOR[ry][rx]= CURFG;
-   BCOLOR[ry][rx]= CURBG;
-   ATTR[ry][rx] = 0;
-  }
- }
- if (typeof pokeRefresh === 'function') pokeRefresh();
+  SYNC=1; pokeCursorOff();
+  pokeText(0,0," ",800); pokeColor(0,0,CURFG, CURBG, 800); pokeAttr(0,0,0, 800);
+  CURX=0; CURY=0; LINEX=0; LINEY=0;
+  SYNC=1; pokeRefresh;
+  pokeCursorOn();
+  pokeRefresh();
 }
 
 // public print(...) replacement
@@ -4240,11 +4242,10 @@ if (HOST) {
     }
   };
   s.onerror = function() { print("Error loading dos.js\n"); };
-  document.head.appendChild(s);
+  //document.head.appendChild(s);
   systemReady();
 } else {
   systemReady();
-  alert(GUEST);
 }
 
 function systemReady() {
