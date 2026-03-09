@@ -135,8 +135,13 @@ function ascii() {
 
   const end = performance.now();
   const timeElapsedMs = end - start;
-  print("\ntime: "+timeElapsedMs+"\n\n");
+
+  print("time: "+timeElapsedMs+"\n\n");
+  
+  
   keyon = 1;
+  
+  
 }
 
 function ansi() {

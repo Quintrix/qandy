@@ -1,0 +1,372 @@
+// Piano app (rewritten) - highlights keys while they play and clears when they stop.
+// Assumptions (as requested): BCOLOR, FCOLOR, pokeRefresh, playNote, startNote, stopNote exist
+// and the screen was initialized already. We avoid runtime existence checks in hot loops.
+
+run="piano.js";
+
+if (typeof beep === 'undefined' || typeof playNote === 'undefined') {
+  var soundScript=document.createElement('script');
+  soundScript.src='sound.js';
+  soundScript.onload=function() { run="piano.js"; initializePiano(); };
+  soundScript.onerror=function() { print("ERROR: sound.js not loaded\n"); };
+  document.head.appendChild(soundScript);
+  var initializePiano;
+}
+
+// --- Key map / layout -----------------------------------------------------------------------
+var pianoKeyMap = {
+  'a': 'C4', 's': 'D4', 'd': 'E4', 'f': 'F4', 'g': 'G4', 'h': 'A4', 'j': 'B4', 'k': 'C5',
+  'w': 'C#4', 'e': 'D#4', 't': 'F#4', 'y': 'G#4', 'u': 'A#4'
+};
+
+var pianoKeyLabels = {
+  'C4': 'A', 'C#4': 'W',
+  'D4': 'S', 'D#4': 'E',
+  'E4': 'D',
+  'F4': 'F', 'F#4': 'T',
+  'G4': 'G', 'G#4': 'Y',
+  'A4': 'H', 'A#4': 'U',
+  'B4': 'J',
+  'C5': 'K'
+};
+
+var pressedKeys = {};         // keyChar -> note
+var noteDisplayLine = 20;     // where "now playing" text appears
+
+// --- Highlight bookkeeping (fast arrays / maps) ---------------------------------------------
+var activeHighlightTimers = Object.create(null); // note -> timeoutId
+var savedBgForNote = Object.create(null);        // note -> array of original bg codes (flattened)
+
+/*
+ Layout assumptions (matches original script's pokeBG coordinates):
+ White keys are 2 columns wide, vertical span rows 6..11 (inclusive).
+ Columns start: x = 4 + 3*index  (index 0..7 for C4..C5).
+ This matches the original keyHighlight pattern (pokeBG calls).
+*/
+var whiteKeyNotes = ['C4','D4','E4','F4','G4','A4','B4','C5'];
+var whiteKeyXStart = 4;
+var whiteKeyXStep = 3;
+var whiteKeyWidth = 2;
+var whiteKeyY0 = 6;
+var whiteKeyY1 = 11; // inclusive
+
+// Highlight background ANSI code to use (bright yellow background)
+var HIGHLIGHT_BG = 103; // 100-107 are bright backgrounds; 103 == bright yellow background
+
+// --- Low-level fast helpers (no guards inside loops) ---------------------------------------
+function _setBgRect(x0, x1, y0, y1, bg) {
+  // x0..x1 inclusive, y0..y1 inclusive
+  // Directly write BCOLOR array for speed; final caller will call pokeRefresh once.
+  for (var yy = y0; yy <= y1; yy++) {
+    var row = BCOLOR[yy];
+    for (var xx = x0; xx <= x1; xx++) {
+      row[xx] = bg;
+    }
+  }
+}
+
+function _saveBgRect(note, x0, x1, y0, y1) {
+  var out = [];
+  for (var yy = y0; yy <= y1; yy++) {
+    var brow = BCOLOR[yy];
+    for (var xx = x0; xx <= x1; xx++) {
+      out.push(brow[xx]);
+    }
+  }
+  savedBgForNote[note] = out;
+}
+
+function _restoreBgRect(note, x0, x1, y0, y1) {
+  var saved = savedBgForNote[note];
+  if (!saved) return;
+  var idx = 0;
+  for (var yy = y0; yy <= y1; yy++) {
+    var brow = BCOLOR[yy];
+    for (var xx = x0; xx <= x1; xx++) {
+      brow[xx] = saved[idx++];
+    }
+  }
+  delete savedBgForNote[note];
+}
+
+// Compute rectangle for a white key (fast arithmetic)
+function _whiteKeyRect(note) {
+  var i = 0;
+  // linear search small array is fine and fast (8 items)
+  for (; i < whiteKeyNotes.length; i++) if (whiteKeyNotes[i] === note) break;
+  if (i >= whiteKeyNotes.length) return null;
+  var x0 = whiteKeyXStart + whiteKeyXStep * i;
+  var x1 = x0 + whiteKeyWidth - 1;
+  return { x0: x0, x1: x1, y0: whiteKeyY0, y1: whiteKeyY1 };
+}
+
+// --- Highlight / unhighlight API -------------------------------------------------------------
+function highlightKey(note, durationMs) {
+  // normalize
+  note = String(note).toUpperCase();
+
+  // If already highlighted, clear previous timer and extend
+  if (activeHighlightTimers[note]) {
+    clearTimeout(activeHighlightTimers[note]);
+    activeHighlightTimers[note] = null;
+  }
+
+  var rect = _whiteKeyRect(note);
+  if (rect === null) {
+    // For non-white keys (black keys) fall back to printing the "now playing" text only.
+    // We still schedule a simple timer so the caller's duration behavior is consistent.
+    activeHighlightTimers[note] = setTimeout(function() {
+      delete activeHighlightTimers[note];
+    }, durationMs || 300);
+    return;
+  }
+
+  // Save background once, then set highlight background for the rectangle
+  _saveBgRect(note, rect.x0, rect.x1, rect.y0, rect.y1);
+  SYNC = 0;
+  _setBgRect(rect.x0, rect.x1, rect.y0, rect.y1, HIGHLIGHT_BG);
+  SYNC = 1;
+  pokeRefresh();
+
+  // Schedule unhighlight when the note should stop (durationMs)
+  var ms = (typeof durationMs === 'number' && durationMs > 0) ? durationMs : 300;
+  activeHighlightTimers[note] = setTimeout(function() {
+    // restore
+    SYNC = 0;
+    _restoreBgRect(note, rect.x0, rect.x1, rect.y0, rect.y1);
+    SYNC = 1;
+    pokeRefresh();
+    delete activeHighlightTimers[note];
+  }, ms);
+}
+
+function unhighlightKey(note) {
+  note = String(note).toUpperCase();
+  // cancel any pending timer and restore immediately
+  var t = activeHighlightTimers[note];
+  if (t) {
+    clearTimeout(t);
+    delete activeHighlightTimers[note];
+  }
+  var rect = _whiteKeyRect(note);
+  if (!rect) return;
+  SYNC = 0;
+  _restoreBgRect(note, rect.x0, rect.x1, rect.y0, rect.y1);
+  SYNC = 1;
+  pokeRefresh();
+}
+
+// --- Wrap sound API so playNote/startNote/stopNote automatically highlight ------------------
+(function wireSoundHighlight() {
+  // If startNote/stopNote pair exist, hook them (preferred for continuous notes).
+  if (typeof startNote === 'function' && typeof stopNote === 'function') {
+    var _startNote = startNote;
+    var _stopNote = stopNote;
+    window.startNote = function(note) {
+      _startNote(note);
+      highlightKey(note, 60000); // very long until explicit stop; will be cleared by stopNote
+      return true;
+    };
+    window.stopNote = function(note) {
+      _stopNote(note);
+      unhighlightKey(note);
+      return true;
+    };
+  } else if (typeof playNote === 'function') {
+    // Wrap playNote to highlight for the duration passed
+    var _playNote = playNote;
+    window.playNote = function(note, duration) {
+      note = String(note).toUpperCase();
+      highlightKey(note, duration || 300);
+      return _playNote(note, duration);
+    };
+  }
+})();
+
+// --- Drawing / input / UI -------------------------------------------------------------------
+function drawPiano() {
+  pokeCursorOff();
+  print("[-black][cls]\n[bold][bgreen]  ╔══════════════════════════╗\n");
+  print("  ║        [yellow]QANDY PIANO[bgreen]       ║\n");
+  print("  ╚══════════════════════════╝\n");
+  print("\n");
+  
+  var keyWht="  [down][left][left]  [down][left][left]  ";
+  var keyBlk="[black][-white]▐[-black] [-white]▌[down][left][left][left][-white]▐[-black] [-white]▌[down][left][left][left][-white]▐[-black] [-white]▌";  
+  
+  pokeCursorOff();
+  print("[white][-black]");
+  print("\033[7;5H[-white]"+keyWht+"[-black]");
+  print("\033[7;8H[-white]"+keyWht+"[-black]");
+  print("\033[7;11H[-white]"+keyWht+"[-black]");
+  print("\033[7;14H[-white]"+keyWht+"[-black]");
+  print("\033[7;17H[-white]"+keyWht+"[-black]");
+  print("\033[7;20H[-white]"+keyWht+"[-black]");
+  print("\033[7;23H[-white]"+keyWht+"[-black]");
+  print("\033[7;26H[-white]"+keyWht+"[-black]");
+  print("\033[10;5H[-white]"+keyWht+"[-black]");
+  print("\033[10;8H[-white]"+keyWht+"[-black]");
+  print("\033[10;11H[-white]"+keyWht+"[-black]");
+  print("\033[10;14H[-white]"+keyWht+"[-black]");
+  print("\033[10;17H[-white]"+keyWht+"[-black]");
+  print("\033[10;20H[-white]"+keyWht+"[-black]");
+  print("\033[10;23H[-white]"+keyWht+"[-black]");
+  print("\033[10;26H[-white]"+keyWht+"[-black]");
+
+  print("\033[7;6H"+keyBlk+"");
+  print("\033[7;9H"+keyBlk+"");
+  print("\033[7;15H"+keyBlk+"");
+  print("\033[7;18H"+keyBlk+"");
+  print("\033[7;21H"+keyBlk+"");
+
+  print("\033[14;5H[-black][cyan]C  D  E  F   G  A  B  C\n\n");
+
+  // After drawing, capture baseline BG for each white key so we can restore later quickly.
+  for (var i = 0; i < whiteKeyNotes.length; i++) {
+    var n = whiteKeyNotes[i];
+    var rect = _whiteKeyRect(n);
+    // Save initial BG for restore (only if not saved already)
+    if (!savedBgForNote[n]) {
+      _saveBgRect(n, rect.x0, rect.x1, rect.y0, rect.y1);
+    }
+  }
+
+  pokeRefresh();
+}
+
+// Input handlers
+function keydown(key) {
+  var keyLower = key.toLowerCase();
+  if (pianoKeyMap[keyLower]) {
+    var note = pianoKeyMap[keyLower];
+    if (!pressedKeys[keyLower]) {
+      // mark pressed and play (playNote wrapper will handle highlight)
+      pressedKeys[keyLower] = note;
+      // Prefer startNote/stopNote style if available (for real key-down hold behavior)
+      if (typeof startNote === 'function') {
+        startNote(note);
+      } else {
+        // playNote will schedule unhighlight automatically after duration
+        playNote(note, 300);
+      }
+      updateNowPlayingDisplay();
+    }
+    return true;
+  }
+  return false;
+}
+
+function keyup(key, keyData) {
+  var keyLower = (keyData && keyData.key ? keyData.key : key).toLowerCase();
+  if (pianoKeyMap[keyLower] && pressedKeys[keyLower]) {
+    var note = pressedKeys[keyLower];
+    delete pressedKeys[keyLower];
+    // If start/stop API available, stop the note; else we still unhighlight immediately
+    if (typeof stopNote === 'function') {
+      stopNote(note);
+    } else {
+      // force immediate unhighlight (cancel scheduled timeout)
+      unhighlightKey(note);
+    }
+    updateNowPlayingDisplay();
+    return true;
+  }
+  return false;
+}
+
+// Now-playing display (compact, minimal work)
+function updateNowPlayingDisplay() {
+  var keys = Object.keys(pressedKeys);
+  print("\x1b[" + noteDisplayLine + ";1H"); // Move to note display line
+  print("\x1b[K"); // Clear to end of line
+
+  if (keys.length === 0) {
+    print("Now playing:");
+    return;
+  }
+
+  if (keys.length === 1) {
+    var note = pressedKeys[keys[0]];
+    var keyLabel = pianoKeyLabels[note] || keys[0].toUpperCase();
+    print("\x1b[1;36m♪ " + keyLabel + " → " + note + "\x1b[0m");
+    return;
+  }
+
+  // chord
+  var notesList = [];
+  var labelsList = [];
+  for (var i = 0; i < keys.length; i++) {
+    var itemNote = pressedKeys[keys[i]];
+    notesList.push(itemNote);
+    labelsList.push(pianoKeyLabels[itemNote] || keys[i].toUpperCase());
+  }
+  print("\x1b[1;35m♫ " + labelsList.join('+') + " → " + notesList.join('+') + "\x1b[0m");
+}
+
+// --- Songs / utility (unchanged logic, now uses wrapped playNote) ---------------------------
+function playScale() {
+  print("\x1b[" + noteDisplayLine + ";1H\x1b[K");
+  print("\x1b[1;32mPlaying C Major Scale...\x1b[0m");
+  playTune("C4:300 D4:300 E4:300 F4:300 G4:300 A4:300 B4:300 C5:500");
+}
+
+function playTwinkleTwinkle() {
+  print("\x1b[" + noteDisplayLine + ";1H\x1b[K");
+  print("\x1b[1;32mPlaying Twinkle Twinkle Little Star...\x1b[0m");
+  playTune("C4:300 C4:300 G4:300 G4:300 A4:300 A4:300 G4:600 " +
+           "F4:300 F4:300 E4:300 E4:300 D4:300 D4:300 C4:600 " +
+           "G4:300 G4:300 F4:300 F4:300 E4:300 E4:300 D4:600 " +
+           "G4:300 G4:300 F4:300 F4:300 E4:300 E4:300 D4:600 " +
+           "C4:300 C4:300 G4:300 G4:300 A4:300 A4:300 G4:600 " +
+           "F4:300 F4:300 E4:300 E4:300 D4:300 D4:300 C4:600");
+}
+
+function playMaryHadALamb() {
+  print("\x1b[" + noteDisplayLine + ";1H\x1b[K");
+  print("\x1b[1;32mPlaying Mary Had a Little Lamb...\x1b[0m");
+  playTune("E4:300 D4:300 C4:300 D4:300 E4:300 E4:300 E4:600 " +
+           "D4:300 D4:300 D4:600 E4:300 G4:300 G4:600 " +
+           "E4:300 D4:300 C4:300 D4:300 E4:300 E4:300 E4:300 E4:300 " +
+           "D4:300 D4:300 E4:300 D4:300 C4:800");
+}
+
+function playHappyBirthday() {
+  print("\x1b[" + noteDisplayLine + ";1H\x1b[K");
+  print("\x1b[1;32mPlaying Happy Birthday...\x1b[0m");
+  playTune("C4:200 C4:200 D4:400 C4:400 F4:400 E4:800 " +
+           "C4:200 C4:200 D4:400 C4:400 G4:400 F4:800 " +
+           "C4:200 C4:200 C5:400 A4:400 F4:400 E4:400 D4:800 " +
+           "A#4:200 A#4:200 A4:400 F4:400 G4:400 F4:800");
+}
+
+function playChord(notes, duration) {
+  duration = duration || 500;
+  for (var i = 0; i < notes.length; i++) {
+    (function(note, delay) {
+      setTimeout(function() {
+        playNote(note, duration);
+      }, delay);
+    })(notes[i], i * 10);
+  }
+  print("\x1b[" + noteDisplayLine + ";1H\x1b[K");
+  print("\x1b[1;35m♫ Chord: " + notes.join(' ') + "\x1b[0m");
+}
+
+function playCMajorChord() { playChord(['C4','E4','G4'], 600); }
+function playFMajorChord() { playChord(['F4','A4','C5'], 600); }
+function playGMajorChord() { playChord(['G4','B4','D5'], 600); }
+
+function playChordProgression() {
+  print("\x1b[" + noteDisplayLine + ";1H\x1b[K");
+  print("\x1b[1;32mPlaying Chord Progression (C-F-G-C)...\x1b[0m");
+  setTimeout(function(){ playCMajorChord(); }, 0);
+  setTimeout(function(){ playFMajorChord(); }, 800);
+  setTimeout(function(){ playGMajorChord(); }, 1600);
+  setTimeout(function(){ playCMajorChord(); }, 2400);
+}
+
+// --- Initialization -------------------------------------------------------------------------
+initializePiano = function() { drawPiano(); };
+if (typeof beep !== 'undefined' && typeof playNote !== 'undefined') {
+  initializePiano();
+}
