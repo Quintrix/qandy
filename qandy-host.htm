@@ -971,10 +971,10 @@ async function assembleGuestHtml(options) {
 
 function hostMessageHandler(ev) {
   // ensure message is from our iframe - this line is error can't access property "contentWindow", iframe is undefined 
-  //if (!iframe.contentWindow || ev.source !== iframe.contentWindow) {
-  //  console.log("Message is not from our iframe");
-  //  return;
-  //}
+  if (!iframe.contentWindow || ev.source !== iframe.contentWindow) {
+    console.log("Message is not from our iframe");
+    return;
+  }
   var d = ev.data || {}; if (!d || typeof d !== 'object') return;
   
   if (d.type === 'request-script' && typeof d.name === 'string') {
@@ -3269,17 +3269,11 @@ function init_command_js() {
       case 'cls':
         SYNC=0; pokeCursorOff();
         pokeText(0,0," ",800); pokeColor(0,0,CURFG, CURBG, 800); pokeAttr(0,0,0, 800);
-        pokeRefresh();
-        SYNC=1;
-        CURX=0; CURY=0; LINEX=0; LINEY=0;
-        pokeCursorOn();
-        return;
+        SYNC=1; pokeRefresh(); CURX=0; CURY=0; LINEX=0; LINEY=0; pokeCursorOn(); return;
       case 'whoami':
         var context = HOST ? "HOST (sysop access)" : "GUEST (user sandbox)";
-        print("\nContext: " + context + "\n");
-        print("Window URL: " + window.location.href + "\n");
-        print("Has file:// access: " + (typeof document.createElement('script').onerror === 'function' ? "yes" : "maybe") + "\n");
-        print("localStorage accessible: " + (typeof localStorage !== 'undefined' ? "yes" : "no") + "\n\n");
+        print("\n"+context+"\n"); print("URL:"+window.location.href+"\n");
+        print("localStorage: " + (typeof localStorage !== 'undefined' ? "yes" : "no") + "\n\n");
         return;
       case 'hostname':
         print("\nHOST=" + HOST + "\n");
@@ -3295,8 +3289,7 @@ function init_command_js() {
             print("Error bringing host forward: " + String(e) + "\n");
           }
         }
-        pokeRefresh();
-        return;
+        pokeRefresh(); return;
       case 'user':
         if (HOST) {
           try {
@@ -3307,27 +3300,19 @@ function init_command_js() {
             var iframe = document.getElementById('vm-iframe') || window._vmIframe || null;
             if (hostEl) { hostEl.style.display = 'none'; hostEl.style.visibility = 'hidden'; hostEl.style.pointerEvents = 'none'; }
             if (hostKb) { hostKb.style.display = 'none'; hostKb.style.visibility = 'hidden'; hostKb.style.pointerEvents = 'none'; }
-            // Show guest container / iframe and bring it to front
             if (vm) {
-              vm.style.display = 'block';
-              vm.style.visibility = 'visible';
-              vm.style.pointerEvents = 'auto';
-              // ensure vm is above host
+              vm.style.display = 'block'; vm.style.visibility = 'visible'; vm.style.pointerEvents = 'auto';
               try {
                 vm.style.position = vm.style.position || 'absolute';
                 vm.style.zIndex = String(Math.max(parseInt(vm.style.zIndex || 0, 10) || 100, 1000));
               } catch (e) {}
             }
             if (iframe) {
-              iframe.style.display = 'block';
-              iframe.style.visibility = 'visible';
-              iframe.style.pointerEvents = 'auto';
+              iframe.style.display = 'block'; iframe.style.visibility = 'visible'; iframe.style.pointerEvents = 'auto';
               try { iframe.style.zIndex = vm && vm.style && vm.style.zIndex ? String(parseInt(vm.style.zIndex,10) + 1) : '1001'; } catch (e) {}
             }
             if (guestKb) {
-              guestKb.style.display = 'block';
-              guestKb.style.visibility = 'visible';
-              guestKb.style.pointerEvents = 'auto';
+              guestKb.style.display = 'block'; guestKb.style.visibility = 'visible'; guestKb.style.pointerEvents = 'auto';
               try {
                 guestKb.style.position = guestKb.style.position || 'absolute';
                 // put guest keyboard above vm-container
@@ -3370,18 +3355,8 @@ function init_command_js() {
     // existing .js loader
     if (cmd.slice(-3) === ".js") {
       //keysoff();
-      var scriptName = String(cmd || '').trim();
-      const prg=document.createElement('script');
-      prg.src=cmd;
-      prg.onload = {  }
-      prg.onerror=() => { print("Error loading program\n"); keyon = 1; }
-      document.head.appendChild(prg);
-      line="";
-    } else {
-      if (cmd.slice(-4) === ".prg") {
-        //keysoff();
+      if (HOST) { 
         var scriptName = String(cmd || '').trim();
-        var scriptName = scriptName.substring(0,-4)+".prg"; 
         const prg=document.createElement('script');
         prg.src=cmd;
         prg.onload = {  }
@@ -3389,14 +3364,18 @@ function init_command_js() {
         document.head.appendChild(prg);
         line="";
       } else {
-        evalCode(cmd);
-        pokeCursorOn();
-        LINE=""; CURP = 0;
-        LINEX = CURX; LINEY = CURY;
-        return;
+        // <guest> machine requests .js file from the <host> and executes it as inline script
+        var scriptName = String(cmd || '').trim();
+        runHostScript(scriptName);
       }
-      pokeRefresh();
+    } else {
+      evalCode(cmd);
+      pokeCursorOn();
+      LINE=""; CURP = 0;
+      LINEX = CURX; LINEY = CURY;
+      return;
     }
+    pokeRefresh();
   }
 }
 

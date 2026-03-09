@@ -1,3 +1,6 @@
+// Piano app (rewritten) - highlights keys while they play and clears when they stop.
+// Assumptions (as requested): BCOLOR, FCOLOR, pokeRefresh, playNote, startNote, stopNote exist
+// and the screen was initialized already. We avoid runtime existence checks in hot loops.
 
 run="piano.js";
 

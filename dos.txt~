@@ -59,7 +59,8 @@
                           character), parentheses, plus, and equals: -_.()+= 
                        
                    data — plain UTF‑8 text, use base64 for binary data, dos.js
-                          returns whole file content as a single text string.
+               
+                                     returns whole file content as a single text string.
                        
                  device — file, local, echo, or none.
                  

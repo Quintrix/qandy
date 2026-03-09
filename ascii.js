@@ -133,9 +133,41 @@ function ascii() {
     print("\n");
   }
 
-  const end = performance.now();
-  const timeElapsedMs = end - start;
-  print("\ntime: "+timeElapsedMs+"\n\n");
+  // --- wait for printing/DOM to finish, then measure time ---
+  function finishTiming() {
+    const end = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    const timeElapsedMs = end - start;
+    // Print seconds with milliseconds precision and also ms
+    const seconds = (timeElapsedMs / 1000).toFixed(3);
+    print("\nTime: " + seconds + " s (" + Math.round(timeElapsedMs) + " ms)\n\n");
+    keyon = 1;
+  }
+
+  // If a qandy print queue exists, wait for it to finish; otherwise wait one rAF so browser can paint
+  if (window._qandy_print_queue) {
+    // Poll until queue is not running and empty, then rAF to ensure paint
+    var poll = setInterval(function() {
+      var q = window._qandy_print_queue;
+      if (!q.running && q.items.length === 0) {
+        clearInterval(poll);
+        requestAnimationFrame(finishTiming);
+      }
+    }, 16);
+    // Safety timeout: if queue doesn't clear after 10s, still finish
+    setTimeout(function() {
+      if (poll) {
+        clearInterval(poll);
+        requestAnimationFrame(finishTiming);
+      }
+    }, 10000);
+  } else {
+    // No known print queue — allow browser to paint then measure
+    requestAnimationFrame(function() {
+      // one rAF may still be before full paint in some cases; use two frames to be safe
+      requestAnimationFrame(finishTiming);
+    });
+  }
+  
   keyon = 1;
 }
 
