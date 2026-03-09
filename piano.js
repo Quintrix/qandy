@@ -136,7 +136,6 @@ function updateNowPlayingDisplay() {
     print("\x1b[1;35m♫ Chord: " + keysList.join('+') + " → " + notesList.join('+') + "\x1b[0m");
   }
 }
-function updateNowPlayingDisplay() {}
 
 // Example songs using the music API
 
@@ -219,8 +218,8 @@ function playChordProgression() {
   setTimeout(function() { playCMajorChord(); }, 2400);
 }
 
-function keydown(key) {
-  var keyLower = key.toLowerCase();
+function keyup(key, keyData) {
+  var keyLower = (keyData && keyData.key ? keyData.key : key).toLowerCase();
   if (pianoKeyMap[keyLower] && pressedKeys[keyLower]) {
     delete pressedKeys[keyLower];
     updateNowPlayingDisplay();

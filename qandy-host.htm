@@ -2792,7 +2792,11 @@ function init_keyboard_js() {
     if (key.id === 'ctrl' || key.id === 'alt') { btn.style.fontSize = '9px'; }
     btn.style.left = key.x + 'px';
     btn.style.top = key.y + 'px';
-    btn.onclick = function() { button(key.keyCode); };
+    btn.onclick = function() {
+      var keyData = {keyCode: key.keyCode, key: String.fromCharCode(key.keyCode), shiftKey: !!shift, ctrlKey: !!ctrl, altKey: !!alt, source: 'virtual', originalEvent: null};
+      dispatchKeyboardEvent('keydown', keyData);
+      setTimeout(function() { dispatchKeyboardEvent('keyup', keyData); }, 50);
+    };
 
     // Append into the selected container (defensive: ensure it exists)
     try {
@@ -3486,7 +3490,7 @@ window.button=function(b, event) {
   // Check if we need to unlock audio on first host keypress
   if (event && typeof event.shiftKey !== 'undefined') shift = !!event.shiftKey;
   var k = "", l = "";
-  if (b===32) { event.preventDefault(); }
+  if (b===32 && event) { event.preventDefault(); }
   switch (b) {
     case 16: // SHIFT
       if (event && typeof event.shiftKey !== 'undefined') shift = !!event.shiftKey;
@@ -3599,14 +3603,12 @@ window.button=function(b, event) {
   }
 
   if (keyboard) {
-    // If program is running and has keydown, send it there first
     if (RUN && typeof keydown !== 'undefined') {
-      try { keydown(k || l); } catch (e) {
-        print("ERROR: keydown();\n\n");
-      }
+      var kd = {keyCode: b, key: k || l, shiftKey: !!shift, ctrlKey: !!ctrl, altKey: !!alt, source: event ? 'physical' : 'virtual', originalEvent: event || null};
+      dispatchKeyboardEvent('keydown', kd);
     } else {
       if (k === "back") {
-        event.preventDefault();
+        event && event.preventDefault();
         if (window.QandyKeyboard && QandyKeyboard.handleBackspace()) {
           // consumed (masked mode)
           pokeCursorOn(CURSOR); // or pokeCursorOn() depending on signature
@@ -3637,7 +3639,7 @@ window.button=function(b, event) {
           pokeCursorOn();
           return;
     	  } else if (k === "delete") {
-          event.preventDefault();
+          event && event.preventDefault();
           var str = String(LINE || "");
           var maxLen = str.length;
           var s = Math.max(0, Math.min(SSTART, SEND));
@@ -3657,7 +3659,7 @@ window.button=function(b, event) {
           SEND = -1;
           pokeInput();
         } else if (k === "left") {
-          event.preventDefault();
+          event && event.preventDefault();
           if (CURP > 0) {
             if (shift) {
               if (SSTART === -1) SSTART = CURP;   // anchor at the starting cursor pos
@@ -3678,7 +3680,7 @@ window.button=function(b, event) {
             }
           }
         } else if (k === "right") {
-          event.preventDefault();
+          event && event.preventDefault();
           if (CURP < LINE.length) {
             if (shift) {
               if (SSTART === -1) SSTART = CURP;
@@ -3697,7 +3699,7 @@ window.button=function(b, event) {
             }
           }
         } else if (k === "home") {
-          event.preventDefault();
+          event && event.preventDefault();
           if (shift) {
             if (SSTART === -1) SSTART = CURP; // anchor
             SEND = 0;
@@ -3715,7 +3717,7 @@ window.button=function(b, event) {
             CURX = absCol % W;
           }        
         } else if (k === "end") {
-          event.preventDefault();
+          event && event.preventDefault();
           if (shift) {
             if (SSTART === -1) SSTART = CURP;
             SEND = LINE.length;
@@ -3732,7 +3734,7 @@ window.button=function(b, event) {
             CURX = absCol % W;
           }        
         } else if (k === "up") {
-          event.preventDefault();
+          event && event.preventDefault();
           if (commandHistory && commandHistory.length > 0) {
             // On first history navigation, save current typing to restore later
             if (historyIndex === -1) {
@@ -3753,7 +3755,7 @@ window.button=function(b, event) {
             pokeInput();
           }
         } else if (k === "down") {
-          event.preventDefault();
+          event && event.preventDefault();
           if (historyIndex !== -1) {
             if (historyIndex < commandHistory.length - 1) {
               historyIndex++;
@@ -3771,7 +3773,7 @@ window.button=function(b, event) {
             pokeInput();
           }
         } else if (k === "enter") {
-          event.preventDefault();
+          event && event.preventDefault();
           if (window.QandyKeyboard && QandyKeyboard.handleEnter()) { return; }
           if (window.QandyKeyboard && QandyKeyboard.handleEnter()) { return; }
           if (SSTART>-1) { pokeSelect(false); SSTART = -1; SEND = -1; }
@@ -3884,7 +3886,10 @@ window.button=function(b, event) {
         }
     } // end else (not run+keydown)
   } else {
-    if (RUN) { keydown(k || l); }
+    if (RUN && typeof keydown !== 'undefined') {
+      var kd2 = {keyCode: b, key: k || l, shiftKey: !!shift, ctrlKey: !!ctrl, altKey: !!alt, source: event ? 'physical' : 'virtual', originalEvent: event || null};
+      dispatchKeyboardEvent('keydown', kd2);
+    }
   }
   pokeCursorOn();
 }
@@ -4045,9 +4050,25 @@ window.pressup=function(event) {
   // Route keyup to active script if run is set
   if (RUN && typeof keyup !== 'undefined') {
     var k = String.fromCharCode(event.keyCode);
-    keyup(k);
+    var keyData = {keyCode: event.keyCode, key: k, shiftKey: !!shift, ctrlKey: !!ctrl, altKey: !!alt, source: 'physical', originalEvent: event};
+    dispatchKeyboardEvent('keyup', keyData);
   }
 }
+
+window.dispatchKeyboardEvent = function(eventType, keyData) {
+  if (eventType === 'keydown') {
+    if (RUN && typeof keydown !== 'undefined') {
+      try { keydown(keyData.key, keyData); } catch (e) { print("ERROR: keydown();\n\n"); }
+      return; // program handled it; Qandy does not process (backward compatible)
+    }
+    // No program running: fall back to Qandy's button() handler
+    button(keyData.keyCode, keyData.originalEvent);
+  } else if (eventType === 'keyup') {
+    if (RUN && typeof keyup !== 'undefined') {
+      try { keyup(keyData.key, keyData); } catch (e) {}
+    }
+  }
+};
 
 window.hostScript=function(name) {
   if (!name || typeof name !== 'string') return false;
