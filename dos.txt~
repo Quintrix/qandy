@@ -1,4 +1,5 @@
 
+
                 
                        Qandy PC DOS:
                        Disk Operating System (dos4.js)
@@ -8,31 +9,27 @@
 
          DOS=true/false — set to true if DOS is enabled, all DOS functions should
                           be inside "if (DOS) {}" checks    
-
-       dosMount(device) — sets the active device to access, default "file" for file:///
+ 
+       dosMount(device) — sets the active device to access
       
           DEVICE="name" — local var for active device
       
         dosBackup(data) — formats active device with JSON strong, if data is omitted
                           returns JSON string with contents of device for backup
      
-              dosList() — returns string with list of filenames separated by new lines
-              
-              dosDir(h) — returns string with list of filenames, filesizes, and
-                          timestamps. h=1 for human readable output
-
-       dosBackup(data) — formats active device with JSON strong, if data is omitted
+        dosBackup(data) — formats active device with JSON strong, if data is omitted
                           returns JSON string with contents of device for backup             
                       
      dosSave(file,data) — saves var data as filename to active device, if filename
                           begins with > (">filename") append data to existing file,
                           do not allow append on filenames that start with ! in the
-                          dir.txt for write-protect mode. Do not allow the dir.txt
+                          dir.txt, as it mimics IBM system filenames.
                           file to be saved, it is write-protect by detault.
 
           dosLoad(file) — returns contents of filename from active device as string,
                           if file is dir.txt return contents of formated directory
-                          via dosDir(1)
+                          via dosDir(1). Load "dir.txt" for list of files, load
+                          "dir.sys" for directory of files.
                           
     dosCopy(file, dest) — copies file into clipboard for dosPaste command, 
                           if dest is provided it also copies the file into
@@ -48,6 +45,8 @@
                           then print the results of dosDir(0)
                           
       dosRetrieve(file) — Retrieve file from localStorage, used to send to <guest>
+      
+         dosStash(file) — Stash a file from the <guest> to localStorage
             
         dosDelete(file) — deletes filename from active device 
 
@@ -63,9 +62,12 @@
                    data — plain UTF‑8 text, use base64 for binary data, dos.js
                           returns whole file content as a single text string.
                        
-                 device — file, local, echo, or none.
-                 
+                 device — transfer, as it mimics IBM system filenames.
+                          
+                          hardrive = File Access API
+                             local = localStorage, <host> does not have execute
+                                     access to localStorage, but can read/write files
+                              echo = print() to screen
+                              none = returns false, no device error
 
-
- 
 

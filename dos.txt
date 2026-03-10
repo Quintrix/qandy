@@ -1,4 +1,5 @@
 
+
                 
                        Qandy PC DOS:
                        Disk Operating System (dos4.js)
@@ -8,31 +9,22 @@
 
          DOS=true/false — set to true if DOS is enabled, all DOS functions should
                           be inside "if (DOS) {}" checks    
-
-       dosMount(device) — sets the active device to access, default "file" for file:///
+ 
+       dosMount(device) — sets the active device to access
       
           DEVICE="name" — local var for active device
       
         dosBackup(data) — formats active device with JSON strong, if data is omitted
                           returns JSON string with contents of device for backup
      
-              dosList() — returns string with list of filenames separated by new lines
-              
-              dosDir(h) — returns string with list of filenames, filesizes, and
-                          timestamps. h=1 for human readable output. 
-
-        dosBackup(data) — formats active device with JSON strong, if data is omitted
-                          returns JSON string with contents of device for backup             
-                      
-     dosSave(file,data) — saves var data as filename to active device, if filename
+     dosSave(file,data) — saves data as filename to active device, if filename
                           begins with > (">filename") append data to existing file,
-                          do not allow append on filenames that start with ! in the
-                          dir.txt for write-protect mode. Do not allow the dir.txt
-                          file to be saved, it is write-protect by detault.
+                          do not allow append to filenames that start with ! as
+                          they are write-protected.
 
           dosLoad(file) — returns contents of filename from active device as string,
-                          if file is dir.txt return contents of formated directory
-                          via dosDir(1)
+                          file "dir.txt" returns list of files serperated by new
+                          lines, file "dir.sys" returns raw directory information.
                           
     dosCopy(file, dest) — copies file into clipboard for dosPaste command, 
                           if dest is provided it also copies the file into
@@ -42,15 +34,12 @@
                           the data to existing dest if dest starts with ">" character,
                           otherwise returns error if file already exists.
 
-  dosRename(file, dest) — renames file to dest 
-
-          dosType(file) — print() file to display screen, if file is dir.txt
-                          then print the results of dosDir(0)
-                          
       dosRetrieve(file) — Retrieve file from localStorage, used to send to <guest>
       
          dosStash(file) — Stash a file from the <guest> to localStorage
             
+   dosRename(file,dest) — renames file to dest
+
         dosDelete(file) — deletes filename from active device 
 
         dosExists(file) — returns true if filename exists      
@@ -65,12 +54,11 @@
                    data — plain UTF‑8 text, use base64 for binary data, dos.js
                           returns whole file content as a single text string.
                        
-                 device — transfer, harddrive, local, echo, or none.
+                 device — transfer, as it mimics IBM system filenames.
                           
-                          transfer = browser's "upload/download"
                           hardrive = File Access API
                              local = localStorage, <host> does not have execute
-                                     access to localStorage
+                                     access to localStorage, but can read/write files
                               echo = print() to screen
                               none = returns false, no device error
 
