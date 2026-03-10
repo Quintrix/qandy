@@ -13,6 +13,9 @@
  *  dosExists(file)     — synchronous
  *  dosDownload(file)
  *  dosUpload(optionalDest)
+ *  dosList()           — visible (non-hidden) filenames, newline-separated
+ *  dosDir()            — all entries in manifest format for current device
+ *  dosShare(file)      — copy file from current device into localStorage
  *  dosStash(file)      — force-save current-device file into localStorage
  *  dosRetrieve(file)   — read file from localStorage (guest-side helper)
  *
@@ -42,8 +45,8 @@
  *    _dir.sys!|2322|20260301010454
  *
  * System virtual files (never stored, always generated):
- *  dir.txt! — visible (non-hidden) filenames, newline-separated
- *  _dir.sys! — raw manifest content as stored in localStorage
+ *  dir.txt  — visible (non-hidden) filenames, newline-separated
+ *  dir.sys  — all entries in manifest format (canonical_name|size|timestamp)
  */
 
 var DOS = true;
@@ -99,12 +102,16 @@ var DEVICE = 'none';
     return { ok: true, name: n };
   }
 
-  /** yyyymmddhhmmss timestamp using the system clock. */
-  function _timestamp() {
-    var d = new Date();
+  /** yyyymmddhhmmss from a Date object. */
+  function _tsFromDate(d) {
     var p = function (n) { return String(n).padStart(2, '0'); };
     return '' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate())
               + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+  }
+
+  /** yyyymmddhhmmss timestamp using the system clock. */
+  function _timestamp() {
+    return _tsFromDate(new Date());
   }
 
   // ── System-file detection ─────────────────────────────────────────────────
@@ -205,21 +212,49 @@ var DEVICE = 'none';
     return null;
   }
 
-  // ── Virtual file generators ───────────────────────────────────────────────
-  /** dir.txt content: non-hidden base names, newline-separated. */
-  function _genDirTxt(manifest) {
-    var out = [];
-    for (var i = 0; i < manifest.length; i++) {
-      if (!_isHidden(manifest[i].name)) {
-        out.push(_baseName(manifest[i].name));
+  // ── Device-aware directory listing ────────────────────────────────────────
+  /**
+   * Return all file entries for the given device as array of {name, size, timestamp}.
+   * For 'local':     reads from localStorage manifest.
+   * For 'echo':      reads from in-memory _echoStore.
+   * For 'harddrive': iterates the directory via File System Access API.
+   * For 'none':      returns [].
+   */
+  async function _dirEntries(device) {
+    switch (device) {
+      case 'local':
+        return _loadManifest();
+      case 'echo': {
+        var entries = [];
+        var ts = _timestamp();
+        var keys = Object.keys(_echoStore);
+        for (var i = 0; i < keys.length; i++) {
+          var k = keys[i];
+          entries.push({ name: k, size: _utf8len(_echoStore[k]), timestamp: ts });
+        }
+        return entries;
       }
+      case 'harddrive': {
+        if (!_harddriveHandle) return [];
+        var hdEntries = [];
+        try {
+          for await (var [hdName, hdHandle] of _harddriveHandle) {
+            if (hdHandle.kind !== 'file') continue;
+            try {
+              var hdFile = await hdHandle.getFile();
+              hdEntries.push({
+                name: hdName,
+                size: hdFile.size,
+                timestamp: _tsFromDate(new Date(hdFile.lastModified))
+              });
+            } catch (e) {}
+          }
+        } catch (e) {}
+        return hdEntries;
+      }
+      default:
+        return [];
     }
-    return out.join('\n');
-  }
-
-  /** dir.sys content: raw manifest as stored. */
-  function _genDirSys() {
-    return _readManifestRaw();
   }
 
   // ── Storage backends ──────────────────────────────────────────────────────
@@ -487,13 +522,13 @@ var DEVICE = 'none';
   };
 
   // dosLoad(file)
-  // "dir.txt" → visible filenames; "dir.sys" → raw manifest; otherwise normal file.
+  // "dir.txt" → visible filenames; "dir.sys" → manifest-format entries; otherwise normal file.
   global.dosLoad = async function (file) {
     var fname = _normName(file);
     var cls = _classify(fname);
 
-    if (cls === 'dir.txt') return _genDirTxt(_loadManifest());
-    if (cls === 'dir.sys') return _genDirSys();
+    if (cls === 'dir.txt') return global.dosList();
+    if (cls === 'dir.sys') return global.dosDir();
 
     var fbase = _baseName(fname);
     var fv = _validateBase(fbase);
@@ -687,9 +722,9 @@ var DEVICE = 'none';
 
     var content;
     if (cls === 'dir.txt') {
-      content = _genDirTxt(_loadManifest());
+      content = await global.dosList();
     } else if (cls === 'dir.sys') {
-      content = _genDirSys();
+      content = await global.dosDir();
     } else {
       var dev = global.DEVICE;
       var manifest = _loadManifest();
@@ -778,6 +813,110 @@ var DEVICE = 'none';
     var found = _findEntry(manifest, fname);
     if (!found) return null;
     return _localLoad(found.entry.name);
+  };
+
+  // dosList() — visible (non-hidden) filenames for current device, newline-separated
+  global.dosList = async function () {
+    var entries = await _dirEntries(global.DEVICE);
+    var out = [];
+    for (var i = 0; i < entries.length; i++) {
+      if (!_isHidden(entries[i].name)) {
+        out.push(_baseName(entries[i].name));
+      }
+    }
+    return out.join('\n');
+  };
+
+  // dosDir() — all file entries for current device in manifest format
+  // Format: canonical_name|size|timestamp  (one per line)
+  global.dosDir = async function () {
+    var entries = await _dirEntries(global.DEVICE);
+    var lines = [];
+    for (var i = 0; i < entries.length; i++) {
+      var e = entries[i];
+      lines.push(e.name + '|' + e.size + '|' + e.timestamp);
+    }
+    return lines.join('\n');
+  };
+
+  // dosShare(file) — copy file from current device into localStorage so guest can access it
+  global.dosShare = async function (file) {
+    var dev = global.DEVICE;
+    if (dev === 'none') return 'Error: no device mounted';
+
+    var fname = _normName(file);
+    if (_classify(fname) !== 'normal') return 'Error: read only file';
+    var fbase = _baseName(fname);
+    var fv = _validateBase(fbase);
+    if (!fv.ok) return 'Error: ' + fv.reason;
+
+    // Locate file on current device — try manifest first, then search device directly
+    var canonical = null;
+    var content = null;
+    var manifest = _loadManifest();
+    var found = _findEntry(manifest, fname);
+    if (found) {
+      canonical = found.entry.name;
+      content = await _load(dev, canonical);
+    }
+
+    // Fallback: search device store directly by base name
+    if (content === null) {
+      if (dev === 'echo') {
+        var eKeys = Object.keys(_echoStore);
+        for (var i = 0; i < eKeys.length; i++) {
+          var eBase = _baseName(eKeys[i]).toLowerCase();
+          if (eBase === fbase.toLowerCase()) {
+            canonical = eKeys[i];
+            content = _echoStore[canonical];
+            break;
+          }
+        }
+      } else if (dev === 'harddrive' && _harddriveHandle) {
+        var tries = [fbase, '_' + fbase, fbase + '!', '_' + fbase + '!'];
+        for (var j = 0; j < tries.length; j++) {
+          var loadedContent = await _hdLoad(tries[j]);
+          if (loadedContent !== null) { canonical = tries[j]; content = loadedContent; break; }
+        }
+      } else if (dev === 'local') {
+        try {
+          var lsKeys = Object.keys(localStorage);
+          for (var k = 0; k < lsKeys.length; k++) {
+            var lsKey = lsKeys[k];
+            if (lsKey.indexOf(LOCAL_PREFIX) !== 0) continue;
+            var lsName = lsKey.substring(LOCAL_PREFIX.length);
+            if (lsName === MANIFEST_KEY) continue;
+            if (_baseName(lsName).toLowerCase() === fbase.toLowerCase()) {
+              canonical = lsName;
+              content = _localLoad(canonical);
+              break;
+            }
+          }
+        } catch (e) {}
+      }
+    }
+
+    if (content === null) return 'Error: file not found';
+
+    // Write to localStorage
+    var saveRes = _localSave(canonical, content);
+    if (saveRes === 'Error: Disk Full') return 'Error: Disk Full';
+
+    // Update localStorage manifest
+    var size = _utf8len(content);
+    var ts = _timestamp();
+    var lsManifest = _loadManifest();
+    var lsFound = _findEntry(lsManifest, canonical);
+    if (lsFound) {
+      lsFound.entry.size = size;
+      lsFound.entry.timestamp = ts;
+    } else {
+      lsManifest.push({ name: canonical, size: size, timestamp: ts });
+    }
+    var mres = _saveManifest(lsManifest);
+    if (mres === 'Error: Disk Full') return 'Error: Disk Full';
+
+    return true;
   };
 
 })(window);
