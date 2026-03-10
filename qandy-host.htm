@@ -4378,8 +4378,8 @@ pokeCursorOn(); pokeRefresh();
 
 if (HOST) {
   var s = document.createElement('script');
-  s.id = 'dos3.js';
-  s.src = 'dos3.js';
+  s.id = 'dos.js';
+  s.src = 'dos.js';
   s.onload = function() {
     try {
       dosMount("local");
@@ -4388,7 +4388,7 @@ if (HOST) {
     }
   };
   s.onerror = function() { print("Error loading dos.js\n"); };
-  //document.head.appendChild(s);
+  document.head.appendChild(s);
   systemReady();
 } else {
   systemReady();
