@@ -3749,14 +3749,14 @@ function init_command_js() {
       // fall through to DOS command handlers below
       break;
   }
-
+  
   // DOS commands — HOST/GUEST branching is handled inside the qdos* wrappers.
-  if (trimmedCmd.endsWith('.js')) {
+    if (trimmedCmd.endsWith('.js')) {
     var result = await qdosScript(trimmedCmd);
     if (result !== true) print(String(result) + '\n');
-  } else if (trimmedCmd === 'dir') {
+  } else if (trimmedCmd === 'dir') { 
     print(await qdosDir(trimmedCmd));
-  } else if (/^delete\s+/i.test(trimmedCmd)) {
+  } else if (/^delete\s+/i.test(trimmedCmd)) {  
     print(await qdosDelete(trimmedCmd));
   } else if (/^exists\s+/i.test(trimmedCmd)) {
     print(await qdosExists(trimmedCmd));
