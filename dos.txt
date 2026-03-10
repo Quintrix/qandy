@@ -19,9 +19,9 @@
               dosList() — returns string with list of filenames separated by new lines
               
               dosDir(h) — returns string with list of filenames, filesizes, and
-                          timestamps. h=1 for human readable output
+                          timestamps. h=1 for human readable output. 
 
-       dosBackup(data) — formats active device with JSON strong, if data is omitted
+        dosBackup(data) — formats active device with JSON strong, if data is omitted
                           returns JSON string with contents of device for backup             
                       
      dosSave(file,data) — saves var data as filename to active device, if filename
@@ -48,6 +48,8 @@
                           then print the results of dosDir(0)
                           
       dosRetrieve(file) — Retrieve file from localStorage, used to send to <guest>
+      
+         dosStash(file) — Stash a file from the <guest> to localStorage
             
         dosDelete(file) — deletes filename from active device 
 
@@ -63,9 +65,13 @@
                    data — plain UTF‑8 text, use base64 for binary data, dos.js
                           returns whole file content as a single text string.
                        
-                 device — file, local, echo, or none.
-                 
+                 device — transfer, harddrive, local, echo, or none.
+                          
+                          transfer = browser's "upload/download"
+                          hardrive = File Access API
+                             local = localStorage, <host> does not have execute
+                                     access to localStorage
+                              echo = print() to screen
+                              none = returns false, no device error
 
-
- 
 
