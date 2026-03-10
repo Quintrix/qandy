@@ -1,10 +1,13 @@
 /**
- * qdos.js — guest-side DOS operations
+ * qdos.js — DOS operations for both HOST and GUEST environments
  *
  * The guest iframe runs in a sandboxed blob: URL and cannot directly access
  * the host's localStorage.  Every DOS operation is routed through
  * window.parent.postMessage() as a 'guest-action' request and the host
  * replies with an 'action-result' message containing the result.
+ *
+ * Wrapper functions (work transparently on HOST and GUEST):
+ *   hostScript(name)        — load and execute a .js script file
  *
  * Exposed globals (all return Promises):
  *   dosMount(device)        — set/get the active device on the host
@@ -245,17 +248,76 @@
     return _sendDosAction('dos-format', payload, 15000);
   }
 
+  // hostScript(name) — load and execute a named .js script on both HOST and GUEST.
+  // On HOST (no parent frame): injects a <script> element directly.
+  // On GUEST (sandboxed iframe): requests the script content from the host via
+  // postMessage('request-script') and evaluates the response inline.
+  function hostScript(name) {
+    if (!name || typeof name !== 'string') return;
+    name = name.trim();
+    if (!/^[A-Za-z0-9.\-]+\.js$/i.test(name)) return;
+    if (/^[.\-]/.test(name) || /[.\-]$/.test(name)) return;
+    if (/\.\./.test(name)) return;
+    if (name.length > 16) return;
+
+    if (!window.parent || window.parent === window) {
+      // HOST: inject script tag directly
+      try {
+        var prg = document.createElement('script');
+        prg.src = name;
+        prg.onerror = function() { try { global.print('File Error\n'); } catch (e) {} };
+        document.head.appendChild(prg);
+      } catch (e) {
+        try { global.print('Error inserting script: ' + String(e) + '\n'); } catch (ee) {}
+      }
+    } else {
+      // GUEST: request script content from host via postMessage
+      var scriptName = name;
+      var _scriptResponseHandler = function(ev) {
+        if (ev.source !== window.parent) return;
+        var d = ev.data || {};
+        if (d && d.type === 'script-response' && d.id === scriptName) {
+          clearTimeout(_scriptTimer);
+          window.removeEventListener('message', _scriptResponseHandler);
+          if (!d.success) {
+            try { global.print((d.error || 'Error loading script') + '\n'); } catch (e) {}
+          } else {
+            try {
+              // eslint-disable-next-line no-eval
+              (0, eval)(String(d.content) + '\n//# sourceURL=' + scriptName);
+            } catch (e) {
+              try { global.print('Error running ' + scriptName + ': ' + String(e) + '\n'); } catch (ee) {}
+            }
+          }
+        }
+      };
+      var _scriptTimer = setTimeout(function() {
+        window.removeEventListener('message', _scriptResponseHandler);
+        try { global.print('Timeout loading: ' + scriptName + '\n'); } catch (e) {}
+      }, 10000);
+      window.addEventListener('message', _scriptResponseHandler, false);
+      try {
+        window.parent.postMessage({ type: 'request-script', id: scriptName, name: scriptName }, '*');
+      } catch (e) {
+        clearTimeout(_scriptTimer);
+        window.removeEventListener('message', _scriptResponseHandler);
+        try { global.print('Error requesting script: ' + String(e) + '\n'); } catch (ee) {}
+      }
+    }
+  }
+
   // Expose to global
-  global.dosMount  = dosMount;
-  global.dosList   = dosList;
-  global.dosSave   = dosSave;
-  global.dosLoad   = dosLoad;
-  global.dosDelete = dosDelete;
-  global.dosExists = dosExists;
-  global.dosRename = dosRename;
-  global.dosType   = dosType;
-  global.dosFormat = dosFormat;
-  global.localLoad = localLoad;
-  global.localSave = localSave;
+  global.dosMount    = dosMount;
+  global.dosList     = dosList;
+  global.dosSave     = dosSave;
+  global.dosLoad     = dosLoad;
+  global.dosDelete   = dosDelete;
+  global.dosExists   = dosExists;
+  global.dosRename   = dosRename;
+  global.dosType     = dosType;
+  global.dosFormat   = dosFormat;
+  global.localLoad   = localLoad;
+  global.localSave   = localSave;
+  global.hostScript  = hostScript;
 
 }(window));

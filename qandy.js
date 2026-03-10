@@ -563,20 +563,56 @@ function pressup(event) {
 
 function hostScript(name) {
   if (!name || typeof name !== 'string') return false;
-  const s = name.trim();
   name = name.trim();
   if (!/^[A-Za-z0-9.\-]+\.js$/i.test(name)) return false;
   if (/^[.\-]/.test(name) || /[.\-]$/.test(name)) return false;
   if (/\.\./.test(name)) return false;
   if (name.length > 16) return false;
-  try {
-    const prg = document.createElement('script');
-    prg.src = s;
-    prg.onerror = function() { print("File Error\n"); };
-    prg.onload = function() { /* optional: print(s + " loaded\n"); */ };
-    document.head.appendChild(prg);
-  } catch (e) {
-    print("Error inserting script: " + String(e) + "\n");
+
+  if (!window.parent || window.parent === window) {
+    // HOST: inject script tag directly
+    try {
+      const prg = document.createElement('script');
+      prg.src = name;
+      prg.onerror = function() { print("File Error\n"); };
+      prg.onload = function() { /* optional: print(name + " loaded\n"); */ };
+      document.head.appendChild(prg);
+    } catch (e) {
+      print("Error inserting script: " + String(e) + "\n");
+    }
+  } else {
+    // GUEST: request script content from host via postMessage
+    var scriptName = name;
+    var _scriptResponseHandler = function(ev) {
+      if (ev.source !== window.parent) return;
+      var d = ev.data || {};
+      if (d && d.type === 'script-response' && d.id === scriptName) {
+        clearTimeout(_scriptTimer);
+        window.removeEventListener('message', _scriptResponseHandler);
+        if (!d.success) {
+          print((d.error || 'Error loading script') + "\n");
+        } else {
+          try {
+            // eslint-disable-next-line no-eval
+            (0, eval)(String(d.content) + '\n//# sourceURL=' + scriptName);
+          } catch (e) {
+            print("Error running " + scriptName + ": " + String(e) + "\n");
+          }
+        }
+      }
+    };
+    var _scriptTimer = setTimeout(function() {
+      window.removeEventListener('message', _scriptResponseHandler);
+      print("Timeout loading: " + scriptName + "\n");
+    }, 10000);
+    window.addEventListener('message', _scriptResponseHandler, false);
+    try {
+      window.parent.postMessage({ type: 'request-script', id: scriptName, name: scriptName }, '*');
+    } catch (e) {
+      clearTimeout(_scriptTimer);
+      window.removeEventListener('message', _scriptResponseHandler);
+      print("Error requesting script: " + String(e) + "\n");
+    }
   }
 }
 
