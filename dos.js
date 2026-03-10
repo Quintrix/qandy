@@ -1,137 +1,360 @@
-/**
- * Exposed globals (async functions returning Promises unless noted):
- *  - dosMount(device)
- *  - dosFormat(data)
- *  - dosList()
- *  - dosSave(file, data)
- *  - dosLoad(file)
- *  - dosCopy(file, dest)
- *  - dosRetrieve(file)
- *  - dosPaste(dest)
- *  - dosRename(file, dest)
- *  - dosType(file)
- *  - dosDownload(file)
- *  - dosUpload(optionalDest)
- *  - dosDelete(file)
- *  - dosExists(file)
+/*
+ * dos.js — Qandy Disk Operating System
+ *
+ * Exposed globals (all async unless noted):
+ *  dosMount(device)
+ *  dosFormat(data)
+ *  dosSave(file, data)
+ *  dosLoad(file)       — consolidated: handles dir.txt and dir.sys specially
+ *  dosCopy(file, dest)
+ *  dosPaste(dest)
+ *  dosRename(file, dest)
+ *  dosDelete(file)
+ *  dosExists(file)     — synchronous
+ *  dosDownload(file)
+ *  dosUpload(optionalDest)
+ *  dosStash(file)      — force-save current-device file into localStorage
+ *  dosRetrieve(file)   — read file from localStorage (guest-side helper)
+ *
+ * Global variables:
+ *  DOS    = true  — DOS is active
+ *  DEVICE = name  — active device (default "none")
+ *
+ * Supported devices:
+ *  "local"      — browser localStorage
+ *  "echo"       — in-memory volatile store
+ *  "harddrive"  — File System Access API (showDirectoryPicker)
+ *  "none"       — null device (discards writes, reads return null)
+ *
+ * File flags:
+ *  _prefix  — hidden  (not listed in dir.txt)
+ *  !suffix  — write-protected (cannot be saved/deleted)
+ *  Both may be combined: _notes.txt!
+ *  Users may omit flags when referencing files; dos.js resolves by base name.
+ *
+ * Manifest file (_dir.sys!):
+ *  Stored in localStorage at LOCAL_PREFIX + "_dir.sys!"
+ *  Format (pipe-delimited, one entry per line):
+ *    canonical_name|size|timestamp
+ *  Example lines:
+ *    program.js|10292|20260301010450
+ *    _backup.txt|2292|20260301010454
+ *    _dir.sys!|2322|20260301010454
+ *
+ * System virtual files (never stored, always generated):
+ *  dir.txt! — visible (non-hidden) filenames, newline-separated
+ *  _dir.sys! — raw manifest content as stored in localStorage
  */
 
-var DEVICE = "local";  // default device, browser localStorage
+var DOS = true;
+var DEVICE = 'none';
 
 (function (global) {
   'use strict';
 
-  // Public device var
-  global.DEVICE = global.DEVICE || 'local';
-
-  // Config / constants
-  var LOCAL_PREFIX = 'qandy_file:';
-  var LOCAL_MAN_KEY = 'qandy_manifest_local';
+  // ── Constants ────────────────────────────────────────────────────────────
+  var LOCAL_PREFIX = 'qandy:file:';
+  var MANIFEST_KEY = '_dir.sys!';          // canonical key for the manifest file
   var MAX_NAME_BYTES = 255;
   var VALID_NAME_RE = /^(?!\.)[A-Za-z0-9 \-_.()+=]+$/;
-  var SUPPORTED_DEVICES = ['local', 'harddrive', 'server', 'echo', 'none'];
+  var SUPPORTED_DEVICES = ['local', 'echo', 'harddrive', 'none'];
 
-  // Internal state
-  var _localManifest = null; // array of filenames for local
-  var _echoStore = Object.create(null); // in-memory echo device
-  var _harddriveHandle = null; // DirectoryHandle from showDirectoryPicker
-  var DOS_CLIPBOARD = null; // { name, content, device, size, createdAt }
+  // ── Internal state ───────────────────────────────────────────────────────
+  var _echoStore = Object.create(null);
+  var _harddriveHandle = null;
+  var _clipboard = null; // { name, content }
 
-  // Helpers --------------------------------------------------------
-
+  // ── Utility ──────────────────────────────────────────────────────────────
   function _utf8len(s) {
     try { return (new TextEncoder()).encode(String(s)).length; } catch (e) { return String(s).length; }
   }
-  function _normName(n) { return (typeof n === 'string') ? n.trim() : String(n == null ? '' : n).trim(); }
-  function _validateName(name) {
+
+  function _normName(n) {
+    return (typeof n === 'string') ? n.trim() : String(n == null ? '' : n).trim();
+  }
+
+  /** Strip leading _ and trailing ! to get the plain base name. */
+  function _baseName(name) {
     var n = _normName(name);
-    if (!n) return { ok: false, reason: 'empty' };
-    if (_utf8len(n) > MAX_NAME_BYTES) return { ok: false, reason: 'too-long' };
-    if (!VALID_NAME_RE.test(n)) return { ok: false, reason: 'invalid-chars-or-leading-dot' };
+    if (n.charAt(0) === '_') n = n.substring(1);
+    if (n.length > 0 && n.charAt(n.length - 1) === '!') n = n.substring(0, n.length - 1);
+    return n;
+  }
+
+  function _isHidden(canonicalName) {
+    return typeof canonicalName === 'string' && canonicalName.charAt(0) === '_';
+  }
+
+  function _isProtected(canonicalName) {
+    return typeof canonicalName === 'string' && canonicalName.length > 0 &&
+           canonicalName.charAt(canonicalName.length - 1) === '!';
+  }
+
+  /** Validate the base (flag-stripped) filename. */
+  function _validateBase(name) {
+    var n = _normName(name);
+    if (!n) return { ok: false, reason: 'empty filename' };
+    if (!VALID_NAME_RE.test(n)) return { ok: false, reason: 'invalid characters in filename' };
+    if (_utf8len(n) > MAX_NAME_BYTES) return { ok: false, reason: 'filename exceeds 255 bytes' };
     return { ok: true, name: n };
   }
 
-  // Local manifest handling (localStorage-backed)
-  async function _loadLocalManifest() {
-    if (_localManifest !== null) return _localManifest;
-    try {
-      var raw = localStorage.getItem(LOCAL_MAN_KEY);
-      if (raw) {
-        _localManifest = JSON.parse(raw);
-        if (!Array.isArray(_localManifest)) _localManifest = [];
-      } else {
-        // build manifest by scanning keys
-        _localManifest = [];
-        for (var i = 0; i < localStorage.length; i++) {
-          var k = localStorage.key(i);
-          if (k && k.indexOf(LOCAL_PREFIX) === 0) _localManifest.push(k.substring(LOCAL_PREFIX.length));
-        }
-        try { localStorage.setItem(LOCAL_MAN_KEY, JSON.stringify(_localManifest)); } catch (e) {}
-      }
-    } catch (e) { _localManifest = []; }
-    return _localManifest;
-  }
-  async function _persistLocalManifest() {
-    try { localStorage.setItem(LOCAL_MAN_KEY, JSON.stringify(_localManifest || [])); } catch (e) {}
-  }
-  function _localHas(name) {
-    return (_localManifest && _localManifest.indexOf(name) !== -1);
-  }
-  function _localAdd(name) {
-    if (!_localManifest) _localManifest = [];
-    if (_localManifest.indexOf(name) === -1) { _localManifest.push(name); _persistLocalManifest(); }
-  }
-  function _localRemove(name) {
-    if (!_localManifest) return;
-    var i = _localManifest.indexOf(name);
-    if (i !== -1) { _localManifest.splice(i, 1); _persistLocalManifest(); }
+  /** yyyymmddhhmmss timestamp using the system clock. */
+  function _timestamp() {
+    var d = new Date();
+    var p = function (n) { return String(n).padStart(2, '0'); };
+    return '' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate())
+              + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
   }
 
-  // Upload picker helper (returns { name, text } or null)
-  async function _upload_pickFile() {
-    if (typeof window.showOpenFilePicker === 'function') {
+  // ── System-file detection ─────────────────────────────────────────────────
+  /**
+   * Classify user-supplied name.
+   * Returns 'dir.txt' | 'dir.sys' | 'normal'
+   */
+  function _classify(userInput) {
+    var base = _baseName(_normName(userInput)).toLowerCase();
+    if (base === 'dir.txt') return 'dir.txt';
+    if (base === 'dir.sys') return 'dir.sys';
+    return 'normal';
+  }
+
+  // ── Manifest (always localStorage) ───────────────────────────────────────
+  function _readManifestRaw() {
+    try {
+      return localStorage.getItem(LOCAL_PREFIX + MANIFEST_KEY) || '';
+    } catch (e) { return ''; }
+  }
+
+  /**
+   * Parse manifest text into array of { name, size, timestamp }.
+   * Skips the _dir.sys! self-entry (handled separately).
+   */
+  function _parseManifest(raw) {
+    var manifest = [];
+    if (!raw) return manifest;
+    var lines = raw.split('\n');
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim();
+      if (!line) continue;
+      var parts = line.split('|');
+      if (parts.length < 3) continue;
+      var name = parts[0].trim();
+      var size = parseInt(parts[1], 10) || 0;
+      var ts = parts[2].trim();
+      if (name) manifest.push({ name: name, size: size, timestamp: ts });
+    }
+    return manifest;
+  }
+
+  function _loadManifest() {
+    return _parseManifest(_readManifestRaw());
+  }
+
+  /**
+   * Serialise manifest array to text, append self-entry, and write to localStorage.
+   * Returns true on success or 'Error: Disk Full'.
+   */
+  function _saveManifest(manifest) {
+    var ts = _timestamp();
+
+    // Build body lines (excluding any stale self-entry)
+    var lines = [];
+    for (var i = 0; i < manifest.length; i++) {
+      var e = manifest[i];
+      if (e.name === MANIFEST_KEY) continue; // remove old self-entry
+      lines.push(e.name + '|' + e.size + '|' + e.timestamp);
+    }
+
+    // Append self-entry: compute size of the full string including itself
+    var bodyText = lines.length ? lines.join('\n') + '\n' : '';
+    // placeholder to compute approximate size
+    var selfLine = MANIFEST_KEY + '|0|' + ts;
+    var full = bodyText + selfLine;
+    var manifestSize = _utf8len(full);
+    // replace with actual size
+    selfLine = MANIFEST_KEY + '|' + manifestSize + '|' + ts;
+    full = bodyText + selfLine;
+
+    // Update self-entry size with precise value (one iteration is sufficient)
+    var finalSize = _utf8len(full);
+    if (finalSize !== manifestSize) {
+      selfLine = MANIFEST_KEY + '|' + finalSize + '|' + ts;
+      full = bodyText + selfLine;
+    }
+
+    try {
+      localStorage.setItem(LOCAL_PREFIX + MANIFEST_KEY, full);
+      return true;
+    } catch (e) {
+      return 'Error: Disk Full';
+    }
+  }
+
+  /**
+   * Find manifest entry whose base name matches the user-supplied name.
+   * Returns { index, entry } or null.
+   */
+  function _findEntry(manifest, userInput) {
+    var base = _baseName(_normName(userInput)).toLowerCase();
+    for (var i = 0; i < manifest.length; i++) {
+      if (_baseName(manifest[i].name).toLowerCase() === base) {
+        return { index: i, entry: manifest[i] };
+      }
+    }
+    return null;
+  }
+
+  // ── Virtual file generators ───────────────────────────────────────────────
+  /** dir.txt content: non-hidden base names, newline-separated. */
+  function _genDirTxt(manifest) {
+    var out = [];
+    for (var i = 0; i < manifest.length; i++) {
+      if (!_isHidden(manifest[i].name)) {
+        out.push(_baseName(manifest[i].name));
+      }
+    }
+    return out.join('\n');
+  }
+
+  /** dir.sys content: raw manifest as stored. */
+  function _genDirSys() {
+    return _readManifestRaw();
+  }
+
+  // ── Storage backends ──────────────────────────────────────────────────────
+
+  // local ─────────────────────────────────────────────────────────────────
+  function _localLoad(canonicalName) {
+    try {
+      var v = localStorage.getItem(LOCAL_PREFIX + canonicalName);
+      return v === null ? null : String(v);
+    } catch (e) { return null; }
+  }
+
+  function _localSave(canonicalName, content) {
+    try {
+      localStorage.setItem(LOCAL_PREFIX + canonicalName,
+                           String(content == null ? '' : content));
+      return true;
+    } catch (e) { return 'Error: Disk Full'; }
+  }
+
+  function _localDelete(canonicalName) {
+    try { localStorage.removeItem(LOCAL_PREFIX + canonicalName); } catch (e) {}
+  }
+
+  // harddrive ─────────────────────────────────────────────────────────────
+  async function _ensureHarddrive() {
+    if (_harddriveHandle) return true;
+    if (typeof window === 'undefined' ||
+        typeof window.showDirectoryPicker !== 'function') return false;
+    try {
+      _harddriveHandle = await window.showDirectoryPicker();
+      return true;
+    } catch (e) { _harddriveHandle = null; return false; }
+  }
+
+  async function _hdLoad(name) {
+    if (!(await _ensureHarddrive())) return null;
+    try {
+      var fh = await _harddriveHandle.getFileHandle(name, { create: false });
+      var file = await fh.getFile();
+      return await file.text();
+    } catch (e) { return null; }
+  }
+
+  async function _hdSave(name, content) {
+    if (!(await _ensureHarddrive())) return false;
+    try {
+      var fh = await _harddriveHandle.getFileHandle(name, { create: true });
+      var w = await fh.createWritable();
+      await w.write(String(content == null ? '' : content));
+      await w.close();
+      return true;
+    } catch (e) { return false; }
+  }
+
+  async function _hdDelete(name) {
+    if (!_harddriveHandle) return;
+    try { await _harddriveHandle.removeEntry(name); } catch (e) {}
+  }
+
+  // Dispatch ──────────────────────────────────────────────────────────────
+  async function _load(device, canonicalName) {
+    switch (device) {
+      case 'local':      return _localLoad(canonicalName);
+      case 'echo':       return Object.prototype.hasOwnProperty.call(_echoStore, canonicalName) ? _echoStore[canonicalName] : null;
+      case 'harddrive':  return await _hdLoad(canonicalName);
+      case 'none':       return null;
+      default:           return null;
+    }
+  }
+
+  async function _save(device, canonicalName, content) {
+    switch (device) {
+      case 'local':     return _localSave(canonicalName, content);
+      case 'echo':      _echoStore[canonicalName] = String(content == null ? '' : content); return true;
+      case 'harddrive': return await _hdSave(canonicalName, content);
+      case 'none':      return true; // silently discard
+      default:          return false;
+    }
+  }
+
+  async function _del(device, canonicalName) {
+    switch (device) {
+      case 'local':     _localDelete(canonicalName); break;
+      case 'echo':      delete _echoStore[canonicalName]; break;
+      case 'harddrive': await _hdDelete(canonicalName); break;
+    }
+  }
+
+  // ── File-picker / save-as helpers ─────────────────────────────────────────
+  async function _pickFile() {
+    if (typeof window !== 'undefined' &&
+        typeof window.showOpenFilePicker === 'function') {
       try {
         var handles = await window.showOpenFilePicker({ multiple: false });
         if (!handles || !handles.length) return null;
         var fh = handles[0];
-        var file = await fh.getFile();
-        return { name: file.name, text: await file.text() };
+        var f = await fh.getFile();
+        return { name: f.name, text: await f.text() };
       } catch (e) { return null; }
     }
-    // fallback to input element
+    // Fallback: hidden <input type="file">
     return new Promise(function (resolve) {
       var inp = document.createElement('input');
       inp.type = 'file';
-      inp.style.position = 'fixed';
-      inp.style.left = '-9999px';
+      inp.style.cssText = 'position:fixed;left:-9999px';
       document.body.appendChild(inp);
-      inp.onchange = async function () {
+      inp.onchange = function () {
         var f = inp.files && inp.files[0];
         if (!f) { document.body.removeChild(inp); return resolve(null); }
-        var t = await f.text();
-        document.body.removeChild(inp);
-        resolve({ name: f.name, text: t });
+        var reader = new FileReader();
+        reader.onload = function (ev) {
+          document.body.removeChild(inp);
+          resolve({ name: f.name, text: ev.target.result });
+        };
+        reader.onerror = function () { document.body.removeChild(inp); resolve(null); };
+        reader.readAsText(f);
       };
       inp.click();
     });
   }
 
-  // Save-as helper for download / saving to file system via save picker
   async function _saveFileAs(name, content) {
-    // prefer showSaveFilePicker
-    if (typeof window.showSaveFilePicker === 'function') {
+    if (typeof window !== 'undefined' &&
+        typeof window.showSaveFilePicker === 'function') {
       try {
-        var opts = { suggestedName: name };
-        var handle = await window.showSaveFilePicker(opts);
+        var handle = await window.showSaveFilePicker({ suggestedName: name });
         var w = await handle.createWritable();
         await w.write(String(content == null ? '' : content));
         await w.close();
         return true;
-      } catch (e) {
-        // fall through to anchor download
-      }
+      } catch (e) { /* fall through to anchor download */ }
     }
-    var blob = new Blob([String(content == null ? '' : content)], { type: 'text/plain;charset=utf-8' });
+    var blob = new Blob([String(content == null ? '' : content)],
+                       { type: 'text/plain;charset=utf-8' });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     a.href = url;
@@ -143,394 +366,418 @@ var DEVICE = "local";  // default device, browser localStorage
     return true;
   }
 
-  // Harddrive helpers (DirectoryHandle based)
-  async function _hd_list() {
-    if (!(_harddriveHandle)) return [];
-    var out = [];
-    try {
-      for await (const [name, handle] of _harddriveHandle.entries()) {
-        if (handle.kind === 'file') out.push(name);
-      }
-    } catch (e) { /* ignore */ }
-    return out;
-  }
-  async function _hd_load(name) {
-    if (!(_harddriveHandle)) return null;
-    try {
-      var fh = await _harddriveHandle.getFileHandle(name, { create: false });
-      var file = await fh.getFile();
-      return await file.text();
-    } catch (e) { return null; }
-  }
-  async function _hd_save(name, content) {
-    if (!(_harddriveHandle)) return Promise.reject(new Error('harddrive not mounted'));
-    var fh = await _harddriveHandle.getFileHandle(name, { create: true });
-    var w = await fh.createWritable();
-    await w.write(String(content == null ? '' : content));
-    await w.close();
-  }
-  async function _hd_delete(name) {
-    if (!(_harddriveHandle)) return Promise.reject(new Error('harddrive not mounted'));
-    try { await _harddriveHandle.removeEntry(name); } catch (e) { /* ignore */ }
-  }
+  // ── Public API ────────────────────────────────────────────────────────────
 
-  // Backend dispatchers ------------------------------------------------
+  global.DOS = true;
+  global.DEVICE = global.DEVICE || 'none';
 
-  async function _backend_list(device) {
-    device = device || global.DEVICE;
-    switch (device) {
-      case 'local': await _loadLocalManifest(); return (_localManifest || []).slice();
-      case 'echo': return Object.keys(_echoStore).slice();
-      case 'none': return [];
-      case 'harddrive': return await _hd_list();
-      case 'server': // not implemented, return empty
-        return [];
-      default: return [];
-    }
-  }
-
-  async function _backend_load(device, name) {
-    device = device || global.DEVICE;
-    switch (device) {
-      case 'local':
-        var v = localStorage.getItem(LOCAL_PREFIX + name);
-        return (v === null) ? null : String(v);
-      case 'echo':
-        return _echoStore.hasOwnProperty(name) ? _echoStore[name] : null;
-      case 'none':
-        return null;
-      case 'harddrive':
-        return await _hd_load(name);
-      case 'server':
-        // server not implemented in this rewrite
-        return null;
-      default:
-        return null;
-    }
-  }
-
-  async function _backend_save(device, name, content) {
-    device = device || global.DEVICE;
-    switch (device) {
-      case 'local':
-        try {
-          localStorage.setItem(LOCAL_PREFIX + name, String(content == null ? '' : content));
-          await _loadLocalManifest();
-          _localAdd(name);
-          return;
-        } catch (e) { throw e; }
-      case 'echo':
-        _echoStore[name] = String(content == null ? '' : content);
-        return;
-      case 'none':
-        return;
-      case 'harddrive':
-        return await _hd_save(name, content);
-      case 'server':
-        // server not implemented
-        throw new Error('server device not implemented');
-      default:
-        return;
-    }
-  }
-
-  async function _backend_delete(device, name) {
-    device = device || global.DEVICE;
-    switch (device) {
-      case 'local':
-        try {
-          localStorage.removeItem(LOCAL_PREFIX + name);
-          await _loadLocalManifest();
-          _localRemove(name);
-        } catch (e) {}
-        return;
-      case 'echo':
-        delete _echoStore[name];
-        return;
-      case 'none':
-        return;
-      case 'harddrive':
-        return await _hd_delete(name);
-      case 'server':
-        // not implemented
-        throw new Error('server device not implemented');
-      default:
-        return;
-    }
-  }
-
-  async function _backend_exists(device, name) {
-    device = device || global.DEVICE;
-    var arr = await _backend_list(device);
-    return arr.indexOf(name) !== -1;
-  }
-
-  // Public API implementations ---------------------------------------
-
-  // dosMount(device) - sets active device; if omitted returns current device
-  async function dosMount(device) {
-    if (typeof device === 'undefined' || device === null || String(device).trim() === '') {
-      return Promise.resolve(global.DEVICE || 'none');
-    }
-    if (typeof device !== 'string') return Promise.reject(new Error('device must be string'));
+  // dosMount(device)
+  global.dosMount = async function (device) {
+    if (!device || typeof device !== 'string') return global.DEVICE;
     device = device.trim();
-    if (SUPPORTED_DEVICES.indexOf(device) === -1) return Promise.reject(new Error('unsupported device: ' + device));
-
-    // special handling for harddrive: ask user to pick a directory
+    if (SUPPORTED_DEVICES.indexOf(device) === -1) return 'Error: unsupported device: ' + device;
     if (device === 'harddrive') {
-      // if already have handle, accept
-      if (_harddriveHandle) {
-        global.DEVICE = 'harddrive';
-        return Promise.resolve('harddrive');
-      }
-      if (typeof window.showDirectoryPicker !== 'function') return Promise.reject(new Error('File System Access API not available'));
-      try {
-        _harddriveHandle = await window.showDirectoryPicker();
-        global.DEVICE = 'harddrive';
-        return Promise.resolve('harddrive');
-      } catch (e) {
-        _harddriveHandle = null;
-        return Promise.reject(e);
-      }
+      var ok = await _ensureHarddrive();
+      if (!ok) return 'Error: harddrive not available';
     }
-
-    // otherwise set device
     global.DEVICE = device;
-    return Promise.resolve(device);
-  }
-
-  // dosFormat(data) - if data omitted, export JSON archive of device; if provided (JSON or object), import into device (overwrite)
-  async function dosFormat(data) {
-    var dev = global.DEVICE || 'local';
-    if (typeof data === 'undefined') {
-      // export
-      var files = {};
-      var list = await _backend_list(dev);
-      for (var i = 0; i < list.length; i++) {
-        var n = list[i];
-        try { var c = await _backend_load(dev, n); files[n] = (c === null ? null : String(c)); } catch (e) { files[n] = null; }
-      }
-      return JSON.stringify({ device: dev, created: (new Date()).toISOString(), files: files });
-    } else {
-      // import
-      var obj = data;
-      if (typeof data === 'string') {
-        try { obj = JSON.parse(data); } catch (e) { return Promise.reject(new Error('format: data must be JSON or object')); }
-      }
-      if (!obj || typeof obj !== 'object' || !obj.files) return Promise.reject(new Error('format: invalid archive'));
-      var cur = await _backend_list(dev);
-      for (var j = 0; j < cur.length; j++) await _backend_delete(dev, cur[j]);
-      var keys = Object.keys(obj.files || {});
-      for (var k = 0; k < keys.length; k++) {
-        var nm = keys[k]; var val = obj.files[nm];
-        var v = _validateName(nm);
-        if (!v.ok) continue;
-        await _backend_save(dev, v.name, val == null ? '' : String(val));
-      }
-      return Promise.resolve(true);
-    }
-  }
-
-  // dosList() - returns newline-separated list of filenames
-  async function dosList() {
-    var dev = global.DEVICE || 'local';
-    var arr = await _backend_list(dev);
-    return (arr && arr.length) ? arr.join('\n') : '';
-  }
-
-  // dosSave(file, data) - '>' prefix appends
-  async function dosSave(file, data) {
-    if (typeof file !== 'string' || file.length === 0) return Promise.reject(new Error('dosSave: file required'));
-    var append = false;
-    var fname = file;
-    if (fname.charAt(0) === '>') { append = true; fname = fname.substring(1); }
-    var v = _validateName(fname);
-    if (!v.ok) return Promise.reject(new Error('dosSave: invalid filename (' + v.reason + ')'));
-    var dev = global.DEVICE || 'local';
-    if (append) {
-      var existing = await _backend_load(dev, v.name);
-      var newContent = (existing === null ? '' : String(existing)) + (data == null ? '' : String(data));
-      await _backend_save(dev, v.name, newContent);
-      return Promise.resolve(true);
-    } else {
-      await _backend_save(dev, v.name, data == null ? '' : String(data));
-      return Promise.resolve(true);
-    }
-  }
-
-  // dosLoad(file) - returns file content string or null
-  async function dosLoad(file) {
-    if (typeof file !== 'string' || file.length === 0) return Promise.reject(new Error('dosLoad: file required'));
-    var v = _validateName(file);
-    if (!v.ok) return Promise.reject(new Error('dosLoad: invalid filename (' + v.reason + ')'));
-    var dev = global.DEVICE || 'local';
-
-    // For harddrive, if handle missing, prompt user so load may succeed without explicit mount
-    if (dev === 'harddrive' && !_harddriveHandle) {
-      try {
-        if (typeof window.showDirectoryPicker !== 'function') return Promise.resolve(null);
-        _harddriveHandle = await window.showDirectoryPicker();
-      } catch (e) { _harddriveHandle = null; return Promise.resolve(null); }
-    }
-
-    return await _backend_load(dev, v.name);
-  }
-
-  async function dosRetrieve(file) {
-    if (typeof file !== 'string' || file.length === 0) return Promise.reject(new Error('dosRetrieve: file required'));
-    var v = _validateName(file);
-    if (!v.ok) return Promise.reject(new Error('dosLoad: invalid filename (' + v.reason + ')'));
-    var dev = 'local';
-    return _backend_load(dev, v.name);
-  }
-
-  // dosCopy(file, dest) - copy into clipboard; if dest provided, also save as dest (error if dest exists)
-  async function dosCopy(file, dest) {
-    if (typeof file !== 'string' || file.length === 0) return Promise.reject(new Error('dosCopy: file required'));
-    var v = _validateName(file);
-    if (!v.ok) return Promise.reject(new Error('dosCopy: invalid filename (' + v.reason + ')'));
-    var dev = global.DEVICE || 'local';
-
-    // load source (may prompt for upload during load if device requires)
-    var content = await _backend_load(dev, v.name);
-    if (content === null) return Promise.reject(new Error('dosCopy: source not found or user cancelled'));
-
-    // store in clipboard
-    var size;
-    try { size = _utf8len(content); } catch (e) { size = String(content).length; }
-    DOS_CLIPBOARD = { name: v.name, content: String(content), device: dev, size: size, createdAt: Date.now() };
-
-    // if dest provided, write immediately but error if dest exists
-    if (typeof dest !== 'undefined' && dest !== null && String(dest).trim() !== '') {
-      var vd = _validateName(dest);
-      if (!vd.ok) return Promise.reject(new Error('dosCopy: invalid dest (' + vd.reason + ')'));
-      var exists = await _backend_exists(dev, vd.name);
-      if (exists) return Promise.reject(new Error('dosCopy: destination exists'));
-      await _backend_save(dev, vd.name, DOS_CLIPBOARD.content);
-      return Promise.resolve(true);
-    }
-
-    return Promise.resolve(true);
-  }
-
-  // dosPaste(dest) - paste clipboard to dest, error if dest exists
-  async function dosPaste(dest) {
-    if (!DOS_CLIPBOARD) return Promise.reject(new Error('dosPaste: clipboard is empty'));
-    if (typeof dest !== 'string' || dest.length === 0) return Promise.reject(new Error('dosPaste: dest required'));
-    var vd = _validateName(dest);
-    if (!vd.ok) return Promise.reject(new Error('dosPaste: invalid dest (' + vd.reason + ')'));
-    var dev = global.DEVICE || 'local';
-    var exists = await _backend_exists(dev, vd.name);
-    if (exists) return Promise.reject(new Error('dosPaste: destination exists'));
-    await _backend_save(dev, vd.name, DOS_CLIPBOARD.content);
-    return Promise.resolve(true);
-  }
-
-  // dosRename(file, dest) - rename file to dest (error if dest exists)
-  async function dosRename(file, dest) {
-    if (typeof file !== 'string' || file.length === 0) return Promise.reject(new Error('dosRename: file required'));
-    if (typeof dest !== 'string' || dest.length === 0) return Promise.reject(new Error('dosRename: dest required'));
-    var vsrc = _validateName(file); if (!vsrc.ok) return Promise.reject(new Error('dosRename: invalid src (' + vsrc.reason + ')'));
-    var vdst = _validateName(dest); if (!vdst.ok) return Promise.reject(new Error('dosRename: invalid dest (' + vdst.reason + ')'));
-    var dev = global.DEVICE || 'local';
-    var content = await _backend_load(dev, vsrc.name);
-    if (content === null) return Promise.reject(new Error('dosRename: source not found'));
-    var exists = await _backend_exists(dev, vdst.name);
-    if (exists) return Promise.reject(new Error('dosRename: destination exists'));
-    await _backend_save(dev, vdst.name, content);
-    await _backend_delete(dev, vsrc.name);
-    return Promise.resolve(true);
-  }
-
-  // dosType(file) - print file contents to display (uses global.print if present)
-  async function dosType(file) {
-    if (typeof file !== 'string' || file.length === 0) return Promise.reject(new Error('dosType: file required'));
-    var v = _validateName(file);
-    if (!v.ok) return Promise.reject(new Error('dosType: invalid filename (' + v.reason + ')'));
-    var dev = global.DEVICE || 'local';
-    var content = await _backend_load(dev, v.name);
-    if (content === null) return Promise.reject(new Error('dosType: file not found'));
-    if (typeof global.print === 'function') {
-      global.print(String(content));
-    } else {
-      // fallback to appending to #txt if present, else console
-      try {
-        var el = document.getElementById('txt');
-        if (el) { el.textContent += String(content); }
-        else console.log(String(content));
-      } catch (e) { console.log(String(content)); }
-    }
-    return Promise.resolve(true);
-  }
-
-  // dosDownload(file) - trigger browser save-as for the file
-  async function dosDownload(file) {
-    if (typeof file !== 'string' || file.length === 0) return Promise.reject(new Error('dosDownload: file required'));
-    var v = _validateName(file);
-    if (!v.ok) return Promise.reject(new Error('dosDownload: invalid filename (' + v.reason + ')'));
-    var dev = global.DEVICE || 'local';
-    var content = await _backend_load(dev, v.name);
-    if (content === null) return Promise.reject(new Error('dosDownload: file not found'));
-    await _saveFileAs(v.name, content);
-    return Promise.resolve(true);
-  }
-
-  // dosUpload(optionalDest) - open file picker and save chosen file into current device
-  // returns the filename saved or null if cancelled
-  async function dosUpload(optionalDest) {
-    var picked = await _upload_pickFile();
-    if (!picked) return Promise.resolve(null); // user cancelled
-    var destName = (typeof optionalDest === 'string' && optionalDest.trim() !== '') ? optionalDest.trim() : picked.name;
-    var v = _validateName(destName);
-    if (!v.ok) return Promise.reject(new Error('dosUpload: invalid destination name (' + v.reason + ')'));
-    var dev = global.DEVICE || 'local';
-    // if dest exists, overwrite (design choice) - to prevent accidental overwrite, caller should check dosExists first
-    await _backend_save(dev, v.name, String(picked.text));
-    return Promise.resolve(v.name);
-  }
-
-  // dosDelete(file) - delete filename
-  async function dosDelete(file) {
-    if (typeof file !== 'string' || file.length === 0) return Promise.reject(new Error('dosDelete: file required'));
-    var v = _validateName(file);
-    if (!v.ok) return Promise.reject(new Error('dosDelete: invalid filename (' + v.reason + ')'));
-    var dev = global.DEVICE || 'local';
-    await _backend_delete(dev, v.name);
-    return Promise.resolve(true);
-  }
-
-  // dosExists(file) - returns boolean
-  async function dosExists(file) {
-    if (typeof file !== 'string' || file.length === 0) return Promise.resolve(false);
-    var v = _validateName(file);
-    if (!v.ok) return Promise.resolve(false);
-    var dev = global.DEVICE || 'local';
-    return await _backend_exists(dev, v.name);
-  }
-
-  // Expose public functions to global
-  global.dosMount = dosMount;
-  global.dosFormat = dosFormat;
-  global.dosList = dosList;
-  global.dosSave = dosSave;
-  global.dosLoad = dosLoad;
-  global.dosRetrieve = dosRetrieve;
-  global.dosCopy = dosCopy;
-  global.dosPaste = dosPaste;
-  global.dosRename = dosRename;
-  global.dosType = dosType;
-  global.dosDownload = dosDownload;
-  global.dosUpload = dosUpload;
-  global.dosDelete = dosDelete;
-  global.dosExists = dosExists;
-
-  // Small convenience: expose internal clipboard inspector (read-only)
-  global.dosClipboardInfo = function () {
-    if (!DOS_CLIPBOARD) return null;
-    return { name: DOS_CLIPBOARD.name, device: DOS_CLIPBOARD.device, size: DOS_CLIPBOARD.size, createdAt: new Date(DOS_CLIPBOARD.createdAt) };
+    return device;
   };
 
-  // Internal debug helpers (non-enumerable)
-  try { Object.defineProperty(global, '__dos_internal', { value: { _backend_list, _backend_load, _backend_save, _backend_delete }, writable: false }); } catch (e) { /* ignore */ }
+  // dosFormat(data)
+  // No data → export JSON archive of current device.
+  // data provided → import JSON archive into current device (clears first).
+  global.dosFormat = async function (data) {
+    var dev = global.DEVICE;
+
+    if (typeof data === 'undefined') {
+      // Export
+      var manifest = _loadManifest();
+      var files = {};
+      for (var i = 0; i < manifest.length; i++) {
+        var e = manifest[i];
+        if (e.name === MANIFEST_KEY) continue;
+        try { files[e.name] = await _load(dev, e.name); } catch (ex) { files[e.name] = null; }
+      }
+      return JSON.stringify({ device: dev, created: new Date().toISOString(), files: files });
+    }
+
+    // Import
+    var obj = data;
+    if (typeof data === 'string') {
+      try { obj = JSON.parse(data); } catch (e) { return 'Error: invalid archive format'; }
+    }
+    if (!obj || typeof obj !== 'object' || !obj.files) return 'Error: invalid archive';
+
+    // Clear current device files tracked in manifest
+    var curManifest = _loadManifest();
+    for (var j = 0; j < curManifest.length; j++) {
+      if (curManifest[j].name !== MANIFEST_KEY) await _del(dev, curManifest[j].name);
+    }
+    if (dev === 'echo') _echoStore = Object.create(null);
+
+    // Write new files
+    var newManifest = [];
+    var keys = Object.keys(obj.files);
+    for (var k = 0; k < keys.length; k++) {
+      var fname = keys[k];
+      if (fname === MANIFEST_KEY) continue;
+      var fbase = _baseName(fname);
+      var fv = _validateBase(fbase);
+      if (!fv.ok) continue;
+      var fcontent = String(obj.files[fname] == null ? '' : obj.files[fname]);
+      var saveRes = await _save(dev, fname, fcontent);
+      if (saveRes === 'Error: Disk Full') return 'Error: Disk Full';
+      newManifest.push({ name: fname, size: _utf8len(fcontent), timestamp: _timestamp() });
+    }
+    var mres = _saveManifest(newManifest);
+    if (mres === 'Error: Disk Full') return 'Error: Disk Full';
+    return true;
+  };
+
+  // dosSave(file, data)
+  // ">file" prefix appends; write-protected and system files rejected.
+  global.dosSave = async function (file, data) {
+    var fname = _normName(file);
+    var append = false;
+    if (fname.charAt(0) === '>') { append = true; fname = fname.substring(1).trimStart(); }
+
+    var cls = _classify(fname);
+    if (cls !== 'normal') return 'Error: read only file';
+
+    var fbase = _baseName(fname);
+    var fv = _validateBase(fbase);
+    if (!fv.ok) return 'Error: ' + fv.reason;
+
+    var dev = global.DEVICE;
+    var manifest = _loadManifest();
+    var found = _findEntry(manifest, fname);
+
+    if (found && _isProtected(found.entry.name)) return 'Error: read only file';
+
+    // Determine canonical name for this file
+    var canonical;
+    if (found) {
+      canonical = found.entry.name;
+    } else {
+      canonical = (_isHidden(fname) ? '_' : '') + fbase + (_isProtected(fname) ? '!' : '');
+    }
+
+    var content = String(data == null ? '' : data);
+    if (append && found) {
+      var existing = await _load(dev, canonical);
+      if (existing !== null) content = existing + content;
+    }
+
+    var res = await _save(dev, canonical, content);
+    if (res === 'Error: Disk Full') return 'Error: Disk Full';
+    if (res === false) return 'Error: write failed';
+
+    var size = _utf8len(content);
+    var ts = _timestamp();
+    if (found) {
+      found.entry.size = size;
+      found.entry.timestamp = ts;
+    } else {
+      manifest.push({ name: canonical, size: size, timestamp: ts });
+    }
+    var mres = _saveManifest(manifest);
+    if (mres === 'Error: Disk Full') return 'Error: Disk Full';
+    return true;
+  };
+
+  // dosLoad(file)
+  // "dir.txt" → visible filenames; "dir.sys" → raw manifest; otherwise normal file.
+  global.dosLoad = async function (file) {
+    var fname = _normName(file);
+    var cls = _classify(fname);
+
+    if (cls === 'dir.txt') return _genDirTxt(_loadManifest());
+    if (cls === 'dir.sys') return _genDirSys();
+
+    var fbase = _baseName(fname);
+    var fv = _validateBase(fbase);
+    if (!fv.ok) return null;
+
+    var dev = global.DEVICE;
+    var manifest = _loadManifest();
+    var found = _findEntry(manifest, fname);
+    if (!found) return null;
+
+    return await _load(dev, found.entry.name);
+  };
+
+  // dosCopy(file, dest)
+  // Copies file into internal clipboard; if dest provided, also saves as dest.
+  global.dosCopy = async function (file, dest) {
+    var dev = global.DEVICE;
+    var fname = _normName(file);
+
+    if (_classify(fname) !== 'normal') return 'Error: cannot copy system file';
+    var fbase = _baseName(fname);
+    var fv = _validateBase(fbase);
+    if (!fv.ok) return 'Error: ' + fv.reason;
+
+    var manifest = _loadManifest();
+    var found = _findEntry(manifest, fname);
+    if (!found) return 'Error: file not found';
+
+    var content = await _load(dev, found.entry.name);
+    if (content === null) return 'Error: file not found';
+
+    _clipboard = { name: found.entry.name, content: content };
+
+    if (typeof dest !== 'undefined' && dest !== null && String(dest).trim() !== '') {
+      var dname = _normName(String(dest));
+      if (_classify(dname) !== 'normal') return 'Error: read only file';
+      var dbase = _baseName(dname);
+      var dv = _validateBase(dbase);
+      if (!dv.ok) return 'Error: invalid destination: ' + dv.reason;
+      var destFound = _findEntry(manifest, dname);
+      if (destFound) return 'Error: destination file already exists';
+      var destCanonical = (_isHidden(dname) ? '_' : '') + dbase + (_isProtected(dname) ? '!' : '');
+      var res = await _save(dev, destCanonical, content);
+      if (res === 'Error: Disk Full') return 'Error: Disk Full';
+      manifest.push({ name: destCanonical, size: _utf8len(content), timestamp: _timestamp() });
+      var mres = _saveManifest(manifest);
+      if (mres === 'Error: Disk Full') return 'Error: Disk Full';
+    }
+
+    return true;
+  };
+
+  // dosPaste(dest)
+  // Pastes clipboard into dest. ">dest" appends; otherwise errors if dest exists.
+  global.dosPaste = async function (dest) {
+    var dev = global.DEVICE;
+    var content = null;
+
+    if (_clipboard && _clipboard.content !== undefined) {
+      content = _clipboard.content;
+    } else if (typeof navigator !== 'undefined' && navigator.clipboard &&
+               typeof navigator.clipboard.readText === 'function') {
+      try { content = await navigator.clipboard.readText(); } catch (e) {
+        return 'Error: clipboard read denied';
+      }
+    }
+    if (content === null || content === undefined) return 'Error: clipboard empty';
+
+    var append = false;
+    var dname = _normName(String(dest));
+    if (dname.charAt(0) === '>') { append = true; dname = dname.substring(1).trimStart(); }
+
+    if (_classify(dname) !== 'normal') return 'Error: read only file';
+    var dbase = _baseName(dname);
+    var dv = _validateBase(dbase);
+    if (!dv.ok) return 'Error: ' + dv.reason;
+
+    var manifest = _loadManifest();
+    var destFound = _findEntry(manifest, dname);
+    if (destFound && _isProtected(destFound.entry.name)) return 'Error: read only file';
+
+    var destCanonical;
+    if (destFound) {
+      destCanonical = destFound.entry.name;
+    } else {
+      destCanonical = (_isHidden(dname) ? '_' : '') + dbase + (_isProtected(dname) ? '!' : '');
+    }
+
+    if (append && destFound) {
+      var existing = await _load(dev, destCanonical);
+      if (existing !== null) content = existing + content;
+    } else if (!append && destFound) {
+      return 'Error: file already exists';
+    }
+
+    var res = await _save(dev, destCanonical, content);
+    if (res === 'Error: Disk Full') return 'Error: Disk Full';
+
+    var size = _utf8len(content);
+    var ts = _timestamp();
+    if (destFound) {
+      destFound.entry.size = size;
+      destFound.entry.timestamp = ts;
+    } else {
+      manifest.push({ name: destCanonical, size: size, timestamp: ts });
+    }
+    var mres = _saveManifest(manifest);
+    if (mres === 'Error: Disk Full') return 'Error: Disk Full';
+    return true;
+  };
+
+  // dosRename(file, dest)
+  global.dosRename = async function (file, dest) {
+    var dev = global.DEVICE;
+    var fname = _normName(file);
+    var dname = _normName(dest);
+
+    if (_classify(fname) !== 'normal') return 'Error: read only file';
+    if (_classify(dname) !== 'normal') return 'Error: read only file';
+
+    var fbase = _baseName(fname);
+    var fv = _validateBase(fbase);
+    if (!fv.ok) return 'Error: ' + fv.reason;
+    var dbase = _baseName(dname);
+    var dv = _validateBase(dbase);
+    if (!dv.ok) return 'Error: invalid destination: ' + dv.reason;
+
+    var manifest = _loadManifest();
+    var srcFound = _findEntry(manifest, fname);
+    if (!srcFound) return 'Error: file not found';
+    if (_isProtected(srcFound.entry.name)) return 'Error: read only file';
+
+    var destFound = _findEntry(manifest, dname);
+    if (destFound) return 'Error: destination file already exists';
+
+    var content = await _load(dev, srcFound.entry.name);
+    if (content === null) return 'Error: file not found';
+
+    var destCanonical = (_isHidden(dname) ? '_' : '') + dbase + (_isProtected(dname) ? '!' : '');
+    var res = await _save(dev, destCanonical, content);
+    if (res === 'Error: Disk Full') return 'Error: Disk Full';
+
+    await _del(dev, srcFound.entry.name);
+    srcFound.entry.name = destCanonical;
+    srcFound.entry.timestamp = _timestamp();
+    var mres = _saveManifest(manifest);
+    if (mres === 'Error: Disk Full') return 'Error: Disk Full';
+    return true;
+  };
+
+  // dosDelete(file)
+  global.dosDelete = async function (file) {
+    var dev = global.DEVICE;
+    var fname = _normName(file);
+
+    if (_classify(fname) !== 'normal') return 'Error: read only file';
+    var fbase = _baseName(fname);
+    var fv = _validateBase(fbase);
+    if (!fv.ok) return 'Error: ' + fv.reason;
+
+    var manifest = _loadManifest();
+    var found = _findEntry(manifest, fname);
+    if (!found) return 'Error: file not found';
+    if (_isProtected(found.entry.name)) return 'Error: read only file';
+
+    await _del(dev, found.entry.name);
+    manifest.splice(found.index, 1);
+    var mres = _saveManifest(manifest);
+    if (mres === 'Error: Disk Full') return 'Error: Disk Full';
+    return true;
+  };
+
+  // dosExists(file) — synchronous
+  global.dosExists = function (file) {
+    var fname = _normName(file);
+    var cls = _classify(fname);
+    if (cls === 'dir.txt' || cls === 'dir.sys') return true;
+    var fbase = _baseName(fname);
+    var fv = _validateBase(fbase);
+    if (!fv.ok) return false;
+    return _findEntry(_loadManifest(), fname) !== null;
+  };
+
+  // dosDownload(file)
+  global.dosDownload = async function (file) {
+    var fname = _normName(file);
+    var cls = _classify(fname);
+    var fbase = _baseName(fname);
+    var fv = _validateBase(fbase);
+    if (!fv.ok) return 'Error: ' + fv.reason;
+
+    var content;
+    if (cls === 'dir.txt') {
+      content = _genDirTxt(_loadManifest());
+    } else if (cls === 'dir.sys') {
+      content = _genDirSys();
+    } else {
+      var dev = global.DEVICE;
+      var manifest = _loadManifest();
+      var found = _findEntry(manifest, fname);
+      if (!found) return 'Error: file not found';
+      content = await _load(dev, found.entry.name);
+      if (content === null) return 'Error: file not found';
+    }
+
+    await _saveFileAs(fbase, content);
+    return true;
+  };
+
+  // dosUpload(optionalDest)
+  global.dosUpload = async function (optionalDest) {
+    var picked = await _pickFile();
+    if (!picked) return null; // user cancelled
+
+    var dname = (typeof optionalDest === 'string' && optionalDest.trim() !== '')
+                ? _normName(optionalDest) : _normName(picked.name);
+
+    if (_classify(dname) !== 'normal') return 'Error: read only file';
+    var dbase = _baseName(dname);
+    var dv = _validateBase(dbase);
+    if (!dv.ok) return 'Error: invalid destination: ' + dv.reason;
+
+    var dev = global.DEVICE;
+    var manifest = _loadManifest();
+    var found = _findEntry(manifest, dname);
+    if (found && _isProtected(found.entry.name)) return 'Error: read only file';
+
+    var destCanonical;
+    if (found) {
+      destCanonical = found.entry.name;
+    } else {
+      destCanonical = (_isHidden(dname) ? '_' : '') + dbase + (_isProtected(dname) ? '!' : '');
+    }
+
+    var content = String(picked.text);
+    var res = await _save(dev, destCanonical, content);
+    if (res === 'Error: Disk Full') return 'Error: Disk Full';
+
+    var size = _utf8len(content);
+    var ts = _timestamp();
+    if (found) {
+      found.entry.size = size;
+      found.entry.timestamp = ts;
+    } else {
+      manifest.push({ name: destCanonical, size: size, timestamp: ts });
+    }
+    var mres = _saveManifest(manifest);
+    if (mres === 'Error: Disk Full') return 'Error: Disk Full';
+    return destCanonical;
+  };
+
+  // dosStash(file) — retrieve file from current device and force-save to localStorage
+  global.dosStash = async function (file) {
+    var dev = global.DEVICE;
+    var fname = _normName(file);
+    if (_classify(fname) !== 'normal') return 'Error: read only file';
+    var fbase = _baseName(fname);
+    var fv = _validateBase(fbase);
+    if (!fv.ok) return 'Error: ' + fv.reason;
+
+    var manifest = _loadManifest();
+    var found = _findEntry(manifest, fname);
+    if (!found) return 'Error: file not found';
+
+    var content = await _load(dev, found.entry.name);
+    if (content === null) return 'Error: file not found';
+
+    var res = _localSave(found.entry.name, content);
+    if (res === 'Error: Disk Full') return 'Error: Disk Full';
+
+    return true;
+  };
+
+  // dosRetrieve(file) — read file from localStorage regardless of current device
+  global.dosRetrieve = async function (file) {
+    var fname = _normName(file);
+    if (_classify(fname) !== 'normal') return null;
+    var fbase = _baseName(fname);
+    var fv = _validateBase(fbase);
+    if (!fv.ok) return null;
+    var manifest = _loadManifest();
+    var found = _findEntry(manifest, fname);
+    if (!found) return null;
+    return _localLoad(found.entry.name);
+  };
 
 })(window);
