@@ -511,5 +511,5 @@
     var filename = _stripProtection(file);
     return _fileExistsOnDevice(filename, window.DEVICE);
   };
-
+ 
 })();

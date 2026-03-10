@@ -32,7 +32,6 @@
   if (!HOST) { return "Error: no access\n"; }
   window.DOS = true;
   window.DEVICE = 'local';
-  print("[yellow]DOS enabled for [cyan]<HOST>\n\n");
   var DEVICES = {
     'file': {
       name: 'file',
