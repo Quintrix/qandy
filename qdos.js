@@ -30,6 +30,10 @@
  * Simple relay functions (never return objects — only strings or booleans):
  *   localLoad(file)         — returns file contents string or error message
  *   localSave(file, text)   — saves text to file; returns true or error message
+ *   localDelete(file)       — delete file; returns true or rejects on error
+ *   localExists(file)       — returns boolean
+ *   localDir()              — newline-separated filename list
+ *   localRename(file, dest) — rename file; returns true or rejects on error
  */
 
 (function (global) {
@@ -146,6 +150,26 @@
     });
   }
 
+  // localDelete(file) — returns Promise resolving to true or rejects on error
+  function localDelete(file) {
+    return _sendDosAction('dos-delete', { file: file });
+  }
+
+  // localExists(file) — returns Promise resolving to boolean
+  function localExists(file) {
+    return _sendDosAction('dos-exists', { file: file });
+  }
+
+  // localDir() — returns Promise resolving to newline-separated filename list
+  function localDir() {
+    return _sendDosAction('dos-list', {});
+  }
+
+  // localRename(file, dest) — returns Promise resolving to true or rejects on error
+  function localRename(file, dest) {
+    return _sendDosAction('dos-rename', { file: file, dest: dest });
+  }
+
   // Send a guest-action message to the host and return a Promise for the result
   function _sendDosAction(action, payload, timeoutMs) {
     return new Promise(function (resolve, reject) {
@@ -255,106 +279,27 @@
     return _sendDosAction('dos-format', payload, 15000);
   }
 
-  // ── HOST/GUEST detection ───────────────────────────────────────────────
-  // Returns true when running as the HOST (top-level page or HOST=1 is set).
-  // Uses the global HOST variable when available; otherwise falls back to
-  // checking whether this window has a parent frame.
-  function _isHost() {
-    if (typeof global.HOST !== 'undefined') return !!global.HOST;
-    return !global.parent || global.parent === global;
-  }
-
-  // ── Formatting helpers for qdosDir ────────────────────────────────────
-
-  // Format a yyyymmddhhmmss timestamp string.
-  // Returns HH:MM:SS if the file is less than 24 h old, MM/DD/YYYY otherwise.
-  function _formatTimestamp(ts) {
-    if (!ts || ts.length < 14) return '';
-    var yr = parseInt(ts.substr(0, 4), 10);
-    var mo = parseInt(ts.substr(4, 2), 10);
-    var dy = parseInt(ts.substr(6, 2), 10);
-    var hh = parseInt(ts.substr(8, 2), 10);
-    var mm = parseInt(ts.substr(10, 2), 10);
-    var ss = parseInt(ts.substr(12, 2), 10);
-    var fileDate = new Date(yr, mo - 1, dy, hh, mm, ss);
-    var age = Date.now() - fileDate.getTime();
-    if (age < 86400000) {
-      return (hh < 10 ? '0' : '') + hh + ':' + (mm < 10 ? '0' : '') + mm + ':' + (ss < 10 ? '0' : '') + ss;
-    }
-    return (mo < 10 ? '0' : '') + mo + '/' + (dy < 10 ? '0' : '') + dy + '/' + yr;
-  }
-
-  // Format a byte count as human-readable (e.g. "123b" or "456k").
-  function _formatSize(size) {
-    var n = parseInt(size, 10);
-    if (isNaN(n)) return '';
-    return n >= 1024 ? Math.round(n / 1024) + 'k' : n + 'b';
-  }
-
-  // Format a single dir.sys entry (name|size|timestamp) as two display lines.
-  // Line 1: " <name padded to 30>   <size right-justified>"
-  // Line 2: "                       <timestamp right-justified>"
-  function _formatDirEntry(name, size, ts) {
-    var sizeStr = _formatSize(size);
-    var tsStr = _formatTimestamp(ts);
-    var WIDTH = 38;
-    var dispName = name.length > 30 ? name.substr(0, 30) : name;
-    var line1 = ' ' + dispName;
-    while (line1.length < WIDTH - sizeStr.length) line1 += ' ';
-    line1 += sizeStr + '\n';
-    var line2 = '';
-    if (tsStr) {
-      var pad = '';
-      while (pad.length < WIDTH - tsStr.length) pad += ' ';
-      line2 = pad + tsStr + '\n';
-    }
-    return line1 + line2;
-  }
-
-  // Format a complete dir.sys string (one "name|size|timestamp" per line).
-  function _formatDirOutput(raw) {
-    if (!raw || !raw.trim()) return ' (empty)\n';
-    var lines = raw.trim().split('\n');
-    var out = '';
-    for (var i = 0; i < lines.length; i++) {
-      var parts = lines[i].split('|');
-      if (parts[0]) out += _formatDirEntry(parts[0], parts[1] || '', parts[2] || '');
-    }
-    return out || ' (empty)\n';
-  }
-
-  // ── Comprehensive qdos wrapper functions ──────────────────────────────
+  // ── qdos wrapper functions ────────────────────────────────────────────
   // Each function accepts the full command string, parses parameters
   // internally, and returns a Promise that resolves to a plain text string
   // (never an object).  Scripts resolve to boolean true on success.
   // Errors resolve to a string beginning with "Error:".
-
-  // Validate a .js script filename.  Returns null on success or an error string.
-  function _validateScriptName(name) {
-    if (!name) return 'Error: filename required';
-    if (!/^[A-Za-z0-9.\-]+\.js$/i.test(name)) return 'Error: invalid filename';
-    if (/^[.\-]/.test(name) || /[.\-]$/.test(name)) return 'Error: invalid filename';
-    if (/\.\./.test(name)) return 'Error: invalid filename';
-    if (name.length > 64) return 'Error: filename too long';
-    return null;
-  }
-
-  // Convert a newline-separated list of bare filenames into dir.sys manifest format
-  // (name||, with empty size and timestamp fields) for use with _formatDirOutput.
-  function _normalizeListing(raw) {
-    return (raw || '').split('\n').filter(Boolean).map(function (f) { return f + '||'; }).join('\n');
-  }
+  //
+  // Branching uses the global HOST variable (HOST=1 on host, HOST=0 on guest).
 
   // qdosScript(cmd) — execute a .js file.
   // HOST: injects a <script> element directly.
   // GUEST: requests the script content from the host via postMessage and evals it inline.
   function qdosScript(cmd) {
     var name = String(cmd || '').trim();
-    var err = _validateScriptName(name);
-    if (err) return Promise.resolve(err);
+    if (!name) return Promise.resolve('Error: filename required');
+    if (!/^[A-Za-z0-9.\-]+\.js$/i.test(name)) return Promise.resolve('Error: invalid filename');
+    if (/^[.\-]/.test(name) || /[.\-]$/.test(name)) return Promise.resolve('Error: invalid filename');
+    if (/\.\./.test(name)) return Promise.resolve('Error: invalid filename');
+    if (name.length > 64) return Promise.resolve('Error: filename too long');
 
     return new Promise(function (resolve) {
-      if (_isHost()) {
+      if (global.HOST) {
         try {
           var prg = document.createElement('script');
           prg.src = name;
@@ -365,7 +310,6 @@
           resolve('Error: ' + String(e));
         }
       } else {
-        var reqId = _nextId();
         var timer = setTimeout(function () {
           global.removeEventListener('message', handler);
           resolve('Error: timeout loading ' + name);
@@ -401,38 +345,37 @@
     });
   }
 
-  // qdosDir(cmd) — display formatted directory listing.
-  // HOST: calls dosDir() / dosList() directly.
-  // GUEST: fetches the file list via the dos-list guest-action.
+  // qdosDir(cmd) — display directory listing.
+  // HOST: calls dosDir() and returns result as string.
+  // GUEST: calls localDir() and returns result as string.
   function qdosDir(cmd) {
-    if (_isHost()) {
-      var listFn = global.dosDir || global.dosList;
-      if (typeof listFn !== 'function') return Promise.resolve('Error: DOS not available\n');
-      return Promise.resolve(listFn()).then(function (raw) {
-        if (global.dosList && !global.dosDir) {
-          raw = _normalizeListing(raw);
-        }
-        return _formatDirOutput(raw || '');
+    if (global.HOST) {
+      if (typeof global.dosDir !== 'function') return Promise.resolve('Error: DOS not available\n');
+      return Promise.resolve(global.dosDir()).then(function (result) {
+        return String(result !== null && result !== undefined ? result : '') + '\n';
       }).catch(function (e) {
         return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
       });
     }
-    return _sendDosAction('dos-list', {}).then(function (result) {
-      return _formatDirOutput(_normalizeListing(result));
+    return localDir().then(function (result) {
+      return String(result !== null && result !== undefined ? result : '') + '\n';
     }).catch(function (e) {
       return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
     });
   }
 
   // qdosMount(cmd) — mount a device (e.g. "mount local").
-  // HOST: calls dosMount() directly.
+  // HOST: calls dosMount() and returns result as string.
   // GUEST: always reports "localStorage" (the only device available to guests).
   function qdosMount(cmd) {
     var device = String(cmd || '').replace(/^mount\s*/i, '').trim() || null;
-    if (_isHost()) {
+    if (global.HOST) {
       if (typeof global.dosMount !== 'function') return Promise.resolve('Error: DOS not available\n');
       return Promise.resolve(global.dosMount(device)).then(function (result) {
-        return (result || 'local') + '\n';
+        if (result !== null && typeof result === 'object') {
+          return (result.error ? 'Error: ' + result.error : 'true') + '\n';
+        }
+        return String(result !== null && result !== undefined ? result : '') + '\n';
       }).catch(function (e) {
         return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
       });
@@ -441,10 +384,12 @@
   }
 
   // qdosDelete(cmd) — delete a file (e.g. "delete foo.txt").
+  // HOST: calls dosDelete(file) and returns result as string.
+  // GUEST: calls localDelete(file) and returns result as string.
   function qdosDelete(cmd) {
     var file = String(cmd || '').replace(/^delete\s+/i, '').trim();
     if (!file) return Promise.resolve('Error: filename required\n');
-    if (_isHost()) {
+    if (global.HOST) {
       if (typeof global.dosDelete !== 'function') return Promise.resolve('Error: DOS not available\n');
       return Promise.resolve(global.dosDelete(file)).then(function () {
         return 'Deleted: ' + file + '\n';
@@ -452,9 +397,7 @@
         return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
       });
     }
-    var v = _validateName(file);
-    if (!v.ok) return Promise.resolve('Error: invalid filename (' + v.reason + ')\n');
-    return _sendDosAction('dos-delete', { file: v.name }).then(function () {
+    return localDelete(file).then(function () {
       return 'Deleted: ' + file + '\n';
     }).catch(function (e) {
       return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
@@ -462,10 +405,12 @@
   }
 
   // qdosExists(cmd) — check whether a file exists; resolves to "true" or "false".
+  // HOST: calls dosExists(file) and returns result as string.
+  // GUEST: calls localExists(file) and returns result as string.
   function qdosExists(cmd) {
     var file = String(cmd || '').replace(/^exists\s+/i, '').trim();
     if (!file) return Promise.resolve('Error: filename required\n');
-    if (_isHost()) {
+    if (global.HOST) {
       if (typeof global.dosExists !== 'function') return Promise.resolve('Error: DOS not available\n');
       return Promise.resolve(global.dosExists(file)).then(function (result) {
         return (result ? 'true' : 'false') + '\n';
@@ -473,9 +418,7 @@
         return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
       });
     }
-    var v = _validateName(file);
-    if (!v.ok) return Promise.resolve('Error: invalid filename (' + v.reason + ')\n');
-    return _sendDosAction('dos-exists', { file: v.name }).then(function (result) {
+    return localExists(file).then(function (result) {
       return (result ? 'true' : 'false') + '\n';
     }).catch(function (e) {
       return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
@@ -483,13 +426,15 @@
   }
 
   // qdosRename(cmd) — rename a file (syntax: "rename old.txt / new.txt").
+  // HOST: calls dosRename(src, dst) and returns result as string.
+  // GUEST: calls localRename(src, dst) and returns result as string.
   function qdosRename(cmd) {
     var args = String(cmd || '').replace(/^rename\s+/i, '').trim();
     var parts = args.split(/\s*\/\s*/);
     var src = (parts[0] || '').trim();
     var dst = (parts[1] || '').trim();
     if (!src || !dst) return Promise.resolve('Error: usage: rename <old> / <new>\n');
-    if (_isHost()) {
+    if (global.HOST) {
       if (typeof global.dosRename !== 'function') return Promise.resolve('Error: DOS not available\n');
       return Promise.resolve(global.dosRename(src, dst)).then(function () {
         return 'Renamed: ' + src + ' -> ' + dst + '\n';
@@ -497,11 +442,7 @@
         return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
       });
     }
-    var vsrc = _validateName(src);
-    if (!vsrc.ok) return Promise.resolve('Error: invalid filename (' + vsrc.reason + ')\n');
-    var vdst = _validateName(dst);
-    if (!vdst.ok) return Promise.resolve('Error: invalid filename (' + vdst.reason + ')\n');
-    return _sendDosAction('dos-rename', { file: vsrc.name, dest: vdst.name }).then(function () {
+    return localRename(src, dst).then(function () {
       return 'Renamed: ' + src + ' -> ' + dst + '\n';
     }).catch(function (e) {
       return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
@@ -509,10 +450,12 @@
   }
 
   // qdosType(cmd) — display the contents of a file (e.g. "type foo.txt").
+  // HOST: calls dosLoad(file) and returns content as string.
+  // GUEST: calls localLoad(file) and returns content as string.
   function qdosType(cmd) {
     var file = String(cmd || '').replace(/^type\s+/i, '').trim();
     if (!file) return Promise.resolve('Error: filename required\n');
-    if (_isHost()) {
+    if (global.HOST) {
       if (typeof global.dosLoad !== 'function') return Promise.resolve('Error: DOS not available\n');
       return Promise.resolve(global.dosLoad(file)).then(function (content) {
         if (content === null || content === undefined) return 'Error: file not found\n';
@@ -521,9 +464,7 @@
         return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
       });
     }
-    var v = _validateName(file);
-    if (!v.ok) return Promise.resolve('Error: invalid filename (' + v.reason + ')\n');
-    return _sendDosAction('dos-load', { file: v.name }).then(function (content) {
+    return localLoad(file).then(function (content) {
       if (content === null || content === undefined) return 'Error: file not found\n';
       return String(content) + '\n';
     }).catch(function (e) {
@@ -532,14 +473,14 @@
   }
 
   // qdosLoad(cmd) — load and display file contents (e.g. "load foo.txt").
-  // Alias for qdosType with a different command prefix.
+  // Delegates to qdosType after substituting the command prefix.
   function qdosLoad(cmd) {
     return qdosType(String(cmd || '').replace(/^load\s+/i, 'type '));
   }
 
   // Expose to global.  Guest-side dos* aliases are only installed when not
   // running as HOST so they do not shadow the real dos.js implementations.
-  if (!_isHost()) {
+  if (!global.HOST) {
     global.dosMount  = dosMount;
     global.dosList   = dosList;
     global.dosSave   = dosSave;
@@ -552,6 +493,10 @@
   }
   global.localLoad   = localLoad;
   global.localSave   = localSave;
+  global.localDelete = localDelete;
+  global.localExists = localExists;
+  global.localDir    = localDir;
+  global.localRename = localRename;
   global.qdosScript  = qdosScript;
   global.qdosDir     = qdosDir;
   global.qdosMount   = qdosMount;
