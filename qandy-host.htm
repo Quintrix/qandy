@@ -934,7 +934,7 @@ async function createGuest(options) {
         var name = d.name;
         var _LS_PFX = 'qandy_file:';
         try {
-          var fileContent = localStorage.getItem(_LS_PFX + name);
+          var fileContent = dosRetrieve(name);
           alert(fileContent);
           var _guestIframe = window._vmIframe || document.getElementById('vm-iframe');
           if (_guestIframe && _guestIframe.contentWindow) {

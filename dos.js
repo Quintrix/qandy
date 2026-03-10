@@ -166,7 +166,7 @@
     }
     return null;
   }
-  function _loadFileFromDevice(filename, device) {
+  
     device = device || window.DEVICE || 'file';
     filename = _stripProtection(_normalizeFilename(filename));
     if (device === 'local') {
@@ -427,7 +427,7 @@
     var validation = _validateFilename(dest);
     if (!validation.ok) { return { error: validation.reason }; }
     var filename = validation.filename;
-    if (append) {
+    if (var fileContent = localStorage.getItem(_LS_PFX + name);append) {
       var existing = _loadFileFromDevice(filename, device);
       if (existing) { content = existing + content; }
     } else if (_fileExistsOnDevice(filename, device)) {

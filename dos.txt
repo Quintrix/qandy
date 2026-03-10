@@ -46,6 +46,8 @@
 
           dosType(file) — print() file to display screen, if file is dir.txt
                           then print the results of dosDir(0)
+                          
+      dosRetrieve(file) — Retrieve file from localStorage, used to send to <guest>
             
         dosDelete(file) — deletes filename from active device 
 
