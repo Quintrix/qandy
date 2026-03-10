@@ -919,17 +919,17 @@ async function createGuest(options) {
     //document.getElementById('qpc')?.style.setProperty('display','none');
 
     function hostMessageHandler(ev) {
+      var iframe = window._vmIframe || document.getElementById('vm-iframe');
       console.log('hostMessageHandler invoked', {
-      iframe_closure: typeof iframe !== 'undefined' ? iframe : '(no closure var)',
+      iframe_resolved: iframe || null,
       window_vmIframe: window._vmIframe || null,
       found_by_id: document.getElementById('vm-iframe') || document.getElementById('guest-iframe') || null,
       all_iframes: document.querySelectorAll('iframe').length,
       ev_source: ev && ev.source
       });
 
-     // ensure message is from our iframe - this line is error can't access property "contentWindow", iframe is undefined 
-     if (!iframe.contentWindow || ev.source !== iframe.contentWindow) {
-       console.log("Message is not from our iframe");
+     // ensure message is from our iframe
+     if (!iframe || !iframe.contentWindow || ev.source !== iframe.contentWindow) {
        return;
      }
      var d = ev.data || {}; if (!d || typeof d !== 'object') return;
@@ -955,18 +955,24 @@ async function createGuest(options) {
        var fwdId = 'fw_' + Date.now() + '_' + window._fwdScriptCnt;
        var fwdTimer = setTimeout(function() {
          window.removeEventListener('message', fwdHandler);
-         iframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: null, error: 'Timeout' }, '*');
+         var _tiIframe = window._vmIframe || document.getElementById('vm-iframe');
+         if (_tiIframe && _tiIframe.contentWindow) {
+           _tiIframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: null, error: 'Timeout' }, '*');
+         }
        }, 10000);
        function fwdHandler(ev2) {
          var d2 = ev2.data || {};
          if (d2 && d2.type === 'scriptLoaded' && d2.id === fwdId) {
            clearTimeout(fwdTimer);
            window.removeEventListener('message', fwdHandler);
-           if (d2.error || d2.code === null || d2.code === undefined) {
-             iframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: null, error: d2.error || 'Load failed' }, '*');
-           } else {
-             var s = sanitizeScriptText(d2.code) + '\n//# sourceURL=' + name;
-             iframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: s }, '*');
+           var _fwIframe = window._vmIframe || document.getElementById('vm-iframe');
+           if (_fwIframe && _fwIframe.contentWindow) {
+             if (d2.error || d2.code === null || d2.code === undefined) {
+               _fwIframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: null, error: d2.error || 'Load failed' }, '*');
+             } else {
+               var s = sanitizeScriptText(d2.code) + '\n//# sourceURL=' + name;
+               _fwIframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: s }, '*');
+             }
            }
          }
        }
@@ -976,19 +982,22 @@ async function createGuest(options) {
        } catch (e) {
          clearTimeout(fwdTimer);
          window.removeEventListener('message', fwdHandler);
-         iframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: null, error: String(e) }, '*');
+         var _errScrIframe = window._vmIframe || document.getElementById('vm-iframe');
+         if (_errScrIframe && _errScrIframe.contentWindow) {
+           _errScrIframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: null, error: String(e) }, '*');
+         }
        }
      }
    
-     //function isAudioUnlocked() {
-     //  try {
-     //    if (window._qandy_audio && window._qandy_audio.unlocked) return true;
-     //    var ctx = (window._qandy_audio && window._qandy_audio.ctx) || window.audioContext || null;
-     //    if (ctx && ctx.state === 'running') return true;
-     //    if (window.audioCtx && window.audioCtx.state === 'running') return true;
-     //  } catch (e) {}
-     //  return false;
-     //}
+     function isAudioUnlocked() {
+       try {
+         if (window._qandy_audio && window._qandy_audio.unlocked) return true;
+         var ctx = (window._qandy_audio && window._qandy_audio.ctx) || window.audioContext || null;
+         if (ctx && ctx.state === 'running') return true;
+         if (window.audioCtx && window.audioCtx.state === 'running') return true;
+       } catch (e) {}
+       return false;
+     }
 
      if (d.type === 'guest-action' && typeof d.action === 'string') {
        try {
@@ -1011,19 +1020,23 @@ async function createGuest(options) {
                  }
                } catch (e) {}
                // Notify guest to restore its input and focus
-               iframe.contentWindow.postMessage({
-                 type: 'action-result',
-                 action: 'show-guest',
-                 success: true
-               }, '*');
+               if (iframe && iframe.contentWindow) {
+                 iframe.contentWindow.postMessage({
+                   type: 'action-result',
+                   action: 'show-guest',
+                   success: true
+                 }, '*');
+               }
              } catch (e) {
                console.error('Error showing guest:', e);
-               iframe.contentWindow.postMessage({
-                 type: 'action-result',
-                 action: 'show-guest',
-                 success: false,
-                 error: String(e)
-               }, '*');
+               if (iframe && iframe.contentWindow) {
+                 iframe.contentWindow.postMessage({
+                   type: 'action-result',
+                   action: 'show-guest',
+                   success: false,
+                   error: String(e)
+                 }, '*');
+               }
              }
              break;
            case 'show-host':

@@ -919,12 +919,35 @@ async function createGuest(options) {
     //document.getElementById('qpc')?.style.setProperty('display','none');
 
     function hostMessageHandler(ev) {
-     // ensure message is from our iframe - this line is error can't access property "contentWindow", iframe is undefined 
-     if (!iframe.contentWindow || ev.source !== iframe.contentWindow) {
-       console.log("Message is not from our iframe");
+      var iframe = window._vmIframe || document.getElementById('vm-iframe');
+      console.log('hostMessageHandler invoked', {
+      iframe_resolved: iframe || null,
+      window_vmIframe: window._vmIframe || null,
+      found_by_id: document.getElementById('vm-iframe') || document.getElementById('guest-iframe') || null,
+      all_iframes: document.querySelectorAll('iframe').length,
+      ev_source: ev && ev.source
+      });
+
+     // ensure message is from our iframe
+     if (!iframe || !iframe.contentWindow || ev.source !== iframe.contentWindow) {
        return;
      }
      var d = ev.data || {}; if (!d || typeof d !== 'object') return;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
      
      if (d.type === 'request-script' && typeof d.name === 'string') {
        var reqId = d.id; var name = d.name;
@@ -932,18 +955,24 @@ async function createGuest(options) {
        var fwdId = 'fw_' + Date.now() + '_' + window._fwdScriptCnt;
        var fwdTimer = setTimeout(function() {
          window.removeEventListener('message', fwdHandler);
-         iframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: null, error: 'Timeout' }, '*');
+         var _tiIframe = window._vmIframe || document.getElementById('vm-iframe');
+         if (_tiIframe && _tiIframe.contentWindow) {
+           _tiIframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: null, error: 'Timeout' }, '*');
+         }
        }, 10000);
        function fwdHandler(ev2) {
          var d2 = ev2.data || {};
          if (d2 && d2.type === 'scriptLoaded' && d2.id === fwdId) {
            clearTimeout(fwdTimer);
            window.removeEventListener('message', fwdHandler);
-           if (d2.error || d2.code === null || d2.code === undefined) {
-             iframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: null, error: d2.error || 'Load failed' }, '*');
-           } else {
-             var s = sanitizeScriptText(d2.code) + '\n//# sourceURL=' + name;
-             iframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: s }, '*');
+           var _fwIframe = window._vmIframe || document.getElementById('vm-iframe');
+           if (_fwIframe && _fwIframe.contentWindow) {
+             if (d2.error || d2.code === null || d2.code === undefined) {
+               _fwIframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: null, error: d2.error || 'Load failed' }, '*');
+             } else {
+               var s = sanitizeScriptText(d2.code) + '\n//# sourceURL=' + name;
+               _fwIframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: s }, '*');
+             }
            }
          }
        }
@@ -953,7 +982,10 @@ async function createGuest(options) {
        } catch (e) {
          clearTimeout(fwdTimer);
          window.removeEventListener('message', fwdHandler);
-         iframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: null, error: String(e) }, '*');
+         var _errScrIframe = window._vmIframe || document.getElementById('vm-iframe');
+         if (_errScrIframe && _errScrIframe.contentWindow) {
+           _errScrIframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: null, error: String(e) }, '*');
+         }
        }
      }
    
@@ -988,19 +1020,23 @@ async function createGuest(options) {
                  }
                } catch (e) {}
                // Notify guest to restore its input and focus
-               iframe.contentWindow.postMessage({
-                 type: 'action-result',
-                 action: 'show-guest',
-                 success: true
-               }, '*');
+               if (iframe && iframe.contentWindow) {
+                 iframe.contentWindow.postMessage({
+                   type: 'action-result',
+                   action: 'show-guest',
+                   success: true
+                 }, '*');
+               }
              } catch (e) {
                console.error('Error showing guest:', e);
-               iframe.contentWindow.postMessage({
-                 type: 'action-result',
-                 action: 'show-guest',
-                 success: false,
-                 error: String(e)
-               }, '*');
+               if (iframe && iframe.contentWindow) {
+                 iframe.contentWindow.postMessage({
+                   type: 'action-result',
+                   action: 'show-guest',
+                   success: false,
+                   error: String(e)
+                 }, '*');
+               }
              }
              break;
            case 'show-host':
@@ -1059,15 +1095,230 @@ async function createGuest(options) {
           console.error('showHostHideGuest failed', err);
         }
         break;
+
+        // DOS operations — the guest iframe cannot access localStorage directly,
+        // so it delegates file operations to the host via postMessage.
+        case 'dos-list': {
+          var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+          var _LS_PFX = 'qandy_file:';
+          var _LS_MAN = 'qandy_manifest_local';
+          try {
+            var _raw = localStorage.getItem(_LS_MAN);
+            var _list = _raw ? JSON.parse(_raw) : null;
+            if (!Array.isArray(_list)) {
+              _list = [];
+              for (var _i = 0; _i < localStorage.length; _i++) {
+                var _k = localStorage.key(_i);
+                if (_k && _k.indexOf(_LS_PFX) === 0) _list.push(_k.substring(_LS_PFX.length));
+              }
+            }
+            if (_dosIframe && _dosIframe.contentWindow) {
+              _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'dos-list', id: d.id, success: true, result: _list.join('\n') }, '*');
+            }
+          } catch (_e) {
+            if (_dosIframe && _dosIframe.contentWindow) {
+              _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'dos-list', id: d.id, success: false, error: String(_e) }, '*');
+            }
+          }
+          break;
+        }
+
+        case 'dos-save': {
+          var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+          var _LS_PFX = 'qandy_file:';
+          var _LS_MAN = 'qandy_manifest_local';
+          try {
+            var _fname = String(d.file || '');
+            var _fdata = String(d.data == null ? '' : d.data);
+            if (d.append) {
+              var _existing = localStorage.getItem(_LS_PFX + _fname);
+              _fdata = (_existing === null ? '' : _existing) + _fdata;
+            }
+            localStorage.setItem(_LS_PFX + _fname, _fdata);
+            var _raw2 = localStorage.getItem(_LS_MAN);
+            var _manifest = _raw2 ? JSON.parse(_raw2) : [];
+            if (!Array.isArray(_manifest)) _manifest = [];
+            if (_manifest.indexOf(_fname) === -1) _manifest.push(_fname);
+            localStorage.setItem(_LS_MAN, JSON.stringify(_manifest));
+            if (_dosIframe && _dosIframe.contentWindow) {
+              _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'dos-save', id: d.id, success: true, result: true }, '*');
+            }
+          } catch (_e) {
+            if (_dosIframe && _dosIframe.contentWindow) {
+              _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'dos-save', id: d.id, success: false, error: String(_e) }, '*');
+            }
+          }
+          break;
+        }
+
+        case 'dos-load': {
+          var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+          var _LS_PFX = 'qandy_file:';
+          try {
+            var _fname = String(d.file || '');
+            var _content = localStorage.getItem(_LS_PFX + _fname);
+            if (_dosIframe && _dosIframe.contentWindow) {
+              _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'dos-load', id: d.id, success: true, result: _content }, '*');
+            }
+          } catch (_e) {
+            if (_dosIframe && _dosIframe.contentWindow) {
+              _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'dos-load', id: d.id, success: false, error: String(_e) }, '*');
+            }
+          }
+          break;
+        }
+
+        case 'dos-delete': {
+          var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+          var _LS_PFX = 'qandy_file:';
+          var _LS_MAN = 'qandy_manifest_local';
+          try {
+            var _fname = String(d.file || '');
+            localStorage.removeItem(_LS_PFX + _fname);
+            var _raw3 = localStorage.getItem(_LS_MAN);
+            var _manifest2 = _raw3 ? JSON.parse(_raw3) : [];
+            if (!Array.isArray(_manifest2)) _manifest2 = [];
+            var _idx = _manifest2.indexOf(_fname);
+            if (_idx !== -1) { _manifest2.splice(_idx, 1); localStorage.setItem(_LS_MAN, JSON.stringify(_manifest2)); }
+            if (_dosIframe && _dosIframe.contentWindow) {
+              _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'dos-delete', id: d.id, success: true, result: true }, '*');
+            }
+          } catch (_e) {
+            if (_dosIframe && _dosIframe.contentWindow) {
+              _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'dos-delete', id: d.id, success: false, error: String(_e) }, '*');
+            }
+          }
+          break;
+        }
+
+        case 'dos-exists': {
+          var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+          var _LS_PFX = 'qandy_file:';
+          try {
+            var _fname = String(d.file || '');
+            var _exists = localStorage.getItem(_LS_PFX + _fname) !== null;
+            if (_dosIframe && _dosIframe.contentWindow) {
+              _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'dos-exists', id: d.id, success: true, result: _exists }, '*');
+            }
+          } catch (_e) {
+            if (_dosIframe && _dosIframe.contentWindow) {
+              _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'dos-exists', id: d.id, success: false, error: String(_e) }, '*');
+            }
+          }
+          break;
+        }
+
+        case 'dos-rename': {
+          var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+          var _LS_PFX = 'qandy_file:';
+          var _LS_MAN = 'qandy_manifest_local';
+          try {
+            var _src = String(d.file || '');
+            var _dst = String(d.dest || '');
+            var _srcContent = localStorage.getItem(_LS_PFX + _src);
+            if (_srcContent === null) throw new Error('dos-rename: source not found');
+            if (localStorage.getItem(_LS_PFX + _dst) !== null) throw new Error('dos-rename: destination already exists');
+            localStorage.setItem(_LS_PFX + _dst, _srcContent);
+            localStorage.removeItem(_LS_PFX + _src);
+            var _raw4 = localStorage.getItem(_LS_MAN);
+            var _manifest3 = _raw4 ? JSON.parse(_raw4) : [];
+            if (!Array.isArray(_manifest3)) _manifest3 = [];
+            var _srcIdx = _manifest3.indexOf(_src);
+            if (_srcIdx !== -1) _manifest3.splice(_srcIdx, 1);
+            if (_manifest3.indexOf(_dst) === -1) _manifest3.push(_dst);
+            localStorage.setItem(_LS_MAN, JSON.stringify(_manifest3));
+            if (_dosIframe && _dosIframe.contentWindow) {
+              _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'dos-rename', id: d.id, success: true, result: true }, '*');
+            }
+          } catch (_e) {
+            if (_dosIframe && _dosIframe.contentWindow) {
+              _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'dos-rename', id: d.id, success: false, error: String(_e) }, '*');
+            }
+          }
+          break;
+        }
+
+        case 'dos-mount': {
+          var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+          try {
+            // For the host-backed guest device, only 'local' is supported
+            var _reqDev = (d.device == null || String(d.device).trim() === '') ? null : String(d.device).trim();
+            var _curDev = (typeof DEVICE !== 'undefined') ? DEVICE : 'local';
+            var _result = _reqDev || _curDev;
+            if (_dosIframe && _dosIframe.contentWindow) {
+              _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'dos-mount', id: d.id, success: true, result: _result }, '*');
+            }
+          } catch (_e) {
+            if (_dosIframe && _dosIframe.contentWindow) {
+              _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'dos-mount', id: d.id, success: false, error: String(_e) }, '*');
+            }
+          }
+          break;
+        }
+
+        case 'dos-format': {
+          var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+          var _LS_PFX = 'qandy_file:';
+          var _LS_MAN = 'qandy_manifest_local';
+          try {
+            if (d.data === null || typeof d.data === 'undefined') {
+              // export: return JSON archive of all local files
+              var _expRaw = localStorage.getItem(_LS_MAN);
+              var _expList = _expRaw ? JSON.parse(_expRaw) : [];
+              if (!Array.isArray(_expList)) _expList = [];
+              var _expFiles = {};
+              for (var _fi = 0; _fi < _expList.length; _fi++) {
+                var _fn = _expList[_fi];
+                _expFiles[_fn] = localStorage.getItem(_LS_PFX + _fn);
+              }
+              var _archive = JSON.stringify({ device: 'local', created: (new Date()).toISOString(), files: _expFiles });
+              if (_dosIframe && _dosIframe.contentWindow) {
+                _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'dos-format', id: d.id, success: true, result: _archive }, '*');
+              }
+            } else {
+              // import: overwrite device with provided archive
+              var _impObj = d.data;
+              if (typeof _impObj === 'string') { try { _impObj = JSON.parse(_impObj); } catch (pe) { throw new Error('dos-format: data must be valid JSON'); } }
+              if (!_impObj || typeof _impObj !== 'object' || !_impObj.files) throw new Error('dos-format: invalid archive');
+              // clear existing files
+              var _clrRaw = localStorage.getItem(_LS_MAN);
+              var _clrList = _clrRaw ? JSON.parse(_clrRaw) : [];
+              if (Array.isArray(_clrList)) {
+                for (var _ci = 0; _ci < _clrList.length; _ci++) localStorage.removeItem(_LS_PFX + _clrList[_ci]);
+              }
+              // write new files
+              var _newList = [];
+              var _impKeys = Object.keys(_impObj.files);
+              for (var _ii = 0; _ii < _impKeys.length; _ii++) {
+                var _iname = _impKeys[_ii];
+                var _ival = _impObj.files[_iname];
+                localStorage.setItem(_LS_PFX + _iname, _ival == null ? '' : String(_ival));
+                _newList.push(_iname);
+              }
+              localStorage.setItem(_LS_MAN, JSON.stringify(_newList));
+              if (_dosIframe && _dosIframe.contentWindow) {
+                _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'dos-format', id: d.id, success: true, result: true }, '*');
+              }
+            }
+          } catch (_e) {
+            if (_dosIframe && _dosIframe.contentWindow) {
+              _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'dos-format', id: d.id, success: false, error: String(_e) }, '*');
+            }
+          }
+          break;
+        }
        }
     } catch (e) {
       console.error('Error handling guest action:', e);
-      iframe.contentWindow.postMessage({ 
-        type: 'action-result', 
-        action: d.action, 
-        success: false, 
-        error: String(e) 
-      }, '*');
+      var _errIframe = window._vmIframe || document.getElementById('vm-iframe');
+      if (_errIframe && _errIframe.contentWindow) {
+        _errIframe.contentWindow.postMessage({ 
+          type: 'action-result', 
+          action: d.action, 
+          success: false, 
+          error: String(e) 
+        }, '*');
+      }
     }
   }
 }
