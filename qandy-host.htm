@@ -969,109 +969,104 @@ async function assembleGuestHtml(options) {
     //document.getElementById('pop')?.style.setProperty('display','none');
     //document.getElementById('qpc')?.style.setProperty('display','none');
 
-function hostMessageHandler(ev) {
-  // ensure message is from our iframe - this line is error can't access property "contentWindow", iframe is undefined 
-  if (!iframe.contentWindow || ev.source !== iframe.contentWindow) {
-    console.log("Message is not from our iframe");
-    return;
-  }
-  var d = ev.data || {}; if (!d || typeof d !== 'object') return;
-  
-  if (d.type === 'request-script' && typeof d.name === 'string') {
-    var reqId = d.id; var name = d.name;
-    window._fwdScriptCnt = (window._fwdScriptCnt || 0) + 1;
-    var fwdId = 'fw_' + Date.now() + '_' + window._fwdScriptCnt;
-    var fwdTimer = setTimeout(function() {
-      window.removeEventListener('message', fwdHandler);
-      iframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: null, error: 'Timeout' }, '*');
-    }, 10000);
-    function fwdHandler(ev2) {
-      var d2 = ev2.data || {};
-      if (d2 && d2.type === 'scriptLoaded' && d2.id === fwdId) {
-        clearTimeout(fwdTimer);
-        window.removeEventListener('message', fwdHandler);
-        if (d2.error || d2.code === null || d2.code === undefined) {
-          iframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: null, error: d2.error || 'Load failed' }, '*');
-        } else {
-          var s = sanitizeScriptText(d2.code) + '\n//# sourceURL=' + name;
-          iframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: s }, '*');
-        }
-      }
-    }
-    window.addEventListener('message', fwdHandler, false);
-    try {
-      window.parent.postMessage({ type: 'loadScript', id: fwdId, name: name }, '*');
-    } catch (e) {
-      clearTimeout(fwdTimer);
-      window.removeEventListener('message', fwdHandler);
-      iframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: null, error: String(e) }, '*');
-    }
-  }
+    function hostMessageHandler(ev) {
+     // ensure message is from our iframe - this line is error can't access property "contentWindow", iframe is undefined 
+     if (!iframe.contentWindow || ev.source !== iframe.contentWindow) {
+       console.log("Message is not from our iframe");
+       return;
+     }
+     var d = ev.data || {}; if (!d || typeof d !== 'object') return;
+     
+     if (d.type === 'request-script' && typeof d.name === 'string') {
+       var reqId = d.id; var name = d.name;
+       window._fwdScriptCnt = (window._fwdScriptCnt || 0) + 1;
+       var fwdId = 'fw_' + Date.now() + '_' + window._fwdScriptCnt;
+       var fwdTimer = setTimeout(function() {
+         window.removeEventListener('message', fwdHandler);
+         iframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: null, error: 'Timeout' }, '*');
+       }, 10000);
+       function fwdHandler(ev2) {
+         var d2 = ev2.data || {};
+         if (d2 && d2.type === 'scriptLoaded' && d2.id === fwdId) {
+           clearTimeout(fwdTimer);
+           window.removeEventListener('message', fwdHandler);
+           if (d2.error || d2.code === null || d2.code === undefined) {
+             iframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: null, error: d2.error || 'Load failed' }, '*');
+           } else {
+             var s = sanitizeScriptText(d2.code) + '\n//# sourceURL=' + name;
+             iframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: s }, '*');
+           }
+         }
+       }
+       window.addEventListener('message', fwdHandler, false);
+       try {
+         window.parent.postMessage({ type: 'loadScript', id: fwdId, name: name }, '*');
+       } catch (e) {
+         clearTimeout(fwdTimer);
+         window.removeEventListener('message', fwdHandler);
+         iframe.contentWindow.postMessage({ type: 'host-script', id: reqId, name: name, code: null, error: String(e) }, '*');
+       }
+     }
+   
+     function isAudioUnlocked() {
+      try {
+        if (window._qandy_audio && window._qandy_audio.unlocked) return true;
+        var ctx = (window._qandy_audio && window._qandy_audio.ctx) || window.audioContext || null;
+        if (ctx && ctx.state === 'running') return true;
+        if (window.audioCtx && window.audioCtx.state === 'running') return true;
+      } catch (e) {}
+      return false;
+     }
 
-  function isAudioUnlocked() {
-    try {
-      // Primary flag we set in the unlock helper
-      if (window._qandy_audio && window._qandy_audio.unlocked) return true;
-      // Check AudioContext state(s) if present
-      var ctx = (window._qandy_audio && window._qandy_audio.ctx) || window.audioContext || null;
-      if (ctx && ctx.state === 'running') return true;
-      // Fallback: some pages put audio context elsewhere
-      if (window.audioCtx && window.audioCtx.state === 'running') return true;
-    } catch (e) {
-      // ignore errors and treat as locked
-    }
-    return false;
-  }
-
-  if (d.type === 'guest-action' && typeof d.action === 'string') {
-    try {
-      switch(d.action) {
-        case 'show-guest':
-          console.log('Guest requested to show guest');
-          try {
-            // Hide host elements
-            var hostEl = document.getElementById('txt');
-            if (hostEl) { hostEl.style.display = 'none'; hostEl.style.visibility = 'hidden'; hostEl.style.pointerEvents = 'none'; }
-            var hostKb = document.getElementById('host-keyboard');
-            if (hostKb) { hostKb.style.display = 'block'; hostKb.style.visibility = 'visible'; hostKb.style.pointerEvents = 'auto'; }
-            var guestKb = document.getElementById('guest-keyboard') || document.getElementById('keyboard-container');
-            if (guestKb) { guestKb.style.display = 'none'; guestKb.style.visibility = 'hidden'; guestKb.style.pointerEvents = 'none'; }
-            if (iframe) { iframe.style.display = 'block'; iframe.style.visibility = 'visible'; }
-            // Transfer focus to the guest iframe's content window
-            try {
-              if (iframe && iframe.contentWindow) {
-                iframe.contentWindow.focus();
-              }
-            } catch (e) {}
-            // Notify guest to restore its input and focus
-            iframe.contentWindow.postMessage({
-              type: 'action-result',
-              action: 'show-guest',
-              success: true
-            }, '*');
-          } catch (e) {
-            console.error('Error showing guest:', e);
-            iframe.contentWindow.postMessage({
-              type: 'action-result',
-              action: 'show-guest',
-              success: false,
-              error: String(e)
-            }, '*');
-          }
-          break;
-        case 'show-host':
-          if (isAudioUnlocked()===false) { init_sound_js(); }        
-          console.log('Guest requested to show host');
-          // Hide guest VM and guest keyboard only; keep host UI visible
-          try {
-            // Ensure host text area is visible / interactive
-            var hostEl = document.getElementById('txt') || document.getElementById('qandy') || document.body;
-            if (hostEl) {
-            hostEl.style.display = 'block';
-            hostEl.style.visibility = 'visible';
-            hostEl.style.pointerEvents = 'auto';
-            hostEl.style.opacity = hostEl.style.opacity || '1';
-          }
+     if (d.type === 'guest-action' && typeof d.action === 'string') {
+       try {
+         switch(d.action) {
+           case 'show-guest':
+             console.log('Guest requested to show guest');
+             try {
+               // Hide host elements
+               var hostEl = document.getElementById('txt');
+               if (hostEl) { hostEl.style.display = 'none'; hostEl.style.visibility = 'hidden'; hostEl.style.pointerEvents = 'none'; }
+               var hostKb = document.getElementById('host-keyboard');
+               if (hostKb) { hostKb.style.display = 'block'; hostKb.style.visibility = 'visible'; hostKb.style.pointerEvents = 'auto'; }
+               var guestKb = document.getElementById('guest-keyboard') || document.getElementById('keyboard-container');
+               if (guestKb) { guestKb.style.display = 'none'; guestKb.style.visibility = 'hidden'; guestKb.style.pointerEvents = 'none'; }
+               if (iframe) { iframe.style.display = 'block'; iframe.style.visibility = 'visible'; }
+               // Transfer focus to the guest iframe's content window
+               try {
+                 if (iframe && iframe.contentWindow) {
+                   iframe.contentWindow.focus();
+                 }
+               } catch (e) {}
+               // Notify guest to restore its input and focus
+               iframe.contentWindow.postMessage({
+                 type: 'action-result',
+                 action: 'show-guest',
+                 success: true
+               }, '*');
+             } catch (e) {
+               console.error('Error showing guest:', e);
+               iframe.contentWindow.postMessage({
+                 type: 'action-result',
+                 action: 'show-guest',
+                 success: false,
+                 error: String(e)
+               }, '*');
+             }
+             break;
+           case 'show-host':
+             if (isAudioUnlocked()===false) { init_sound_js(); }        
+             console.log('Guest requested to show host');
+             // Hide guest VM and guest keyboard only; keep host UI visible
+             try {
+               // Ensure host text area is visible / interactive
+               var hostEl = document.getElementById('txt') || document.getElementById('qandy') || document.body;
+               if (hostEl) {
+               hostEl.style.display = 'block';
+               hostEl.style.visibility = 'visible';
+               hostEl.style.pointerEvents = 'auto';
+               hostEl.style.opacity = hostEl.style.opacity || '1';
+             }
           // Ensure legacy wrapper is visible so host keyboard (child) can be shown
           var wrapper = document.getElementById('keyboard-container');
           if (wrapper) {
@@ -3366,7 +3361,8 @@ function init_command_js() {
       } else {
         // <guest> machine requests .js file from the <host> and executes it as inline script
         var scriptName = String(cmd || '').trim();
-        runHostScript(scriptName);
+        //window.parent.postMessage({ type: 'guest-action', , action: 'show-host', success: true }, '*');
+        window.parent.postMessage({ type: 'request-script', id: scriptName, name: scriptName }, '*');
       }
     } else {
       evalCode(cmd);
