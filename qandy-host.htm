@@ -934,21 +934,6 @@ async function createGuest(options) {
      }
      var d = ev.data || {}; if (!d || typeof d !== 'object') return;
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-     
      if (d.type === 'request-script' && typeof d.name === 'string') {
        var reqId = d.id; var name = d.name;
        window._fwdScriptCnt = (window._fwdScriptCnt || 0) + 1;

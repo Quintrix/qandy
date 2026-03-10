@@ -989,15 +989,15 @@ async function createGuest(options) {
        }
      }
    
-     //function isAudioUnlocked() {
-     //  try {
-     //    if (window._qandy_audio && window._qandy_audio.unlocked) return true;
-     //    var ctx = (window._qandy_audio && window._qandy_audio.ctx) || window.audioContext || null;
-     //    if (ctx && ctx.state === 'running') return true;
-     //    if (window.audioCtx && window.audioCtx.state === 'running') return true;
-     //  } catch (e) {}
-     //  return false;
-     //}
+     function isAudioUnlocked() {
+       try {
+         if (window._qandy_audio && window._qandy_audio.unlocked) return true;
+         var ctx = (window._qandy_audio && window._qandy_audio.ctx) || window.audioContext || null;
+         if (ctx && ctx.state === 'running') return true;
+         if (window.audioCtx && window.audioCtx.state === 'running') return true;
+       } catch (e) {}
+       return false;
+     }
 
      if (d.type === 'guest-action' && typeof d.action === 'string') {
        try {
@@ -3562,6 +3562,7 @@ function init_command_js() {
         // <guest> machine requests .js file from the <host> and executes it as inline script
         var scriptName = String(cmd || '').trim();
         //window.parent.postMessage({ type: 'guest-action', , action: 'show-host', success: true }, '*');
+        alert(scriptName);
         window.parent.postMessage({ type: 'request-script', id: scriptName, name: scriptName }, '*');
       }
     } else {
