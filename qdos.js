@@ -16,6 +16,10 @@
  *   dosRename(file, dest)   — rename file
  *   dosType(file)           — print file content via global print()
  *   dosFormat(data)         — export (no arg) or import (JSON/object) archive
+ *
+ * Simple relay functions (never return objects — only strings or booleans):
+ *   localLoad(file)         — returns file contents string or error message
+ *   localSave(file, text)   — saves text to file; returns true or error message
  */
 
 (function (global) {
@@ -61,6 +65,76 @@
       entry.reject(new Error(d.error || 'DOS operation failed'));
     }
   }, false);
+
+  // Pending response map for dos-response messages: reqId -> { handler, timer }
+  var _dosResPending = Object.create(null);
+
+  // Listen for dos-response messages from the host (used by localLoad / localSave)
+  global.addEventListener('message', function (ev) {
+    var d = ev.data;
+    if (!d || typeof d !== 'object') return;
+    if (d.type !== 'dos-response') return;
+    var id = d.id;
+    if (!id || !_dosResPending[id]) return;
+    var entry = _dosResPending[id];
+    clearTimeout(entry.timer);
+    delete _dosResPending[id];
+    entry.handler(d);
+  }, false);
+
+  // _sendDosMessage(type, payload, timeoutMs, handler) — send a simple relay message and call
+  // handler(d) with the dos-response.  Never rejects; the handler is responsible
+  // for calling resolve with a string or boolean.
+  function _sendDosMessage(type, payload, timeoutMs, handler) {
+    return new Promise(function (resolve) {
+      if (!global.parent || global.parent === global) {
+        return resolve(type + ': no host parent frame available');
+      }
+      var id = _nextId();
+      var msg = { type: type, id: id };
+      if (payload) {
+        var keys = Object.keys(payload);
+        for (var i = 0; i < keys.length; i++) msg[keys[i]] = payload[keys[i]];
+      }
+      var timer = setTimeout(function () {
+        delete _dosResPending[id];
+        resolve(type + ': timeout waiting for host response');
+      }, timeoutMs || 8000);
+      _dosResPending[id] = {
+        handler: function (d) { handler(d, resolve); },
+        timer: timer
+      };
+      try {
+        global.parent.postMessage(msg, '*');
+      } catch (e) {
+        clearTimeout(timer);
+        delete _dosResPending[id];
+        resolve(String(e));
+      }
+    });
+  }
+
+  // localLoad(file) — returns Promise resolving to file contents string or error message
+  function localLoad(file) {
+    return _sendDosMessage('dosLoad', { file: file }, 8000, function (d, resolve) {
+      if (d.success) {
+        resolve(d.data !== undefined && d.data !== null ? String(d.data) : '');
+      } else {
+        resolve(String(d.error || 'localLoad: operation failed'));
+      }
+    });
+  }
+
+  // localSave(file, text) — returns Promise resolving to true or error message string
+  function localSave(file, text) {
+    return _sendDosMessage('dosSave', { file: file, data: (text == null ? '' : String(text)) }, 8000, function (d, resolve) {
+      if (d.success) {
+        resolve(true);
+      } else {
+        resolve(String(d.error || 'localSave: operation failed'));
+      }
+    });
+  }
 
   // Send a guest-action message to the host and return a Promise for the result
   function _sendDosAction(action, payload, timeoutMs) {
@@ -181,5 +255,7 @@
   global.dosRename = dosRename;
   global.dosType   = dosType;
   global.dosFormat = dosFormat;
+  global.localLoad = localLoad;
+  global.localSave = localSave;
 
 }(window));
