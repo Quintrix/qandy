@@ -934,6 +934,7 @@ async function createGuest(options) {
         var name = d.name;
         var _LS_PFX = 'qandy_file:';
         try {
+          alert("here");
           var fileContent = dosRetrieve(name);
           alert(fileContent);
           var _guestIframe = window._vmIframe || document.getElementById('vm-iframe');
@@ -3532,7 +3533,6 @@ function init_command_js() {
       } else {
         // <guest> machine requests .js file from the <host> and executes it as inline script
         var scriptName = String(cmd || '').trim();
-        //window.parent.postMessage({ type: 'guest-action', , action: 'show-host', success: true }, '*');
         window.parent.postMessage({ type: 'request-script', id: scriptName, name: scriptName }, '*');
       }
     } else {
@@ -4384,11 +4384,11 @@ if (HOST) {
     try {
       dosMount("local");
     } catch (e) {
-      print("Error mounting \'local\'\n");
+      print("Error mounting \'local\'\n\n");
     }
   };
   s.onerror = function() { print("Error loading dos.js\n"); };
-  //document.head.appendChild(s);
+  document.head.appendChild(s);
   systemReady();
 } else {
   systemReady();

@@ -18,8 +18,6 @@
 
 var DEVICE = "local";  // default device, browser localStorage
 
-print("[bred]DOS Enabled[white]\n");
-
 (function (global) {
   'use strict';
 
@@ -378,6 +376,14 @@ print("[bred]DOS Enabled[white]\n");
     return await _backend_load(dev, v.name);
   }
 
+  async function dosRetrieve(file) {
+    if (typeof file !== 'string' || file.length === 0) return Promise.reject(new Error('dosRetrieve: file required'));
+    var v = _validateName(file);
+    if (!v.ok) return Promise.reject(new Error('dosLoad: invalid filename (' + v.reason + ')'));
+    var dev = 'local';
+    return _backend_load(dev, v.name);
+  }
+
   // dosCopy(file, dest) - copy into clipboard; if dest provided, also save as dest (error if dest exists)
   async function dosCopy(file, dest) {
     if (typeof file !== 'string' || file.length === 0) return Promise.reject(new Error('dosCopy: file required'));
@@ -508,6 +514,7 @@ print("[bred]DOS Enabled[white]\n");
   global.dosList = dosList;
   global.dosSave = dosSave;
   global.dosLoad = dosLoad;
+  global.dosRetrieve = dosRetrieve;
   global.dosCopy = dosCopy;
   global.dosPaste = dosPaste;
   global.dosRename = dosRename;
