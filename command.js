@@ -1,40 +1,87 @@
 
-function command(cmd) {
+async function command(cmd) {
   if (RUN != "qandy.js") {
     print("\n");
     try { input(cmd); } catch (e) { /* ignore */ }
     // this needs testing AFTER run command works
     LINE = ""; CURP = 0; LINEX = CURX; LINEY = CURY;
-    pokeRefresh()
-  } else {
-    // system commands
-    print("\n");
-    if (cmd.slice(-3) === ".js") {
-      //keysoff();
-      var scriptName = String(cmd || '').trim();
-      hostScript(scriptName);
-    } else if (cmd.substr(0,3) === "cls") {
-       SYNC=0;   
-       pokeCursorOff();
-       pokeText(0,0," ",800);
-       pokeColor(0,0,CURFG, CURBG, 800);
-       pokeAttr(0,0,0, 800);
-       CURX=0; CURY=0; LINEX=0; LINEY=0;
-       SYNC=1;
-       pokeRefresh;
-       pokeCursorOn();
-    } else {
-      evalCode(cmd);
-      pokeCursorOn();
-      LINE=""; CURP = 0;
-      LINEX = CURX; LINEY = CURY;
-      return;
-    }
     pokeRefresh();
+    return;
   }
+  // system commands
+  print("\n");
+  var trimmedCmd = String(cmd || '').trim();
+
+  if (trimmedCmd === 'cls') {
+    SYNC=0;
+    pokeCursorOff();
+    pokeText(0,0," ",800);
+    pokeColor(0,0,CURFG, CURBG, 800);
+    pokeAttr(0,0,0, 800);
+    CURX=0; CURY=0; LINEX=0; LINEY=0;
+    SYNC=1;
+    pokeRefresh();
+    pokeCursorOn();
+  } else if (trimmedCmd.endsWith('.js')) {
+    if (typeof qdosScript === 'function') {
+      var result = await qdosScript(trimmedCmd);
+      if (result !== true) print(String(result) + '\n');
+    } else if (typeof hostScript === 'function') {
+      hostScript(trimmedCmd);
+    }
+  } else if (trimmedCmd === 'dir') {
+    if (typeof qdosDir === 'function') {
+      print(await qdosDir(trimmedCmd));
+    } else {
+      await evalCode(trimmedCmd);
+    }
+  } else if (/^delete\s+/i.test(trimmedCmd)) {
+    if (typeof qdosDelete === 'function') {
+      print(await qdosDelete(trimmedCmd));
+    } else {
+      await evalCode(trimmedCmd);
+    }
+  } else if (/^exists\s+/i.test(trimmedCmd)) {
+    if (typeof qdosExists === 'function') {
+      print(await qdosExists(trimmedCmd));
+    } else {
+      await evalCode(trimmedCmd);
+    }
+  } else if (/^rename\s+/i.test(trimmedCmd)) {
+    if (typeof qdosRename === 'function') {
+      print(await qdosRename(trimmedCmd));
+    } else {
+      await evalCode(trimmedCmd);
+    }
+  } else if (/^type\s+/i.test(trimmedCmd)) {
+    if (typeof qdosType === 'function') {
+      print(await qdosType(trimmedCmd));
+    } else {
+      await evalCode(trimmedCmd);
+    }
+  } else if (/^load\s+/i.test(trimmedCmd)) {
+    if (typeof qdosLoad === 'function') {
+      print(await qdosLoad(trimmedCmd));
+    } else {
+      await evalCode(trimmedCmd);
+    }
+  } else if (/^mount(\s|$)/i.test(trimmedCmd)) {
+    if (typeof qdosMount === 'function') {
+      print(await qdosMount(trimmedCmd));
+    } else {
+      await evalCode(trimmedCmd);
+    }
+  } else {
+    await evalCode(trimmedCmd);
+    pokeCursorOn();
+    LINE=""; CURP = 0;
+    LINEX = CURX; LINEY = CURY;
+    return;
+  }
+  pokeRefresh();
 }
 
-function evalCode(code) {
+async function evalCode(code) {
   try {
     var trimmed = String(code).trim();
     var simpleNameRE = /^[$A-Za-z_][$A-Za-z0-9_]*(?:\s*\.\s*[$A-Za-z_][$A-Za-z0-9_]*)*$/;
