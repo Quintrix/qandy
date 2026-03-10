@@ -1352,6 +1352,47 @@ function hostMessageHandler(ev) {
       }
     }
   }
+
+  // Simple relay: dosLoad — load a file and respond with dos-response
+  if (d.type === 'dosLoad') {
+    var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+    var _LS_PFX = 'qandy_file:';
+    try {
+      var _fname = String(d.file || '');
+      var _content = localStorage.getItem(_LS_PFX + _fname);
+      if (_dosIframe && _dosIframe.contentWindow) {
+        _dosIframe.contentWindow.postMessage({ type: 'dos-response', id: d.id, success: true, data: _content }, '*');
+      }
+    } catch (_e) {
+      if (_dosIframe && _dosIframe.contentWindow) {
+        _dosIframe.contentWindow.postMessage({ type: 'dos-response', id: d.id, success: false, error: String(_e) }, '*');
+      }
+    }
+  }
+
+  // Simple relay: dosSave — save a file and respond with dos-response
+  if (d.type === 'dosSave') {
+    var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+    var _LS_PFX = 'qandy_file:';
+    var _LS_MAN = 'qandy_manifest_local';
+    try {
+      var _fname = String(d.file || '');
+      var _fdata = String(d.data == null ? '' : d.data);
+      localStorage.setItem(_LS_PFX + _fname, _fdata);
+      var _raw = localStorage.getItem(_LS_MAN);
+      var _manifest = _raw ? JSON.parse(_raw) : [];
+      if (!Array.isArray(_manifest)) _manifest = [];
+      if (_manifest.indexOf(_fname) === -1) _manifest.push(_fname);
+      localStorage.setItem(_LS_MAN, JSON.stringify(_manifest));
+      if (_dosIframe && _dosIframe.contentWindow) {
+        _dosIframe.contentWindow.postMessage({ type: 'dos-response', id: d.id, success: true, data: true }, '*');
+      }
+    } catch (_e) {
+      if (_dosIframe && _dosIframe.contentWindow) {
+        _dosIframe.contentWindow.postMessage({ type: 'dos-response', id: d.id, success: false, error: String(_e) }, '*');
+      }
+    }
+  }
 }
 
     window.addEventListener('message', hostMessageHandler, false);
