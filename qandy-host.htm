@@ -3481,7 +3481,7 @@ window.updateKeyLabels = updateKeyLabels;
 (function () {
   'use strict';
 
-  // Lightweight guest-action postMessage helper (mirrors qdos.js _sendDosAction).
+  // Lightweight guest-action postMessage helper used by local* functions below.
   function _qdosSend(action, payload, timeoutMs) {
     return new Promise(function (resolve, reject) {
       if (!window.parent || window.parent === window) {
@@ -3510,38 +3510,12 @@ window.updateKeyLabels = updateKeyLabels;
     });
   }
 
-  // Directory formatting helpers (same logic as qdos.js).
-  function _fmtTs(ts) {
-    if (!ts || ts.length < 14) return '';
-    var yr = parseInt(ts.substr(0,4),10), mo = parseInt(ts.substr(4,2),10), dy = parseInt(ts.substr(6,2),10);
-    var hh = parseInt(ts.substr(8,2),10), mm = parseInt(ts.substr(10,2),10), ss = parseInt(ts.substr(12,2),10);
-    var age = Date.now() - new Date(yr, mo-1, dy, hh, mm, ss).getTime();
-    if (age < 86400000) return (hh<10?'0':'')+hh+':'+(mm<10?'0':'')+mm+':'+(ss<10?'0':'')+ss;
-    return (mo<10?'0':'')+mo+'/'+(dy<10?'0':'')+dy+'/'+yr;
-  }
-  function _fmtSz(size) { var n=parseInt(size,10); return isNaN(n)?'':(n>=1024?Math.round(n/1024)+'k':n+'b'); }
-  function _fmtEntry(name, size, ts) {
-    var sz=_fmtSz(size), tss=_fmtTs(ts), W=38, line=' '+name.substring(0,30);
-    while (line.length < W-sz.length) line+=' '; line+=sz+'\n';
-    if (!tss) return line;
-    var pad=''; while (pad.length < W-tss.length) pad+=' ';
-    return line+pad+tss+'\n';
-  }
-  function _fmtDir(raw) {
-    if (!raw||!raw.trim()) return ' (empty)\n';
-    var out = '';
-    var lines = raw.trim().split('\n');
-    for (var i = 0; i < lines.length; i++) {
-      var p = lines[i].split('|');
-      if (p[0]) out += _fmtEntry(p[0], p[1]||'', p[2]||'');
-    }
-    return out||' (empty)\n';
-  }
-
-  // _normalizeListing — convert bare filenames to dir.sys manifest format (name||).
-  function _normalizeListing(raw) {
-    return (raw||'').split('\n').filter(Boolean).map(function(f){ return f+'||'; }).join('\n');
-  }
+  // local* relay functions — GUEST-side wrappers that delegate to the host via postMessage.
+  function localDelete(file) { return _qdosSend('dos-delete', {file: file}); }
+  function localExists(file) { return _qdosSend('dos-exists', {file: file}); }
+  function localDir()        { return _qdosSend('dos-list',   {}); }
+  function localRename(file, dest) { return _qdosSend('dos-rename', {file: file, dest: dest}); }
+  function localLoad(file)   { return _qdosSend('dos-load',   {file: file}); }
 
   // qdosScript — execute a .js file on HOST (inject tag) or GUEST (postMessage).
   window.qdosScript = function (cmd) {
@@ -3576,19 +3550,17 @@ window.updateKeyLabels = updateKeyLabels;
     });
   };
 
-  // qdosDir — formatted directory listing.
+  // qdosDir — directory listing.
+  // HOST: calls dosDir() and returns result as string.
+  // GUEST: calls localDir() and returns result as string.
   window.qdosDir = function (cmd) {
     if (HOST) {
-      var fn = (typeof dosDir==='function') ? dosDir : (typeof dosList==='function' ? dosList : null);
-      if (!fn) return Promise.resolve('Error: DOS not available\n');
-      return Promise.resolve(fn()).then(function (raw) {
-        if (typeof dosDir !== 'function') raw = _normalizeListing(raw);
-        return _fmtDir(raw||'');
-      }).catch(function(e){ return 'Error: '+(e&&e.message?e.message:String(e))+'\n'; });
+      if (typeof dosDir !== 'function') return Promise.resolve('Error: DOS not available\n');
+      return Promise.resolve(dosDir()).then(function(r){ return String(r !== null && r !== undefined ? r : '')+'\n'; })
+        .catch(function(e){ return 'Error: '+(e&&e.message?e.message:String(e))+'\n'; });
     }
-    return _qdosSend('dos-list', {}).then(function (result) {
-      return _fmtDir(_normalizeListing(result));
-    }).catch(function(e){ return 'Error: '+(e&&e.message?e.message:String(e))+'\n'; });
+    return localDir().then(function(r){ return String(r !== null && r !== undefined ? r : '')+'\n'; })
+      .catch(function(e){ return 'Error: '+(e&&e.message?e.message:String(e))+'\n'; });
   };
 
   // qdosMount — mount a device (HOST) or report localStorage (GUEST).
@@ -3596,13 +3568,17 @@ window.updateKeyLabels = updateKeyLabels;
     var device = String(cmd||'').replace(/^mount\s*/i,'').trim() || null;
     if (HOST) {
       if (typeof dosMount !== 'function') return Promise.resolve('Error: DOS not available\n');
-      return Promise.resolve(dosMount(device)).then(function(r){ return (r||'local')+'\n'; })
-        .catch(function(e){ return 'Error: '+(e&&e.message?e.message:String(e))+'\n'; });
+      return Promise.resolve(dosMount(device)).then(function(r){
+        if (r !== null && typeof r === 'object') return (r.error ? 'Error: '+r.error : 'true')+'\n';
+        return String(r !== null && r !== undefined ? r : '')+'\n';
+      }).catch(function(e){ return 'Error: '+(e&&e.message?e.message:String(e))+'\n'; });
     }
     return Promise.resolve('localStorage\n');
   };
 
   // qdosDelete — delete a file.
+  // HOST: calls dosDelete(file) and returns result as string.
+  // GUEST: calls localDelete(file) and returns result as string.
   window.qdosDelete = function (cmd) {
     var file = String(cmd||'').replace(/^delete\s+/i,'').trim();
     if (!file) return Promise.resolve('Error: filename required\n');
@@ -3611,11 +3587,13 @@ window.updateKeyLabels = updateKeyLabels;
       return Promise.resolve(dosDelete(file)).then(function(){ return 'Deleted: '+file+'\n'; })
         .catch(function(e){ return 'Error: '+(e&&e.message?e.message:String(e))+'\n'; });
     }
-    return _qdosSend('dos-delete', {file:file}).then(function(){ return 'Deleted: '+file+'\n'; })
+    return localDelete(file).then(function(){ return 'Deleted: '+file+'\n'; })
       .catch(function(e){ return 'Error: '+(e&&e.message?e.message:String(e))+'\n'; });
   };
 
   // qdosExists — check whether a file exists; resolves to "true" or "false".
+  // HOST: calls dosExists(file) and returns result as string.
+  // GUEST: calls localExists(file) and returns result as string.
   window.qdosExists = function (cmd) {
     var file = String(cmd||'').replace(/^exists\s+/i,'').trim();
     if (!file) return Promise.resolve('Error: filename required\n');
@@ -3624,11 +3602,13 @@ window.updateKeyLabels = updateKeyLabels;
       return Promise.resolve(dosExists(file)).then(function(r){ return (r?'true':'false')+'\n'; })
         .catch(function(e){ return 'Error: '+(e&&e.message?e.message:String(e))+'\n'; });
     }
-    return _qdosSend('dos-exists', {file:file}).then(function(r){ return (r?'true':'false')+'\n'; })
+    return localExists(file).then(function(r){ return (r?'true':'false')+'\n'; })
       .catch(function(e){ return 'Error: '+(e&&e.message?e.message:String(e))+'\n'; });
   };
 
   // qdosRename — rename a file (syntax: "rename old / new").
+  // HOST: calls dosRename(src, dst) and returns result as string.
+  // GUEST: calls localRename(src, dst) and returns result as string.
   window.qdosRename = function (cmd) {
     var args = String(cmd||'').replace(/^rename\s+/i,'').trim();
     var parts = args.split(/\s*\/\s*/), src=(parts[0]||'').trim(), dst=(parts[1]||'').trim();
@@ -3638,11 +3618,13 @@ window.updateKeyLabels = updateKeyLabels;
       return Promise.resolve(dosRename(src,dst)).then(function(){ return 'Renamed: '+src+' -> '+dst+'\n'; })
         .catch(function(e){ return 'Error: '+(e&&e.message?e.message:String(e))+'\n'; });
     }
-    return _qdosSend('dos-rename', {file:src,dest:dst}).then(function(){ return 'Renamed: '+src+' -> '+dst+'\n'; })
+    return localRename(src, dst).then(function(){ return 'Renamed: '+src+' -> '+dst+'\n'; })
       .catch(function(e){ return 'Error: '+(e&&e.message?e.message:String(e))+'\n'; });
   };
 
   // qdosType — display file contents.
+  // HOST: calls dosLoad(file) and returns content as string.
+  // GUEST: calls localLoad(file) and returns content as string.
   window.qdosType = function (cmd) {
     var file = String(cmd||'').replace(/^type\s+/i,'').trim();
     if (!file) return Promise.resolve('Error: filename required\n');
@@ -3653,7 +3635,7 @@ window.updateKeyLabels = updateKeyLabels;
         return String(c)+'\n';
       }).catch(function(e){ return 'Error: '+(e&&e.message?e.message:String(e))+'\n'; });
     }
-    return _qdosSend('dos-load', {file:file}).then(function(c){
+    return localLoad(file).then(function(c){
       if (c===null||c===undefined) return 'Error: file not found\n';
       return String(c)+'\n';
     }).catch(function(e){ return 'Error: '+(e&&e.message?e.message:String(e))+'\n'; });
@@ -3767,14 +3749,14 @@ function init_command_js() {
       // fall through to DOS command handlers below
       break;
   }
-
+  
   // DOS commands — HOST/GUEST branching is handled inside the qdos* wrappers.
-  if (trimmedCmd.endsWith('.js')) {
+    if (trimmedCmd.endsWith('.js')) {
     var result = await qdosScript(trimmedCmd);
     if (result !== true) print(String(result) + '\n');
-  } else if (trimmedCmd === 'dir') {
+  } else if (trimmedCmd === 'dir') { 
     print(await qdosDir(trimmedCmd));
-  } else if (/^delete\s+/i.test(trimmedCmd)) {
+  } else if (/^delete\s+/i.test(trimmedCmd)) {  
     print(await qdosDelete(trimmedCmd));
   } else if (/^exists\s+/i.test(trimmedCmd)) {
     print(await qdosExists(trimmedCmd));

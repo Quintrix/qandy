@@ -932,28 +932,45 @@ async function createGuest(options) {
       if (d.type === 'request-script' && typeof d.name === 'string') {
         var reqId = d.id;
         var name = d.name;
-        var _LS_PFX = 'qandy_file:';
         try {
-          var fileContent = dosRetrieve(name);
-          alert(fileContent);
-          var _guestIframe = window._vmIframe || document.getElementById('vm-iframe');
-          if (_guestIframe && _guestIframe.contentWindow) {
-            _guestIframe.contentWindow.postMessage({
-              type: 'scriptLoaded',
-              id: reqId,
-              name: name,
-              code: fileContent,
-              error: fileContent === null ? 'File not found' : null
-            }, '*');
-          }
+          dosRetrieve(name).then(function(fileContent) {
+            var _guestIframe = window._vmIframe || document.getElementById('vm-iframe');
+            if (_guestIframe && _guestIframe.contentWindow) {
+              if (fileContent === null) {
+                _guestIframe.contentWindow.postMessage({
+                  type: 'script-response',
+                  id: reqId,
+                  success: false,
+                  error: 'File not found'
+                }, '*');
+              } else {
+                _guestIframe.contentWindow.postMessage({
+                  type: 'script-response',
+                  id: reqId,
+                  success: true,
+                  content: fileContent
+                }, '*');
+              }
+            }
+          }).catch(function(e) {
+            var _errIframe = window._vmIframe || document.getElementById('vm-iframe');
+            if (_errIframe && _errIframe.contentWindow) {
+              var errMsg = (e && String(e).indexOf('Disk Full') !== -1) ? 'Error: Disk Full' : String(e);
+              _errIframe.contentWindow.postMessage({
+                type: 'script-response',
+                id: reqId,
+                success: false,
+                error: errMsg
+              }, '*');
+            }
+          });
         } catch (e) {
           var _errIframe = window._vmIframe || document.getElementById('vm-iframe');
           if (_errIframe && _errIframe.contentWindow) {
             _errIframe.contentWindow.postMessage({
-              type: 'scriptLoaded',
+              type: 'script-response',
               id: reqId,
-              name: name,
-              code: null,
+              success: false,
               error: String(e)
             }, '*');
           }
@@ -1289,6 +1306,47 @@ async function createGuest(options) {
           success: false, 
           error: String(e) 
         }, '*');
+      }
+    }
+  }
+
+  // Simple relay: dosLoad — load a file and respond with dos-response
+  if (d.type === 'dosLoad') {
+    var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+    var _LS_PFX = 'qandy_file:';
+    try {
+      var _fname = String(d.file || '');
+      var _content = localStorage.getItem(_LS_PFX + _fname);
+      if (_dosIframe && _dosIframe.contentWindow) {
+        _dosIframe.contentWindow.postMessage({ type: 'dos-response', id: d.id, success: true, data: _content }, '*');
+      }
+    } catch (_e) {
+      if (_dosIframe && _dosIframe.contentWindow) {
+        _dosIframe.contentWindow.postMessage({ type: 'dos-response', id: d.id, success: false, error: String(_e) }, '*');
+      }
+    }
+  }
+
+  // Simple relay: dosSave — save a file and respond with dos-response
+  if (d.type === 'dosSave') {
+    var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+    var _LS_PFX = 'qandy_file:';
+    var _LS_MAN = 'qandy_manifest_local';
+    try {
+      var _fname = String(d.file || '');
+      var _fdata = String(d.data == null ? '' : d.data);
+      localStorage.setItem(_LS_PFX + _fname, _fdata);
+      var _raw = localStorage.getItem(_LS_MAN);
+      var _manifest = _raw ? JSON.parse(_raw) : [];
+      if (!Array.isArray(_manifest)) _manifest = [];
+      if (_manifest.indexOf(_fname) === -1) _manifest.push(_fname);
+      localStorage.setItem(_LS_MAN, JSON.stringify(_manifest));
+      if (_dosIframe && _dosIframe.contentWindow) {
+        _dosIframe.contentWindow.postMessage({ type: 'dos-response', id: d.id, success: true, data: true }, '*');
+      }
+    } catch (_e) {
+      if (_dosIframe && _dosIframe.contentWindow) {
+        _dosIframe.contentWindow.postMessage({ type: 'dos-response', id: d.id, success: false, error: String(_e) }, '*');
       }
     }
   }
@@ -3416,136 +3474,318 @@ window.updateKeyLabels = updateKeyLabels;
 }
 
 //
+// qdos inline wrappers — HOST/GUEST-aware DOS command functions.
+// Installed on window so they are available to command() at runtime in both
+// the HOST page and the GUEST iframe (which receives the same body HTML).
+//
+(function () {
+  'use strict';
+
+  // Lightweight guest-action postMessage helper used by local* functions below.
+  function _qdosSend(action, payload, timeoutMs) {
+    return new Promise(function (resolve, reject) {
+      if (!window.parent || window.parent === window) {
+        return reject(new Error('qdos: no host parent frame'));
+      }
+      var id = 'qh_' + Date.now() + '_' + (Math.random() * 0xFFFF | 0);
+      var msg = { type: 'guest-action', action: action, id: id };
+      if (payload) { var ks = Object.keys(payload); for (var i = 0; i < ks.length; i++) msg[ks[i]] = payload[ks[i]]; }
+      var timer = setTimeout(function () {
+        window.removeEventListener('message', handler);
+        reject(new Error('qdos: timeout waiting for ' + action));
+      }, timeoutMs || 8000);
+      function handler(ev) {
+        var d = ev.data || {};
+        if (d.type === 'action-result' && d.id === id) {
+          clearTimeout(timer);
+          window.removeEventListener('message', handler);
+          if (d.success) resolve(d.result !== undefined ? d.result : true);
+          else reject(new Error(d.error || 'DOS operation failed'));
+        }
+      }
+      window.addEventListener('message', handler, false);
+      try { window.parent.postMessage(msg, '*'); } catch (e) {
+        clearTimeout(timer); window.removeEventListener('message', handler); reject(e);
+      }
+    });
+  }
+
+  // local* relay functions — GUEST-side wrappers that delegate to the host via postMessage.
+  function localDelete(file) { return _qdosSend('dos-delete', {file: file}); }
+  function localExists(file) { return _qdosSend('dos-exists', {file: file}); }
+  function localDir()        { return _qdosSend('dos-list',   {}); }
+  function localRename(file, dest) { return _qdosSend('dos-rename', {file: file, dest: dest}); }
+  function localLoad(file)   { return _qdosSend('dos-load',   {file: file}); }
+
+  // qdosScript — execute a .js file on HOST (inject tag) or GUEST (postMessage).
+  window.qdosScript = function (cmd) {
+    var name = String(cmd||'').trim();
+    if (!name) return Promise.resolve('Error: filename required');
+    if (!/^[A-Za-z0-9.\-]+\.js$/i.test(name)) return Promise.resolve('Error: invalid filename');
+    if (/^[.\-]/.test(name) || /[.\-]$/.test(name)) return Promise.resolve('Error: invalid filename');
+    if (/\.\./.test(name)) return Promise.resolve('Error: invalid filename');
+    if (name.length > 64) return Promise.resolve('Error: filename too long');
+    return new Promise(function (resolve) {
+      if (HOST) {
+        var prg = document.createElement('script');
+        prg.src = name;
+        prg.onload = function () { resolve(true); };
+        prg.onerror = function () { resolve('Error: file not found'); };
+        document.head.appendChild(prg);
+      } else {
+        var timer = setTimeout(function () { window.removeEventListener('message', h); resolve('Error: timeout loading '+name); }, 10000);
+        function h(ev) {
+          if (ev.source !== window.parent) return;
+          var d = ev.data||{};
+          if (d.type === 'script-response' && d.id === name) {
+            clearTimeout(timer); window.removeEventListener('message', h);
+            if (!d.success) { resolve(String(d.error||'Error loading script')); }
+            else { try { (0,eval)(String(d.content)+'\n//# sourceURL='+name); resolve(true); } catch(e) { resolve('Error: '+String(e)); } }
+          }
+        }
+        window.addEventListener('message', h, false);
+        try { window.parent.postMessage({type:'request-script',id:name,name:name},'*'); }
+        catch(e) { clearTimeout(timer); window.removeEventListener('message',h); resolve('Error: '+String(e)); }
+      }
+    });
+  };
+
+  // qdosDir — directory listing.
+  // HOST: calls dosDir() and returns result as string.
+  // GUEST: calls localDir() and returns result as string.
+  window.qdosDir = function (cmd) {
+    if (HOST) {
+      if (typeof dosDir !== 'function') return Promise.resolve('Error: DOS not available\n');
+      return Promise.resolve(dosDir()).then(function(r){ return String(r !== null && r !== undefined ? r : '')+'\n'; })
+        .catch(function(e){ return 'Error: '+(e&&e.message?e.message:String(e))+'\n'; });
+    }
+    return localDir().then(function(r){ return String(r !== null && r !== undefined ? r : '')+'\n'; })
+      .catch(function(e){ return 'Error: '+(e&&e.message?e.message:String(e))+'\n'; });
+  };
+
+  // qdosMount — mount a device (HOST) or report localStorage (GUEST).
+  window.qdosMount = function (cmd) {
+    var device = String(cmd||'').replace(/^mount\s*/i,'').trim() || null;
+    if (HOST) {
+      if (typeof dosMount !== 'function') return Promise.resolve('Error: DOS not available\n');
+      return Promise.resolve(dosMount(device)).then(function(r){
+        if (r !== null && typeof r === 'object') return (r.error ? 'Error: '+r.error : 'true')+'\n';
+        return String(r !== null && r !== undefined ? r : '')+'\n';
+      }).catch(function(e){ return 'Error: '+(e&&e.message?e.message:String(e))+'\n'; });
+    }
+    return Promise.resolve('localStorage\n');
+  };
+
+  // qdosDelete — delete a file.
+  // HOST: calls dosDelete(file) and returns result as string.
+  // GUEST: calls localDelete(file) and returns result as string.
+  window.qdosDelete = function (cmd) {
+    var file = String(cmd||'').replace(/^delete\s+/i,'').trim();
+    if (!file) return Promise.resolve('Error: filename required\n');
+    if (HOST) {
+      if (typeof dosDelete !== 'function') return Promise.resolve('Error: DOS not available\n');
+      return Promise.resolve(dosDelete(file)).then(function(){ return 'Deleted: '+file+'\n'; })
+        .catch(function(e){ return 'Error: '+(e&&e.message?e.message:String(e))+'\n'; });
+    }
+    return localDelete(file).then(function(){ return 'Deleted: '+file+'\n'; })
+      .catch(function(e){ return 'Error: '+(e&&e.message?e.message:String(e))+'\n'; });
+  };
+
+  // qdosExists — check whether a file exists; resolves to "true" or "false".
+  // HOST: calls dosExists(file) and returns result as string.
+  // GUEST: calls localExists(file) and returns result as string.
+  window.qdosExists = function (cmd) {
+    var file = String(cmd||'').replace(/^exists\s+/i,'').trim();
+    if (!file) return Promise.resolve('Error: filename required\n');
+    if (HOST) {
+      if (typeof dosExists !== 'function') return Promise.resolve('Error: DOS not available\n');
+      return Promise.resolve(dosExists(file)).then(function(r){ return (r?'true':'false')+'\n'; })
+        .catch(function(e){ return 'Error: '+(e&&e.message?e.message:String(e))+'\n'; });
+    }
+    return localExists(file).then(function(r){ return (r?'true':'false')+'\n'; })
+      .catch(function(e){ return 'Error: '+(e&&e.message?e.message:String(e))+'\n'; });
+  };
+
+  // qdosRename — rename a file (syntax: "rename old / new").
+  // HOST: calls dosRename(src, dst) and returns result as string.
+  // GUEST: calls localRename(src, dst) and returns result as string.
+  window.qdosRename = function (cmd) {
+    var args = String(cmd||'').replace(/^rename\s+/i,'').trim();
+    var parts = args.split(/\s*\/\s*/), src=(parts[0]||'').trim(), dst=(parts[1]||'').trim();
+    if (!src||!dst) return Promise.resolve('Error: usage: rename <old> / <new>\n');
+    if (HOST) {
+      if (typeof dosRename !== 'function') return Promise.resolve('Error: DOS not available\n');
+      return Promise.resolve(dosRename(src,dst)).then(function(){ return 'Renamed: '+src+' -> '+dst+'\n'; })
+        .catch(function(e){ return 'Error: '+(e&&e.message?e.message:String(e))+'\n'; });
+    }
+    return localRename(src, dst).then(function(){ return 'Renamed: '+src+' -> '+dst+'\n'; })
+      .catch(function(e){ return 'Error: '+(e&&e.message?e.message:String(e))+'\n'; });
+  };
+
+  // qdosType — display file contents.
+  // HOST: calls dosLoad(file) and returns content as string.
+  // GUEST: calls localLoad(file) and returns content as string.
+  window.qdosType = function (cmd) {
+    var file = String(cmd||'').replace(/^type\s+/i,'').trim();
+    if (!file) return Promise.resolve('Error: filename required\n');
+    if (HOST) {
+      if (typeof dosLoad !== 'function') return Promise.resolve('Error: DOS not available\n');
+      return Promise.resolve(dosLoad(file)).then(function(c){
+        if (c===null||c===undefined) return 'Error: file not found\n';
+        return String(c)+'\n';
+      }).catch(function(e){ return 'Error: '+(e&&e.message?e.message:String(e))+'\n'; });
+    }
+    return localLoad(file).then(function(c){
+      if (c===null||c===undefined) return 'Error: file not found\n';
+      return String(c)+'\n';
+    }).catch(function(e){ return 'Error: '+(e&&e.message?e.message:String(e))+'\n'; });
+  };
+
+  // qdosLoad — load and display file contents (alias for qdosType with "load" prefix).
+  window.qdosLoad = function (cmd) {
+    return window.qdosType(String(cmd||'').replace(/^load\s+/i,'type '));
+  };
+}());
+
+//
 // command.js (modified)
 //
 function init_command_js() {
- window.command=function(cmd) {
+ window.command=async function(cmd) {
   if (RUN != "qandy.js") {
     print("\n");
     try { input(cmd); } catch (e) { /* ignore */ }
     // this needs testing AFTER run command works
     LINE = ""; CURP = 0; LINEX = CURX; LINEY = CURY;
-    pokeRefresh()
-  } else {
-    // system commands
-    print("\n");
-    // Normalize command
-    var cmd=String(cmd || '').trim();
-    switch (cmd) {
-      case 'cls':
-        SYNC=0; pokeCursorOff();
-        pokeText(0,0," ",800); pokeColor(0,0,CURFG, CURBG, 800); pokeAttr(0,0,0, 800);
-        SYNC=1; pokeRefresh(); CURX=0; CURY=0; LINEX=0; LINEY=0; pokeCursorOn(); return;
-      case 'whoami':
-        var context = HOST ? "HOST (sysop access)" : "GUEST (user sandbox)";
-        print("\n"+context+"\n"); print("URL:"+window.location.href+"\n");
-        print("localStorage: " + (typeof localStorage !== 'undefined' ? "yes" : "no") + "\n\n");
-        return;
-      case 'hostname':
-        print("\nHOST=" + HOST + "\n");
-        print("GUEST=" + GUEST + "\n");
-        print("RUN=" + RUN + "\n");
-        print("Parent is: " + (window.parent === window ? "self" : "parent iframe") + "\n\n");
-        return;
-      case 'sysop':
-        if (GUEST) {
-          try {
-            window.parent.postMessage({ type: 'guest-action', action: 'show-host', success: true }, '*');
-          } catch (e) {
-            print("Error bringing host forward: " + String(e) + "\n");
-          }
-        }
-        pokeRefresh(); return;
-      case 'user':
-        if (HOST) {
-          try {
-            var hostEl = document.getElementById('txt');
-            var hostKb = document.getElementById('host-keyboard');
-            var guestKb = document.getElementById('guest-keyboard');
-            var vm = document.getElementById('vm-container') || window._vmContainer || null;
-            var iframe = document.getElementById('vm-iframe') || window._vmIframe || null;
-            if (hostEl) { hostEl.style.display = 'none'; hostEl.style.visibility = 'hidden'; hostEl.style.pointerEvents = 'none'; }
-            if (hostKb) { hostKb.style.display = 'none'; hostKb.style.visibility = 'hidden'; hostKb.style.pointerEvents = 'none'; }
-            if (vm) {
-              vm.style.display = 'block'; vm.style.visibility = 'visible'; vm.style.pointerEvents = 'auto';
-              try {
-                vm.style.position = vm.style.position || 'absolute';
-                vm.style.zIndex = String(Math.max(parseInt(vm.style.zIndex || 0, 10) || 100, 1000));
-              } catch (e) {}
-            }
-            if (iframe) {
-              iframe.style.display = 'block'; iframe.style.visibility = 'visible'; iframe.style.pointerEvents = 'auto';
-              try { iframe.style.zIndex = vm && vm.style && vm.style.zIndex ? String(parseInt(vm.style.zIndex,10) + 1) : '1001'; } catch (e) {}
-            }
-            if (guestKb) {
-              guestKb.style.display = 'block'; guestKb.style.visibility = 'visible'; guestKb.style.pointerEvents = 'auto';
-              try {
-                guestKb.style.position = guestKb.style.position || 'absolute';
-                // put guest keyboard above vm-container
-                var vmZ = vm && vm.style && vm.style.zIndex ? parseInt(vm.style.zIndex,10) : 1000;
-                guestKb.style.zIndex = String(Math.max(parseInt(guestKb.style.zIndex || 0,10) || (vmZ + 1), vmZ + 1));
-              } catch (e) {}
-            }
-            if (hostEl) { hostEl.style.pointerEvents = 'none'; }
-            if (hostKb) { hostKb.style.pointerEvents = 'none'; hostKb.style.visibility = 'hidden'; }
-            try {
-              if (iframe) {
-                iframe.setAttribute && iframe.setAttribute('tabindex', '0'); // make focusable
-                try { iframe.focus(); } catch (e) { console.warn('iframe.focus failed', e); }
-                try { if (iframe.contentWindow && typeof iframe.contentWindow.focus === 'function') iframe.contentWindow.focus(); } catch (e) { console.warn('iframe.contentWindow.focus failed', e); }
-                try { 
-                  var doc = iframe.contentDocument || (iframe.contentWindow && iframe.contentWindow.document);
-                  if (doc && doc.body && typeof doc.body.focus === 'function') doc.body.focus();
-                } catch (e) { /* cross-origin or not accessible; ignore */ }
-                setTimeout(function() {
-                  try { iframe.focus(); } catch (e) {}
-                  try { if (iframe.contentWindow && typeof iframe.contentWindow.focus === 'function') iframe.contentWindow.focus(); } catch (e) {}
-                }, 50);
-              }
-            } catch (errFocus) {
-              console.warn('focus restore attempted but failed', errFocus);
-            }
-            console.log('Attempted to focus guest iframe; activeElement is:', document.activeElement);
-          } catch (err) {
-            console.error('focusGuestIframe failed', err);
-          }
-        }
-        pokeRefresh();
-        return;      
-
-      default:
-        // fall through to existing handlers below
-        break;
-    }
-
-    // existing .js loader
-    if (cmd.slice(-3) === ".js") {
-      //keysoff();
-      if (HOST) { 
-        var scriptName = String(cmd || '').trim();
-        const prg=document.createElement('script');
-        prg.src=cmd;
-        prg.onload = {  }
-        prg.onerror=() => { print("Error loading program\n"); keyon = 1; }
-        document.head.appendChild(prg);
-        line="";
-      } else {
-        // <guest> machine requests .js file from the <host> and executes it as inline script
-        var scriptName = String(cmd || '').trim();
-        window.parent.postMessage({ type: 'request-script', id: scriptName, name: scriptName }, '*');
-      }
-    } else {
-      evalCode(cmd);
-      pokeCursorOn();
-      LINE=""; CURP = 0;
-      LINEX = CURX; LINEY = CURY;
-      return;
-    }
     pokeRefresh();
+    return;
   }
-}
+  // system commands
+  print("\n");
+  var trimmedCmd = String(cmd || '').trim();
+  switch (trimmedCmd) {
+    case 'cls':
+      SYNC=0; pokeCursorOff();
+      pokeText(0,0," ",800); pokeColor(0,0,CURFG, CURBG, 800); pokeAttr(0,0,0, 800);
+      SYNC=1; pokeRefresh(); CURX=0; CURY=0; LINEX=0; LINEY=0; pokeCursorOn(); return;
+    case 'whoami':
+      var context = HOST ? "HOST (sysop access)" : "GUEST (user sandbox)";
+      print("\n"+context+"\n"); print("URL:"+window.location.href+"\n");
+      print("localStorage: " + (typeof localStorage !== 'undefined' ? "yes" : "no") + "\n\n");
+      return;
+    case 'hostname':
+      print("\nHOST=" + HOST + "\n");
+      print("GUEST=" + GUEST + "\n");
+      print("RUN=" + RUN + "\n");
+      print("Parent is: " + (window.parent === window ? "self" : "parent iframe") + "\n\n");
+      return;
+    case 'sysop':
+      if (GUEST) {
+        try {
+          window.parent.postMessage({ type: 'guest-action', action: 'show-host', success: true }, '*');
+        } catch (e) {
+          print("Error bringing host forward: " + String(e) + "\n");
+        }
+      }
+      pokeRefresh(); return;
+    case 'user':
+      if (HOST) {
+        try {
+          var hostEl = document.getElementById('txt');
+          var hostKb = document.getElementById('host-keyboard');
+          var guestKb = document.getElementById('guest-keyboard');
+          var vm = document.getElementById('vm-container') || window._vmContainer || null;
+          var iframe = document.getElementById('vm-iframe') || window._vmIframe || null;
+          if (hostEl) { hostEl.style.display = 'none'; hostEl.style.visibility = 'hidden'; hostEl.style.pointerEvents = 'none'; }
+          if (hostKb) { hostKb.style.display = 'none'; hostKb.style.visibility = 'hidden'; hostKb.style.pointerEvents = 'none'; }
+          if (vm) {
+            vm.style.display = 'block'; vm.style.visibility = 'visible'; vm.style.pointerEvents = 'auto';
+            try {
+              vm.style.position = vm.style.position || 'absolute';
+              vm.style.zIndex = String(Math.max(parseInt(vm.style.zIndex || 0, 10) || 100, 1000));
+            } catch (e) {}
+          }
+          if (iframe) {
+            iframe.style.display = 'block'; iframe.style.visibility = 'visible'; iframe.style.pointerEvents = 'auto';
+            try { iframe.style.zIndex = vm && vm.style && vm.style.zIndex ? String(parseInt(vm.style.zIndex,10) + 1) : '1001'; } catch (e) {}
+          }
+          if (guestKb) {
+            guestKb.style.display = 'block'; guestKb.style.visibility = 'visible'; guestKb.style.pointerEvents = 'auto';
+            try {
+              guestKb.style.position = guestKb.style.position || 'absolute';
+              // put guest keyboard above vm-container
+              var vmZ = vm && vm.style && vm.style.zIndex ? parseInt(vm.style.zIndex,10) : 1000;
+              guestKb.style.zIndex = String(Math.max(parseInt(guestKb.style.zIndex || 0,10) || (vmZ + 1), vmZ + 1));
+            } catch (e) {}
+          }
+          if (hostEl) { hostEl.style.pointerEvents = 'none'; }
+          if (hostKb) { hostKb.style.pointerEvents = 'none'; hostKb.style.visibility = 'hidden'; }
+          try {
+            if (iframe) {
+              iframe.setAttribute && iframe.setAttribute('tabindex', '0'); // make focusable
+              try { iframe.focus(); } catch (e) { console.warn('iframe.focus failed', e); }
+              try { if (iframe.contentWindow && typeof iframe.contentWindow.focus === 'function') iframe.contentWindow.focus(); } catch (e) { console.warn('iframe.contentWindow.focus failed', e); }
+              try { 
+                var doc = iframe.contentDocument || (iframe.contentWindow && iframe.contentWindow.document);
+                if (doc && doc.body && typeof doc.body.focus === 'function') doc.body.focus();
+              } catch (e) { /* cross-origin or not accessible; ignore */ }
+              setTimeout(function() {
+                try { iframe.focus(); } catch (e) {}
+                try { if (iframe.contentWindow && typeof iframe.contentWindow.focus === 'function') iframe.contentWindow.focus(); } catch (e) {}
+              }, 50);
+            }
+          } catch (errFocus) {
+            console.warn('focus restore attempted but failed', errFocus);
+          }
+          console.log('Attempted to focus guest iframe; activeElement is:', document.activeElement);
+        } catch (err) {
+          console.error('focusGuestIframe failed', err);
+        }
+      }
+      pokeRefresh();
+      return;
 
-window.evalCode=function(code) {
+    default:
+      // fall through to DOS command handlers below
+      break;
+  }
+  
+  // DOS commands — HOST/GUEST branching is handled inside the qdos* wrappers.
+  if (trimmedCmd.endsWith('.js')) {
+    var result = await qdosScript(trimmedCmd);
+    if (result !== true) print(String(result) + '\n');
+    pokeRefresh(); return;
+  }
+  
+  
+  if (trimmedCmd === 'dir') { 
+    print(await qdosDir(trimmedCmd));
+    pokeRefresh(); return;
+  }
+  
+  if (/^delete\s+/i.test(trimmedCmd)) {  
+    print(await qdosDelete(trimmedCmd));
+  } else if (/^exists\s+/i.test(trimmedCmd)) {
+    print(await qdosExists(trimmedCmd));
+  } else if (/^rename\s+/i.test(trimmedCmd)) {
+    print(await qdosRename(trimmedCmd));
+  } else if (/^type\s+/i.test(trimmedCmd)) {
+    print(await qdosType(trimmedCmd));
+  } else if (/^load\s+/i.test(trimmedCmd)) {
+    print(await qdosLoad(trimmedCmd));
+  } else if (/^mount(\s|$)/i.test(trimmedCmd)) {
+    print(await qdosMount(trimmedCmd));
+  } else {
+    await evalCode(trimmedCmd);
+    pokeCursorOn();
+    LINE=""; CURP = 0;
+    LINEX = CURX; LINEY = CURY;
+    return;
+  }
+  pokeRefresh();
+ }
+
+ window.evalCode=async function(code) {
   try {
     var trimmed = String(code).trim();
     var simpleNameRE = /^[$A-Za-z_][$A-Za-z0-9_]*(?:\s*\.\s*[$A-Za-z_][$A-Za-z0-9_]*)*$/;
@@ -3599,7 +3839,7 @@ window.evalCode=function(code) {
     print("Error: " + error.message + "\n\n");
     return false;
   }
-}
+ }
 
 // Signal that command.js is ready
 if (typeof window.qandySignalReady === 'function') {
