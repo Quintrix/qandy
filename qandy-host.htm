@@ -919,12 +919,35 @@ async function createGuest(options) {
     //document.getElementById('qpc')?.style.setProperty('display','none');
 
     function hostMessageHandler(ev) {
+      console.log('hostMessageHandler invoked', {
+      iframe_closure: typeof iframe !== 'undefined' ? iframe : '(no closure var)',
+      window_vmIframe: window._vmIframe || null,
+      found_by_id: document.getElementById('vm-iframe') || document.getElementById('guest-iframe') || null,
+      all_iframes: document.querySelectorAll('iframe').length,
+      ev_source: ev && ev.source
+      });
+
      // ensure message is from our iframe - this line is error can't access property "contentWindow", iframe is undefined 
      if (!iframe.contentWindow || ev.source !== iframe.contentWindow) {
        console.log("Message is not from our iframe");
        return;
      }
      var d = ev.data || {}; if (!d || typeof d !== 'object') return;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
      
      if (d.type === 'request-script' && typeof d.name === 'string') {
        var reqId = d.id; var name = d.name;
