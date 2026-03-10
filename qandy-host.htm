@@ -841,70 +841,19 @@ function init() {
 
 // Build guest HTML and embed HOST_SCRIPTS map (filename -> source string)
 async function assembleGuestHtml(options) {
- // should this be if GUEST==true?
- if (HOST==true) {  
-  options = options || {};
+  // should this be if GUEST==true?
+  if (HOST==true) {  
+    options = options || {};
 
-  // Build HTML parts
-  var parts = [];
-  parts.push('<!doctype html>');
-  parts.push('<html>');
-  parts.push('<head>');
-  parts.push('<meta charset="utf-8">');
-  parts.push('<meta name="viewport" content="width=device-width,initial-scale=1">');
-  // Expose assembled flag and QANDY.mode
-  parts.push('<script>window._QANDY_ASSEMBLED = true; window.QANDY = window.QANDY || {}; window.QANDY.mode = "guest";</' + 'script>');
-  // Embed the HOST_SCRIPTS map (JSON-stringified; escape closing tags)
-  // Guest helper: runHostScript(name) and requestFromHost(name)
-  parts.push('<script>\n' +
-  '/* Guest-side helpers injected by host */\n' +
-  'window.runHostScript = function(name) {\n' +
-      '  try {\n' +
-      '    var code = (window.HOST_SCRIPTS && window.HOST_SCRIPTS[name]) || null;\n' +
-      '    if (!code) {\n' +
-      '      // signal host to fetch it if not present\n' +
-      '      if (window.parent && window.parent !== window) {\n' +
-      '        var id = Math.random().toString(36).slice(2);\n' +
-      '        window._pendingScriptRequests = window._pendingScriptRequests || {};\n' +
-      '        window._pendingScriptRequests[id] = name;\n' +
-      '        window.parent.postMessage({ type: \"request-script\", id: id, name: name }, \"*\");\n' +
-      '      }\n' +
-      '      return false;\n' +
-      '    }\n' +
-      '    // Prefer executeCode() if available (executes in the intended VM context)\n' +
-      '    if (typeof executeCode === \"function\") {\n' +
-      '      executeCode(String(code));\n' +
-      '    } else {\n' +
-      '      // fallback: append a script tag (may be blocked by CSP)\n' +
-      '      var s = document.createElement(\"script\");\n' +
-      '      s.type = \"text/javascript\";\n' +
-      '      s.textContent = code;\n' +
-      '      document.head.appendChild(s);\n' +
-      '    }\n' +
-      '    return true;\n' +
-      '  } catch (e) { console && console.error && console.error(\"runHostScript failed\", e); return false; }\n' +
-      '};\n' +
-      '\n' +
-      '// Listen for host replies containing script text\n' +
-      'window.addEventListener(\"message\", function(ev) {\n' +
-      '  try {\n' +
-      '    var d = ev.data || {};\n' +
-      '    if (d && d.type === \"host-script\" && typeof d.name === \"string\") {\n' +
-      '      // store it and optionally run if requested\n' +
-      '      window.HOST_SCRIPTS = window.HOST_SCRIPTS || {};\n' +
-      '      window.HOST_SCRIPTS[d.name] = d.code === null ? null : String(d.code || \"\") + \"\\n//# sourceURL=\" + d.name;\n' +
-      '      // if we had previously requested this via id, auto-run\n' +
-      '      if (d.id && window._pendingScriptRequests && window._pendingScriptRequests[d.id]) {\n' +
-      '        try { window.runHostScript(d.name); } catch(e) {}\n' +
-      '        delete window._pendingScriptRequests[d.id];\n' +
-      '      }\n' +
-      '    }\n' +
-      '  } catch (e) { }\n' +
-      '}, false);\n' +
-      '\n' +
-      '// starter: optional auto-execution order (run core scripts as needed)\n' +
-      '(function(){ try { /* guest can decide order: e.g. runHostScript(\"memory.js\"); runHostScript(\"video.js\"); runHostScript(\"qandy.js\"); */ } catch(e){} })();\n' +
-      '</' + 'script>');
+    // Build HTML parts
+    var parts = [];
+    parts.push('<!doctype html>');
+    parts.push('<html>');
+    parts.push('<head>');
+    parts.push('<meta charset="utf-8">');
+    parts.push('<meta name="viewport" content="width=device-width,initial-scale=1">');
+    // Expose assembled flag and QANDY.mode
+    parts.push('<script>window._QANDY_ASSEMBLED = true; window.QANDY = window.QANDY || {}; window.QANDY.mode = "guest";</' + 'script>');
     parts.push('</head>');
     parts.push('<body>');
     var bodyHtml =  document.body.innerHTML;
@@ -917,13 +866,13 @@ async function assembleGuestHtml(options) {
   
   function sanitizeScriptText(txt) {
     return String(txt || '')
-      .replace(/[\u200B\uFEFF\u200C\u200D]/g, '')      // strip invisible chars
-      .replace(/<\/script>/gi, '<\\/script>');        // escape closing script sequences
+    .replace(/[\u200B\uFEFF\u200C\u200D]/g, '')      // strip invisible chars
+    .replace(/<\/script>/gi, '<\\/script>');        // escape closing script sequences
   }
- }
+}
   
-  async function createGuest(options) {
-   if (HOST==true) {
+async function createGuest(options) {
+  if (HOST==true) {
     console.info("<host> createGuest() creating <guest>");
     var html = await assembleGuestHtml(options).catch(function (e) { console.error('assembleGuestHtml failed', e); return ''; });
     if (!html) throw new Error('assembleGuestHtml returned empty HTML');
@@ -1008,15 +957,15 @@ async function assembleGuestHtml(options) {
        }
      }
    
-     function isAudioUnlocked() {
-      try {
-        if (window._qandy_audio && window._qandy_audio.unlocked) return true;
-        var ctx = (window._qandy_audio && window._qandy_audio.ctx) || window.audioContext || null;
-        if (ctx && ctx.state === 'running') return true;
-        if (window.audioCtx && window.audioCtx.state === 'running') return true;
-      } catch (e) {}
-      return false;
-     }
+     //function isAudioUnlocked() {
+     //  try {
+     //    if (window._qandy_audio && window._qandy_audio.unlocked) return true;
+     //    var ctx = (window._qandy_audio && window._qandy_audio.ctx) || window.audioContext || null;
+     //    if (ctx && ctx.state === 'running') return true;
+     //    if (window.audioCtx && window.audioCtx.state === 'running') return true;
+     //  } catch (e) {}
+     //  return false;
+     //}
 
      if (d.type === 'guest-action' && typeof d.action === 'string') {
        try {

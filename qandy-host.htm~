@@ -1141,7 +1141,6 @@ async function assembleGuestHtml(options) {
  
  // expose globally
  window.assembleGuestHtml = assembleGuestHtml;
- window.hostMessageHandler= hostMessageHandler;
 
 async function startup() {
   // Determine guest status (support sync or async isGuest)
