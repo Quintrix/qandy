@@ -1020,6 +1020,9 @@ async function createGuest(options) {
       }
     }
 
+    window.showHost = showHost;
+    window.showGuest = showGuest;
+
     function hostMessageHandler(ev) {
       var iframe = window._vmIframe || document.getElementById('vm-iframe');
       console.log('hostMessageHandler invoked', {
@@ -1351,7 +1354,7 @@ async function startup() {
   }
 
   window.virtualHost = function virtualHost(option) {
-    var showHost = Number(option) === 1;
+    var shouldShowHost = Number(option) === 1;
     var hostEl = findHostElement();
     var iframe = findGuestIframe();
     if (!hostEl || !iframe) {
@@ -1368,7 +1371,7 @@ async function startup() {
       origState.inited = true;
     }
 
-    if (showHost) {
+    if (shouldShowHost) {
       // restore host inline styles
       Object.keys(origState.hostSaved).forEach(function(k){
         var v = origState.hostSaved[k];
