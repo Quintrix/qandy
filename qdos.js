@@ -15,14 +15,6 @@
  *   qdosRename(oldname, newname) — rename a file
  *   qdosType(filename)       — display file contents
  *   qdosLoad(filename)       — load and display file contents
- *
- * Simple relay functions (never return objects — only strings or booleans):
- *   localLoad(file)         — returns file contents string or error message
- *   localSave(file, text)   — saves text to file; returns true or error message
- *   localDelete(file)       — delete file; returns true or rejects on error
- *   localExists(file)       — returns boolean
- *   localDir()              — newline-separated filename list
- *   localRename(file, dest) — rename file; returns true or rejects on error
  */
 
 (function (global) {
@@ -68,85 +60,6 @@
       entry.reject(new Error(d.error || 'DOS operation failed'));
     }
   }, false);
-
-  // Pending response map for dos-response messages: reqId -> { handler, timer }
-  var _dosResPending = Object.create(null);
-
-  // Listen for dos-response messages from the host (used by localLoad / localSave)
-  global.addEventListener('message', function (ev) {
-    var d = ev.data;
-    if (!d || typeof d !== 'object') return;
-    if (d.type !== 'dos-response') return;
-    var id = d.id;
-    if (!id || !_dosResPending[id]) return;
-    var entry = _dosResPending[id];
-    clearTimeout(entry.timer);
-    delete _dosResPending[id];
-    entry.handler(d);
-  }, false);
-
-  // _sendDosMessage(type, payload, timeoutMs, handler) — send a simple relay message and call
-  // handler(d) with the dos-response.  Never rejects; the handler is responsible
-  // for calling resolve with a string or boolean.
-  function _sendDosMessage(type, payload, timeoutMs, handler) {
-    return new Promise(function (resolve) {
-      if (!global.parent || global.parent === global) {
-        return resolve(type + ': no host parent frame available');
-      }
-      var id = _nextId();
-      var msg = { type: type, id: id };
-      if (payload) {
-        var keys = Object.keys(payload);
-        for (var i = 0; i < keys.length; i++) msg[keys[i]] = payload[keys[i]];
-      }
-      var timer = setTimeout(function () {
-        delete _dosResPending[id];
-        resolve(type + ': timeout waiting for host response');
-      }, timeoutMs || 8000);
-      _dosResPending[id] = {
-        handler: function (d) { handler(d, resolve); },
-        timer: timer
-      };
-      try {
-        global.parent.postMessage(msg, '*');
-      } catch (e) {
-        clearTimeout(timer);
-        delete _dosResPending[id];
-        resolve(String(e));
-      }
-    });
-  }
-
-  // localSave(file, text) — returns Promise resolving to true or error message string
-  function localSave(file, text) {
-    return _sendDosMessage('localSave', { file: file, data: (text == null ? '' : String(text)) }, 8000, function (d, resolve) {
-      if (d.success) {
-        resolve(true);
-      } else {
-        resolve(String(d.error || 'localSave: operation failed'));
-      }
-    });
-  }
-
-  // localLoad(file) — returns Promise resolving to file contents string or error message
-  function localLoad(file) {
-  	 return _sendDosAction('localLoad', { file: file });
-  }
-
-  // localDelete(file) — returns Promise resolving to true or rejects on error
-  function localDelete(file) {
-    return _sendDosAction('dos-delete', { file: file });
-  }
-
-  // localExists(file) — returns Promise resolving to boolean
-  function localExists(file) {
-    return _sendDosAction('dos-exists', { file: file });
-  }
-
-  // localRename(file, dest) — returns Promise resolving to true or rejects on error
-  function localRename(file, dest) {
-    return _sendDosAction('dos-rename', { file: file, dest: dest });
-  }
 
   // Send a guest-action message to the host and return a Promise for the result
   function _sendDosAction(action, payload, timeoutMs) {
@@ -243,13 +156,12 @@
 
   async function qdosDir() {
     if (global.HOST) {
-      if (typeof global.dosDir !== 'function') return Promise.resolve('Error: no dosDir()\n');
-      print(await dosDir());
-      return;
+      if (typeof global.dosDir !== 'function') return 'Error: no dosDir()\n';
+      try { return await dosDir(); } catch (e) { return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n'; }
     }
-    if (typeof global.localDir !== 'function') return Promise.resolve('Error: no localDir()\n');
-    print(await _sendDosAction('localDir', {});
-    return;
+    return _sendDosAction('localDir').catch(function (e) {
+      return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+    });
   }
 
   //function qdosMount(device) {
@@ -277,7 +189,7 @@
 
 
     }
-    return localDelete(file).then(function () {
+    return _sendDosAction('localDelete', { file: file }).then(function () {
       return 'Deleted: ' + file + '\n';
     }).catch(function (e) {
       return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
@@ -297,7 +209,7 @@
         return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
       });
     }
-    return localExists(file).then(function (result) {
+    return _sendDosAction('localExists', { file: file }).then(function (result) {
       return (result ? 'true' : 'false') + '\n';
     }).catch(function (e) {
       return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
@@ -317,7 +229,7 @@
         return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
       });
     }
-    return localRename(src, dst).then(function () {
+    return _sendDosAction('localRename', { file: src, dest: dst }).then(function () {
       return 'Renamed: ' + src + ' -> ' + dst + '\n';
     }).catch(function (e) {
       return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
@@ -338,7 +250,7 @@
         return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
       });
     }
-    return localLoad(file).then(function (content) {
+    return _sendDosAction('localLoad', { file: file }).then(function (content) {
       if (content === null || content === undefined) return 'Error: file not found\n';
       return String(content) + '\n';
     }).catch(function (e) {
@@ -352,12 +264,6 @@
     return qdosType(file);
   }
 
-  global.localLoad   = localLoad;
-  global.localSave   = localSave;
-  global.localDelete = localDelete;
-  global.localExists = localExists;
-  global.localDir    = localDir;
-  global.localRename = localRename;
   global.qdosScript  = qdosScript;
   global.qdosDir     = qdosDir;
   //global.qdosMount   = qdosMount;
