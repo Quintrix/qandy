@@ -1287,6 +1287,7 @@ async function createGuest(options) {
     return {vmIframe: iframe, container: vmContainer, blobUrl: blobUrl };
    }
   }
+ }
  
  
  // expose globally
@@ -3664,7 +3665,7 @@ function init_command_js() {
       case "dir":
         print(await qdosDir());
         return;
-      case "load";
+      case "load":
         qdosLoad(f);
         return;
       case "delete":
