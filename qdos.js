@@ -117,26 +117,20 @@
     });
   }
 
-  // localLoad(file) — returns Promise resolving to file contents string or error message
-  function localLoad(file) {
-    return _sendDosMessage('dosLoad', { file: file }, 8000, function (d, resolve) {
-      if (d.success) {
-        resolve(d.data !== undefined && d.data !== null ? String(d.data) : '');
-      } else {
-        resolve(String(d.error || 'localLoad: operation failed'));
-      }
-    });
-  }
-
   // localSave(file, text) — returns Promise resolving to true or error message string
   function localSave(file, text) {
-    return _sendDosMessage('dosSave', { file: file, data: (text == null ? '' : String(text)) }, 8000, function (d, resolve) {
+    return _sendDosMessage('localSave', { file: file, data: (text == null ? '' : String(text)) }, 8000, function (d, resolve) {
       if (d.success) {
         resolve(true);
       } else {
         resolve(String(d.error || 'localSave: operation failed'));
       }
     });
+  }
+
+  // localLoad(file) — returns Promise resolving to file contents string or error message
+  function localLoad(file) {
+  	 return _sendDosAction('localLoad', { file: file });
   }
 
   // localDelete(file) — returns Promise resolving to true or rejects on error
@@ -252,42 +246,25 @@
     });
   }
 
-  // qdosDir() — display directory listing.
-  // HOST: calls dosDir() and returns result as string.
-  // GUEST: calls localDir() and returns result as string.
-  function qdosDir() {
+  async function qdosDir() {
     if (global.HOST) {
-      if (typeof global.dosDir !== 'function') return Promise.resolve('Error: DOS not available\n');
-      return Promise.resolve(global.dosDir()).then(function (result) {
-        return String(result !== null && result !== undefined ? result : '') + '\n';
-      }).catch(function (e) {
-        return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
-      });
+      if (typeof global.dosDir !== 'function') return Promise.resolve('Error: no dosDir()\n');
+      print(await dosDir());
+      return;
     }
-    return localDir().then(function (result) {
-      return String(result !== null && result !== undefined ? result : '') + '\n';
-    }).catch(function (e) {
-      return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
-    });
+    if (typeof global.localDir !== 'function') return Promise.resolve('Error: no localDir()\n');
+    print(await localDir());
+    return;
   }
 
-  // qdosMount(device) — mount a device (e.g. "local").
-  // HOST: calls dosMount() and returns result as string.
-  // GUEST: always reports "localStorage" (the only device available to guests).
-  function qdosMount(device) {
-    if (global.HOST) {
-      if (typeof global.dosMount !== 'function') return Promise.resolve('Error: DOS not available\n');
-      return Promise.resolve(global.dosMount(device || null)).then(function (result) {
-        if (result !== null && typeof result === 'object') {
-          return (result.error ? 'Error: ' + result.error : 'true') + '\n';
-        }
-        return String(result !== null && result !== undefined ? result : '') + '\n';
-      }).catch(function (e) {
-        return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
-      });
-    }
-    return Promise.resolve('localStorage\n');
-  }
+  //function qdosMount(device) {
+  //  if (global.HOST) {
+  //    if (typeof global.dosMount !== 'function') return Promise.resolve('Error: no dosMount()\n');
+  //    print(await dosDir());
+  //    return;
+  //  }
+  //  print(await localDir());
+  //}
 
   // qdosDelete(file) — delete a file.
   // HOST: calls dosDelete(file) and returns result as string.
@@ -296,11 +273,14 @@
     if (!file) return Promise.resolve('Error: filename required\n');
     if (global.HOST) {
       if (typeof global.dosDelete !== 'function') return Promise.resolve('Error: DOS not available\n');
-      return Promise.resolve(global.dosDelete(file)).then(function () {
-        return 'Deleted: ' + file + '\n';
+      return Promise.resolve(global.dosDelete(file)).then(function (result) {
+        return (typeof result === 'string') ? result + '\n' : result;
       }).catch(function (e) {
-        return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+      var msg = (e && e.message ? e.message : String(e));
+      return 'Error: ' + msg + '\n';
       });
+
+
     }
     return localDelete(file).then(function () {
       return 'Deleted: ' + file + '\n';

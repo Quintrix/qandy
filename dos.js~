@@ -637,7 +637,7 @@ var DEVICE = 'none';
     }
     var mres = _saveManifest(manifest);
     if (mres === 'Error: Disk Full') return 'Error: Disk Full';
-    return 'done\n';
+    return 'done\n";
   };
 
   // dosRename(file, dest)
