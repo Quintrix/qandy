@@ -143,11 +143,6 @@
     return _sendDosAction('dos-exists', { file: file });
   }
 
-  // localDir() — returns Promise resolving to newline-separated filename list
-  function localDir() {
-    return _sendDosAction('dos-list', {});
-  }
-
   // localRename(file, dest) — returns Promise resolving to true or rejects on error
   function localRename(file, dest) {
     return _sendDosAction('dos-rename', { file: file, dest: dest });
@@ -157,7 +152,7 @@
   function _sendDosAction(action, payload, timeoutMs) {
     return new Promise(function (resolve, reject) {
       if (!global.parent || global.parent === global) {
-        return reject(new Error('qdos: no host parent frame available'));
+        return reject(new Error('Error: no <host>'));
       }
       var id = _nextId();
       var msg = { type: 'guest-action', action: action, id: id };
@@ -167,7 +162,7 @@
       }
       var timer = setTimeout(function () {
         delete _pending[id];
-        reject(new Error('qdos: timeout waiting for host response to ' + action));
+        reject(new Error('Error: timeout ' + action));
       }, timeoutMs || 8000);
       _pending[id] = { resolve: resolve, reject: reject, timer: timer };
       try {
@@ -253,7 +248,7 @@
       return;
     }
     if (typeof global.localDir !== 'function') return Promise.resolve('Error: no localDir()\n');
-    print(await localDir());
+    print(await _sendDosAction('localDir', {});
     return;
   }
 

@@ -1086,32 +1086,18 @@ async function createGuest(options) {
 
         // DOS operations — the guest iframe cannot access localStorage directly,
         // so it delegates file operations to the host via postMessage.
-        case 'dosList': {
-          var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
-          var _LS_PFX = 'qandy_file:';
-          var _LS_MAN = 'qandy_manifest_local';
-          try {
-            var _raw = localStorage.getItem(_LS_MAN);
-            var _list = _raw ? JSON.parse(_raw) : null;
-            if (!Array.isArray(_list)) {
-              _list = [];
-              for (var _i = 0; _i < localStorage.length; _i++) {
-                var _k = localStorage.key(_i);
-                if (_k && _k.indexOf(_LS_PFX) === 0) _list.push(_k.substring(_LS_PFX.length));
-              }
-            }
-            if (_dosIframe && _dosIframe.contentWindow) {
-              _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'dosList', id: d.id, success: true, result: _list.join('\n') }, '*');
-            }
-          } catch (_e) {
-            if (_dosIframe && _dosIframe.contentWindow) {
-              _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'dosList', id: d.id, success: false, error: String(_e) }, '*');
-            }
-          }
+        
+        case 'localDir': {
+          // completely wrong
           break;
         }
 
-        case 'dosSave': {
+        //case 'localList': {
+        //  // completely wrong
+        //  break;
+        //}
+
+        case 'localSave': {
           var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
           var _LS_PFX = 'qandy_file:';
           var _LS_MAN = 'qandy_manifest_local';
@@ -3511,11 +3497,11 @@ window.updateKeyLabels = updateKeyLabels;
   }
 
   // local* relay functions — GUEST-side wrappers that delegate to the host via postMessage.
-  function localDelete(file) { return _qdosSend('localDelete', {file: file}); }
-  function localExists(file) { return _qdosSend('localExists', {file: file}); }
-  function localDir()        { return _qdosSend('localList',   {}); }
-  function localRename(file, dest) { return _qdosSend('dos-rename', {file: file, dest: dest}); }
-  function localLoad(file)   { return _qdosSend('localLoad',   {file: file}); }
+  //function localDelete(file) { return _qdosSend('localDelete', {file: file}); }
+  //function localExists(file) { return _qdosSend('localExists', {file: file}); }
+  //function localDir()        { return _qdosSend('localList',   {}); }
+  //function localRename(file, dest) { return _qdosSend('dos-rename', {file: file, dest: dest}); }
+  //function localLoad(file)   { return _qdosSend('localLoad',   {file: file}); }
 
   // qdosScript — execute a .js file on HOST (inject tag) or GUEST (postMessage).
   window.qdosScript = function (cmd) {
@@ -3739,11 +3725,11 @@ function init_command_js() {
     var c=cmd; if (c.indexOf(" ")>01) { c=cmd.slice(0, cmd.indexOf(" ")); }
     var f=""; f=cmd.slice(cmd.indexOf(" ")+1).trim(); 
     var d=""; if (f.indexOf("/") > -1) { d=f.slice(f.indexOf("/")+1).trim(); f=f.slice(0,f.indexOf("/")).trim(); }
+    console.log("c="+c+" f="+f+" d="+d);    
     if (c.endsWith('.js')) {
       print(await qdosScript(c)+"\n");
       return;
     }
-    console.log("c="+c+" f="+f+" d="+d);
     switch (c) {
       case "dir":
         print(await qdosDir());
