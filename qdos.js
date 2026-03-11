@@ -365,7 +365,7 @@
   global.localRename = localRename;
   global.qdosScript  = qdosScript;
   global.qdosDir     = qdosDir;
-  global.qdosMount   = qdosMount;
+  //global.qdosMount   = qdosMount;
   global.qdosDelete  = qdosDelete;
   global.qdosExists  = qdosExists;
   global.qdosRename  = qdosRename;
