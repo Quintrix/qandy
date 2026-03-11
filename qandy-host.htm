@@ -3695,7 +3695,7 @@ function init_command_js() {
         print(await qdosDir());
         return;
       case "load":
-        qdosLoad(f);
+        print(await qdosLoad(f));
         return;
       case "delete":
         if (f) {

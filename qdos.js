@@ -154,12 +154,18 @@
     });
   }
 
-  async function qdosDir() {
+  function qdosDir() {
     if (global.HOST) {
-      if (typeof global.dosDir !== 'function') return 'Error: no dosDir()\n';
-      try { return await dosDir(); } catch (e) { return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n'; }
+      if (typeof global.dosDir !== 'function') return Promise.resolve('Error: DOS not available\n');
+      return Promise.resolve(global.dosDir()).then(function (result) {
+        return String(result) + '\n';
+      }).catch(function (e) {
+        return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+      });
     }
-    return _sendDosAction('localDir').catch(function (e) {
+    return _sendDosAction('localDir').then(function (result) {
+      return String(result) + '\n';
+    }).catch(function (e) {
       return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
     });
   }
@@ -259,9 +265,25 @@
   }
 
   // qdosLoad(file) — load and display file contents.
-  // Delegates to qdosType with the filename directly.
+  // HOST: calls dosLoad(file) and returns content as string.
+  // GUEST: requests localLoad from host via postMessage.
   function qdosLoad(file) {
-    return qdosType(file);
+    if (!file) return Promise.resolve('Error: filename required\n');
+    if (global.HOST) {
+      if (typeof global.dosLoad !== 'function') return Promise.resolve('Error: DOS not available\n');
+      return Promise.resolve(global.dosLoad(file)).then(function (content) {
+        if (content === null || content === undefined) return 'Error: file not found\n';
+        return String(content) + '\n';
+      }).catch(function (e) {
+        return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+      });
+    }
+    return _sendDosAction('localLoad', { file: file }).then(function (content) {
+      if (content === null || content === undefined) return 'Error: file not found\n';
+      return String(content) + '\n';
+    }).catch(function (e) {
+      return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+    });
   }
 
   global.qdosScript  = qdosScript;
