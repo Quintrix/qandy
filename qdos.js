@@ -7,14 +7,14 @@
  * replies with an 'action-result' message containing the result.
  *
  * Wrapper functions (work transparently on HOST and GUEST):
- *   qdosScript(cmd)         — execute a .js file (HOST: inject tag, GUEST: postMessage)
- *   qdosDir(cmd)            — formatted directory listing
- *   qdosMount(cmd)          — mount device (e.g. "mount local")
- *   qdosDelete(cmd)         — delete a file (e.g. "delete foo.txt")
- *   qdosExists(cmd)         — returns "true" or "false" string
- *   qdosRename(cmd)         — rename (e.g. "rename old.txt / new.txt")
- *   qdosType(cmd)           — display file contents (e.g. "type foo.txt")
- *   qdosLoad(cmd)           — load and display file contents (e.g. "load foo.txt")
+ *   qdosScript(filename)     — execute a .js file (HOST: inject tag, GUEST: postMessage)
+ *   qdosDir()                — directory listing
+ *   qdosMount(device)        — mount device (e.g. "local")
+ *   qdosDelete(filename)     — delete a file
+ *   qdosExists(filename)     — returns "true" or "false" string
+ *   qdosRename(oldname, newname) — rename a file
+ *   qdosType(filename)       — display file contents
+ *   qdosLoad(filename)       — load and display file contents
  *
  * Simple relay functions (never return objects — only strings or booleans):
  *   localLoad(file)         — returns file contents string or error message
@@ -252,10 +252,10 @@
     });
   }
 
-  // qdosDir(cmd) — display directory listing.
+  // qdosDir() — display directory listing.
   // HOST: calls dosDir() and returns result as string.
   // GUEST: calls localDir() and returns result as string.
-  function qdosDir(cmd) {
+  function qdosDir() {
     if (global.HOST) {
       if (typeof global.dosDir !== 'function') return Promise.resolve('Error: DOS not available\n');
       return Promise.resolve(global.dosDir()).then(function (result) {
@@ -271,14 +271,13 @@
     });
   }
 
-  // qdosMount(cmd) — mount a device (e.g. "mount local").
+  // qdosMount(device) — mount a device (e.g. "local").
   // HOST: calls dosMount() and returns result as string.
   // GUEST: always reports "localStorage" (the only device available to guests).
-  function qdosMount(cmd) {
-    var device = String(cmd || '').replace(/^mount\s*/i, '').trim() || null;
+  function qdosMount(device) {
     if (global.HOST) {
       if (typeof global.dosMount !== 'function') return Promise.resolve('Error: DOS not available\n');
-      return Promise.resolve(global.dosMount(device)).then(function (result) {
+      return Promise.resolve(global.dosMount(device || null)).then(function (result) {
         if (result !== null && typeof result === 'object') {
           return (result.error ? 'Error: ' + result.error : 'true') + '\n';
         }
@@ -290,12 +289,10 @@
     return Promise.resolve('localStorage\n');
   }
 
-  // qdosDelete(cmd) — delete a file (e.g. "delete foo.txt").
+  // qdosDelete(file) — delete a file.
   // HOST: calls dosDelete(file) and returns result as string.
   // GUEST: calls localDelete(file) and returns result as string.
-  function qdosDelete(cmd) {
-    var file = String(cmd || '').replace(/^delete\s+/i, '').trim();
-    alert(file);
+  function qdosDelete(file) {
     if (!file) return Promise.resolve('Error: filename required\n');
     if (global.HOST) {
       if (typeof global.dosDelete !== 'function') return Promise.resolve('Error: DOS not available\n');
@@ -312,11 +309,10 @@
     });
   }
 
-  // qdosExists(cmd) — check whether a file exists; resolves to "true" or "false".
+  // qdosExists(file) — check whether a file exists; resolves to "true" or "false".
   // HOST: calls dosExists(file) and returns result as string.
   // GUEST: calls localExists(file) and returns result as string.
-  function qdosExists(cmd) {
-    var file = String(cmd || '').replace(/^exists\s+/i, '').trim();
+  function qdosExists(file) {
     if (!file) return Promise.resolve('Error: filename required\n');
     if (global.HOST) {
       if (typeof global.dosExists !== 'function') return Promise.resolve('Error: DOS not available\n');
@@ -333,14 +329,10 @@
     });
   }
 
-  // qdosRename(cmd) — rename a file (syntax: "rename old.txt / new.txt").
+  // qdosRename(src, dst) — rename a file.
   // HOST: calls dosRename(src, dst) and returns result as string.
   // GUEST: calls localRename(src, dst) and returns result as string.
-  function qdosRename(cmd) {
-    var args = String(cmd || '').replace(/^rename\s+/i, '').trim();
-    var parts = args.split(/\s*\/\s*/);
-    var src = (parts[0] || '').trim();
-    var dst = (parts[1] || '').trim();
+  function qdosRename(src, dst) {
     if (!src || !dst) return Promise.resolve('Error: usage: rename <old> / <new>\n');
     if (global.HOST) {
       if (typeof global.dosRename !== 'function') return Promise.resolve('Error: DOS not available\n');
@@ -357,11 +349,10 @@
     });
   }
 
-  // qdosType(cmd) — display the contents of a file (e.g. "type foo.txt").
+  // qdosType(file) — display the contents of a file.
   // HOST: calls dosLoad(file) and returns content as string.
   // GUEST: calls localLoad(file) and returns content as string.
-  function qdosType(cmd) {
-    var file = String(cmd || '').replace(/^type\s+/i, '').trim();
+  function qdosType(file) {
     if (!file) return Promise.resolve('Error: filename required\n');
     if (global.HOST) {
       if (typeof global.dosLoad !== 'function') return Promise.resolve('Error: DOS not available\n');
@@ -380,10 +371,10 @@
     });
   }
 
-  // qdosLoad(cmd) — load and display file contents (e.g. "load foo.txt").
-  // Delegates to qdosType after substituting the command prefix.
-  function qdosLoad(cmd) {
-    return qdosType(String(cmd || '').replace(/^load\s+/i, 'type '));
+  // qdosLoad(file) — load and display file contents.
+  // Delegates to qdosType with the filename directly.
+  function qdosLoad(file) {
+    return qdosType(file);
   }
 
   global.localLoad   = localLoad;

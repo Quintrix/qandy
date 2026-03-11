@@ -31,43 +31,69 @@ async function command(cmd) {
     }
   } else if (trimmedCmd === 'dir') {
     if (typeof qdosDir === 'function') {
-      print(await qdosDir(trimmedCmd));
+      print(await qdosDir());
     } else {
       await evalCode(trimmedCmd);
     }
   } else if (/^delete\s+/i.test(trimmedCmd)) {
     if (typeof qdosDelete === 'function') {
-      print(await qdosDelete(trimmedCmd));
+      var match = trimmedCmd.match(/^delete\s+(.+)$/i);
+      if (match && match[1]) {
+        print(await qdosDelete(match[1].trim()));
+      } else {
+        print('Error: usage: delete <filename>\n');
+      }
     } else {
       await evalCode(trimmedCmd);
     }
   } else if (/^exists\s+/i.test(trimmedCmd)) {
     if (typeof qdosExists === 'function') {
-      print(await qdosExists(trimmedCmd));
+      var match = trimmedCmd.match(/^exists\s+(.+)$/i);
+      if (match && match[1]) {
+        print(await qdosExists(match[1].trim()));
+      } else {
+        print('Error: usage: exists <filename>\n');
+      }
     } else {
       await evalCode(trimmedCmd);
     }
   } else if (/^rename\s+/i.test(trimmedCmd)) {
     if (typeof qdosRename === 'function') {
-      print(await qdosRename(trimmedCmd));
+      var match = trimmedCmd.match(/^rename\s+(.+?)\s*\/\s*(.+)$/i);
+      if (match && match[1] && match[2]) {
+        print(await qdosRename(match[1].trim(), match[2].trim()));
+      } else {
+        print('Error: usage: rename <old> / <new>\n');
+      }
     } else {
       await evalCode(trimmedCmd);
     }
   } else if (/^type\s+/i.test(trimmedCmd)) {
     if (typeof qdosType === 'function') {
-      print(await qdosType(trimmedCmd));
+      var match = trimmedCmd.match(/^type\s+(.+)$/i);
+      if (match && match[1]) {
+        print(await qdosType(match[1].trim()));
+      } else {
+        print('Error: usage: type <filename>\n');
+      }
     } else {
       await evalCode(trimmedCmd);
     }
   } else if (/^load\s+/i.test(trimmedCmd)) {
     if (typeof qdosLoad === 'function') {
-      print(await qdosLoad(trimmedCmd));
+      var match = trimmedCmd.match(/^load\s+(.+)$/i);
+      if (match && match[1]) {
+        print(await qdosLoad(match[1].trim()));
+      } else {
+        print('Error: usage: load <filename>\n');
+      }
     } else {
       await evalCode(trimmedCmd);
     }
   } else if (/^mount(\s|$)/i.test(trimmedCmd)) {
     if (typeof qdosMount === 'function') {
-      print(await qdosMount(trimmedCmd));
+      var match = trimmedCmd.match(/^mount\s+(.+)$/i);
+      print(await qdosMount(match ? match[1].trim() : null));
     } else {
       await evalCode(trimmedCmd);
     }
