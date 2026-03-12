@@ -877,7 +877,11 @@ function hostMessageHandler(ev) {
   if (d.type === 'guest-action' && typeof d.action === 'string') {
     try {
       switch(d.action) {
-        case 'sysop': { SysOp(); break; }
+      
+        case 'sysop': { Sysop(); break; }
+        
+        
+        
         case 'localDir': {
           var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
           localDir().then(function(result) {
@@ -1119,7 +1123,11 @@ async function createGuest(options) {
   }
 }
 
-function SysOp() { 
+function User() {
+
+}
+
+function Sysop() { 
   console.log('Guest requested to show host');
   // Hide guest VM and guest keyboard only; keep host UI visible
   try {
@@ -3248,7 +3256,7 @@ function init_command_js() {
             }
             console.log('Attempted to focus guest iframe; activeElement is:', document.activeElement);
           } catch (err) {
-            console.info('focusGuestIframe failed', err);
+            console.log('focusGuestIframe failed', err);
           }
         }
         pokeRefresh();

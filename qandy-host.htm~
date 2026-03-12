@@ -657,7 +657,7 @@ function powerOn() {
     width: rect.width + 'px',
     height: rect.height + 'px',
     zIndex: '300',
-    backgr/copilot/c/a099188d-4264-455e-a82e-497623b762c2ound: 'transparent',
+    background: 'transparent',
     pointerEvents: 'auto',
     display: 'flex',
     alignItems: 'center',
@@ -877,7 +877,11 @@ function hostMessageHandler(ev) {
   if (d.type === 'guest-action' && typeof d.action === 'string') {
     try {
       switch(d.action) {
+      
         case 'sysop': { SysOp(); break; }
+        
+        
+        
         case 'localDir': {
           var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
           localDir().then(function(result) {
@@ -3252,7 +3256,7 @@ function init_command_js() {
             }
             console.log('Attempted to focus guest iframe; activeElement is:', document.activeElement);
           } catch (err) {
-            console.info('focusGuestIframe failed', err);
+            console.log('focusGuestIframe failed', err);
           }
         }
         pokeRefresh();
