@@ -878,9 +878,8 @@ function hostMessageHandler(ev) {
     try {
       switch(d.action) {
       
-        case 'sysop': { Sysop(); break; }
-        
-        
+        case 'sysop': { sysop(); break; }
+        case 'user': { user(); break; }
         
         case 'localDir': {
           var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
@@ -1123,11 +1122,22 @@ async function createGuest(options) {
   }
 }
 
-function User() {
-
+function user() {
+  // show <guest> machine
+  console.log('Guest requested to show guest');
+  if (typeof virtualHost === 'function') {
+    virtualHost(0);
+    iframe.contentWindow.postMessage({ 
+      type: 'action-result', 
+      action: 'user', 
+        success: true 
+    }, '*');
+  } else {
+    throw new Error('virtualHost not available');
+ }
 }
 
-function Sysop() { 
+function sysop() { 
   console.log('Guest requested to show host');
   // Hide guest VM and guest keyboard only; keep host UI visible
   try {
@@ -1179,7 +1189,7 @@ function Sysop() {
     }
     console.log('Host shown; guest hidden.');
   } catch (err) {
-    // console.info('SysOp failed', err);
+    // console.info('sysOp failed', err);
   }
 }
 
