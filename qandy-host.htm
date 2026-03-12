@@ -928,7 +928,7 @@ async function createGuest(options) {
       return false;
     }
 
-    function showHost() {
+    window.sysop=function() {
       if (isAudioUnlocked() === false) { init_sound_js(); }
       console.log('Showing host...');
       try {
@@ -1024,17 +1024,12 @@ async function createGuest(options) {
     window.showGuest = showGuest;
 
     function hostMessageHandler(ev) {
+      console.log('hostMessageHandler invoked')
       var iframe = window._vmIframe || document.getElementById('vm-iframe');
-      console.log('hostMessageHandler invoked', {
-        iframe_resolved: iframe || null,
-        window_vmIframe: window._vmIframe || null,
-        found_by_id: document.getElementById('vm-iframe') || document.getElementById('guest-iframe') || null,
-        all_iframes: document.querySelectorAll('iframe').length,
-        ev_source: ev && ev.source
-      });
       if (!iframe || !iframe.contentWindow || ev.source !== iframe.contentWindow) { return; }
       var d = ev.data || {}; if (!d || typeof d !== 'object') return;
       if (d.type === 'request-script' && typeof d.name === 'string') {
+        console.log("LINE 1032"+d.type+" "+d.name);
         var reqId = d.id;
         var name = d.name;
         try {
@@ -1082,22 +1077,13 @@ async function createGuest(options) {
         }
       }
    
+   console.log("LINE 1079");
+   
      if (d.type === 'guest-action' && typeof d.action === 'string') {
        try {
          switch(d.action) {
-           case 'show-guest': {
-             var _sgResult = showGuest();
-             var _sgIframe = window._vmIframe || document.getElementById('vm-iframe');
-             if (_sgIframe && _sgIframe.contentWindow) {
-               _sgIframe.contentWindow.postMessage({
-                 type: 'action-result',
-                 action: 'show-guest',
-                 success: _sgResult
-               }, '*');
-             }
-             break;
-           }
            case 'show-host': {
+             console.log("LINE 1083");
              var _shResult = showHost();
              var _shIframe = window._vmIframe || document.getElementById('vm-iframe');
              if (_shIframe && _shIframe.contentWindow) {
@@ -1109,23 +1095,19 @@ async function createGuest(options) {
              }
              break;
            }
-
-        // DOS operations — the guest iframe cannot access localStorage directly,
-        // so it delegates file operations to the host via postMessage.
-        
-        case 'localDir': {
-          var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
-          localDir().then(function(result) {
-            if (_dosIframe && _dosIframe.contentWindow) {
-              _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'localDir', id: d.id, success: true, result: result }, '*');
-            }
-          }).catch(function(e) {
-            if (_dosIframe && _dosIframe.contentWindow) {
-              _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'localDir', id: d.id, success: false, error: String(e) }, '*');
-            }
-          });
-          break;
-        }
+          case 'localDir': {
+            var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+            localDir().then(function(result) {
+              if (_dosIframe && _dosIframe.contentWindow) {
+                _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'localDir', id: d.id, success: true, result: result }, '*');
+              }
+            }).catch(function(e) {
+              if (_dosIframe && _dosIframe.contentWindow) {
+                _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'localDir', id: d.id, success: false, error: String(e) }, '*');
+              }
+            });
+            break;
+          }
 
         case 'localList': {
           var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
@@ -3457,131 +3439,6 @@ window.updateKeyLabels = updateKeyLabels;
       }
     });
   }
-
-  // local* relay stubs were removed — qdos* GUEST branches now call _qdosSend directly.
-
-  // qdosScript — execute a .js file on HOST (inject tag) or GUEST (postMessage).
-  window.qdosScript = function (cmd) {
-    var name = String(cmd||'').trim();
-    if (!name) return Promise.resolve('Error: filename required');
-    if (!/^[A-Za-z0-9.\-]+\.js$/i.test(name)) return Promise.resolve('Error: invalid filename');
-    if (/^[.\-]/.test(name) || /[.\-]$/.test(name)) return Promise.resolve('Error: invalid filename');
-    if (/\.\./.test(name)) return Promise.resolve('Error: invalid filename');
-    if (name.length > 64) return Promise.resolve('Error: filename too long');
-    return new Promise(function (resolve) {
-      if (HOST) {
-        var prg = document.createElement('script');
-        prg.src = name;
-        prg.onload = function () { resolve('done'); };
-        prg.onerror = function () { resolve('Error: file not found'); };
-        document.head.appendChild(prg);
-      } else {
-        var timer = setTimeout(function () { window.removeEventListener('message', h); resolve('Error: timeout loading '+name); }, 10000);
-        function h(ev) {
-          if (ev.source !== window.parent) return;
-          var d = ev.data||{};
-          if (d.type === 'script-response' && d.id === name) {
-            clearTimeout(timer); window.removeEventListener('message', h);
-            if (!d.success) { resolve(String(d.error||'Error loading script')); }
-            else { try { (0,eval)(String(d.content)+'\n//# sourceURL='+name); resolve('done'); } catch(e) { resolve('Error: '+String(e)); } }
-          }
-        }
-        window.addEventListener('message', h, false);
-        try { window.parent.postMessage({type:'request-script',id:name,name:name},'*'); }
-        catch(e) { clearTimeout(timer); window.removeEventListener('message',h); resolve('Error: '+String(e)); }
-      }
-    });
-  };
-
-  // qdosDir — directory listing.
-  // HOST: calls dosDir() and returns result as string.
-  // GUEST: requests localDir from host via postMessage.
-  window.qdosDir = function () {
-    if (HOST) {
-      if (typeof dosDir !== 'function') return Promise.resolve('Error: DOS not available\n');
-      return Promise.resolve(dosDir()).then(function(r){ return String(r !== null && r !== undefined ? r : '')+'\n'; })
-        .catch(function(e){ return 'Error: '+(e&&e.message?e.message:String(e))+'\n'; });
-    }
-    return _qdosSend('localDir').then(function(r){ return String(r !== null && r !== undefined ? r : '')+'\n'; })
-      .catch(function(e){ return 'Error: '+(e&&e.message?e.message:String(e))+'\n'; });
-  };
-
-  // qdosMount — mount a device (HOST) or report localStorage (GUEST).
-  window.qdosMount = function (device) {
-    if (HOST) {
-      if (typeof dosMount !== 'function') return Promise.resolve('Error: DOS not available\n');
-      return Promise.resolve(dosMount(device || null)).then(function(r){
-        if (r !== null && typeof r === 'object') return (r.error ? 'Error: '+r.error : 'true')+'\n';
-        return String(r !== null && r !== undefined ? r : '')+'\n';
-      }).catch(function(e){ return 'Error: '+(e&&e.message?e.message:String(e))+'\n'; });
-    }
-    return Promise.resolve('localStorage\n');
-  };
-
-  // qdosDelete — delete a file.
-  // HOST: calls dosDelete(file) and returns result as string.
-  // GUEST: requests localDelete from host via postMessage.
-  window.qdosDelete = function (file) {
-    if (!file) return Promise.resolve('Error: filename required\n');
-    if (HOST) {
-      if (typeof dosDelete !== 'function') return Promise.resolve('Error: DOS not available\n');
-      return Promise.resolve(dosDelete(file)).then(function(){ return 'Deleted: '+file+'\n'; })
-        .catch(function(e){ return 'Error: '+(e&&e.message?e.message:String(e))+'\n'; });
-    }
-    return _qdosSend('localDelete', {file: file}).then(function(){ return 'Deleted: '+file+'\n'; })
-      .catch(function(e){ return 'Error: '+(e&&e.message?e.message:String(e))+'\n'; });
-  };
-
-  // qdosExists — check whether a file exists; resolves to "true" or "false".
-  // HOST: calls dosExists(file) and returns result as string.
-  // GUEST: requests localExists from host via postMessage.
-  window.qdosExists = function (file) {
-    if (!file) return Promise.resolve('Error: filename required\n');
-    if (HOST) {
-      if (typeof dosExists !== 'function') return Promise.resolve('Error: DOS not available\n');
-      return Promise.resolve(dosExists(file)).then(function(r){ return (r?'true':'false')+'\n'; })
-        .catch(function(e){ return 'Error: '+(e&&e.message?e.message:String(e))+'\n'; });
-    }
-    return _qdosSend('localExists', {file: file}).then(function(r){ return (r?'true':'false')+'\n'; })
-      .catch(function(e){ return 'Error: '+(e&&e.message?e.message:String(e))+'\n'; });
-  };
-
-  // qdosRename — rename a file.
-  // HOST: calls dosRename(src, dst) and returns result as string.
-  // GUEST: requests localRename from host via postMessage.
-  window.qdosRename = function (src, dst) {
-    if (!src||!dst) return Promise.resolve('Error: usage: rename <old> / <new>\n');
-    if (HOST) {
-      if (typeof dosRename !== 'function') return Promise.resolve('Error: DOS not available\n');
-      return Promise.resolve(dosRename(src,dst)).then(function(){ return 'Renamed: '+src+' -> '+dst+'\n'; })
-        .catch(function(e){ return 'Error: '+(e&&e.message?e.message:String(e))+'\n'; });
-    }
-    return _qdosSend('localRename', {file: src, dest: dst}).then(function(){ return 'Renamed: '+src+' -> '+dst+'\n'; })
-      .catch(function(e){ return 'Error: '+(e&&e.message?e.message:String(e))+'\n'; });
-  };
-
-  // qdosType — display file contents.
-  // HOST: calls dosLoad(file) and returns content as string.
-  // GUEST: requests localLoad from host via postMessage.
-  window.qdosType = function (file) {
-    if (!file) return Promise.resolve('Error: filename required\n');
-    if (HOST) {
-      if (typeof dosLoad !== 'function') return Promise.resolve('Error: DOS not available\n');
-      return Promise.resolve(dosLoad(file)).then(function(c){
-        if (c===null||c===undefined) return 'Error: file not found\n';
-        return String(c)+'\n';
-      }).catch(function(e){ return 'Error: '+(e&&e.message?e.message:String(e))+'\n'; });
-    }
-    return _qdosSend('localLoad', {file: file}).then(function(c){
-      if (c===null||c===undefined) return 'Error: file not found\n';
-      return String(c)+'\n';
-    }).catch(function(e){ return 'Error: '+(e&&e.message?e.message:String(e))+'\n'; });
-  };
-
-  // qdosLoad — load and display file contents.
-  window.qdosLoad = function (file) {
-    return window.qdosType(file);
-  };
 }());
 
 //
@@ -3623,10 +3480,8 @@ function init_command_js() {
           } catch (e) {
             print("Error bringing host forward: " + String(e) + "\n");
           }
-        } else if (HOST) {
-          showHost();
         }
-        return;
+        pokeRefresh(); return;
       case 'user':
         if (HOST) {
           try {
@@ -3714,7 +3569,15 @@ function init_command_js() {
     }
   }
 
-
+  function qdosDir() {
+    if (HOST) { return dosDir()+"\n"; }
+    //@@ post message goes here 
+    return _sendDosAction('localDir').then(function (result) {
+      return String(result) + '\n';
+    }).catch(function (e) {
+      return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+    });
+  }
 
  window.evalCode=async function(code) {
   try {
@@ -4547,21 +4410,15 @@ window.print=function(t) {
 pokeCursorOn(); pokeRefresh();
 
 if (HOST) {
-  var s = document.createElement('script');
-  s.id = 'dos.js';
-  s.src = 'dos.js';
-  s.onload = function() {
-    try {
-      dosMount("local");
-    } catch (e) {
-      print("Error mounting \'local\'\n\n");
-    }
-  };
-  s.onerror = function() { print("Error loading dos.js\n"); };
-  document.head.appendChild(s);
+  var s=document.createElement('script');
+  s.id='dos.js';
+  s.src='dos.js';
+  s.onload=function() { try { dosMount("local"); } catch (e) { print("Error mounting \'local\'\n\n"); }};
+  document.head.appendChild(s);  
   systemReady();
 } else {
   systemReady();
+  
 }
 
 function systemReady() {
