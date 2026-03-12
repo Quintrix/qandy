@@ -872,46 +872,42 @@ async function assembleGuestHtml(options) {
   
 
 function hostMessageHandler(ev) {
-      alert("LINE 931");
-      //if (!iframe.contentWindow || ev.source !== iframe.contentWindow) {
-      //  console.log("Message is not from our iframe");
-      //  return;
-      //}
-      var iframe = window._vmIframe || document.getElementById('vm-iframe');
-      //if (!iframe || !iframe.contentWindow || ev.source !== iframe.contentWindow) { return; }
-      var d = ev.data || {}; if (!d || typeof d !== 'object') return;
+  alert("LINE 931");
+  //if (!iframe.contentWindow || ev.source !== iframe.contentWindow) {
+  //  console.log("Message is not from our iframe");
+  //  return;
+  //}
+  var iframe = window._vmIframe || document.getElementById('vm-iframe');
+  //if (!iframe || !iframe.contentWindow || ev.source !== iframe.contentWindow) { return; }
+  var d = ev.data || {}; if (!d || typeof d !== 'object') return;
   
-     console.log("LINE 1079");
-   
-     if (d.type === 'guest-action' && typeof d.action === 'string') {
-       try {
-         switch(d.action) {
-           case 'show-host': {
-             console.log("LINE 1083");
-             var _shResult = showHost();
-             var _shIframe = window._vmIframe || document.getElementById('vm-iframe');
-             if (_shIframe && _shIframe.contentWindow) {
-               _shIframe.contentWindow.postMessage({
-                 type: 'action-result',
-                 action: 'show-host',
-                 success: _shResult
-               }, '*');
-             }
-             break;
-           }
-          case 'localDir': {
-            var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
-            localDir().then(function(result) {
-              if (_dosIframe && _dosIframe.contentWindow) {
-                _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'localDir', id: d.id, success: true, result: result }, '*');
-              }
-            }).catch(function(e) {
-              if (_dosIframe && _dosIframe.contentWindow) {
-                _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'localDir', id: d.id, success: false, error: String(e) }, '*');
-              }
-            });
-            break;
+  console.log("LINE 1079");
+ 
+  if (d.type === 'guest-action' && typeof d.action === 'string') {
+    try {
+      switch(d.action) {
+        case 'show-host': {
+          console.log("LINE 1083");
+          var _shResult = showHost();
+          var _shIframe = window._vmIframe || document.getElementById('vm-iframe');
+          if (_shIframe && _shIframe.contentWindow) {
+             _shIframe.contentWindow.postMessage({ type: 'action-result', action: 'show-host', success: _shResult}, '*');
           }
+          break;
+        }
+        case 'localDir': {
+          var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+          localDir().then(function(result) {
+            if (_dosIframe && _dosIframe.contentWindow) {
+              _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'localDir', id: d.id, success: true, result: result }, '*');
+            }
+          }).catch(function(e) {
+            if (_dosIframe && _dosIframe.contentWindow) {
+              _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'localDir', id: d.id, success: false, error: String(e) }, '*');
+            }
+          });
+          break;
+        }
 
         case 'localList': {
           var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
@@ -941,7 +937,7 @@ function hostMessageHandler(ev) {
           break;
         }
 
-        case 'localSave': {
+        case 'localSstartup() failed ReferenceError: createGuest is not definedave': {
           var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
           localSave(d.file, d.data).then(function(result) {
             if (_dosIframe && _dosIframe.contentWindow) {
@@ -1070,7 +1066,7 @@ function hostMessageHandler(ev) {
           }
           break;
         }
-       }
+      }
     } catch (e) {
       console.error('Error handling guest action:', e);
       var _errIframe = window._vmIframe || document.getElementById('vm-iframe');
@@ -1084,6 +1080,8 @@ function hostMessageHandler(ev) {
       }
     }
   }
+}  
+
 
 async function createGuest(options) {
   if (HOST==true) {
@@ -1155,7 +1153,7 @@ async function createGuest(options) {
   return {vmIframe: iframe, container: vmContainer, blobUrl: blobUrl };
  }
 }
-}
+
  
  
  // expose globally

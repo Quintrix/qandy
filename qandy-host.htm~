@@ -870,104 +870,44 @@ async function assembleGuestHtml(options) {
   }
 }
   
-async function createGuest(options) {
-  if (HOST==true) {
-    console.info("<host> createGuest() creating <guest>");
-    var html = await assembleGuestHtml(options).catch(function (e) { console.error('assembleGuestHtml failed', e); return ''; });
-    if (!html) throw new Error('assembleGuestHtml returned empty HTML');
 
-    var vmContainer = document.createElement('div');
-    vmContainer.id = 'vm-container';
-    vmContainer.style.position = 'absolute';
-    vmContainer.style.left = '0px';
-    vmContainer.style.top = '0px';
-    vmContainer.style.width = '350px';
-    vmContainer.style.height = '650px';
-    vmContainer.style.zIndex = String(options.zIndex || 100);
-    vmContainer.style.background = 'transparent';
-    vmContainer.style.border = '0px';
-    vmContainer.style.borderRadius = '0px';
-    vmContainer.style.overflow = 'hidden';
-
-    var iframe = document.createElement('iframe');
-    iframe.id = options.iframeId || 'vm-iframe';
-    iframe.setAttribute('sandbox', 'allow-scripts allow-modals');
-    iframe.setAttribute('title', 'Qandy Virtual Machine');
-    iframe.style.margin = 0;
-    iframe.style.padding = 0;
-    iframe.style.width = '100%';
-    iframe.style.height = '100%';
-    iframe.style.border = '0';
-    iframe.style.display = 'block';
-    iframe.style.overflow = 'hidden';
-    iframe.style.background = 'transparent';
-    vmContainer.appendChild(iframe);
-    document.body.appendChild(vmContainer);
-
-    var blob = new Blob([html], { type: 'text/html' });
-    var blobUrl = URL.createObjectURL(blob);
-    iframe.src = blobUrl;
-
-    iframe._qandyGuestBlobUrl = blobUrl;
-    window._vmIframe = iframe;
-    window._vmContainer = vmContainer;
-
-    document.getElementById('txt')?.style.setProperty('display','none');
-    document.getElementById('keyboard-container')?.style.setProperty('display','none');
-    //document.getElementById('pop')?.style.setProperty('display','none');
-    //document.getElementById('qpc')?.style.setProperty('display','none');
-
-    function isAudioUnlocked() {
-      try {
-        if (window._qandy_audio && window._qandy_audio.unlocked) return true;
-        var ctx = (window._qandy_audio && window._qandy_audio.ctx) || window.audioContext || null;
-        if (ctx && ctx.state === 'running') return true;
-        if (window.audioCtx && window.audioCtx.state === 'running') return true;
-      } catch (e) {}
-      return false;
-    }
-
-    function hostMessageHandler(ev) {
-      console.log("LINE 931");
-      //if (!iframe.contentWindow || ev.source !== iframe.contentWindow) {
-      //  console.log("Message is not from our iframe");
-      //  return;
-      //}
-      var iframe = window._vmIframe || document.getElementById('vm-iframe');
-      //if (!iframe || !iframe.contentWindow || ev.source !== iframe.contentWindow) { return; }
-      var d = ev.data || {}; if (!d || typeof d !== 'object') return;
+function hostMessageHandler(ev) {
+  alert("LINE 931");
+  //if (!iframe.contentWindow || ev.source !== iframe.contentWindow) {
+  //  console.log("Message is not from our iframe");
+  //  return;
+  //}
+  var iframe = window._vmIframe || document.getElementById('vm-iframe');
+  //if (!iframe || !iframe.contentWindow || ev.source !== iframe.contentWindow) { return; }
+  var d = ev.data || {}; if (!d || typeof d !== 'object') return;
   
-     console.log("LINE 1079");
-   
-     if (d.type === 'guest-action' && typeof d.action === 'string') {
-       try {
-         switch(d.action) {
-           case 'show-host': {
-             console.log("LINE 1083");
-             var _shResult = showHost();
-             var _shIframe = window._vmIframe || document.getElementById('vm-iframe');
-             if (_shIframe && _shIframe.contentWindow) {
-               _shIframe.contentWindow.postMessage({
-                 type: 'action-result',
-                 action: 'show-host',
-                 success: _shResult
-               }, '*');
-             }
-             break;
-           }
-          case 'localDir': {
-            var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
-            localDir().then(function(result) {
-              if (_dosIframe && _dosIframe.contentWindow) {
-                _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'localDir', id: d.id, success: true, result: result }, '*');
-              }
-            }).catch(function(e) {
-              if (_dosIframe && _dosIframe.contentWindow) {
-                _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'localDir', id: d.id, success: false, error: String(e) }, '*');
-              }
-            });
-            break;
+  console.log("LINE 1079");
+ 
+  if (d.type === 'guest-action' && typeof d.action === 'string') {
+    try {
+      switch(d.action) {
+        case 'show-host': {
+          console.log("LINE 1083");
+          var _shResult = showHost();
+          var _shIframe = window._vmIframe || document.getElementById('vm-iframe');
+          if (_shIframe && _shIframe.contentWindow) {
+             _shIframe.contentWindow.postMessage({ type: 'action-result', action: 'show-host', success: _shResult}, '*');
           }
+          break;
+        }
+        case 'localDir': {
+          var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+          localDir().then(function(result) {
+            if (_dosIframe && _dosIframe.contentWindow) {
+              _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'localDir', id: d.id, success: true, result: result }, '*');
+            }
+          }).catch(function(e) {
+            if (_dosIframe && _dosIframe.contentWindow) {
+              _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'localDir', id: d.id, success: false, error: String(e) }, '*');
+            }
+          });
+          break;
+        }
 
         case 'localList': {
           var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
@@ -997,7 +937,7 @@ async function createGuest(options) {
           break;
         }
 
-        case 'localSave': {
+        case 'localSstartup() failed ReferenceError: createGuest is not definedave': {
           var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
           localSave(d.file, d.data).then(function(result) {
             if (_dosIframe && _dosIframe.contentWindow) {
@@ -1126,7 +1066,7 @@ async function createGuest(options) {
           }
           break;
         }
-       }
+      }
     } catch (e) {
       console.error('Error handling guest action:', e);
       var _errIframe = window._vmIframe || document.getElementById('vm-iframe');
@@ -1140,6 +1080,65 @@ async function createGuest(options) {
       }
     }
   }
+}  
+
+
+async function createGuest(options) {
+  if (HOST==true) {
+    console.info("<host> createGuest() creating <guest>");
+    var html = await assembleGuestHtml(options).catch(function (e) { console.error('assembleGuestHtml failed', e); return ''; });
+    if (!html) throw new Error('assembleGuestHtml returned empty HTML');
+
+    var vmContainer = document.createElement('div');
+    vmContainer.id = 'vm-container';
+    vmContainer.style.position = 'absolute';
+    vmContainer.style.left = '0px';
+    vmContainer.style.top = '0px';
+    vmContainer.style.width = '350px';
+    vmContainer.style.height = '650px';
+    vmContainer.style.zIndex = String(options.zIndex || 100);
+    vmContainer.style.background = 'transparent';
+    vmContainer.style.border = '0px';
+    vmContainer.style.borderRadius = '0px';
+    vmContainer.style.overflow = 'hidden';
+
+    var iframe = document.createElement('iframe');
+    iframe.id = options.iframeId || 'vm-iframe';
+    iframe.setAttribute('sandbox', 'allow-scripts allow-modals');
+    iframe.setAttribute('title', 'Qandy Virtual Machine');
+    iframe.style.margin = 0;
+    iframe.style.padding = 0;
+    iframe.style.width = '100%';
+    iframe.style.height = '100%';
+    iframe.style.border = '0';
+    iframe.style.display = 'block';
+    iframe.style.overflow = 'hidden';
+    iframe.style.background = 'transparent';
+    vmContainer.appendChild(iframe);
+    document.body.appendChild(vmContainer);
+
+    var blob = new Blob([html], { type: 'text/html' });
+    var blobUrl = URL.createObjectURL(blob);
+    iframe.src = blobUrl;
+
+    iframe._qandyGuestBlobUrl = blobUrl;
+    window._vmIframe = iframe;
+    window._vmContainer = vmContainer;
+
+    document.getElementById('txt')?.style.setProperty('display','none');
+    document.getElementById('keyboard-container')?.style.setProperty('display','none');
+    //document.getElementById('pop')?.style.setProperty('display','none');
+    //document.getElementById('qpc')?.style.setProperty('display','none');
+
+    function isAudioUnlocked() {
+      try {
+        if (window._qandy_audio && window._qandy_audio.unlocked) return true;
+        var ctx = (window._qandy_audio && window._qandy_audio.ctx) || window.audioContext || null;
+        if (ctx && ctx.state === 'running') return true;
+        if (window.audioCtx && window.audioCtx.state === 'running') return true;
+      } catch (e) {}
+      return false;
+    }
 
   window.addEventListener('message', hostMessageHandler, false);
 
@@ -1154,7 +1153,7 @@ async function createGuest(options) {
   return {vmIframe: iframe, container: vmContainer, blobUrl: blobUrl };
  }
 }
-}
+
  
  
  // expose globally
