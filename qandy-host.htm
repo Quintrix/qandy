@@ -928,63 +928,15 @@ async function createGuest(options) {
     }
 
     function hostMessageHandler(ev) {
-      if (!iframe.contentWindow || ev.source !== iframe.contentWindow) {
-        console.log("Message is not from our iframe");
-        return;
-      }
-      var iframe = window._vmIframe || document.getElementById('vm-iframe');
-      if (!iframe || !iframe.contentWindow || ev.source !== iframe.contentWindow) { return; }
-      var d = ev.data || {}; if (!d || typeof d !== 'object') return;
-      
-      //if (d.type === 'request-script' && typeof d.name === 'string') {
-      //  console.log("LINE 1032"+d.type+" "+d.name);
-      //  var reqId = d.id;
-      //  var name = d.name;
-      //  try {
-      //    dosRetrieve(name).then(function(fileContent) {
-      //      var _guestIframe = window._vmIframe || document.getElementById('vm-iframe');
-      //      if (_guestIframe && _guestIframe.contentWindow) {
-      //        if (fileContent === null) {
-      //          _guestIframe.contentWindow.postMessage({
-      //            type: 'script-response',
-      //            id: reqId,
-      //            success: false,
-      //            error: 'File not found'
-      //          }, '*');
-      //        } else {
-      //          _guestIframe.contentWindow.postMessage({
-      //            type: 'script-response',
-      //            id: reqId,
-      //            success: true,
-      //            content: fileContent
-      //          }, '*');
-      //        }
-      //     }
-      //    }).catch(function(e) {
-      //      var _errIframe = window._vmIframe || document.getElementById('vm-iframe');
-      //      if (_errIframe && _errIframe.contentWindow) {
-      //       var errMsg = (e && String(e).indexOf('Disk Full') !== -1) ? 'Error: Disk Full' : String(e);
-      //        _errIframe.contentWindow.postMessage({
-      //          type: 'script-response',
-      //          id: reqId,
-      //          success: false,
-      //          error: errMsg
-      //        }, '*');
-      //      }
-      //    });
-      //  } catch (e) {
-      //    var _errIframe = window._vmIframe || document.getElementById('vm-iframe');
-      //    if (_errIframe && _errIframe.contentWindow) {
-      //      _errIframe.contentWindow.postMessage({
-      //        type: 'script-response',
-      //        id: reqId,
-      //        success: false,
-      //        error: String(e)
-      //      }, '*');
-      //    }
-      //  }
+      alert("LINE 931");
+      //if (!iframe.contentWindow || ev.source !== iframe.contentWindow) {
+      //  console.log("Message is not from our iframe");
+      //  return;
       //}
-   
+      var iframe = window._vmIframe || document.getElementById('vm-iframe');
+      //if (!iframe || !iframe.contentWindow || ev.source !== iframe.contentWindow) { return; }
+      var d = ev.data || {}; if (!d || typeof d !== 'object') return;
+  
      console.log("LINE 1079");
    
      if (d.type === 'guest-action' && typeof d.action === 'string') {
@@ -1188,21 +1140,21 @@ async function createGuest(options) {
       }
     }
   }
+
   window.addEventListener('message', hostMessageHandler, false);
 
-    iframe._qandyGuestCleanup = function () {
-      try { URL.revokeObjectURL(blobUrl); } catch (e) {}
-      window.removeEventListener('message', hostMessageHandler, false);
-      if (iframe && iframe.parentNode) iframe.parentNode.removeChild(iframe);
-      if (vmContainer && vmContainer.parentNode) vmContainer.parentNode.removeChild(vmContainer);
-      window._vmIframe = null;
-      window._vmContainer = null;
-    };
-
-    return {vmIframe: iframe, container: vmContainer, blobUrl: blobUrl };
-   }
-  }
+  iframe._qandyGuestCleanup = function () {
+    try { URL.revokeObjectURL(blobUrl); } catch (e) {}
+    window.removeEventListener('message', hostMessageHandler, false);
+    if (iframe && iframe.parentNode) iframe.parentNode.removeChild(iframe);
+    if (vmContainer && vmContainer.parentNode) vmContainer.parentNode.removeChild(vmContainer);
+    window._vmIframe = null;
+    window._vmContainer = null;
+  };
+  return {vmIframe: iframe, container: vmContainer, blobUrl: blobUrl };
  }
+}
+}
  
  
  // expose globally
