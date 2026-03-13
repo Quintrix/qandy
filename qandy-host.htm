@@ -3325,6 +3325,7 @@ window.updateKeyLabels = updateKeyLabels;
 //
 function init_command_js() {
   window.command=async function(cmd) {
+    alert(cmd);
     if (RUN != "qandy.js") {
       print("\n");
       try { input(cmd); } catch (e) { /* ignore */ }
@@ -3546,6 +3547,7 @@ window.__qandy_pending = window.__qandy_pending || Object.create(null);
 window.__qandy_reqCounter = window.__qandy_reqCounter || 0;
 var _pending = window.__qandy_pending;
 
+
 async function qdosScript(name) {
   var nm = (typeof name === 'string') ? name.trim() : '';
   if (!nm) return Promise.reject(new Error('invalid filename'));
@@ -3554,29 +3556,88 @@ async function qdosScript(name) {
     if (typeof n !== 'string') return false;
     if (n.length === 0 || n.length > 128) return false;
     if (n.indexOf('..') !== -1) return false;
-    // allow letters, digits, spaces, dot, dash, underscore and slashes
     return /^[A-Za-z0-9 _.\-\/]+$/.test(n);
   }
   if (!_isValid(nm)) return Promise.reject(new Error('invalid filename'));
-  if (typeof HOST === 'undefined' || !HOST) {
-    try {
-      var content = await qdosXmitDos('localLoad', { file: nm });
-      if (content === null || typeof content === 'undefined') content = '';
-      try {
-        if (content.substring(0,5)=="Error") {
-          return content;
-        } else {
-          await evalCode(String(content));
-          return 'done';
-        }
-      } catch (e) {
-        return Promise.reject(new Error('execution failed: ' + (e && e.message ? e.message : String(e))));
-      }
-    } catch (err) {
-      return Promise.reject(new Error('load failed: ' + (err && err.message ? err.message : String(err))));
-    }
+  if (typeof HOST !== 'undefined' && HOST) { return "Error: input 'user' to run scripts"; }
+  // Guest: ask host for file contents
+  var content;
+  try {
+    content = await qdosXmitDos('localLoad', { file: nm });
+  } catch (e) {
+    return Promise.reject(new Error('load failed: ' + ((e && e.message) ? e.message : String(e))));
   }
-  return "Input \'user\' to run user scripts";
+  if (content === null || typeof content === 'undefined') content = '';
+
+  // Prepare global app state and handlers
+  var prevRUN = (typeof RUN !== 'undefined' && RUN) ? RUN : 'qandy.js';
+  try { RUN = String(nm); } catch (e) {}
+  // Save previous exit if any so we can restore it after explicit exit if desired
+  var prevExit = (typeof window.exit === 'function') ? window.exit : null;
+
+  // app resolve mechanism (optional for scripts that want to programmatically resolve)
+  // but we won't await it — scripts manage RUN/exit directly.
+  var escHandler = function(ev) {
+    try {
+      var k = ev && (ev.key || ev.keyIdentifier) || '';
+      if (k === 'Escape' || k === 'Esc' || (ev && ev.keyCode === 27)) {
+        try { window.exit && window.exit('esc'); } catch (ee) {}
+        try { ev.preventDefault(); } catch (e2) {}
+      }
+    } catch (e) {}
+  };
+
+  // install exit that cleans up the ESC handler and resets RUN back to qandy.js
+  function installExit() {
+    window.exit = function(v) {
+      try {
+        // remove ESC handler
+        try { window.removeEventListener('keydown', escHandler, true); } catch (e) {}
+      } catch (e) {}
+      try { RUN = 'qandy.js'; } catch (e) {}
+      // if there was a previous exit function, restore it (we keep it simple)
+      if (typeof prevExit === 'function') {
+        try { window.exit = prevExit; } catch (e) {}
+      } else {
+        // leave a safe fallback
+        try { delete window.exit; } catch (e) { window.exit = function(){ RUN = 'qandy.js'; }; }
+      }
+      return v;
+    };
+  }
+
+  try {
+    // install handlers
+    try { window.addEventListener('keydown', escHandler, true); } catch (e) {}
+    installExit();
+
+    // Evaluate script in global scope so top-level declarations become globals.
+    // Use indirect eval to ensure global scope eval: (0, eval)(...)
+    try {
+      (0, eval)(String(content));
+    } catch (evalErr) {
+      // On error, cleanup: call exit() to remove ESC handler and restore RUN
+      try { window.exit && window.exit(); } catch (e) {}
+      // restore previous RUN just in case
+      try { RUN = prevRUN || 'qandy.js'; } catch (e) {}
+      return Promise.reject(new Error('script error: ' + ((evalErr && evalErr.message) ? evalErr.message : String(evalErr))));
+    }
+
+    // Script evaluated successfully. It is now running in global scope and may have set up event handlers,
+    // replaced global functions, etc. We do NOT restore globals — persistent overrides are intentional.
+    // We also do NOT automatically call exit(); scripts should call exit() when they want to stop.
+    return 'Started ' + nm;
+  } catch (outerErr) {
+    // on unexpected issues, attempt cleanup
+    try { window.exit && window.exit(); } catch (e) {}
+    try { RUN = prevRUN || 'qandy.js'; } catch (e) {}
+    return Promise.reject(new Error('qdosScript failed: ' + ((outerErr && outerErr.message) ? outerErr.message : String(outerErr))));
+  }
+}
+
+// Ensure a basic exit() exists so scripts can call it even outside qdosScript
+if (typeof window.exit !== 'function') {
+  window.exit = function() { try { RUN = 'qandy.js'; } catch (e) {} };
 }
 
 async function qdosDir() {
@@ -4583,7 +4644,7 @@ function exit() {
   // guest scripts use this to exit back to qandy.js
   RUN="qandy.js"
 }
-
+	
 function clearScreen() { cls(); }
 
 window.cls=function() {
