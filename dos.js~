@@ -10,14 +10,23 @@
  *  dosPaste(dest)
  *  dosRename(file, dest)
  *  dosDelete(file)
- *  dosExists(gfile)     — synchronous
- *  dosDownload(file)
- *  dosUpload(optionalDest)
+ *  dosExists(gfile)    — synchronous
  *  dosList()           — visible (non-hidden) filenames, newline-separated
  *  dosDir()            — all entries in manifest format for current device
+ *  dosDownload(file)
+ *  dosUpload(optionalDest)
  *  dosShare(file)      — copy file from current device into localStorage
  *  dosStash(file)      — force-save current-device file into localStorage
  *  dosRetrieve(file)   — read file from localStorage (guest-side helper)
+ *
+ * Local* functions (hardcoded to localStorage, DEVICE-independent):
+ *  localLoad(file)     — load file from localStorage
+ *  localSave(file, text) — save text to localStorage (">file" appends)
+ *  localDelete(file)   — delete file from localStorage (rejects on error)
+ *  localExists(file)   — returns boolean (resolves, never rejects)
+ *  localDir()          — all entries in manifest format (name|size|timestamp)
+ *  localList()         — visible (non-hidden) filenames, newline-separated
+ *  localRename(file, dest) — rename file in localStorage (rejects on error)
  *
  * Global variables:
  *  DOS    = true  — DOS is active
@@ -637,7 +646,7 @@ var DEVICE = 'none';
     }
     var mres = _saveManifest(manifest);
     if (mres === 'Error: Disk Full') return 'Error: Disk Full';
-    return 'done\n";
+    return 'done\n';
   };
 
   // dosRename(file, dest)
@@ -912,6 +921,181 @@ var DEVICE = 'none';
     var mres = _saveManifest(lsManifest);
     if (mres === 'Error: Disk Full') return 'Error: Disk Full';
 
+    return true;
+  };
+
+
+  // ── Local* public API (hardcoded to localStorage, DEVICE-independent) ────
+  // These functions operate exclusively on localStorage regardless of which
+  // device is currently mounted via dosMount().  They are intended for HOST-side
+  // use by the postMessage handler so that guest iframe requests for file
+  // operations cannot be affected by the DEVICE variable.
+
+  // localLoad(file) — load file from localStorage
+  // Handles virtual files dir.txt and dir.sys; returns null for missing files.
+  global.localLoad = async function (file) {
+    var fname = _normName(file);
+    var cls = _classify(fname);
+    if (cls === 'dir.txt') return await global.localList();
+    if (cls === 'dir.sys') return await global.localDir();
+
+    var fbase = _baseName(fname);
+    var fv = _validateBase(fbase);
+    if (!fv.ok) return null;
+
+    var manifest = _loadManifest();
+    var found = _findEntry(manifest, fname);
+    if (!found) return null;
+
+    return _localLoad(found.entry.name);
+  };
+
+  // localSave(file, text) — save text to localStorage
+  // ">file" prefix appends; write-protected and system files rejected.
+  // Returns: Promise resolving to true or error message string
+  global.localSave = async function (file, text) {
+    var fname = _normName(file);
+    var append = false;
+    if (fname.charAt(0) === '>') { append = true; fname = fname.substring(1).trimStart(); }
+
+    var cls = _classify(fname);
+    if (cls !== 'normal') return 'Error: read only file';
+
+    var fbase = _baseName(fname);
+    var fv = _validateBase(fbase);
+    if (!fv.ok) return 'Error: ' + fv.reason;
+
+    var manifest = _loadManifest();
+    var found = _findEntry(manifest, fname);
+    if (found && _isProtected(found.entry.name)) return 'Error: read only file';
+
+    var canonical;
+    if (found) {
+      canonical = found.entry.name;
+    } else {
+      canonical = (_isHidden(fname) ? '_' : '') + fbase + (_isProtected(fname) ? '!' : '');
+    }
+
+    var content = String(text == null ? '' : text);
+    if (append && found) {
+      var existing = _localLoad(canonical);
+      if (existing !== null) content = existing + content;
+    }
+
+    var res = _localSave(canonical, content);
+    if (res === 'Error: Disk Full') return 'Error: Disk Full';
+    if (res === false) return 'Error: write failed';
+
+    var size = _utf8len(content);
+    var ts = _timestamp();
+    if (found) {
+      found.entry.size = size;
+      found.entry.timestamp = ts;
+    } else {
+      manifest.push({ name: canonical, size: size, timestamp: ts });
+    }
+    var mres = _saveManifest(manifest);
+    if (mres === 'Error: Disk Full') return 'Error: Disk Full';
+    return true;
+  };
+
+  // localDelete(file) — delete file from localStorage
+  // Returns: Promise resolving to true or rejects on error
+  global.localDelete = async function (file) {
+    var fname = _normName(file);
+    if (_classify(fname) !== 'normal') throw new Error('read only file');
+
+    var fbase = _baseName(fname);
+    var fv = _validateBase(fbase);
+    if (!fv.ok) throw new Error(fv.reason);
+
+    var manifest = _loadManifest();
+    var found = _findEntry(manifest, fname);
+    if (!found) throw new Error('file not found');
+    if (_isProtected(found.entry.name)) throw new Error('read only file');
+
+    _localDelete(found.entry.name);
+    manifest.splice(found.index, 1);
+    var mres = _saveManifest(manifest);
+    if (mres === 'Error: Disk Full') throw new Error('Disk Full');
+    return true;
+  };
+
+  // localExists(file) — check if file exists in localStorage
+  // Returns: Promise resolving to boolean
+  global.localExists = async function (file) {
+    var fname = _normName(file);
+    var cls = _classify(fname);
+    if (cls === 'dir.txt' || cls === 'dir.sys') return true;
+
+    var fbase = _baseName(fname);
+    var fv = _validateBase(fbase);
+    if (!fv.ok) return false;
+
+    return _findEntry(_loadManifest(), fname) !== null;
+  };
+
+  // localDir() — all localStorage entries in manifest format
+  // Format: canonical_name|size|timestamp  (one per line, all files including hidden)
+  global.localDir = async function () {
+    var entries = _loadManifest();
+    var lines = [];
+    for (var i = 0; i < entries.length; i++) {
+      var e = entries[i];
+      lines.push(e.name + '|' + e.size + '|' + e.timestamp);
+    }
+    return lines.join('\n');
+  };
+
+  // localList() — visible (non-hidden) filenames from localStorage, newline-separated
+  // Excludes files with a leading _ (hidden flag)
+  global.localList = async function () {
+    var entries = _loadManifest();
+    var out = [];
+    for (var i = 0; i < entries.length; i++) {
+      if (!_isHidden(entries[i].name)) {
+        out.push(_baseName(entries[i].name));
+      }
+    }
+    return out.join('\n');
+  };
+
+  // localRename(file, dest) — rename file in localStorage
+  // Returns: Promise resolving to true or rejects on error
+  global.localRename = async function (file, dest) {
+    var fname = _normName(file);
+    var dname = _normName(dest);
+
+    if (_classify(fname) !== 'normal') throw new Error('read only file');
+    if (_classify(dname) !== 'normal') throw new Error('read only file');
+
+    var fbase = _baseName(fname);
+    var fv = _validateBase(fbase);
+    if (!fv.ok) throw new Error(fv.reason);
+    var dbase = _baseName(dname);
+    var dv = _validateBase(dbase);
+    if (!dv.ok) throw new Error('invalid destination: ' + dv.reason);
+
+    var manifest = _loadManifest();
+    var srcFound = _findEntry(manifest, fname);
+    if (!srcFound) throw new Error('file not found');
+    if (_isProtected(srcFound.entry.name)) throw new Error('read only file');
+
+    var destFound = _findEntry(manifest, dname);
+    if (destFound) throw new Error('destination file already exists');
+
+    var content = _localLoad(srcFound.entry.name);
+    if (content === null) throw new Error('file not found');
+
+    var destCanonical = (_isHidden(dname) ? '_' : '') + dbase + (_isProtected(dname) ? '!' : '');
+    var res = _localSave(destCanonical, content);
+    if (res === 'Error: Disk Full') throw new Error('Disk Full');
+
+    _localDelete(srcFound.entry.name);
+    srcFound.entry.name = destCanonical;
+    srcFound.entry.timestamp = _timestamp();
+    var mres = _saveManifest(manifest);
+    if (mres === 'Error: Disk Full') throw new Error('Disk Full');
     return true;
   };
 

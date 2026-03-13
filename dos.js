@@ -10,11 +10,14 @@
  *  dosPaste(dest)
  *  dosRename(file, dest)
  *  dosDelete(file)
- *  dosExists(gfile)     — synchronous
- *  dosDownload(file)
- *  dosUpload(optionalDest)
+ *  dosExists(gfile)    — synchronous
  *  dosList()           — visible (non-hidden) filenames, newline-separated
  *  dosDir()            — all entries in manifest format for current device
+ *
+ * Advanced Users:
+ *
+ *  dosDownload(file)
+ *  dosUpload(optionalDest)
  *  dosShare(file)      — copy file from current device into localStorage
  *  dosStash(file)      — force-save current-device file into localStorage
  *  dosRetrieve(file)   — read file from localStorage (guest-side helper)
