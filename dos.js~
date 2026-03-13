@@ -938,15 +938,12 @@ var DEVICE = 'none';
     var fname = _normName(file);
     var cls = _classify(fname);
     if (cls === 'dir.txt') return await global.localList();
-    //if (cls === 'dir.sys') return await global.localDir();
-
     var fbase = _baseName(fname);
     var fv = _validateBase(fbase);
     if (!fv.ok) return null;
-
     var manifest = _loadManifest();
     var found = _findEntry(manifest, fname);
-    if (!found) return null;
+    if (!found) return "Error: file not found";
 
     return _localLoad(found.entry.name);
   };

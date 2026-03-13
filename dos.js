@@ -944,7 +944,6 @@ var DEVICE = 'none';
     var manifest = _loadManifest();
     var found = _findEntry(manifest, fname);
     if (!found) return "Error: file not found";
-
     return _localLoad(found.entry.name);
   };
 
