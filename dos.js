@@ -835,8 +835,6 @@ var DEVICE = 'none';
     return out.join('\n');
   };
 
-  // dosDir() — all file entries for current device in manifest format
-  // Format: canonical_name|size|timestamp  (one per line)
   global.dosDir = async function () {
     var entries = await _dirEntries(global.DEVICE);
     var lines = [];
@@ -940,15 +938,12 @@ var DEVICE = 'none';
     var fname = _normName(file);
     var cls = _classify(fname);
     if (cls === 'dir.txt') return await global.localList();
-    if (cls === 'dir.sys') return await global.localDir();
-
     var fbase = _baseName(fname);
     var fv = _validateBase(fbase);
     if (!fv.ok) return null;
-
     var manifest = _loadManifest();
     var found = _findEntry(manifest, fname);
-    if (!found) return null;
+    if (!found) return "Error: file not found";
 
     return _localLoad(found.entry.name);
   };
@@ -1045,10 +1040,19 @@ var DEVICE = 'none';
     var lines = [];
     for (var i = 0; i < entries.length; i++) {
       var e = entries[i];
-      lines.push(e.name + '|' + e.size + '|' + e.timestamp);
+      var bytes=formatFileSize(e.size);	
+      lines.push(' '+e.name+' '+bytes);
     }
-    return lines.join('\n');
+    return "\n"+lines.join('\n')+"\n";
   };
+
+  function formatFileSize(bytes) {
+    bytes = parseInt(bytes, 10) || 0;
+    if (bytes === 0) return '0b';
+    if (bytes < 1024) return bytes + 'b';
+    if (bytes < 1048576) return Math.round(bytes / 1024) + 'k';
+    return Math.round(bytes / 1048576) + 'm';
+  }
 
   // localList() — visible (non-hidden) filenames from localStorage, newline-separated
   // Excludes files with a leading _ (hidden flag)
@@ -1057,10 +1061,10 @@ var DEVICE = 'none';
     var out = [];
     for (var i = 0; i < entries.length; i++) {
       if (!_isHidden(entries[i].name)) {
-        out.push(_baseName(entries[i].name));
+        out.push(" "+_baseName(entries[i].name));
       }
     }
-    return out.join('\n');
+    return "\n"+out.join('\n')+"\n";
   };
 
   // localRename(file, dest) — rename file in localStorage

@@ -3558,14 +3558,13 @@ async function qdosScript(name) {
     return /^[A-Za-z0-9 _.\-\/]+$/.test(n);
   }
   if (!_isValid(nm)) return Promise.reject(new Error('invalid filename'));
-  // GUEST behavior: request host for file then execute in guest
   if (typeof HOST === 'undefined' || !HOST) {
     try {
       var content = await qdosXmitDos('localLoad', { file: nm });
       if (content === null || typeof content === 'undefined') content = '';
       try {
         await evalCode(String(content));
-        return 'Executed ' + nm;
+        return 'done xx';
       } catch (e) {
         return Promise.reject(new Error('execution failed: ' + (e && e.message ? e.message : String(e))));
       }

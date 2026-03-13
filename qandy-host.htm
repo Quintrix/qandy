@@ -3563,6 +3563,7 @@ async function qdosScript(name) {
       var content = await qdosXmitDos('localLoad', { file: nm });
       if (content === null || typeof content === 'undefined') content = '';
       try {
+        alert(content);
         await evalCode(String(content));
         return 'done';
       } catch (e) {
