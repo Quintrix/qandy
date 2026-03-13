@@ -318,8 +318,9 @@ html { -webkit-text-size-adjust: 100%; }     /* keep text size stable across zoo
 var SOUND=true;       // enable/disable sound card
 
 // qandy.js
-var HOST=1;     // host machine
-var GUEST=0;    // guest machine
+var HOST = 1; if (HOST) { var LOG='host defined\n'; }
+var GUEST = 0; if (GUEST) { var LOG='guest defined\n'; }
+
 var RUN="";     // current script running starting with qandy.js 
 var RUNIN="";   // input mode set by running script, line or key
 var RUNOUT="";  // output display set by running script, gfx or txt
@@ -579,7 +580,7 @@ var currentIndex = 0;
 var signalAdvance = null;
 
 window.qandySignalReady = function(scriptName) {
-  console.log('\u2713 ' + scriptName + ' signaled ready');
+  LOG+=scriptName+' initalized\n';
   if (typeof signalAdvance === 'function') { signalAdvance(); }
 };
   
@@ -590,16 +591,12 @@ function loadNext() {
     (async function() {
       try {
         if (typeof startup === 'function') {
-          console.info('loader: calling startup()');
           await Promise.resolve(startup());
-          console.info('loader: startup() completed');
         } else {
-          console.info('loader: startup() not defined');
+          LOG+='startup() not defined\n';
         }
       } catch (e) {
-        console.info('startup() failed', e);
-      } finally {
-        document.dispatchEvent(new CustomEvent('qandyReady'));
+        LOG+='startup() failed\n';
       }
     })();
     return;
@@ -628,19 +625,14 @@ function loadNext() {
   // Keep a shorter timeout as a final safety
   var timeout = setTimeout(function() {
     if (!advanced) {
-      console.warn('Timed out waiting for ' + entry.name + ' to signal ready. Continuing.');
+      LOG+=entry.name+' time out\n';
       advance();
     }
-  }, 1000);
-}
-
-function startScriptLoading() {
-  currentIndex = 0;
-  loadNext();
+  }, 2000);
 }
 
 function powerOn() {
-  console.info("Creating Power On Button");
+  LOG+="Creating Power On Button\n";
   var target = document.getElementById('qandy') || document.getElementById('txt') || document.body;
   var rect = target.getBoundingClientRect();
 
@@ -768,16 +760,7 @@ function powerOn() {
     if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
     if (ro) try { ro.disconnect(); } catch (e) {}
     try { window.removeEventListener('resize', reposition); } catch (e) {}
-
-    try {
-      if (typeof startScriptLoading === 'function') {
-        startScriptLoading();
-      } else {
-        console.warn('qandy: startScriptLoading() not found; continue startup manually.');
-      }
-    } catch (e) {
-      console.info('qandy: error while continuing startup', e);
-    }
+    loadNext();
   }
 
   function cleanupListeners() {
@@ -817,18 +800,18 @@ function init() {
   console.info("Initalizing HOST="+HOST);
   if (document.readyState === 'loading') {
     if (HOST==true) {
-      console.log("poweron <host> machine");
-      setTimeout(startScriptLoading, 0);
+      LOG+="power on HOST\n";
+      setTimeout(loadNext, 0);
     } else {
-      console.log("poweron <guest> machine");
+      LOG+="power on GUEST\n";
       document.addEventListener('DOMContentLoaded', powerOn);
     }
   } else {
     if (HOST==true) {
-      console.log("poweron <host> machine");
-      setTimeout(startScriptLoading, 0);
+      LOG+="power-on HOST\n";
+      setTimeout(loadNext, 0);
     } else {
-      console.log("poweron <guest> machine");
+      LOG+="power on GUEST\n";
       document.addEventListener('DOMContentLoaded', powerOn);
     }
   }
@@ -1345,7 +1328,7 @@ async function startup() {
   // Determine guest status (support sync or async isGuest)
 
   if (HOST) {
-    console.info('startup: <host> ready — assembling <guest> ');
+    console.info('HOST ready, assemebling GUEST');
     await createGuest({ hideHost: false });
     // Listen once for guest-ready to optionally hide host UI / focus guest
     function onHostMessage(ev) {
