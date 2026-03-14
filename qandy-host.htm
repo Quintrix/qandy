@@ -3399,7 +3399,6 @@ window.updateKeyLabels = updateKeyLabels;
 //
 function init_command_js() {
   window.command=async function(cmd) {
-    console.log("line 3311");
     if (RUN != "qandy.js") {
       print("\n");
       try { input(cmd); } catch (e) { /* ignore */ }
@@ -3408,7 +3407,6 @@ function init_command_js() {
       pokeRefresh();
       return;
     }
-    console.log("line 3320");
     // system commands
     print("\n");
     cmd=String(cmd || '').trim();
@@ -4046,11 +4044,7 @@ window.button=function(b, event) {
   };
 
   if (!k && keyMap[b]) { l = shift ? keyMap[b][1] : keyMap[b][0]; k = l; }
-
-  // Ignore raw control codes (<32) that aren't already mapped
   if (!k && b < 32) { pokeCursorOn(); return; }
-
-  // Modifier key toggles (virtual keyboard)
   if (k === "ctrl") {
     ctrl = !ctrl;
     var el = document.getElementById("ctrl");
@@ -4081,79 +4075,85 @@ window.button=function(b, event) {
     pokeCursorOn(); return;
   }
 
-  if (keyboard) {
+  keyboard=1; if (keyboard) {
     if (window.RUN && typeof keydown !== 'undefined') {
       var kd = {keyCode: b, key: k || l, shiftKey: !!shift, ctrlKey: !!ctrl, altKey: !!alt, source: event ? 'physical' : 'virtual', originalEvent: event || null};
-      dispatchKeyboardEvent('keydown', kd);
-    } else {
-      if (k === "back") {
-        event && event.preventDefault();
-        if (window.QandyKeyboard && QandyKeyboard.handleBackspace()) {
-          // consumed (masked mode)
-          pokeCursorOn(CURSOR); // or pokeCursorOn() depending on signature
-          return;
-        }
-        if (SSTART !== -1 && SEND !== -1) {
-          if (SSTART>SEND) { [SSTART, SEND] = [SEND, SSTART];}
-          deleteSelection();
-          pokeInput();
-        } else if (CURP > 0) {
-          LINE = LINE.substring(0, CURP - 1) + LINE.substring(CURP);
-          CURP--;
-          pokeCell(CURX, CURY, " ");
-          pokeInput();
-        }
-        pokeCursorOn(CURSOR);
-        //if (SSTART !== -1 && SEND !== -1) deleteSelection();
-      } else if (k === "insert") {
-          navigator.clipboard.readText().then(function(text) {
-          if (text) {
-            if (SSTART !== -1 && SEND !== -1) deleteSelection();
-              if (SSTART>-1) { pokeSelect(false); SSTART = -1; SEND = -1; }
-              LINE = (LINE || "").substring(0, CURP) + text + (LINE || "").substring(CURP);
-              CURP += text.length;
-              pokeInput();
-            }
-          }).catch(function(){});
-          pokeCursorOn();
-          return;
-    	  } else if (k === "delete") {
-          event && event.preventDefault();
-          var str = String(LINE || "");
-          var maxLen = str.length;
-          var s = Math.max(0, Math.min(SSTART, SEND));
-          var e = Math.max(0, Math.min(Math.max(SSTART, SEND), maxLen));
-          if (s < e) {
-            // copy to clipboard only when shift-requested and available
-            if (shift && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
-              navigator.clipboard.writeText(str.substring(s, e)).catch(function(err){
-                console.warn('clipboard write failed', err);
-              });
-            }
+
+    if (RUN != "qandy.js" && typeof keydown !== 'undefined') {
+      try { keydown(keyData.key, keyData); } catch (e) { print("ERROR: keydown();\n\n"); }
+      return; // program handled it; Qandy does not process (backward compatible)
+    }
+    dispatchKeyboardEvent('keydown', kd);
+
+  } else {
+    if (k === "back") {
+      event && event.preventDefault();
+      if (window.QandyKeyboard && QandyKeyboard.handleBackspace()) {
+        // consumed (masked mode)
+        pokeCursorOn(CURSOR); // or pokeCursorOn() depending on signature
+        return;
+      }
+      if (SSTART !== -1 && SEND !== -1) {
+        if (SSTART>SEND) { [SSTART, SEND] = [SEND, SSTART];}
+        deleteSelection();
+        pokeInput();
+      } else if (CURP > 0) {
+        LINE = LINE.substring(0, CURP - 1) + LINE.substring(CURP);
+        CURP--;
+        pokeCell(CURX, CURY, " ");
+        pokeInput();
+      }
+      pokeCursorOn(CURSOR);
+      //if (SSTART !== -1 && SEND !== -1) deleteSelection();
+    } else if (k === "insert") {
+        navigator.clipboard.readText().then(function(text) {
+        if (text) {
+          if (SSTART !== -1 && SEND !== -1) deleteSelection();
+            if (SSTART>-1) { pokeSelect(false); SSTART = -1; SEND = -1; }
+            LINE = (LINE || "").substring(0, CURP) + text + (LINE || "").substring(CURP);
+            CURP += text.length;
+            pokeInput();
           }
-          pokeSelect(false);
-          LINE = str.substring(0, s) + str.substring(e);
-          CURP = s;
-          SSTART = -1;
-          SEND = -1;
-          pokeInput();
-        } else if (k === "left") {
-          event && event.preventDefault();
-          if (CURP > 0) {
-            if (shift) {
-              if (SSTART === -1) SSTART = CURP;   // anchor at the starting cursor pos
-              CURP = Math.max(0, CURP - 1);
-              SEND = CURP;
-              // update visual cursor coordinates (wrap-aware)
-              var absCol = LINEX + CURP;
-              CURY = LINEY + Math.floor(absCol / W);
-              CURX = absCol % W;
-              pokeSelect(true);
-            } else {
-              // non-shift behavior clears selection
-              if (SSTART > -1) { pokeSelect(false); SSTART = -1; SEND = -1; }
-              CURP = Math.max(0, CURP - 1);
-              var absCol = LINEX + CURP;
+        }).catch(function(){});
+        pokeCursorOn();
+        return;
+  	  } else if (k === "delete") {
+        event && event.preventDefault();
+        var str = String(LINE || "");
+        var maxLen = str.length;
+        var s = Math.max(0, Math.min(SSTART, SEND));
+        var e = Math.max(0, Math.min(Math.max(SSTART, SEND), maxLen));
+        if (s < e) {
+          // copy to clipboard only when shift-requested and available
+          if (shift && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+            navigator.clipboard.writeText(str.substring(s, e)).catch(function(err){
+              console.warn('clipboard write failed', err);
+            });
+          }
+        }
+        pokeSelect(false);
+        LINE = str.substring(0, s) + str.substring(e);
+        CURP = s;
+        SSTART = -1;
+        SEND = -1;
+       pokeInput();
+      } else if (k === "left") {
+        event && event.preventDefault();
+        if (CURP > 0) {
+          if (shift) {
+            if (SSTART === -1) SSTART = CURP;   // anchor at the starting cursor pos
+            CURP = Math.max(0, CURP - 1);
+            SEND = CURP;
+            // update visual cursor coordinates (wrap-aware)
+            var absCol = LINEX + CURP;
+            CURY = LINEY + Math.floor(absCol / W);
+            CURX = absCol % W;
+            pokeSelect(true);
+          } else {
+            // non-shift behavior clears selection
+            if (SSTART > -1) { pokeSelect(false); SSTART = -1; SEND = -1; }
+            CURP = Math.max(0, CURP - 1);
+            var absCol = LINEX + CURP;
               CURY = LINEY + Math.floor(absCol / W);
               CURX = absCol % W;
             }
@@ -4533,17 +4533,49 @@ window.pressup=function(event) {
   }
 }
 
+function formatError(e) {
+  if (e == null) return String(e);
+  if (typeof e === 'string') return e;
+  // Error instances
+  if (e instanceof Error) {
+    return e.name + (e.message ? ': ' + e.message : '') + (e.stack ? '\n' + e.stack : '');
+  }
+  // Some environments use .message on non-Error objects
+  if (e && typeof e.message === 'string') {
+    return (e.name ? (e.name + ': ') : '') + e.message + (e.stack ? '\n' + e.stack : '');
+  }
+  // Fallback: JSON stringify with circular replacer
+  try {
+    const seen = new WeakSet();
+    return JSON.stringify(e, function(k, v) {
+      if (v && typeof v === 'object') {
+        if (seen.has(v)) return '[Circular]';
+        seen.add(v);
+      }
+      if (typeof v === 'function') return '[Function]';
+      return v;
+    }, 2);
+  } catch (err) {
+    return Object.prototype.toString.call(e);
+  }
+}
+
 window.dispatchKeyboardEvent = function(eventType, keyData) {
   if (eventType === 'keydown') {
     if (RUN != "qandy.js" && typeof keydown !== 'undefined') {
-      try { keydown(keyData.key, keyData); } catch (e) { print("ERROR: keydown();\n\n"); }
-      return; // program handled it; Qandy does not process (backward compatible)
+      try {
+        keydown(keyData.key, keyData);
+      } catch (e) {
+        print("ERROR: keydown():\n" + formatError(e) + "\n\n");
+      }
+      return;
     }
-    button(keyData.keyCode, keyData.originalEvent);
-  } else if (eventType === 'keyup') {
+  }
+
+  if (eventType === 'keyup') {
     if (RUN != "qandy.js" && typeof keyup !== 'undefined') {
-      try { keyup(keyData.key, keyData); } catch (e) { print("ERROR: keyup();\n\n"); }
-      return; // program handled it; Qandy does not process (backward compatible)
+      print("Error: keyup(): " + (e && e.message ? e.message : String(e)) + "\n");
+      return;
     }
   }
 };

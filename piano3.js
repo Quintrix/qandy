@@ -234,15 +234,14 @@ function drawPiano() {
 function keydown(key) {
   // Check for ESC key first and exit if present
   try {
-    if (typeof key === 'string') {
-      if (key === '\x1b' || key === 'Escape' || key === 'Esc' || key.toLowerCase() === 'escape') {
-        try {
-          if (typeof exit === 'function') exit('esc');
-          else if (typeof window.exit === 'function') window.exit('esc');
-          else { RUN = 'qandy.js'; pokeRefresh(); pokeCursorOn(); }
-        } catch (e) {}
-        return true;
-      }
+    if (key === 'esc') {
+    	alert("yes");
+      try {
+        if (typeof exit === 'function') exit('esc');
+        else if (typeof window.exit === 'function') window.exit('esc');
+        else { RUN = 'qandy.js'; pokeRefresh(); pokeCursorOn(); }
+      } catch (e) {}
+      return true;
     }
   } catch (e) {}
 
