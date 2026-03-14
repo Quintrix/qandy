@@ -80,27 +80,22 @@ function drawPiano() {
   
 }
 
-function keydown(key) {
-  // Note: ESC key is handled universally by qandy-host.htm
-  // It will terminate the script and return to OS automatically
-  
-  // Convert to lowercase for comparison
+function keydown(key, data) {
+  if (key=="esc") {
+    RUN="qandy.js";
+    return;
+  }  
   var keyLower = key.toLowerCase();
-  
-  // Check if this key is mapped to a piano note
-  if (pianoKeyMap[keyLower]) {
-    var note = pianoKeyMap[keyLower];
-    
+  var note = pianoKeyMap[key];
+  if (pianoKeyMap[key]) {
     // Only play if key wasn't already pressed (prevents key repeat)
     if (!pressedKeys[keyLower]) {
       playNote(note, 300);
       pressedKeys[keyLower] = note;
       updateNowPlayingDisplay();
     }
-    
     return true;
   }
-  
   return false;
 }
 
@@ -252,6 +247,11 @@ function playChordProgression() {
 }
 
 function keyup(key, keyData) {
+
+  if (key=="esc") {
+    alert(RUN);
+  }
+  
   var keyLower = (keyData && keyData.key ? keyData.key : key).toLowerCase();
   if (pianoKeyMap[keyLower] && pressedKeys[keyLower]) {
     delete pressedKeys[keyLower];

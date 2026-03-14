@@ -64,6 +64,9 @@
 var DOS = true;
 var DEVICE = 'none';
 
+if (HOST) { window.LOG.push("dos.js installed on HOST"); }
+if (GUEST) { wimdow.LOG.push("dos.js installed on GUEST"); }
+
 (function (global) {
   'use strict';
 
@@ -944,7 +947,6 @@ var DEVICE = 'none';
     var manifest = _loadManifest();
     var found = _findEntry(manifest, fname);
     if (!found) return "Error: file not found";
-
     return _localLoad(found.entry.name);
   };
 

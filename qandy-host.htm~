@@ -103,6 +103,84 @@ body { margin: 0; background-color: #333; }
   animation: qandy-blink 1s steps(1, start) infinite;
 }
 
+:root {
+  --cols: 32;               /* columns */
+  --cell-w: 13px;
+  --cell-h: 15px;
+  --cell-fs: 13px;
+}
+
+#screen {
+  display: grid;
+  grid-template-columns: repeat(var(--cols), var(--cell-w));
+  grid-auto-rows: var(--cell-h);
+  font-family: monospace, monospace;
+  font-size: var(--cell-fs);
+  line-height: var(--cell-h);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Each cell is a grid item; set background per cell without seams */
+.cell {
+  width: var(--cell-w);
+  height: var(--cell-h);
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Make rows own the background and ensure cells are exact-size and transparent when desired */
+.qandy-row {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  height: var(--cell-h);
+  line-height: var(--cell-h);
+  align-items: center;
+  gap: 0;
+  background-color: transparent; /* default: transparent, mode can override */
+}
+
+/* Ensure cells are exact-pixel sized and don't introduce borders/gaps */
+.qandy-cell {
+  width: var(--cell-w);
+  height: var(--cell-h);
+  font-size: var(--cell-fs);
+  line-height: var(--cell-h);
+  padding: 0;
+  margin: 0;
+  border: 0;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent; /* default transparent so row owns bg if needed */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transform: translateZ(0); /* force compositing layer (helps some UA rendering) */
+}
+
+/* Sysop mode: make each row the visible background and keep cells transparent */
+#txt.sysop .qandy-row,
+#screen.sysop .qandy-row {
+  background-color: #0b2340 !important; /* choose your distinctive sysop color */
+}
+
+#txt.sysop .qandy-cell,
+#screen.sysop .qandy-cell {
+  background: transparent !important;
+  color: #ffffff !important; /* ensure legible text on sysop bg */
+}
+
+/* Defensive: clear inline-borders/margins that can cause hairlines */
+.qandy-row, .qandy-cell { outline: none; box-shadow: none; }
+
+
 .pop { position:absolute; top:260; left:190; z-index:250;
        font-family: arial; font-size: 14px; weight: bold;
        color: navy; background-color: #999; visibility:hidden;
@@ -800,18 +878,18 @@ function init() {
   console.info("Initalizing HOST="+HOST);
   if (document.readyState === 'loading') {
     if (HOST==true) {
-      LOG+="power on HOST";
+      LOG+="power on HOST\n";
       setTimeout(loadNext, 0);
     } else {
-      LOG+="power on GUEST";
+      LOG+="power on GUEST\n";
       document.addEventListener('DOMContentLoaded', powerOn);
     }
   } else {
     if (HOST==true) {
-      LOG+="power-on HOST";
+      LOG+="power-on HOST\n";
       setTimeout(loadNext, 0);
     } else {
-      LOG+="power on GUEST machine";
+      LOG+="power on GUEST\n";
       document.addEventListener('DOMContentLoaded', powerOn);
     }
   }
@@ -1019,21 +1097,31 @@ function hostMessageHandler(ev) {
         case 'dosExists': {
           var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
           var fname = (typeof d.file === 'undefined' || d.file === null) ? '' : String(d.file).trim();
-          var validName = (typeof validateGuestFilename === 'function') ? validateGuestFilename(fname) : null;
+          // Normalize validateGuestFilename return values to a filename string or null
+          var validName = null;
+          var v = validateGuestFilename(fname);
+          if (typeof v === 'string') validName = v.trim();
+          else if (v === true) validName = fname; // true => original name is valid
+          else validName = null;
           if (!validName) { dosXmitQdos(_dosIframe, d.id, 'dosExists', false, 'invalid filename'); break; }
-          if (typeof dosExists !== 'function') { dosXmitQdos(_dosIframe, d.id, 'dosExists', false, 'host: dosExists not implemented'); break; }
+          // Defensive: ensure we pass a string to dosExists
+          if (typeof validName !== 'string') validName = String(validName);
+          // Optional debug to trace corrupted messages
+          try { console.debug('host: dosExists request', { id: d.id, raw: d.file, fname: fname, validated: validName }); } catch (e) {}
+          if (typeof dosExists !== 'function') {
+            dosXmitQdos(_dosIframe, d.id, 'dosExists', false, 'host: dosExists not implemented');
+            break;
+          }
           Promise.resolve().then(function () { return dosExists(validName); })
             .then(function (result) {
-              // Normalize result to boolean
-              var exists = !!result;
-              dosXmitQdos(_dosIframe, d.id, 'dosExists', true, exists);
-            })
-            .catch(function (err) {
-              dosXmitQdos(_dosIframe, d.id, 'dosExists', false, err && err.message ? err.message : String(err));
-            });
-          break;
-}
-
+          var exists = !!result;
+          dosXmitQdos(_dosIframe, d.id, 'dosExists', true, exists);
+        })
+        .catch(function (err) {
+          dosXmitQdos(_dosIframe, d.id, 'dosExists', false, err && err.message ? err.message : String(err));
+        });
+      break;
+      }
 
 
         case 'dosFormat': {
@@ -1888,20 +1976,23 @@ window.pokeCell = function(x,y,a,f,b,h) {
 };
 
 window.pokeColor = function(x, y, f, b, n) {
-  if (!validateCoords(x, y)) return false;  
-  if (typeof f === 'undefined') { f=CURFG; }
-  if (typeof b === 'undefined') { b=CURBG; }
-  n = (typeof n === 'number' && n > 0) ? Math.floor(n) : 1;
-  if (typeof n === 'number' && n > 0) {
-    var endX = Math.min(x + n, W);
-    for (var i = x; i < endX; i++) {
-      FCOLOR[y][i]=CURFG;
-      BCOLOR[y][i]=CURBG;
-      if (SYNC) { pokeRefresh(i, y); }
-    }
-    return endX - x;
+  if (!validateCoords(x, y)) return false;
+  if (typeof f === 'undefined') { f = CURFG; }
+  if (typeof b === 'undefined') { b = CURBG; }
+  var count = (typeof n === 'number' && n > 0) ? Math.floor(n) : 1;
+  var offset = 0;
+  while (count > 0) {
+    var abs=x+offset;
+    var row=y+Math.floor(abs/W);
+    var col=abs % W;
+    if (row >= H) break;
+    FCOLOR[row][col]=f;
+    BCOLOR[row][col]=b;
+    if (SYNC) { pokeRefresh(col,row); }
+    offset++;
+    count--;
   }
-  return false;
+  return true;
 };
 
 // there should be a poke function that already does this??
@@ -3321,7 +3412,7 @@ function init_command_js() {
     cmd=String(cmd || '').trim();
     switch (cmd) {
       case 'cls':
-        SYNC=0; pokeCursorOff();
+        SYNC=1; pokeCursorOff();
         pokeText(0,0," ",800); pokeColor(0,0,CURFG, CURBG, 800); pokeAttr(0,0,0, 800);
         SYNC=1; pokeRefresh(); CURX=0; CURY=0; LINEX=0; LINEY=0; pokeCursorOn(); return;
       case 'whoami':
@@ -3452,22 +3543,26 @@ function init_command_js() {
       case "list":
         print(await qdosList()); 
         return;
+      case "ls": 
+        print(await qdosList()); 
+        return;
       case "load":
         print(await qdosLoad(f));
         return;
       case "delete":
-        if (f) {
-          print(await qdosDelete(f));
-        } else {
-          return('Error: invalid filename\n');
-        }
+        if (f) { print(await qdosDelete(f)); } else { return('Error: invalid filename\n'); }
+        return;
+      case "del":
+        if (f) { print(await qdosDelete(f)); } else { return('Error: invalid filename\n'); }
+        return;
+      case "rm":
+        if (f) { print(await qdosDelete(f)); } else { return('Error: invalid filename\n'); }
         return;
       case "rename":
-        if (f && d) {
-          print(await qdosRename(f,d));
-        } else {
-          return('Error: invalid filename\n');
-        }
+        if (f && d) { print(await qdosRename(f,d)); } else { return('Error: invalid filename\n'); }
+        return; 
+      case "ren":
+        if (f && d) { print(await qdosRename(f,d)); } else { return('Error: invalid filename\n'); }
         return; 
       case "mount":
         if (f) {
@@ -3540,13 +3635,8 @@ async function qdosScript(name) {
     return /^[A-Za-z0-9 _.\-\/]+$/.test(n);
   }
   if (!_isValid(nm)) return Promise.reject(new Error('invalid filename'));
+  if (typeof HOST !== 'undefined' && HOST) { return "Error: input 'user' to run scripts"; }
 
-  // refuse to run on host page (keep host exec disabled)
-  if (typeof HOST !== 'undefined' && HOST) {
-    return "Error: input 'user' to run scripts";
-  }
-
-  // fetch content from host
   var content;
   try {
     content = await qdosXmitDos('localLoad', { file: nm });
@@ -3565,7 +3655,7 @@ async function qdosScript(name) {
   else RUN = nm; // fallback
   try {
     (0, eval)(content + "\n\n//# sourceURL=" + nm);
-    return 'Loaded ' + nm;
+    return "";
   } catch (e) {
     // Print helpful diagnostic to the on-screen console and dev console
     var msg = (e && e.message) ? e.message : String(e);
@@ -3579,108 +3669,6 @@ async function qdosScript(name) {
     return Promise.reject(new Error('script error: ' + msg));
   }
 }
-
-// Ensure a basic exit() exists so scripts can call it even outside qdosScript
-if (typeof window.exit !== 'function') {
-  window.exit = function() { try { RUN = 'qandy.js'; } catch (e) {} };
-}
-
-// qdosProgram (module/import variant) - evaluate .prg as an ES module so top-level await is allowed.
-async function qdosProgram(name) {
-  var nm = (typeof name === 'string') ? name.trim() : '';
-  if (!nm) return Promise.reject(new Error('invalid filename'));
-
-  function _isValid(n) {
-    if (typeof validateSystemFilename === 'function') return !!validateSystemFilename(n);
-    if (typeof n !== 'string') return false;
-    if (n.length === 0 || n.length > 128) return false;
-    if (n.indexOf('..') !== -1) return false;
-    return /^[A-Za-z0-9 _.\-\/]+$/.test(n);
-  }
-  if (!_isValid(nm)) return Promise.reject(new Error('invalid filename'));
-
-  if (typeof HOST !== 'undefined' && HOST) {
-    return "Error: input 'user' to run scripts";
-  }
-
-  // 1) load program text
-  var content;
-  try {
-    content = await qdosXmitDos('localLoad', { file: nm });
-  } catch (e) {
-    return Promise.reject(new Error('load failed: ' + ((e && e.message) ? e.message : String(e))));
-  }
-  content = (content === null || typeof content === 'undefined') ? '' : String(content);
-
-  // 2) sanitize leading invisible chars / shebang that break parsing
-  if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1); // strip BOM
-  content = content.replace(/^\s*#!.*\r?\n/, ''); // strip optional shebang line
-
-  // 3) preserve previous state so we can restore
-  var prevRUN = (typeof RUN !== 'undefined' && RUN) ? RUN : 'qandy.js';
-  var prevExit = (typeof window.exit === 'function') ? window.exit : null;
-
-  // 4) ESC handler and wrapper exit
-  var escHandler = function(ev) {
-    try {
-      var k = ev && (ev.key || ev.keyIdentifier) || '';
-      if (k === 'Escape' || k === 'Esc' || (ev && ev.keyCode === 27)) {
-        try { if (typeof window.exit === 'function') window.exit('esc'); } catch (e) {}
-        try { ev.preventDefault(); } catch (e) {}
-      }
-    } catch (e) {}
-  };
-
-  function installWrapperExit() {
-    var origExit = (typeof window.exit === 'function') ? window.exit : null;
-    window.exit = function(v) {
-      try { window.removeEventListener('keydown', escHandler, true); } catch (e) {}
-      try { RUN = prevRUN || 'qandy.js'; } catch (e) {}
-      if (origExit) {
-        try { window.exit = origExit; } catch (e) {}
-      } else {
-        try { delete window.exit; } catch (e) { window.exit = function(){ RUN='qandy.js'; }; }
-      }
-      return v;
-    };
-  }
-
-  // 5) run module via blob + dynamic import
-  var blobUrl = null;
-  try {
-    try { window.addEventListener('keydown', escHandler, true); } catch (e) {}
-    installWrapperExit();
-    try { RUN = String(nm); } catch (e) {}
-
-    // Add a sourceURL comment to help debugging and set module text.
-    var moduleSource = content + "\n//# sourceURL=" + nm + "\n";
-    var blob = new Blob([moduleSource], { type: 'text/javascript' });
-    blobUrl = URL.createObjectURL(blob);
-
-    // dynamic import returns a promise that resolves when module evaluation finishes.
-    await import(blobUrl);
-
-    // program finished normally
-    try { if (typeof window.exit === 'function') window.exit(); } catch (e) {}
-    try { RUN = prevRUN || 'qandy.js'; } catch (e) {}
-    return 'Program ' + nm + ' finished';
-  } catch (err) {
-    // If the import failed with a syntax error like "await is only valid ...", surface it clearly.
-    try {
-      var msg = (err && err.message) ? err.message : String(err);
-      try { await print("Program error: " + msg + "\n"); } catch (e) {}
-    } catch (_) {}
-    try { if (typeof window.exit === 'function') window.exit(); } catch (e) {}
-    try { RUN = prevRUN || 'qandy.js'; } catch (e) {}
-    return Promise.reject(new Error('program error: ' + ((err && err.message) ? err.message : String(err))));
-  } finally {
-    // cleanup blob URL and restore exit handler if needed
-    try { if (blobUrl) URL.revokeObjectURL(blobUrl); } catch (e) {}
-    try { if (prevExit) window.exit = prevExit; } catch (e) {}
-    try { RUN = prevRUN || 'qandy.js'; } catch (e) {}
-  }
-}
-
 
 async function qdosDir() {
   if (typeof HOST !== 'undefined' && HOST) {
@@ -3748,7 +3736,7 @@ async function qdosLoad(filename, timeoutMs) {
   });
 }
 
-function qdosDelete(filename, timeoutMs) {
+async function qdosDelete(filename, timeoutMs) {
   var valid = qdosValidateFilename(filename);
   if (!valid) return Promise.reject(new Error('invalid filename'));
   // qdosXmitDos resolves only on host success (host sends success:false -> guest handler rejects)
@@ -3756,7 +3744,7 @@ function qdosDelete(filename, timeoutMs) {
     return true;
   });
 }
-function qdosRename(file, dest, timeoutMs) {
+async function qdosRename(file, dest, timeoutMs) {
   var validSrc = qdosValidateFilename(file);
   var validDest = qdosValidateFilename(dest);
   if (!validSrc || !validDest) return Promise.reject(new Error('invalid filename(s)'));
@@ -3788,7 +3776,7 @@ async function qdosMount(device) {
   return 'localhost\n';
 }
 
-function qdosPaste(filename, timeoutMs) {
+async function qdosPaste(filename, timeoutMs) {
   var valid = qdosValidateFilename(filename);
   if (!valid) return Promise.reject(new Error('invalid filename'));
   return qdosXmitDos('qdosPaste', { file: valid }, timeoutMs).then(function (res) {
@@ -3801,7 +3789,7 @@ function qdosPaste(filename, timeoutMs) {
   });
 }
 
-function qdosCopy(filename, timeoutMs) {
+async function qdosCopy(filename, timeoutMs) {
   var valid = qdosValidateFilename(filename);
   if (!valid) return Promise.reject(new Error('invalid filename'));
   return qdosXmitDos('qdosCopy', { file: valid }, timeoutMs).then(function (res) {
@@ -3812,26 +3800,28 @@ function qdosCopy(filename, timeoutMs) {
   });
 }
 
-function qdosExists(filename, timeoutMs) {
-  var valid = (typeof qdosValidateFilenameGuest === 'function') ? qdosValidateFilenameGuest(filename) : (typeof filename === 'string' ? filename.trim() : null);
-  if (!valid) return Promise.reject(new Error('invalid filename'));
-  return qdosXmitDos('dosExists', { file: valid }, timeoutMs)
-    .then(function (res) {
-      // Host returns a boolean (or something truthy/falsey). Normalize defensively.
-      if (typeof res === 'boolean') return res;
-      if (typeof res === 'number') return !!res;
-      if (typeof res === 'string') {
-        var s = res.trim().toLowerCase();
-        if (s === 'true' || s === '1') return true;
-        if (s === 'false' || s === '0' || s === '') return false;
-        // fallback: JSON parse if it's "true"/"false"
-        try {
-          var parsed = JSON.parse(res);
-          if (typeof parsed === 'boolean') return parsed;
-        } catch (e) {}
-      }
-      return !!res;
-    });
+async function qdosExists(filename, timeoutMs) {
+  var name = (typeof filename === 'string') ? filename.trim() : filename;
+  var v = qdosValidateFilename(filename);
+  if (typeof v === 'string') name = v.trim();
+  else if (v === true) name = (typeof filename === 'string' ? filename.trim() : null);
+  else return false;
+  if (!name || typeof name !== 'string') return false;
+  try {
+    var res = await qdosXmitDos('dosExists', { file: name }, timeoutMs);
+    if (typeof res === 'boolean') return res;
+    if (typeof res === 'number') return !!res;
+    if (typeof res === 'string') {
+      var s = res.trim().toLowerCase();
+      if (s === 'true' || s === '1') return true;
+      if (s === 'false' || s === '0' || s === '') return false;
+    }
+    return !!res;
+  } catch (e) {
+    // Communication or host-side error: return false (avoid rejecting)
+    // If you want to surface errors instead, replace the next line with: throw e;
+    return false;
+  }
 }
 
 function qdosValidateFilename(name) {
@@ -3848,7 +3838,6 @@ function qdosValidateFilename(name) {
 // expose to global guest runtime
 window.qdosXmitDos = qdosXmitDos;
 window.qdosScript = qdosScript;
-window.qdosProgram = qdosProgram;
 window.qdosDir = qdosDir;
 window.qdosList = qdosDir; 
 window.qdosLoad = qdosLoad; 
@@ -4055,11 +4044,7 @@ window.button=function(b, event) {
   };
 
   if (!k && keyMap[b]) { l = shift ? keyMap[b][1] : keyMap[b][0]; k = l; }
-
-  // Ignore raw control codes (<32) that aren't already mapped
   if (!k && b < 32) { pokeCursorOn(); return; }
-
-  // Modifier key toggles (virtual keyboard)
   if (k === "ctrl") {
     ctrl = !ctrl;
     var el = document.getElementById("ctrl");
@@ -4093,76 +4078,81 @@ window.button=function(b, event) {
   if (keyboard) {
     if (window.RUN && typeof keydown !== 'undefined') {
       var kd = {keyCode: b, key: k || l, shiftKey: !!shift, ctrlKey: !!ctrl, altKey: !!alt, source: event ? 'physical' : 'virtual', originalEvent: event || null};
-      dispatchKeyboardEvent('keydown', kd);
-    } else {
-      if (k === "back") {
-        event && event.preventDefault();
-        if (window.QandyKeyboard && QandyKeyboard.handleBackspace()) {
-          // consumed (masked mode)
-          pokeCursorOn(CURSOR); // or pokeCursorOn() depending on signature
-          return;
-        }
-        if (SSTART !== -1 && SEND !== -1) {
-          if (SSTART>SEND) { [SSTART, SEND] = [SEND, SSTART];}
-          deleteSelection();
-          pokeInput();
-        } else if (CURP > 0) {
-          LINE = LINE.substring(0, CURP - 1) + LINE.substring(CURP);
-          CURP--;
-          pokeCell(CURX, CURY, " ");
-          pokeInput();
-        }
-        pokeCursorOn(CURSOR);
-        //if (SSTART !== -1 && SEND !== -1) deleteSelection();
-      } else if (k === "insert") {
-          navigator.clipboard.readText().then(function(text) {
-          if (text) {
-            if (SSTART !== -1 && SEND !== -1) deleteSelection();
-              if (SSTART>-1) { pokeSelect(false); SSTART = -1; SEND = -1; }
-              LINE = (LINE || "").substring(0, CURP) + text + (LINE || "").substring(CURP);
-              CURP += text.length;
-              pokeInput();
-            }
-          }).catch(function(){});
-          pokeCursorOn();
-          return;
-    	  } else if (k === "delete") {
-          event && event.preventDefault();
-          var str = String(LINE || "");
-          var maxLen = str.length;
-          var s = Math.max(0, Math.min(SSTART, SEND));
-          var e = Math.max(0, Math.min(Math.max(SSTART, SEND), maxLen));
-          if (s < e) {
-            // copy to clipboard only when shift-requested and available
-            if (shift && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
-              navigator.clipboard.writeText(str.substring(s, e)).catch(function(err){
-                console.warn('clipboard write failed', err);
-              });
-            }
+
+    if (RUN != "qandy.js" && typeof keydown !== 'undefined') {
+      keydown(key, keyCode);
+      return;
+    }
+    
+  } else {
+    if (k === "back") {
+      event && event.preventDefault();
+      if (window.QandyKeyboard && QandyKeyboard.handleBackspace()) {
+        // consumed (masked mode)
+        pokeCursorOn(CURSOR); // or pokeCursorOn() depending on signature
+        return;
+      }
+      if (SSTART !== -1 && SEND !== -1) {
+        if (SSTART>SEND) { [SSTART, SEND] = [SEND, SSTART];}
+        deleteSelection();
+        pokeInput();
+      } else if (CURP > 0) {
+        LINE = LINE.substring(0, CURP - 1) + LINE.substring(CURP);
+        CURP--;
+        pokeCell(CURX, CURY, " ");
+        pokeInput();
+      }
+      pokeCursorOn(CURSOR);
+      //if (SSTART !== -1 && SEND !== -1) deleteSelection();
+    } else if (k === "insert") {
+        navigator.clipboard.readText().then(function(text) {
+        if (text) {
+          if (SSTART !== -1 && SEND !== -1) deleteSelection();
+            if (SSTART>-1) { pokeSelect(false); SSTART = -1; SEND = -1; }
+            LINE = (LINE || "").substring(0, CURP) + text + (LINE || "").substring(CURP);
+            CURP += text.length;
+            pokeInput();
           }
-          pokeSelect(false);
-          LINE = str.substring(0, s) + str.substring(e);
-          CURP = s;
-          SSTART = -1;
-          SEND = -1;
-          pokeInput();
-        } else if (k === "left") {
-          event && event.preventDefault();
-          if (CURP > 0) {
-            if (shift) {
-              if (SSTART === -1) SSTART = CURP;   // anchor at the starting cursor pos
-              CURP = Math.max(0, CURP - 1);
-              SEND = CURP;
-              // update visual cursor coordinates (wrap-aware)
-              var absCol = LINEX + CURP;
-              CURY = LINEY + Math.floor(absCol / W);
-              CURX = absCol % W;
-              pokeSelect(true);
-            } else {
-              // non-shift behavior clears selection
-              if (SSTART > -1) { pokeSelect(false); SSTART = -1; SEND = -1; }
-              CURP = Math.max(0, CURP - 1);
-              var absCol = LINEX + CURP;
+        }).catch(function(){});
+        pokeCursorOn();
+        return;
+  	  } else if (k === "delete") {
+        event && event.preventDefault();
+        var str = String(LINE || "");
+        var maxLen = str.length;
+        var s = Math.max(0, Math.min(SSTART, SEND));
+        var e = Math.max(0, Math.min(Math.max(SSTART, SEND), maxLen));
+        if (s < e) {
+          // copy to clipboard only when shift-requested and available
+          if (shift && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+            navigator.clipboard.writeText(str.substring(s, e)).catch(function(err){
+              console.warn('clipboard write failed', err);
+            });
+          }
+        }
+        pokeSelect(false);
+        LINE = str.substring(0, s) + str.substring(e);
+        CURP = s;
+        SSTART = -1;
+        SEND = -1;
+       pokeInput();
+      } else if (k === "left") {
+        event && event.preventDefault();
+        if (CURP > 0) {
+          if (shift) {
+            if (SSTART === -1) SSTART = CURP;   // anchor at the starting cursor pos
+            CURP = Math.max(0, CURP - 1);
+            SEND = CURP;
+            // update visual cursor coordinates (wrap-aware)
+            var absCol = LINEX + CURP;
+            CURY = LINEY + Math.floor(absCol / W);
+            CURX = absCol % W;
+            pokeSelect(true);
+          } else {
+            // non-shift behavior clears selection
+            if (SSTART > -1) { pokeSelect(false); SSTART = -1; SEND = -1; }
+            CURP = Math.max(0, CURP - 1);
+            var absCol = LINEX + CURP;
               CURY = LINEY + Math.floor(absCol / W);
               CURX = absCol % W;
             }
@@ -4542,17 +4532,49 @@ window.pressup=function(event) {
   }
 }
 
+function formatError(e) {
+  if (e == null) return String(e);
+  if (typeof e === 'string') return e;
+  // Error instances
+  if (e instanceof Error) {
+    return e.name + (e.message ? ': ' + e.message : '') + (e.stack ? '\n' + e.stack : '');
+  }
+  // Some environments use .message on non-Error objects
+  if (e && typeof e.message === 'string') {
+    return (e.name ? (e.name + ': ') : '') + e.message + (e.stack ? '\n' + e.stack : '');
+  }
+  // Fallback: JSON stringify with circular replacer
+  try {
+    const seen = new WeakSet();
+    return JSON.stringify(e, function(k, v) {
+      if (v && typeof v === 'object') {
+        if (seen.has(v)) return '[Circular]';
+        seen.add(v);
+      }
+      if (typeof v === 'function') return '[Function]';
+      return v;
+    }, 2);
+  } catch (err) {
+    return Object.prototype.toString.call(e);
+  }
+}
+
 window.dispatchKeyboardEvent = function(eventType, keyData) {
   if (eventType === 'keydown') {
-    if (RUN && typeof keydown !== 'undefined') {
-      try { keydown(keyData.key, keyData); } catch (e) { print("ERROR: keydown();\n\n"); }
-      return; // program handled it; Qandy does not process (backward compatible)
+    if (RUN != "qandy.js" && typeof keydown !== 'undefined') {
+      try {
+        keydown(keyData.key, keyData);
+      } catch (e) {
+        print("ERROR: keydown():\n" + formatError(e) + "\n\n");
+      }
+      return;
     }
-    // No program running: fall back to Qandy's button() handler
-    button(keyData.keyCode, keyData.originalEvent);
-  } else if (eventType === 'keyup') {
-    if (RUN && typeof keyup !== 'undefined') {
-      try { keyup(keyData.key, keyData); } catch (e) {}
+  }
+
+  if (eventType === 'keyup') {
+    if (RUN != "qandy.js" && typeof keyup !== 'undefined') {
+      print("Error: keyup(): " + (e && e.message ? e.message : String(e)) + "\n");
+      return;
     }
   }
 };
@@ -4661,7 +4683,6 @@ window.cls=function() {
   CURX=0; CURY=0; LINEX=0; LINEY=0;
   SYNC=1; pokeRefresh;
   pokeCursorOn();
-  pokeRefresh();
 }
 
 // public print(...) replacement
@@ -4742,47 +4763,31 @@ if (HOST) {
   systemReady();
 } else {
   systemReady();
-  
 }
 
-function systemReady() {
+async function systemReady() {
+  // system ready
+  print("\n[bgreen]Qandy Pocket\nComputer v1.k\n\n");
+  print("[cyan]Alpha Testing\nPrototype Release\n\n");
   if (GUEST) {
     // guest system ready
-    var CURBAUD=2400; // baud rate to display text
-    print("\n[cyan]Qandy Pocket\nComputer v1.j\n\n[yellow]Qandy Guest User\n[white]\n");
-    // if autoexec.js exists on localStorage execute it
+    print("[yellow]Qandy User Access\n[white]\n");
+    if (await qdosExists("dir.sys")) {
+      //if (await qdosExists("autoexec.js")) { qdosScript("autoexec.js"); }
+    } else {
+      print("localStorage not formated.\nInput \'sysop\' for access.");
+    }
   } else {
     // host system ready
-    var CURBAUD=9600; // baud rate to display text
-    print("\n[cyan]Qandy Pocket\nComputer v1.j\n\n[bgreen]Qandy Sysop Access\n[white]\n");
-//    if (!dosIfExists("dir.txt")) {
-//      // localStorage does not exist
-//      print("localStorage exists\n");
-//    } else {
-//      print("localStorage exists");
-//    }
+    print("[yellow]Qandy Sysop Access[white]\n\n");
+    if (!qdosExists("dir.sys")) {
+      print("localStorage not formated.\nInput \'fdisk\' to install.");
+    }
   }
 }
 
-//mySearch=location.search.substr(1).split("&")
-//for (i=0;i<mySearch.length;i++) {
-// nameVal=mySearch[i].split("=");
-// for (j in nameVal) { nameVal[j]=unescape(nameVal[j]); } 
-// if (nameVal[0]=="run") {
-//  script=document.createElement('script');
-//  script.src=nameVal[1];
-//  document.head.appendChild(script);
-//  SFiles=0;
-// }
-//}
 
-// if (SFiles) { showFiles(); }
-// Signal that qandy.js is ready
-
-if (typeof qandySignalReady === 'function') {
-  qandySignalReady('qandy.js');
-}
-}
+if (typeof qandySignalReady === 'function') { qandySignalReady('qandy.js'); }}
 
 
 </script>
