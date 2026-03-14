@@ -713,12 +713,13 @@ var DEVICE = 'none';
   global.dosExists = function (file) {
     var fname = _normName(file);
     var cls = _classify(fname);
-    if (cls === 'dir.txt' || cls === 'dir.sys') return true;
     var fbase = _baseName(fname);
     var fv = _validateBase(fbase);
     if (!fv.ok) return false;
-    return _findEntry(_loadManifest(), fname) !== null;
-  };
+    var manifest = _loadManifest();
+    if (!manifest || (Array.isArray(manifest) && manifest.length === 0)) { return false; }
+    return _findEntry(manifest, fname) !== null;
+  };  
 
   // dosDownload(file)
   global.dosDownload = async function (file) {
@@ -1104,5 +1105,11 @@ var DEVICE = 'none';
     if (mres === 'Error: Disk Full') throw new Error('Disk Full');
     return true;
   };
+
+
+  if (dosExists("dir.sys")) {} else {  
+    print("localStorage not formated,\n");
+    print("input \'fdisk\' to install.\n\n");
+  }
 
 })(window);

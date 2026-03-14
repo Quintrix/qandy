@@ -3446,6 +3446,9 @@ function init_command_js() {
     if (c.endsWith('.js')) { print(await qdosScript(c)+"\n"); return; }
     if (c.endsWith('.prg')) { print(await qdosProgram(c)+"\n"); return; }
     switch (c) {
+      case "exists":
+        if (f) { print(await qdosExists(f)); } else { return('Error: invalid filename\n'); }
+        return;
       case "dir":
         print(await qdosDir()); 
         return;
@@ -3490,12 +3493,13 @@ function init_command_js() {
           return('Error: invalid filename\n');
         }
         return;
-      case "exists":
-        if (f) {
-          print(await qdosExists(f));
-        } else {
-          return('Error: invalid filename\n');
+      case "fdisk":
+        if (GUEST) {
+          print("Input \'sysop\' for access\n"); 
+          return;
         }
+        // need install program
+        alert("install");
         return;
       default:
         if (GUEST) {
@@ -3812,26 +3816,36 @@ function qdosCopy(filename, timeoutMs) {
   });
 }
 
-function qdosExists(filename, timeoutMs) {
-  var valid = (typeof qdosValidateFilenameGuest === 'function') ? qdosValidateFilenameGuest(filename) : (typeof filename === 'string' ? filename.trim() : null);
-  if (!valid) return Promise.reject(new Error('invalid filename'));
-  return qdosXmitDos('dosExists', { file: valid }, timeoutMs)
-    .then(function (res) {
-      // Host returns a boolean (or something truthy/falsey). Normalize defensively.
-      if (typeof res === 'boolean') return res;
-      if (typeof res === 'number') return !!res;
-      if (typeof res === 'string') {
-        var s = res.trim().toLowerCase();
-        if (s === 'true' || s === '1') return true;
-        if (s === 'false' || s === '0' || s === '') return false;
-        // fallback: JSON parse if it's "true"/"false"
-        try {
-          var parsed = JSON.parse(res);
-          if (typeof parsed === 'boolean') return parsed;
-        } catch (e) {}
-      }
-      return !!res;
-    });
+async function qdosExists(filename, timeoutMs) {
+  if (typeof HOST !== 'undefined' && HOST) {
+    try {
+      var res = await Promise.resolve().then(function () { return dosExists(filename); });
+      res = _normalizeResult(res);
+      return String(res) + '\n';
+    } catch (e) {
+      return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+    }
+  } else {
+    var valid = (typeof qdosValidateFilenameGuest === 'function') ? qdosValidateFilenameGuest(filename) : (typeof filename === 'string' ? filename.trim() : null);
+    if (!valid) return Promise.reject(new Error('invalid filename'));
+    return qdosXmitDos('dosExists', { file: valid }, timeoutMs)
+      .then(function (res) {
+        // Host returns a boolean (or something truthy/falsey). Normalize defensively.
+        if (typeof res === 'boolean') return res;
+        if (typeof res === 'number') return !!res;
+        if (typeof res === 'string') {
+          var s = res.trim().toLowerCase();
+          if (s === 'true' || s === '1') return true;
+          if (s === 'false' || s === '0' || s === '') return false;
+          // fallback: JSON parse if it's "true"/"false"
+          try {
+            var parsed = JSON.parse(res);
+            if (typeof parsed === 'boolean') return parsed;
+          } catch (e) {}
+        }
+        return !!res;
+      });
+  }
 }
 
 function qdosValidateFilename(name) {
@@ -4429,7 +4443,7 @@ window.press=function(event) {
      }
    }
 
-   caps = !!newCaps;  
+   cappresss = !!newCaps;  
    l = document.getElementById(kid+"kcaps") || document.getElementById(kid+"caps");
    if (l) {
      if (caps) { l.style.backgroundColor = "#fff"; l.style.color = "#000"; }
@@ -4467,7 +4481,7 @@ window.press=function(event) {
  if (event.keyCode === 18 || event.altKey) { event.preventDefault(); }
  if (event.keyCode === 27) { event.preventDefault(); }
  if (event.keyCode === 16) {
-  var capsBtn = document.getElementById(kid+"caps");
+  var presscapsBtn = document.getElementById(kid+"caps");
   if (capsBtn) { capsBtn.style.backgroundColor = "#444"; capsBtn.style.color = "#fff"; }
   updateKeyLabels();
  }
@@ -4745,39 +4759,21 @@ if (HOST) {
   
 }
 
-function systemReady() {
+async function systemReady() {
+  print("\n[bgreen]Qandy Pocket\nComputer v1.j\n");
+  print("\n[cyan]Alpha Testing\nPrototype Release\n[yellow]");
   if (GUEST) {
     // guest system ready
-    var CURBAUD=2400; // baud rate to display text
-    print("\n[cyan]Qandy Pocket\nComputer v1.j\n\n[yellow]Qandy Guest User\n[white]\n");
-    // if autoexec.js exists on localStorage execute it
+    print("\nQandy Guest User\n[white]\n");
+    if (await qdosExists("dir.sys")) {} else {
+      print("localStorage not formated,\n");
+      print("input \'sysop\' for access.\n\n");
+    }
   } else {
     // host system ready
-    var CURBAUD=9600; // baud rate to display text
-    print("\n[cyan]Qandy Pocket\nComputer v1.j\n\n[bgreen]Qandy Sysop Access\n[white]\n");
-//    if (!dosIfExists("dir.txt")) {
-//      // localStorage does not exist
-//      print("localStorage exists\n");
-//    } else {
-//      print("localStorage exists");
-//    }
+    print("\nQandy Sysop Access\n[white]\n");
   }
 }
-
-//mySearch=location.search.substr(1).split("&")
-//for (i=0;i<mySearch.length;i++) {
-// nameVal=mySearch[i].split("=");
-// for (j in nameVal) { nameVal[j]=unescape(nameVal[j]); } 
-// if (nameVal[0]=="run") {
-//  script=document.createElement('script');
-//  script.src=nameVal[1];
-//  document.head.appendChild(script);
-//  SFiles=0;
-// }
-//}
-
-// if (SFiles) { showFiles(); }
-// Signal that qandy.js is ready
 
 if (typeof qandySignalReady === 'function') {
   qandySignalReady('qandy.js');
