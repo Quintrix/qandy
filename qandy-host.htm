@@ -105,9 +105,9 @@ body { margin: 0; background-color: #333; }
 
 :root {
   --cols: 32;               /* columns */
-  --cell-w: 16px;
-  --cell-h: 20px;
-  --cell-fs: 16px;
+  --cell-w: 13px;
+  --cell-h: 15px;
+  --cell-fs: 13px;
 }
 
 #screen {
@@ -132,6 +132,54 @@ body { margin: 0; background-color: #333; }
   align-items: center;
   justify-content: center;
 }
+
+/* Make rows own the background and ensure cells are exact-size and transparent when desired */
+.qandy-row {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  height: var(--cell-h);
+  line-height: var(--cell-h);
+  align-items: center;
+  gap: 0;
+  background-color: transparent; /* default: transparent, mode can override */
+}
+
+/* Ensure cells are exact-pixel sized and don't introduce borders/gaps */
+.qandy-cell {
+  width: var(--cell-w);
+  height: var(--cell-h);
+  font-size: var(--cell-fs);
+  line-height: var(--cell-h);
+  padding: 0;
+  margin: 0;
+  border: 0;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent; /* default transparent so row owns bg if needed */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transform: translateZ(0); /* force compositing layer (helps some UA rendering) */
+}
+
+/* Sysop mode: make each row the visible background and keep cells transparent */
+#txt.sysop .qandy-row,
+#screen.sysop .qandy-row {
+  background-color: #0b2340 !important; /* choose your distinctive sysop color */
+}
+
+#txt.sysop .qandy-cell,
+#screen.sysop .qandy-cell {
+  background: transparent !important;
+  color: #ffffff !important; /* ensure legible text on sysop bg */
+}
+
+/* Defensive: clear inline-borders/margins that can cause hairlines */
+.qandy-row, .qandy-cell { outline: none; box-shadow: none; }
+
 
 .pop { position:absolute; top:260; left:190; z-index:250;
        font-family: arial; font-size: 14px; weight: bold;
@@ -1049,21 +1097,31 @@ function hostMessageHandler(ev) {
         case 'dosExists': {
           var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
           var fname = (typeof d.file === 'undefined' || d.file === null) ? '' : String(d.file).trim();
-          var validName = (typeof validateGuestFilename === 'function') ? validateGuestFilename(fname) : null;
+          // Normalize validateGuestFilename return values to a filename string or null
+          var validName = null;
+          var v = validateGuestFilename(fname);
+          if (typeof v === 'string') validName = v.trim();
+          else if (v === true) validName = fname; // true => original name is valid
+          else validName = null;
           if (!validName) { dosXmitQdos(_dosIframe, d.id, 'dosExists', false, 'invalid filename'); break; }
-          if (typeof dosExists !== 'function') { dosXmitQdos(_dosIframe, d.id, 'dosExists', false, 'host: dosExists not implemented'); break; }
+          // Defensive: ensure we pass a string to dosExists
+          if (typeof validName !== 'string') validName = String(validName);
+          // Optional debug to trace corrupted messages
+          try { console.debug('host: dosExists request', { id: d.id, raw: d.file, fname: fname, validated: validName }); } catch (e) {}
+          if (typeof dosExists !== 'function') {
+            dosXmitQdos(_dosIframe, d.id, 'dosExists', false, 'host: dosExists not implemented');
+            break;
+          }
           Promise.resolve().then(function () { return dosExists(validName); })
             .then(function (result) {
-              // Normalize result to boolean
-              var exists = !!result;
-              dosXmitQdos(_dosIframe, d.id, 'dosExists', true, exists);
-            })
-            .catch(function (err) {
-              dosXmitQdos(_dosIframe, d.id, 'dosExists', false, err && err.message ? err.message : String(err));
-            });
-          break;
-}
-
+          var exists = !!result;
+          dosXmitQdos(_dosIframe, d.id, 'dosExists', true, exists);
+        })
+        .catch(function (err) {
+          dosXmitQdos(_dosIframe, d.id, 'dosExists', false, err && err.message ? err.message : String(err));
+        });
+      break;
+      }
 
 
         case 'dosFormat': {
@@ -4677,31 +4735,23 @@ if (HOST) {
 }
 
 async function systemReady() {
-  print("\n[cyan]Qandy Pocket\nComputer v1.k\n\n[bgreen]Alpha Testing\nPrototype Release\n\n");
+  // system ready
+  print("\n[cyan]Qandy Pocket\nComputer v1.k\n\n");
+  print("[bgreen]Alpha Testing\nPrototype Release\n\n");
   if (GUEST) {
     // guest system ready
-    print("[yellow]Qandy Guest User\n[white]\n");
-    ls=await qdosExists("dir.sys");
-    if (ls) {
-      if (await qdosExists("autoexec.js")) { qdosScript("autoexec.js"); }
+    print("[yellow]Qandy User Access\n[white]\n");
+    if (await qdosExists("dir.sys")) {
+      //if (await qdosExists("autoexec.js")) { qdosScript("autoexec.js"); }
     } else {
       print("localStorage not formated.\nInput \'sysop\' for access.");
     }
   } else {
     // host system ready
-    CURBG=100;
-    CURFG=37; 
-    CURBAUD=9600;
-    
-    cls();     
     print("[yellow]Qandy Sysop Access\n\n");
-    
-    //if (!qdosExists("dir.sys")) {
-    //  print("localStorage not formated.\nInput \'sysop\' for access.");
-    //} else {
-    // 
-    //}
-
+    if (!qdosExists("dir.sys")) {
+      print("localStorage not formated.\nInput \'fdisk\' to install.");
+    }
   }
 }
 

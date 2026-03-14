@@ -1097,21 +1097,32 @@ function hostMessageHandler(ev) {
         case 'dosExists': {
           var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
           var fname = (typeof d.file === 'undefined' || d.file === null) ? '' : String(d.file).trim();
-          var validName = (typeof validateGuestFilename === 'function') ? validateGuestFilename(fname) : null;
+          // Normalize validateGuestFilename return values to a filename string or null
+          var validName = null;
+          var v = validateGuestFilename(fname);
+          if (typeof v === 'string') validName = v.trim();
+          else if (v === true) validName = fname; // true => original name is valid
+          else validName = null;
           if (!validName) { dosXmitQdos(_dosIframe, d.id, 'dosExists', false, 'invalid filename'); break; }
-          if (typeof dosExists !== 'function') { dosXmitQdos(_dosIframe, d.id, 'dosExists', false, 'host: dosExists not implemented'); break; }
+          // Defensive: ensure we pass a string to dosExists
+          if (typeof validName !== 'string') validName = String(validName);
+          // Optional debug to trace corrupted messages
+          try { console.debug('host: dosExists request', { id: d.id, raw: d.file, fname: fname, validated: validName }); } catch (e) {}
+          if (typeof dosExists !== 'function') {
+            dosXmitQdos(_dosIframe, d.id, 'dosExists', false, 'host: dosExists not implemented');
+            break;
+          }
           Promise.resolve().then(function () { return dosExists(validName); })
             .then(function (result) {
-              // Normalize result to boolean
-              var exists = !!result;
-              dosXmitQdos(_dosIframe, d.id, 'dosExists', true, exists);
-            })
-            .catch(function (err) {
-              dosXmitQdos(_dosIframe, d.id, 'dosExists', false, err && err.message ? err.message : String(err));
-            });
-          break;
-}
-
+          alert(result);
+          var exists = !!result;
+          dosXmitQdos(_dosIframe, d.id, 'dosExists', true, exists);
+        })
+        .catch(function (err) {
+          dosXmitQdos(_dosIframe, d.id, 'dosExists', false, err && err.message ? err.message : String(err));
+        });
+      break;
+      }
 
 
         case 'dosFormat': {
@@ -4731,10 +4742,12 @@ async function systemReady() {
   if (GUEST) {
     // guest system ready
     print("[yellow]Qandy User Access\n[white]\n");
-    ls=await qdosExists("dir.sys");
+    ls=await qdosExists("dir.sys"); 
     if (ls) {
+      alert("4737");
       if (await qdosExists("autoexec.js")) { qdosScript("autoexec.js"); }
     } else {
+      alert("4740");
       print("localStorage not formated.\nInput \'sysop\' for access.");
     }
   } else {
