@@ -4075,16 +4075,15 @@ window.button=function(b, event) {
     pokeCursorOn(); return;
   }
 
-  keyboard=1; if (keyboard) {
+  if (keyboard) {
     if (window.RUN && typeof keydown !== 'undefined') {
       var kd = {keyCode: b, key: k || l, shiftKey: !!shift, ctrlKey: !!ctrl, altKey: !!alt, source: event ? 'physical' : 'virtual', originalEvent: event || null};
 
     if (RUN != "qandy.js" && typeof keydown !== 'undefined') {
-      try { keydown(keyData.key, keyData); } catch (e) { print("ERROR: keydown();\n\n"); }
-      return; // program handled it; Qandy does not process (backward compatible)
+      keydown(key, keyCode);
+      return;
     }
-    dispatchKeyboardEvent('keydown', kd);
-
+    
   } else {
     if (k === "back") {
       event && event.preventDefault();
