@@ -4768,8 +4768,8 @@ if (HOST) {
 
 async function systemReady() {
   // system ready
-  print("\n[cyan]Qandy Pocket\nComputer v1.k\n\n");
-  print("[bgreen]Alpha Testing\nPrototype Release\n\n");
+  print("\n[bgreen]Qandy Pocket\nComputer v1.k\n\n");
+  print("[cyan]Alpha Testing\nPrototype Release\n\n");
   if (GUEST) {
     // guest system ready
     print("[yellow]Qandy User Access\n[white]\n");
@@ -4780,7 +4780,7 @@ async function systemReady() {
     }
   } else {
     // host system ready
-    print("[yellow]Qandy Sysop Access\n\n");
+    print("[yellow]Qandy Sysop Access[white]\n\n");
     if (!qdosExists("dir.sys")) {
       print("localStorage not formated.\nInput \'fdisk\' to install.");
     }
@@ -4788,25 +4788,7 @@ async function systemReady() {
 }
 
 
-//mySearch=location.search.substr(1).split("&")
-//for (i=0;i<mySearch.length;i++) {
-// nameVal=mySearch[i].split("=");
-// for (j in nameVal) { nameVal[j]=unescape(nameVal[j]); } 
-// if (nameVal[0]=="run") {
-//  script=document.createElement('script');
-//  script.src=nameVal[1];
-//  document.head.appendChild(script);
-//  SFiles=0;
-// }
-//}
-
-// if (SFiles) { showFiles(); }
-// Signal that qandy.js is ready
-
-if (typeof qandySignalReady === 'function') {
-  qandySignalReady('qandy.js');
-}
-}
+if (typeof qandySignalReady === 'function') { qandySignalReady('qandy.js'); }}
 
 
 </script>
