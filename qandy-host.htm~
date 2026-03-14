@@ -3446,6 +3446,9 @@ function init_command_js() {
     if (c.endsWith('.js')) { print(await qdosScript(c)+"\n"); return; }
     if (c.endsWith('.prg')) { print(await qdosProgram(c)+"\n"); return; }
     switch (c) {
+      case "exists":
+        if (f) { print(await qdosExists(f)); } else { return('Error: invalid filename\n'); }
+        return;
       case "dir":
         print(await qdosDir()); 
         return;
@@ -3490,12 +3493,13 @@ function init_command_js() {
           return('Error: invalid filename\n');
         }
         return;
-      case "exists":
-        if (f) {
-          print(await qdosExists(f));
-        } else {
-          return('Error: invalid filename\n');
+      case "fdisk":
+        if (GUEST) {
+          print("Input \'sysop\' for access\n"); 
+          return;
         }
+        // need install program
+        alert("install");
         return;
       default:
         if (GUEST) {
@@ -4761,34 +4765,15 @@ async function systemReady() {
   if (GUEST) {
     // guest system ready
     print("\nQandy Guest User\n[white]\n");
-    if (await qdosExists("dir.sys")) {
+    if (await qdosExists("dir.sys")) {} else {
       print("localStorage not formated,\n");
       print("input \'sysop\' for access.\n\n");
     }
   } else {
     // host system ready
     print("\nQandy Sysop Access\n[white]\n");
-    if (await qdosExists("dir.sys")) {
-      print("localStorage not formated,\n");
-      print("input \'fdisk\' to install.\n\n");
-    }
   }
 }
-
-//mySearch=location.search.substr(1).split("&")
-//for (i=0;i<mySearch.length;i++) {
-// nameVal=mySearch[i].split("=");
-// for (j in nameVal) { nameVal[j]=unescape(nameVal[j]); } 
-// if (nameVal[0]=="run") {
-//  script=document.createElement('script');
-//  script.src=nameVal[1];
-//  document.head.appendChild(script);
-//  SFiles=0;
-// }
-//}
-
-// if (SFiles) { showFiles(); }
-// Signal that qandy.js is ready
 
 if (typeof qandySignalReady === 'function') {
   qandySignalReady('qandy.js');
