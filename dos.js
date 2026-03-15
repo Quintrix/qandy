@@ -1198,7 +1198,7 @@ var DEVICE = 'none';
       }
     }
 
-  	 if (isHttpProtocol()==true) {
+  	 if (isHttpProtocol() == true) {
   	   print("\nInstalling Qandy:\n");
   	   print("\n  ansi.js: "); dosInstallFetch("ansi.js");
       print("\n  ascii.js: "); dosInstallFetch("ascii.js");

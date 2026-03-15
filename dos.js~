@@ -1205,9 +1205,7 @@ var DEVICE = 'none';
       print("\n  keydown.js: "); dosInstallFetch("ascii.js");
       print("\n  piano.js: "); dosInstallFetch("piano.js");
       print("\n  svga.js: "); dosInstallFetch("svga.js");
-      
-      
-      print("\n");
+      print("\nInstallation Complete.\n\n");
       return;
     }
     print("\ncannot install from file://\n");
