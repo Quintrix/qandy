@@ -2920,8 +2920,8 @@ function init_keyboard_js() {
     btn.style.top = key.y + 'px';
     btn.onclick = function() {
       var keyData = {keyCode: key.keyCode, key: String.fromCharCode(key.keyCode), shiftKey: !!shift, ctrlKey: !!ctrl, altKey: !!alt, source: 'virtual', originalEvent: null};
-      dispatchKeyboardEvent('keydown', keyData);
-      setTimeout(function() { dispatchKeyboardEvent('keyup', keyData); }, 50);
+      press('keydown', keyData);
+      setTimeout(function() { press('keyup', keyData); }, 50);
     };
 
     // Append into the selected container (defensive: ensure it exists)
@@ -3536,8 +3536,14 @@ function init_command_js() {
     f=f.replace(/\s+/g, ' ').trim();
     d=d.replace(/\s+/g, ' ').trim();
 
-    if (c.endsWith('.js')) { print(await qdosScript(c)+"\n"); return; }
-    if (c.endsWith('.prg')) { print(await qdosProgram(c)+"\n"); return; }
+    if (c.endsWith('.js')) {
+      var res = await qdosScript(c);
+      if (res === true) {} else {
+        print(String(res) + "\n");
+      } 
+      return;
+    }
+
     switch (c) {
       case "dir":
         print(await qdosDir()); 
@@ -3626,7 +3632,7 @@ var _pending = window.__qandy_pending;
 
 async function qdosScript(name) {
   var nm = (typeof name === 'string') ? name.trim() : '';
-  if (!nm) return Promise.reject(new Error('invalid filename'));
+  if (!nm) return "Error: invalid filename";
 
   function _isValid(n) {
     if (typeof validateSystemFilename === 'function') return !!validateSystemFilename(n);
@@ -3635,14 +3641,17 @@ async function qdosScript(name) {
     if (n.indexOf('..') !== -1) return false;
     return /^[A-Za-z0-9 _.\-\/]+$/.test(n);
   }
-  if (!_isValid(nm)) return Promise.reject(new Error('invalid filename'));
-  if (typeof HOST !== 'undefined' && HOST) { return "Error: input 'user' to run scripts"; }
+  if (!_isValid(nm)) return "Error: invalid filename";
+
+  if (typeof HOST !== 'undefined' && HOST) {
+    return "Error: input 'user' to run scripts";
+  }
 
   var content;
   try {
     content = await qdosXmitDos('localLoad', { file: nm });
   } catch (e) {
-    return Promise.reject(new Error('load failed: ' + ((e && e.message) ? e.message : String(e))));
+    return "Error: load failed: " + ((e && e.message) ? e.message : String(e));
   }
   content = (content === null || typeof content === 'undefined') ? '' : String(content);
 
@@ -3650,23 +3659,43 @@ async function qdosScript(name) {
   if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
   content = content.replace(/^\s*#!.*\r?\n/, '');
 
+  // Eval the script in global scope via indirect eval and capture errors
+  var evalError = null;
   try {
     (0, eval)(content + "\n\n//# sourceURL=" + nm);
-    return "";
+    // success
+    return true;
   } catch (e) {
-    // Print helpful diagnostic to the on-screen console and dev console
-    var msg = (e && e.message) ? e.message : String(e);
+    evalError = e;
+    // Attempt to extract line/column from stack or error properties
+    var line = null, column = null;
     try {
-      // print is async; best-effort (don't await here to avoid nested awaits)
-      print("Script load failed: " + msg + "\n");
-    } catch (pe) {
-      // ignore print failures
+      var stack = e && e.stack ? String(e.stack) : '';
+      if (stack) {
+        var stackLines = stack.split('\n');
+        for (var i = 0; i < stackLines.length; i++) {
+          var sl = stackLines[i].trim();
+          var m = sl.match(/:(\d+):(\d+)\)?\s*$/);
+          if (m) { line = parseInt(m[1], 10); column = parseInt(m[2], 10); break; }
+          m = sl.match(/\((?:.*):(\d+):(\d+)\)/);
+          if (m) { line = parseInt(m[1], 10); column = parseInt(m[2], 10); break; }
+        }
+      }
+      if (!line) {
+        if (typeof e.lineNumber === 'number') line = e.lineNumber;
+        else if (typeof e.lineno === 'number') line = e.lineno;
+        if (typeof e.columnNumber === 'number') column = e.columnNumber;
+        else if (typeof e.colno === 'number') column = e.colno;
+      }
+    } catch (ex) {
+      /* ignore extraction errors */
     }
-    console.error("qdos: qdosScript eval failed for", nm, e);
-    return Promise.reject(new Error('script error: ' + msg));
+
+    var emsg = (e && e.message) ? e.message : String(e);
+    var loc = (line ? (nm + ':' + line + (column ? (':' + column) : '')) : nm);
+    return "Error: " + emsg + " at " + loc;
   }
 }
-
 async function qdosDir() {
   if (typeof HOST !== 'undefined' && HOST) {
     try {
@@ -3961,10 +3990,37 @@ RUN="qandy.js";
 
 window.button=function(b, event) {
   pokeCursorOff();
+  // debug: uncomment if you need to trace key routing
+  // console.log("button()", b, "RUN=", typeof RUN !== 'undefined' ? RUN : '(undef)');
+
   // Check if we need to unlock audio on first host keypress
   if (event && typeof event.shiftKey !== 'undefined') shift = !!event.shiftKey;
   var k = "", l = "";
   if (b===32 && event) { event.preventDefault(); }
+
+  // Fast-path: if a user script (not qandy.js) is running and defines keydown(),
+  // deliver the event directly to that function for lowest latency.
+  if (typeof RUN !== 'undefined' && RUN !== "qandy.js" && typeof keydown === 'function') {
+    var kdEvent = event || {};
+    // populate minimal useful fields without allocating new objects where possible
+    if (!kdEvent.key) {
+      try { kdEvent.key = k || l || String.fromCharCode(b || 0); } catch (e) { kdEvent.key = ''; }
+    }
+    // Ensure modifier fields reflect current host flags if event didn't have them
+    kdEvent.shiftKey = !!(kdEvent.shiftKey || shift);
+    kdEvent.ctrlKey  = !!(kdEvent.ctrlKey  || ctrl);
+    kdEvent.altKey   = !!(kdEvent.altKey   || alt);
+    kdEvent.source = kdEvent.source || 'physical';
+    try {
+      keydown(b, kdEvent);
+    } catch (err) {
+      console.error("script keydown() threw:", err);
+    }
+    pokeCursorOn();
+    return;
+  }
+
+  // MAP special keys first
   switch (b) {
     case 16: // SHIFT
       if (event && typeof event.shiftKey !== 'undefined') shift = !!event.shiftKey;
@@ -4005,7 +4061,7 @@ window.button=function(b, event) {
     48: ['0', ')'], 49: ['1', '!'], 50: ['2', '@'], 51: ['3', '#'],
     52: ['4', '$'], 53: ['5', '%'], 54: ['6', '^'], 55: ['7', '&'],
     56: ['8', '*'], 57: ['9', '('],
- 
+
     // Numpad digits (NumLock on) - map to same characters
     96: ['0', ')'], 97: ['1', '!'], 98: ['2', '@'], 99: ['3', '#'],
     100: ['4', '$'], 101: ['5', '%'], 102: ['6', '^'], 103: ['7', '&'],
@@ -4042,6 +4098,7 @@ window.button=function(b, event) {
 
   if (!k && keyMap[b]) { l = shift ? keyMap[b][1] : keyMap[b][0]; k = l; }
   if (!k && b < 32) { pokeCursorOn(); return; }
+
   if (k === "ctrl") {
     ctrl = !ctrl;
     var el = document.getElementById("ctrl");
@@ -4052,12 +4109,12 @@ window.button=function(b, event) {
     alt = !alt;
     var el2 = document.getElementById("alt");
     if (el2) {
-      if (alt) { 
+      if (alt) {
        el2.style.backgroundColor = "#fff"; el2.style.color = "#000";
       } else {
-       el2.style.backgroundColor = "#000"; el2.style.color = "#fff";    
+       el2.style.backgroundColor = "#000"; el2.style.color = "#fff";
       }
-    }    
+    }
     updateKeyLabels();
     pokeCursorOn(); return;
   }
@@ -4072,38 +4129,231 @@ window.button=function(b, event) {
     pokeCursorOn(); return;
   }
 
-  if (keyboard) {
-    if (window.RUN && typeof keydown !== 'undefined') {
-      var kd = {keyCode: b, key: k || l, shiftKey: !!shift, ctrlKey: !!ctrl, altKey: !!alt, source: event ? 'physical' : 'virtual', originalEvent: event || null};
-      if (RUN != "qandy.js" && typeof keydown !== 'undefined') {
-        keydown(key, keyCode);
+  // Host editing / navigation / input handling
+  if (k === "back") {
+    event && event.preventDefault();
+    if (window.QandyKeyboard && QandyKeyboard.handleBackspace()) {
+      pokeCursorOn(); return;
+    }
+    if (SSTART !== -1 && SEND !== -1) {
+      if (SSTART>SEND) { [SSTART, SEND] = [SEND, SSTART];}
+      deleteSelection();
+      pokeInput();
+    } else if (CURP > 0) {
+      LINE = LINE.substring(0, CURP - 1) + LINE.substring(CURP);
+      CURP--;
+      pokeCell(CURX, CURY, " ");
+      pokeInput();
+    }
+    pokeCursorOn();
+  } else if (k === "insert") {
+    navigator.clipboard.readText().then(function(text) {
+      if (text) {
+        if (SSTART !== -1 && SEND !== -1) deleteSelection();
+        if (SSTART>-1) { pokeSelect(false); SSTART = -1; SEND = -1; }
+        LINE = (LINE || "").substring(0, CURP) + text + (LINE || "").substring(CURP);
+        CURP += text.length;
+        pokeInput();
+      }
+    }).catch(function(){});
+    pokeCursorOn();
+    return;
+  } else if (k === "delete") {
+    event && event.preventDefault();
+    var str = String(LINE || "");
+    var maxLen = str.length;
+    var s = Math.max(0, Math.min(SSTART, SEND));
+    var e = Math.max(0, Math.min(Math.max(SSTART, SEND), maxLen));
+    if (s < e) {
+      // copy to clipboard only when shift-requested and available
+      if (shift && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        navigator.clipboard.writeText(str.substring(s, e)).catch(function(err){
+          console.warn('clipboard write failed', err);
+        });
+      }
+    }
+    pokeSelect(false);
+    LINE = str.substring(0, s) + str.substring(e);
+    CURP = s;
+    SSTART = -1;
+    SEND = -1;
+    pokeInput();
+  } else if (k === "left") {
+    event && event.preventDefault();
+    if (CURP > 0) {
+      if (shift) {
+        if (SSTART === -1) SSTART = CURP;   // anchor at the starting cursor pos
+        CURP = Math.max(0, CURP - 1);
+        SEND = CURP;
+        var absCol = LINEX + CURP;
+        CURY = LINEY + Math.floor(absCol / W);
+        CURX = absCol % W;
+        pokeSelect(true);
+      } else {
+        if (SSTART > -1) { pokeSelect(false); SSTART = -1; SEND = -1; }
+        CURP = Math.max(0, CURP - 1);
+        var absCol = LINEX + CURP;
+        CURY = LINEY + Math.floor(absCol / W);
+        CURX = absCol % W;
+      }
+    }
+  } else if (k === "right") {
+    event && event.preventDefault();
+    if (CURP < LINE.length) {
+      if (shift) {
+        if (SSTART === -1) SSTART = CURP;
+        CURP = Math.min(LINE.length, CURP + 1);
+        SEND = CURP;
+        var absCol = LINEX + CURP;
+        CURY = LINEY + Math.floor(absCol / W);
+        CURX = absCol % W;
+        pokeSelect(true);
+      } else {
+        if (SSTART>-1) { pokeSelect(false); SSTART = -1; SEND = -1; }
+        CURP = Math.min(LINE.length, CURP + 1);
+        var absCol = LINEX + CURP;
+        CURY = LINEY + Math.floor(absCol / W);
+        CURX = absCol % W;
+      }
+    }
+  } else if (k === "home") {
+    event && event.preventDefault();
+    if (shift) {
+      if (SSTART === -1) SSTART = CURP; // anchor
+      SEND = 0;
+      CURP = 0;
+      var absCol = LINEX + CURP;
+      CURY = LINEY + Math.floor(absCol / W);
+      CURX = absCol % W;
+      pokeSelect(true);
+    } else {
+      if (SSTART > -1) { pokeSelect(false); SSTART = -1; SEND = -1; }
+      CURP = 0;
+      var absCol = LINEX + CURP;
+      CURY = LINEY + Math.floor(absCol / W);
+      CURX = absCol % W;
+    }
+  } else if (k === "end") {
+    event && event.preventDefault();
+    if (shift) {
+      if (SSTART === -1) SSTART = CURP;
+      SEND = LINE.length;
+      CURP = LINE.length;
+      var absCol = LINEX + CURP;
+      CURY = LINEY + Math.floor(absCol / W);
+      CURX = absCol % W;
+      pokeSelect(true);
+    } else {
+      if (SSTART > -1) { pokeSelect(false); SSTART = -1; SEND = -1; }
+      CURP = LINE.length;
+      var absCol = LINEX + CURP;
+      CURY = LINEY + Math.floor(absCol / W);
+      CURX = absCol % W;
+    }
+  } else if (k === "up") {
+    event && event.preventDefault();
+    if (commandHistory && commandHistory.length > 0) {
+      if (historyIndex === -1) {
+        tempCommand = LINE || "";
+        historyIndex = commandHistory.length;
+      }
+      if (historyIndex > 0) {
+        historyIndex--;
+        LINE = commandHistory[historyIndex] || "";
+      } else {
+        LINE = commandHistory[0] || "";
+      }
+      CURP = LINE.length;
+      var absCol = LINEX + CURP;
+      CURY = LINEY + Math.floor(absCol / W);
+      CURX = absCol % W;
+      pokeInput();
+    }
+  } else if (k === "down") {
+    event && event.preventDefault();
+    if (historyIndex !== -1) {
+      if (historyIndex < commandHistory.length - 1) {
+        historyIndex++;
+        LINE = commandHistory[historyIndex] || "";
+      } else {
+        historyIndex = -1;
+        LINE = tempCommand || "";
+      }
+      CURP = LINE.length;
+      var absCol2 = LINEX + CURP;
+      CURY = LINEY + Math.floor(absCol2 / W);
+      CURX = absCol2 % W;
+      pokeInput();
+    }
+  } else if (k === "enter") {
+    event && event.preventDefault();
+    if (window.QandyKeyboard && QandyKeyboard.handleEnter()) { pokeCursorOn(); return; }
+    if (SSTART>-1) { pokeSelect(false); SSTART = -1; SEND = -1; }
+    if (LINE !== undefined) {
+      // Save to history
+      if (typeof commandHistory !== 'undefined' && LINE.trim().length > 0) {
+        if (commandHistory.length === 0 || commandHistory[commandHistory.length - 1] !== LINE) {
+          commandHistory.push(LINE);
+          if (typeof maxHistorySize !== 'undefined' && commandHistory.length > maxHistorySize) {
+            commandHistory.shift();
+          }
+        }
+      }
+      historyIndex = -1;
+      tempCommand = "";
+      cmd=LINE; LINE=""; CURP=0; LINEX=CURX; LINEY=CURY; pokeRefresh();
+      if (typeof RUN !== 'undefined' && RUN !== "qandy.js" && typeof input === 'function') {
+        try {
+          input(cmd);
+        } catch (err) {
+          console.error("script input() threw:", err);
+        }
+      } else {
+        command(cmd);
+      }
+      pokeCursorOn();
+      return;
+    }
+  } else if (l) {
+    // Insert printable character(s)
+    var finalChar = l;
+    var hasAltFlag = !!((typeof alt !== 'undefined' && alt) || (typeof altPhysical !== 'undefined' && altPhysical) || (event && !!event.altKey));
+    var hasCtrlFlag = !!((typeof ctrl !== 'undefined' && ctrl) || (typeof ctrlPhysical !== 'undefined' && ctrlPhysical) || (event && !!event.ctrlKey));
+    var hasAltShift = hasAltFlag && !!shift;
+
+    if (hasAltFlag) {
+      var baseLower = (typeof l === 'string' && l.length > 0) ? l.toLowerCase() : '';
+      if (hasAltShift && altShiftKeys.hasOwnProperty(baseLower)) {
+        finalChar = altShiftKeys[baseLower];
+      } else if (altKeys.hasOwnProperty(baseLower)) {
+        finalChar = altKeys[baseLower];
+      }
+    }
+    if (hasCtrlFlag) {
+      // Handle ctrl shortcuts
+      ctrl = 0;
+      var cel = document.getElementById("ctrl");
+      if (cel) { cel.style.backgroundColor = "#222"; cel.style.color = "#fff"; }
+      var lc = finalChar.toLowerCase();
+      if (lc === 'c') {
+        var copyText = "";
+        if (SSTART !== -1 && SEND !== -1) {
+          var cs = Math.min(SSTART, SEND);
+          var ce = Math.max(SSTART, SEND);
+          copyText = LINE.substring(cs, ce);
+        } else {
+          copyText = LINE;
+        }
+        if (copyText.length > 0) {
+          navigator.clipboard.writeText(copyText).catch(function(){});
+        }
+        pokeCursorOn();
         return;
       }
-    
-  } else {
-    if (k === "back") {
-      event && event.preventDefault();
-      if (window.QandyKeyboard && QandyKeyboard.handleBackspace()) {
-        // consumed (masked mode)
-        pokeCursorOn(CURSOR); // or pokeCursorOn() depending on signature
-        return;
-      }
-      if (SSTART !== -1 && SEND !== -1) {
-        if (SSTART>SEND) { [SSTART, SEND] = [SEND, SSTART];}
-        deleteSelection();
-        pokeInput();
-      } else if (CURP > 0) {
-        LINE = LINE.substring(0, CURP - 1) + LINE.substring(CURP);
-        CURP--;
-        pokeCell(CURX, CURY, " ");
-        pokeInput();
-      }
-      pokeCursorOn(CURSOR);
-      //if (SSTART !== -1 && SEND !== -1) deleteSelection();
-    } else if (k === "insert") {
+      if (lc === 'v') {
         navigator.clipboard.readText().then(function(text) {
-        if (text) {
-          if (SSTART !== -1 && SEND !== -1) deleteSelection();
+          if (text) {
+            if (SSTART !== -1 && SEND !== -1) deleteSelection();
             if (SSTART>-1) { pokeSelect(false); SSTART = -1; SEND = -1; }
             LINE = (LINE || "").substring(0, CURP) + text + (LINE || "").substring(CURP);
             CURP += text.length;
@@ -4112,258 +4362,34 @@ window.button=function(b, event) {
         }).catch(function(){});
         pokeCursorOn();
         return;
-  	  } else if (k === "delete") {
-        event && event.preventDefault();
-        var str = String(LINE || "");
-        var maxLen = str.length;
-        var s = Math.max(0, Math.min(SSTART, SEND));
-        var e = Math.max(0, Math.min(Math.max(SSTART, SEND), maxLen));
-        if (s < e) {
-          // copy to clipboard only when shift-requested and available
-          if (shift && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
-            navigator.clipboard.writeText(str.substring(s, e)).catch(function(err){
-              console.warn('clipboard write failed', err);
-            });
-          }
+      }
+      if (lc === 'a') {
+        if (LINE.length > 0) {
+          SSTART = 0; SEND = LINE.length;
+          pokeSelect(true);
         }
-        pokeSelect(false);
-        LINE = str.substring(0, s) + str.substring(e);
-        CURP = s;
-        SSTART = -1;
-        SEND = -1;
-       pokeInput();
-      } else if (k === "left") {
-        event && event.preventDefault();
-        if (CURP > 0) {
-          if (shift) {
-            if (SSTART === -1) SSTART = CURP;   // anchor at the starting cursor pos
-            CURP = Math.max(0, CURP - 1);
-            SEND = CURP;
-            // update visual cursor coordinates (wrap-aware)
-            var absCol = LINEX + CURP;
-            CURY = LINEY + Math.floor(absCol / W);
-            CURX = absCol % W;
-            pokeSelect(true);
-          } else {
-            // non-shift behavior clears selection
-            if (SSTART > -1) { pokeSelect(false); SSTART = -1; SEND = -1; }
-            CURP = Math.max(0, CURP - 1);
-            var absCol = LINEX + CURP;
-              CURY = LINEY + Math.floor(absCol / W);
-              CURX = absCol % W;
-            }
-          }
-        } else if (k === "right") {
-          event && event.preventDefault();
-          if (CURP < LINE.length) {
-            if (shift) {
-              if (SSTART === -1) SSTART = CURP;
-              CURP = Math.min(LINE.length, CURP + 1);
-              SEND = CURP;
-              var absCol = LINEX + CURP;
-              CURY = LINEY + Math.floor(absCol / W);
-              CURX = absCol % W;
-              pokeSelect(true);
-            } else {
-              if (SSTART>-1) { pokeSelect(false); SSTART = -1; SEND = -1; }
-              CURP = Math.min(LINE.length, CURP + 1);
-              var absCol = LINEX + CURP;
-              CURY = LINEY + Math.floor(absCol / W);
-              CURX = absCol % W;
-            }
-          }
-        } else if (k === "home") {
-          event && event.preventDefault();
-          if (shift) {
-            if (SSTART === -1) SSTART = CURP; // anchor
-            SEND = 0;
-            CURP = 0;
-            var absCol = LINEX + CURP;
-            CURY = LINEY + Math.floor(absCol / W);
-            CURX = absCol % W;
-            pokeSelect(true);
-          } else {
-            // non-shift home: clear selection and move cursor to start
-            if (SSTART > -1) { pokeSelect(false); SSTART = -1; SEND = -1; }
-            CURP = 0;
-            var absCol = LINEX + CURP;
-            CURY = LINEY + Math.floor(absCol / W);
-            CURX = absCol % W;
-          }        
-        } else if (k === "end") {
-          event && event.preventDefault();
-          if (shift) {
-            if (SSTART === -1) SSTART = CURP;
-            SEND = LINE.length;
-            CURP = LINE.length;
-            var absCol = LINEX + CURP;
-            CURY = LINEY + Math.floor(absCol / W);
-            CURX = absCol % W;
-            pokeSelect(true);
-          } else {
-            if (SSTART > -1) { pokeSelect(false); SSTART = -1; SEND = -1; }
-            CURP = LINE.length;
-            var absCol = LINEX + CURP;
-            CURY = LINEY + Math.floor(absCol / W);
-            CURX = absCol % W;
-          }        
-        } else if (k === "up") {
-          event && event.preventDefault();
-          if (commandHistory && commandHistory.length > 0) {
-            // On first history navigation, save current typing to restore later
-            if (historyIndex === -1) {
-              tempCommand = LINE || "";
-              historyIndex = commandHistory.length;
-            }
-            // Move back through history if possible
-            if (historyIndex > 0) {
-              historyIndex--;
-              LINE = commandHistory[historyIndex] || "";
-            } else {
-              LINE = commandHistory[0] || "";
-            }
-            CURP = LINE.length;
-            var absCol = LINEX + CURP;
-            CURY = LINEY + Math.floor(absCol / W);
-            CURX = absCol % W;
-            pokeInput();
-          }
-        } else if (k === "down") {
-          event && event.preventDefault();
-          if (historyIndex !== -1) {
-            if (historyIndex < commandHistory.length - 1) {
-              historyIndex++;
-              LINE = commandHistory[historyIndex] || "";
-            } else {
-              // Past the newest history entry: restore the saved current edit
-              historyIndex = -1;
-              LINE = tempCommand || "";
-            }
-            // Put cursor at end of the current LINE
-            CURP = LINE.length;
-            var absCol2 = LINEX + CURP;
-            CURY = LINEY + Math.floor(absCol2 / W);
-            CURX = absCol2 % W;
-            pokeInput();
-          }
-        } else if (k === "enter") {
-          event && event.preventDefault();
-          if (window.QandyKeyboard && QandyKeyboard.handleEnter()) { return; }
-          if (SSTART>-1) { pokeSelect(false); SSTART = -1; SEND = -1; }
-          if (LINE !== undefined) {
-            // Save to history
-            if (typeof commandHistory !== 'undefined' && LINE.trim().length > 0) {
-              if (commandHistory.length === 0 || commandHistory[commandHistory.length - 1] !== LINE) {
-                commandHistory.push(LINE);
-                if (typeof maxHistorySize !== 'undefined' && commandHistory.length > maxHistorySize) {
-                  commandHistory.shift();
-                }
-              }
-            }
-            historyIndex = -1;
-            tempCommand = "";
-            cmd=LINE; LINE = ""; CURP = 0; LINEX = CURX; LINEY = CURY;
-            pokeRefresh()
-            command(cmd);
-            return; 
-          }
-        } else if (l) {
-          // Insert printable character(s)
-          var finalChar = l;
-          var hasCtrl = !!ctrl;
-          var hasAlt = !!alt;
-          var hasAltFlag = !!((typeof alt !== 'undefined' && alt) || (typeof altPhysical !== 'undefined' && altPhysical) || (event && !!event.altKey))
-          var hasCtrl = !!ctrl;
-          var hasCtrlFlag = !!((typeof ctrl !== 'undefined' && ctrl) || (typeof ctrlPhysical !== 'undefined' && ctrlPhysical) || (event && !!event.ctrlKey));
-          var hasAltShift = hasAltFlag && !!shift;
-
-          if (hasAltFlag || hasAlt) {
-            var baseLower = (typeof l === 'string' && l.length > 0) ? l.toLowerCase() : '';
-            if (hasAltShift && altShiftKeys.hasOwnProperty(baseLower)) {
-              finalChar = altShiftKeys[baseLower];
-            } else if (altKeys.hasOwnProperty(baseLower)) {
-              finalChar = altKeys[baseLower];
-            }
-          }
-          if (hasCtrl) {
-            ctrl = 0;
-            var cel = document.getElementById("ctrl");
-            if (cel) { cel.style.backgroundColor = "#222"; cel.style.color = "#fff"; }
-            var lc = finalChar.toLowerCase();
-            // Ctrl+C: copy selection or whole line
-            if (lc === 'c') {
-              var copyText = "";
-              if (SSTART !== -1 && SEND !== -1) {
-                var cs = Math.min(SSTART, SEND);
-                var ce = Math.max(SSTART, SEND);
-                copyText = LINE.substring(cs, ce);
-              } else {
-                copyText = LINE;
-              }
-              if (copyText.length > 0) {
-                navigator.clipboard.writeText(copyText).catch(function(){});
-              }
-              pokeCursorOn()
-              return;
-            }
-
-            // Ctrl+V: paste from clipboard
-            if (lc === 'v') {
-              navigator.clipboard.readText().then(function(text) {
-                if (text) {
-                  if (SSTART !== -1 && SEND !== -1) deleteSelection();
-                  if (SSTART>-1) { pokeSelect(false); SSTART = -1; SEND = -1; }
-                  LINE = (LINE || "").substring(0, CURP) + text + (LINE || "").substring(CURP);
-                  CURP += text.length;
-                  pokeInput();
-                }
-              }).catch(function(){});
-              pokeCursorOn()
-              return;
-            }
-            // Ctrl+A: select all input
-            if (lc === 'a') {
-              if (LINE.length > 0) {
-                SSTART = 0; SEND = LINE.length;
-                pokeSelect(true);
-              }
-              pokeCursorOn()
-              return;
-            }
-            pokeCursorOn()
-            return;
-          }
-
-          // Typing clears any active selection (replacing selected text)
-          if (SSTART !== -1 && SEND !== -1) {
-            //
-            // @@ this routine must be rewritten to use new variable set
-            //
-            // deleteSelection();
-            //
-          }
-          if (SSTART>-1) { pokeSelect(false); SSTART = -1; SEND = -1; }
-          // Insert character into line at CURP (cursor position)
-          // insert mode, need overwrite mode
-
-          //if (window.QandyKeyboard && QandyKeyboard.handleTypedChar(char)) {
-          //  // consumed (e.g., masked input) — do nothing else
-          //} else {
-            LINE = (LINE || "").substring(0, CURP) + finalChar + (LINE || "").substring(CURP);
-            CURP += finalChar.length;
-            CURX += finalChar.length;
-            while (CURX >= W) { CURX -= W; CURY++; if (CURY >= H) { CURY = H - 1; } }
-            pokeInput();
-            if (typeof historyIndex !== 'undefined' && historyIndex !== -1) { historyIndex = -1; tempCommand = ""; }
-          //}          
-        }
-    } // end else (not run+keydown)
-  } else {
-    if (RUN && typeof keydown !== 'undefined') {
-      var kd2 = {keyCode: b, key: k || l, shiftKey: !!shift, ctrlKey: !!ctrl, altKey: !!alt, source: event ? 'physical' : 'virtual', originalEvent: event || null};
-      dispatchKeyboardEvent('keydown', kd2);
+        pokeCursorOn();
+        return;
+      }
+      pokeCursorOn();
+      return;
     }
+
+    // Typing clears any active selection (replacing selected text)
+    if (SSTART !== -1 && SEND !== -1) {
+      // deleteSelection();  // keep your existing deletion routine if needed
+    }
+    if (SSTART>-1) { pokeSelect(false); SSTART = -1; SEND = -1; }
+
+    LINE = (LINE || "").substring(0, CURP) + finalChar + (LINE || "").substring(CURP);
+    CURP += finalChar.length;
+    CURX += finalChar.length;
+    while (CURX >= W) { CURX -= W; CURY++; if (CURY >= H) { CURY = H - 1; } }
+    pokeInput();
+    if (typeof historyIndex !== 'undefined' && historyIndex !== -1) { historyIndex = -1; tempCommand = ""; }
   }
+
+  // No guest script fast-path and not handled above - final housekeeping
   pokeCursorOn();
 }
 
@@ -4392,98 +4418,118 @@ document.addEventListener('paste', function (event) {
 });
 
 window.press=function(event) { 
- key=""; k=event.keyCode; shift=event.shiftKey;
- if (HOST) { kid="host-"; } else { kid="guest-"; }
+  key=""; k=event.keyCode; shift=event.shiftKey;
+  if (HOST) { kid="host-"; } else { kid="guest-"; }
 
- // Handle physical CapsLock keypress (keyCode 20)
- if (event.keyCode === 20) {
-   // Determine the platform state if available
-   var platformState = (typeof event.getModifierState === 'function') ? !!event.getModifierState('CapsLock') : null;
+  // Handle physical CapsLock keypress (keyCode 20)
+  if (event.keyCode === 20) {
+    // Determine the platform state if available
+    var platformState = (typeof event.getModifierState === 'function') ? !!event.getModifierState('CapsLock') : null;
 
-   // Compute the new desired caps state:
-   // - If platformState is available, use it.
-   // - But some browsers report the previous state on keydown; if platformState equals current caps,
-   //   assume the toggle has not yet been applied and flip it.
-   var newCaps;
-   if (platformState === null) {
-     newCaps = !caps; // no platform info -> just toggle
-   } else {
-     newCaps = platformState;
-     if (platformState === caps) {
-       // likely timing issue -> flip to reflect the user action
-       newCaps = !caps;
-     }
-   }
+    // Compute the new desired caps state:
+    // - If platformState is available, use it.
+    // - But some browsers report the previous state on keydown; if platformState equals current caps,
+    //   assume the toggle has not yet been applied and flip it.
+    var newCaps;
+    if (platformState === null) {
+      newCaps = !caps; // no platform info -> just toggle
+    } else {
+      newCaps = platformState;
+      if (platformState === caps) {
+        // likely timing issue -> flip to reflect the user action
+        newCaps = !caps;
+      }
+    }
+ 
+    caps = !!newCaps;  
+    l = document.getElementById(kid+"kcaps") || document.getElementById(kid+"caps");
+    if (l) {
+      if (caps) { l.style.backgroundColor = "#fff"; l.style.color = "#000"; }
+      else { l.style.backgroundColor = "#222"; l.style.color = "#fff"; }
+    }
 
-   caps = !!newCaps;  
-   l = document.getElementById(kid+"kcaps") || document.getElementById(kid+"caps");
-   if (l) {
-     if (caps) { l.style.backgroundColor = "#fff"; l.style.color = "#000"; }
-     else { l.style.backgroundColor = "#222"; l.style.color = "#fff"; }
-   }
+    // Cancel any transient flash timeout for the CAPS element so it won't reapply a flash style
+    try {
+      if (keyTimeouts && keyTimeouts['caps']) { clearTimeout(keyTimeouts['caps']); delete keyTimeouts['caps']; }
+      // Also clear any stored flash marker on the element
+      if (l) l.dataset._flash = '';
+    } catch (e) { /* ignore */ }
 
-   // Cancel any transient flash timeout for the CAPS element so it won't reapply a flash style
-   try {
-     if (keyTimeouts && keyTimeouts['caps']) { clearTimeout(keyTimeouts['caps']); delete keyTimeouts['caps']; }
-     // Also clear any stored flash marker on the element
-     if (l) l.dataset._flash = '';
-   } catch (e) { /* ignore */ }
+    // Ensure label updates
+    if (typeof updateKeyLabels === 'function') updateKeyLabels();
 
-   // Ensure label updates
-   if (typeof updateKeyLabels === 'function') updateKeyLabels();
+    // If we just turned it off, explicitly unhighlight the element (clear inline styles)
+    if (!caps) {
+      unhighlightKey('caps');
+    } else {
+      // Ensure locked appearance
+      if (l) { l.style.backgroundColor = "#ddd"; l.style.color = "#000"; }
+    }
 
-   // If we just turned it off, explicitly unhighlight the element (clear inline styles)
-   if (!caps) {
-     unhighlightKey('caps');
-   } else {
-     // Ensure locked appearance
-     if (l) { l.style.backgroundColor = "#ddd"; l.style.color = "#000"; }
-   }
-
-  // Prevent default browser handling side-effects and stop further processing for this key event
-  event.preventDefault && event.preventDefault();
-  return;
-}
+    // Prevent default browser handling side-effects and stop further processing for this key event
+    event.preventDefault && event.preventDefault();
+    return;
+  }
 
   if (event.ctrlKey && (event.key === 'v' || event.key === 'V')) {
     // Let the browser fire the native paste event (handled by the paste listener)
     return;
   }
 
- if (event.keyCode === 18 || event.altKey) { event.preventDefault(); }
- if (event.keyCode === 27) { event.preventDefault(); }
- if (event.keyCode === 16) {
-  var capsBtn = document.getElementById(kid+"caps");
-  if (capsBtn) { capsBtn.style.backgroundColor = "#444"; capsBtn.style.color = "#fff"; }
-  updateKeyLabels();
- }
- if (event.keyCode === 17 && !ctrl) {
-  ctrl=1; ctrlPhysical=true;
-  document.getElementById(kid+"ctrl").style.backgroundColor = "#ddd";
-  document.getElementById(kid+"ctrl").style.color = "#000";
-  return;
- }
- if (event.keyCode === 18 && !alt) {
-  highlightKey(k);
-  alt = 1; altPhysical = true;
-  document.getElementById(kid+"alt").style.backgroundColor = "#fff";
-  document.getElementById(kid+"alt").style.color = "#000";
-  updateKeyLabels();
- }
- // For Ctrl+key combos, pass specific ones through to button() (Ctrl+C, Ctrl+A)
- // Ctrl+V is handled via the native paste event listener instead
- if (event.ctrlKey) {
-  var ctrlKey = event.key ? event.key.toLowerCase() : '';
-  if (ctrlKey === 'c' || ctrlKey === 'a') {
-   event.preventDefault();
-   highlightKey(k);
-   button(k, event);
+  if (event.keyCode === 18 || event.altKey) { event.preventDefault(); }
+  if (event.keyCode === 27) { event.preventDefault(); }
+  if (event.keyCode === 16) {
+    var capsBtn = document.getElementById(kid+"caps");
+    if (capsBtn) { capsBtn.style.backgroundColor = "#444"; capsBtn.style.color = "#fff"; }
+    updateKeyLabels();
   }
-  // All other ctrl combos: let browser handle
-  return;
- }
- highlightKey(k);
- button(k, event);
+  if (event.keyCode === 17 && !ctrl) {
+   ctrl=1; ctrlPhysical=true;
+   document.getElementById(kid+"ctrl").style.backgroundColor = "#ddd";
+   document.getElementById(kid+"ctrl").style.color = "#000";
+   return;
+  }
+  if (event.keyCode === 18 && !alt) {
+    highlightKey(k);
+    alt = 1; altPhysical = true;
+    document.getElementById(kid+"alt").style.backgroundColor = "#fff";
+    document.getElementById(kid+"alt").style.color = "#000";
+    updateKeyLabels();
+  }
+
+  // For Ctrl+key combos, pass specific ones through to button() (Ctrl+C, Ctrl+A)
+  // Ctrl+V is handled via the native paste event listener instead
+  if (event.ctrlKey) {
+    var ctrlKey = event.key ? event.key.toLowerCase() : '';
+    if (ctrlKey === 'c' || ctrlKey === 'a') {
+      event.preventDefault();
+      highlightKey(k);
+      button(k, event); 
+    }
+    // All other ctrl combos: let browser handle
+    return;
+  }
+  if (typeof RUN !== 'undefined' && RUN !== "qandy.js" && typeof keydown === 'function') {
+    if (!event.key) { try { event.key = String.fromCharCode(event.keyCode || 0); } catch (e) { event.key = ""; } }
+    event.source = event.source || 'physical';
+    if (keyboard==true) {
+      window.button(event.keyCode, event);
+    } else {
+      try {
+        keydown(event.keyCode, event);
+      } catch (err) {
+        // again, what to do with this error?
+        // need to terminate running script and alert user
+        console.error("Error: keydown() ", err);
+      }
+      //event.preventDefault && event.preventDefault();
+      //event.stopPropagation && event.stopPropagation();
+      return;
+    }
+  }
+  // Default host behavior: highlight and send to emulator button()
+  highlightKey(k);
+  button(k, event);
 }
 
 window.pressup=function(event) {
@@ -4492,7 +4538,6 @@ window.pressup=function(event) {
   if (event.keyCode === 18 || event.altKey) {
     event.preventDefault(); // Prevent browser menu from opening
   }
- 
   // Handle physical CTRL key release (unhighlight)
   if (event.keyCode === 17 && ctrlPhysical) {
     ctrl = 0;
@@ -4501,7 +4546,6 @@ window.pressup=function(event) {
     document.getElementById(kid+"ctrl").style.color = "#fff";
     return;
   }
-
   // Handle physical SHIFT key release (unhighlight CAPS unless caps mode is active)
   if (event.keyCode === 16) {
     shift = 0;
@@ -4509,7 +4553,6 @@ window.pressup=function(event) {
     if (!caps) { unhighlightKey('caps'); }
     return;
   }
-
   // Handle physical ALT key release (unhighlight)
   if (event.keyCode === 18 && altPhysical) {
     alt = 0;
@@ -4519,12 +4562,20 @@ window.pressup=function(event) {
     updateKeyLabels();
     return;
   }
- 
-  // Route keyup to active script if run is set
-  if (RUN && typeof keyup !== 'undefined') {
-    var k = String.fromCharCode(event.keyCode);
-    var keyData = {keyCode: event.keyCode, key: k, shiftKey: !!shift, ctrlKey: !!ctrl, altKey: !!alt, source: 'physical', originalEvent: event};
-    dispatchKeyboardEvent('keyup', keyData);
+  // Route keyup to active script if RUN is set and not the host
+  if (RUN !== "qandy.js" && typeof keyup === 'function') {
+    event = event || {};
+    if (!event.key) { try { event.key = String.fromCharCode(event.keyCode || 0); } catch (e) { event.key = ""; }}
+    // mark source so scripts can tell physical vs synthetic
+    event.source = event.source || 'physical';
+    try {
+      keyup(event.keyCode, event);
+  	   // we need way to terminate running script and alert programmer
+    } catch (err) {
+  	   // what is best thing to do with this error??
+      console.log("script keyup() threw:", err);
+    }
+    return;
   }
 }
 
@@ -4555,6 +4606,8 @@ function formatError(e) {
   }
 }
 
+
+// this can be deleted, press() and press() now dispatch their own keyboard events
 window.dispatchKeyboardEvent = function(eventType, keyData) {
   if (eventType === 'keydown') {
     if (RUN != "qandy.js" && typeof keydown !== 'undefined') {
@@ -4566,7 +4619,6 @@ window.dispatchKeyboardEvent = function(eventType, keyData) {
       return;
     }
   }
-
   if (eventType === 'keyup') {
     if (RUN != "qandy.js" && typeof keyup !== 'undefined') {
       print("Error: keyup(): " + (e && e.message ? e.message : String(e)) + "\n");
@@ -4575,6 +4627,7 @@ window.dispatchKeyboardEvent = function(eventType, keyData) {
   }
 };
 
+// is this still used?? i don't think so
 window.hostScript=function(name) {
   if (!name || typeof name !== 'string') return false;
   name = name.trim();
@@ -4668,6 +4721,12 @@ async function _processPrintQueue() {
 
 function exit() {
   // guest scripts use this to exit back to qandy.js
+  RUN="qandy.js"
+}
+
+window.dosExit=function() {
+  // guest scripts use this to exit back to qandy.js
+  print("\n[white]Exit to Qandy\n");
   RUN="qandy.js"
 }
 	

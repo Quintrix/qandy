@@ -3408,7 +3408,7 @@ function init_command_js() {
       return;
     }
     // system commands
-    console.log("system command "+cmd);
+    
     print("\n");
     cmd=String(cmd || '').trim();
     switch (cmd) {
@@ -4602,7 +4602,7 @@ window.press=function(event) {
     }
   }
   // Default host behavior: highlight and send to emulator button()
-  highlightKey(k);
+  highlightKey(event.keyCode);
   button(event.keyCode, event);
 }
 
