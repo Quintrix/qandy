@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html><head>
+<script>
+if (typeof window.print === 'function' && window.print.toString().indexOf('[native code]') !== -1) { window._native_print = window.print; window.print = function() {}; }
+</script>
+<link rel="stylesheet" type="text/css" href="qandy.css">
+</head><body><p><br>
+<div id=txt class="txt"></div>
+<div id="pop" class="pop" onMouseOver='PopUpVis="visible";' onMouseOut='PopUpVis=PForce; PUV=setTimeout("document.getElementById(\"pop\").style.visibility=PopUpVis;",100);'></div>
+<div id="keyboard-container"></div>
+
+<script>
+
+// Define Global Variables
+
+// sound.js
+var SOUND=false;       // enable/disable sound card
+var SOUND=true;       // enable/disable sound card
+
+// qandy.js
+var devteam=1;  // developer mode
+var RUN="";     // current script running starting with qandy.js 
+var RUNIN="";   // input mode set by running script, line or key
+var RUNOUT="";  // output display set by running script, gfx or txt
+
+var runInputMode="";      // type of input qandy sends run= (line, key, or none)
+var commandHistory = [];  // Array to store command history
+var historyIndex = -1;    // Current position in history (-1 = not browsing, typing new command)
+var maxHistorySize = 50;  // Maximum number of commands to remember
+var tempCommand = "";     // Temporary storage for command being typed when browsing history
+
+var CURSOR=5; // cursor type 0=off, 1=line, 3=blink line, 4=block, 5=blink block  
+var CURX = 0;    // cursor x
+var CURY = 0;    // cursor y
+var CURP = 0;    // cursor p 
+
+var CURANSI = true; // cursor text ANSI on
+var CURFG = 37;     // cursor text fg color white
+var CURBG = 40;     // cursor text bg color black
+var CURATTR = 0;    // cursor text attr (not including color)
+var CURBAUD = 2400;    // baud rate to display text
+
+// video.js
+var W=32; // screen width
+var H=25; // screen height
+
+var VIDEO = [];  // video memory
+var COLOR = [];  // color memory
+var FCOLOR = []; // foreground color memory
+var BCOLOR = [];  // background color memory
+var ATTR = [];   // attribute memory
+var DOM = [];    // DOM memory
+
+var SYNC=true; // keeps DOM in sync with video
+
+// Attribute bit constants (16-bit)
+var ATTR_INVERSE    = 0x0001;
+var ATTR_BOLD       = 0x0002;
+var ATTR_DIM        = 0x0004;
+var ATTR_ITALIC     = 0x0008;
+var ATTR_UNDERLINE  = 0x0010;
+var ATTR_BLINK      = 0x0020;
+var ATTR_RAPIDBLINK = 0x0040; // optional
+var ATTR_HIDDEN     = 0x0080;
+var ATTR_STRIKE     = 0x0100;
+var ATTR_OVERLINE   = 0x0200; // optional
+
+// Foreground (normal)
+var ANSIblack = "\x1b[30m";
+var ANSIred = "\x1b[31m";
+var ANSIgreen = "\x1b[32m";
+var ANSIyellow = "\x1b[33m";
+var ANSIblue = "\x1b[34m";
+var ANSImagenta = "\x1b[35m";
+var ANSIcyan = "\x1b[36m";
+var ANSIwhite = "\x1b[37m";
+
+// rest of ANSI color variables not implemented yet
+var ANSIreset = "\x1b[0m";
+
+// Foreground (bright / high-intensity)
+var ANSIblack_bright = "\x1b[90m";
+var ANSIred_bright = "\x1b[91m";
+var ANSIgreen_bright = "\x1b[92m";
+var ANSIyellow_bright = "\x1b[93m";
+var ANSIblue_bright = "\x1b[94m";
+var ANSImagenta_bright = "\x1b[95m";
+var ANSIcyan_bright = "\x1b[96m";
+var ANSIwhite_bright = "\x1b[97m";
+
+// Background (normal)
+var ANSIbgblack = "\x1b[40m";
+var ANSIbgred = "\x1b[41m";
+var ANSIbggreen = "\x1b[42m";
+var ANSIbgyellow = "\x1b[43m";
+var ANSIbgblue = "\x1b[44m";
+var ANSIbgmagenta = "\x1b[45m";
+var ANSIbgcyan = "\x1b[46m";
+var ANSIbgwhite = "\x1b[47m";
+
+// Background (bright)
+var ANSIbgblack_bright = "\x1b[100m";
+var ANSIbgred_bright = "\x1b[101m";
+var ANSIbggreen_bright = "\x1b[102m";
+var ANSIbgyellow_bright = "\x1b[103m";
+var ANSIbgblue_bright = "\x1b[104m";
+var ANSIbgmagenta_bright = "\x1b[105m";
+var ANSIbgcyan_bright = "\x1b[106m";
+var ANSIbgwhite_bright = "\x1b[107m";
+
+// Useful attribute helpers
+var ANSIbold = "\x1b[1m";
+var ANSIdim = "\x1b[2m";
+var ANSIitalic = "\x1b[3m";
+var ANSIunderline = "\x1b[4m";
+var ANSIinverse = "\x1b[7m";
+var ANSIhidden = "\x1b[8m";
+var ANSIstrikethrough = "\x1b[9m";
+var ANSIresetAll = "\x1b[0m"; // same as ANSIreset
+
+// gfx.js
+var txt="";
+var mode="txt"; // gfx or txt display
+var allowScriptESC=false; // if true, script handles ESC instead of universal termination
+var PopX=0;
+var PopY=0;
+var PopHide="hidden";
+var PopAlign="center";
+var PForce="hidden";
+var mapx=7;
+var mapy=11;
+var map="";
+
+// keyboard.js
+var keyon=1;
+var caps=0;  // caps lock state: 0=lowercase, 1=uppercase, 2=extended graphics
+var shift=0; // shift key pressed  
+var ctrl=0;  // ctrl key pressed
+var alt=0;   // alt key pressed
+var ctrlPhysical=false;  // track if ctrl was activated by physical keyboard
+var altPhysical=false;   // track if alt was activated by physical keyboard
+var keyboard=1; // turn keyboard input on/off
+
+var LINE ="";  // input line
+var LINEX=0;   // start of input cursor x
+var LINEY=0;   // start of input cursor y
+var LINEP=0;   // cursor position on line
+
+var SSTART=-1;  // selection start
+var SEND=-1;    // selection end
+
+var selectionBgColor = '#ffffff';   // old Selection background color
+var selectionFgColor = '#000000';   // old Selection text color
+
+// keyboard.js
+
+var normalKeys = {
+           "`":"`","\\":"\\","[":"[", "]":"]", "-":"-", "=":"=", 
+  "1":"1", "2":"2", "3":"3", "4":"4", "5":"5", "6":"6", "7":"7", "8":"8", "9":"9", "0":"0",
+  "q":"q", "w":"w", "e":"e", "r":"r", "t":"t", "y":"y", "u":"u", "i":"i", "o":"o", "p":"p",
+  "a":"a", "s":"s", "d":"d", "f":"f", "g":"g", "h":"h", "j":"j", "k":"k", "l":"l", "'":"'",
+  "z":"z", "x":"x", "c":"c", "v":"v", "b":"b", "n":"n", "m":"m", ";":";",
+                    " ":" ",                   ",":",", ".":".", "/":"/"
+};
+
+var shiftedKeys = {
+           "`":"~","\\":"|", "[":"{", "]":"}", "-":"_", "=":"+",
+  "1":"!", "2":"@", "3":"#", "4":"$", "5":"%", "6":"^", "7":"&", "8":"*", "9":"(", "0":")",
+  "q":"Q", "w":"W", "e":"E", "r":"R", "t":"T", "y":"Y", "u":"U", "i":"I", "o":"O", "p":"P",
+  "a":"A", "s":"S", "d":"D", "f":"F", "g":"G", "h":"H", "j":"J", "k":"K", "l":"L", "'":'"',
+  "z":"Z", "x":"X", "c":"C", "v":"V", "b":"B", "n":"N", "m":"M", ";":":", 
+                    " ":" ",                   ",":"<", ".":">", "/":"?"
+};
+
+var altKeys = {
+           "`":"°","\\":"¦", "[":"«", "]":"»", "-":"─", "=":"═",
+  "1":"☺", "2":"☻", "3":"♥", "4":"♦", "5":"♣", "6":"♠", "7":"•", "8":"◘", "9":"○", "0":"◙",
+  "q":"┌", "w":"─", "e":"┐", "r":"├", "t":"┤", "y":"└", "u":"┴", "i":"┘", "o":"│", "p":"┼",
+  "a":"╔", "s":"═", "d":"╗", "f":"╠", "g":"╣", "h":"╚", "j":"╩", "k":"╝", "l":"║", "'":"″",
+  "z":"▀", "x":"▄", "c":"█", "v":"▌", "b":"▐", "n":"░", "m":"▒", ";":"╬",
+                    " ":"·",                   ",":"▓", ".":"■", "/":"□"
+};
+
+var altShiftKeys = {
+  "`":"¬","\\":"¦", "[":"‹", "]":"›", "-":"―", "=":"≡",
+  "1":"↑", "2":"↓", "3":"←", "4":"→", "5":"↔", "6":"↕", "7":"★", "8":"☆", "9":"◆", "0":"◇",
+  "q":"╭", "w":"╌", "e":"╮", "r":"╞", "t":"╡", "y":"╰", "u":"╴", "i":"╯", "o":"╎", "p":"╪",
+  "a":"┏", "s":"━", "d":"┓", "f":"┣", "g":"┫", "h":"┗", "j":"┻", "k":"┛", "l":"┃", "'":"′",
+  "zhttps://quintrix.github.io/qandy/":"▔", "x":"▁", "c":"▪", "v":"▸", "b":"◂", "n":"▴", "m":"▾", ";":"╋",
+  " ":"·", ",":"◊", ".":"●", "/":"○"
+};
+var keyboardData = [
+  // Row 0: ESC, BACKTICK, BACKSLASH, OPEN, CLOSE, DASH, EQUAL, BACK (y=446)
+  {id:"esc", label:"ESC", keyCode:27, x:47, y:446, width:52},
+  {id:"backtick", label:"`", keyCode:192, x:103, y:446, width:28},
+  {id:"backslash", label:"\\", keyCode:220, x:132, y:446, width:28},
+  {id:"open", label:"[", keyCode:219, x:160, y:446, width:28},
+  {id:"close", label:"]", keyCode:221, x:189, y:446, width:28},
+  {id:"dash", label:"-", keyCode:173, x:218, y:446, width:28},
+  {id:"equal", label:"=", keyCode:61, x:247, y:446, width:28},
+  {id:"back", label:"BACK", keyCode:8, x:275, y:446, width:52},
+  // Row 1: Number keys 1-0 (y=480)
+  {id:"n1", label:"1", keyCode:49, x:47, y:480, width:28},
+  {id:"n2", label:"2", keyCode:50, x:75, y:480, width:28},
+  {id:"n3", label:"3", keyCode:51, x:103, y:480, width:28},
+  {id:"n4", label:"4", keyCode:52, x:132, y:480, width:28},
+  {id:"n5", label:"5", keyCode:53, x:160, y:480, width:28},
+  {id:"n6", label:"6", keyCode:54, x:189, y:480, width:28},
+  {id:"n7", label:"7", keyCode:55, x:218, y:480, width:28},
+  {id:"n8", label:"8", keyCode:56, x:247, y:480, width:28},
+  {id:"n9", label:"9", keyCode:57, x:275, y:480, width:28},
+  {id:"n0", label:"0", keyCode:48, x:303, y:480, width:28},
+  // Row 2: QWERTY (y=511)
+  {id:"q", label:"q", keyCode:81, x:47, y:511, width:28},
+  {id:"w", label:"w", keyCode:87, x:75, y:511, width:28},
+  {id:"e", label:"e", keyCode:69, x:103, y:511, width:28},
+  {id:"r", label:"r", keyCode:82, x:132, y:511, width:28},
+  {id:"t", label:"t", keyCode:84, x:160, y:511, width:28},
+  {id:"y", label:"y", keyCode:89, x:189, y:511, width:28},
+  {id:"u", label:"u", keyCode:85, x:218, y:511, width:28},
+  {id:"i", label:"i", keyCode:73, x:247, y:511, width:28},
+  {id:"o", label:"o", keyCode:79, x:275, y:511, width:28},
+  {id:"p", label:"p", keyCode:80, x:303, y:511, width:28},
+  // Row 3: ASDF (y=542)
+  {id:"a", label:"a", keyCode:65, x:47, y:542, width:28},
+  {id:"s", label:"s", keyCode:83, x:75, y:542, width:28},
+  {id:"d", label:"d", keyCode:68, x:103, y:542, width:28},
+  {id:"f", label:"f", keyCode:70, x:132, y:542, width:28},
+  {id:"g", label:"g", keyCode:71, x:160, y:542, width:28},
+  {id:"h", label:"h", keyCode:72, x:189, y:542, width:28},
+  {id:"j", label:"j", keyCode:74, x:218, y:542, width:28},
+  {id:"k", label:"k", keyCode:75, x:247, y:542, width:28},
+  {id:"l", label:"l", keyCode:76, x:275, y:542, width:28},
+  {id:"quote", label:"'", keyCode:222, x:303, y:542, width:28},
+  // Row 4: ZXCV (y=573)
+  {id:"z", label:"z", keyCode:90, x:47, y:573, width:28},
+  {id:"x", label:"x", keyCode:88, x:75, y:573, width:28},
+  {id:"c", label:"c", keyCode:67, x:103, y:573, width:28},
+  {id:"v", label:"v", keyCode:86, x:132, y:573, width:28},
+  {id:"b", label:"b", keyCode:66, x:160, y:573, width:28},
+  {id:"n", label:"n", keyCode:78, x:189, y:573, width:28},
+  {id:"m", label:"m", keyCode:77, x:218, y:573, width:28},
+  {id:"colon", label:";", keyCode:59, x:247, y:573, width:28},
+  {id:"enter", label:"ENTER", keyCode:13, x:275, y:573, width:52},
+
+  // Row 5: Bottom row with modifiers (y=604)
+  {id:"caps", label:"CAPS", keyCode:20, x:47, y:604, width:52},
+  {id:"space", label:"SPACE", keyCode:32, x:103, y:604, width:81},
+  {id:"ctrl", label:"CTRL", keyCode:17, x:189, y:604, width:28},
+  {id:"alt", label:"ALT", keyCode:18, x:218, y:604, width:28},
+  {id:"comma", label:",", keyCode:188, x:247, y:604, width:28},
+  {id:"dot", label:".", keyCode:190, x:275, y:604, width:28},
+  {id:"slash", label:"/", keyCode:191, x:303, y:604, width:28}
+];
+
+// dos.js
+var device = "local";
+var RAM="";           // Current file content in memory
+var RAMFILE="";       // Current filename loaded in RAM
+var RAMTYPE="";       // Current file type (js, txt, etc)
+
+// stray code
+var paginationEnabled = true;  // Enable/disable pagination feature
+var paginationPaused = false;  // Is print() currently paused?
+var paginationBuffer = [];     // Queued text waiting to be printed
+var paginationLinesBeforePause = 25;  // Lines to show before pausing
+var inInputMode = false;       // True when processing user input (prevents pagination)
+
+// run= RUN=
+(function() {
+  // backing storage
+  var _run = "";
+  try { if (typeof window.run !== 'undefined') { _run = window.run; } } catch (e) { /* ignore */ }
+
+  // Try to create window.RUN only if it's safe to do so
+  try {
+    var existingRunDesc = Object.getOwnPropertyDescriptor(window, 'RUN');
+    if (!existingRunDesc || existingRunDesc.configurable) {
+      Object.defineProperty(window, 'RUN', {
+        configurable: true,
+        enumerable: true,
+        get: function() { return _run; },
+        set: function(v) {
+          _run = (typeof v === 'undefined' || v === null) ? '' : String(v);
+          // Keep legacy run in sync if it still exists as a plain property
+          try { window.run = _run; } catch (e) { /* ignore */ }
+        }
+      });
+    } else {
+      // non-configurable existing property: try to read its value to seed _run
+      try { _run = window.RUN; } catch (e) { /* ignore */ }
+    }
+  } catch (e) {
+    // defineProperty failed for some reason — fall back to plain assignment
+    try { window.RUN = _run; } catch (e2) { /* ignore */ }
+  }
+
+  // Try to create a mirrored reactive window.run if safe
+  try {
+    var runDesc = Object.getOwnPropertyDescriptor(window, 'run');
+    if (!runDesc || runDesc.configurable) {
+      try { delete window.run; } catch (ignore) {}
+      Object.defineProperty(window, 'run', {
+        configurable: true,
+        enumerable: true,
+        get: function() { return _run; },
+        set: function(v) {
+          _run = (typeof v === 'undefined' || v === null) ? '' : String(v);
+          // keep RUN in sync (if it's defined as an accessor this will update it)
+          try { window.RUN = _run; } catch (e) { /* ignore */ }
+        }
+      });
+    } else {
+      // run exists and is non-configurable — seed/keep sync
+      try { _run = window.run; } catch (e) { /* ignore */ }
+      try { window.RUN = _run; } catch (e) { /* ignore */ }
+    }
+  } catch (err) {
+    // If all else fails, ensure RUN reflects existing run if possible
+    try { window.RUN = window.run; } catch (e) { /* ignore */ }
+  }
+})();
+
+</script>
+
+<script>
+(function() {
+  'use strict';
+
+  // Configuration array with script load order (unchanged)
+  var SCRIPT_QUEUE = [
+    { src: 'video.js', name: 'Video' },
+    { src: 'gfx.js', name: 'Graphics' },
+    { src: 'keyboard.js', name: 'Keyboard' },
+    { src: 'dos.js', name: 'DOS', optional: true },
+    { src: 'qandy.js', name: 'Qandy Core' }
+  ];
+
+  var startTime = Date.now();
+  var currentIndex = 0;
+  var signalAdvance = null;
+
+  // Called by each script when its initialization is complete
+  window.qandySignalReady = function(scriptName) {
+    // console.log('\u2713 ' + scriptName + ' signaled ready');
+    if (typeof signalAdvance === 'function') {
+      signalAdvance();
+    }
+  };
+
+  function loadNext() {
+    if (currentIndex >= SCRIPT_QUEUE.length) {
+      var elapsed = Date.now() - startTime;
+      document.dispatchEvent(new CustomEvent('qandyReady'));
+      return;
+    }
+
+    var entry = SCRIPT_QUEUE[currentIndex];
+    currentIndex++;
+
+    var advanced = false;
+    function advance() {
+      if (advanced) return;
+      advanced = true;
+      signalAdvance = null;
+      loadNext();
+    }
+
+    // Register advance as the handler for qandySignalReady for this script
+    signalAdvance = advance;
+
+    var script = document.createElement('script');
+    script.src = entry.src;
+
+    script.onerror = function() {
+      signalAdvance = null;
+      if (entry.optional) {
+        console.warn('⚠ Optional script not found: ' + entry.name);
+      } else {
+        console.error('✘ Failed to load required script: ' + entry.name + ' (' + entry.src + ')');
+      }
+      advance();
+    };
+
+    // Advance immediately when the script file loads (onload fallback)
+    script.onload = function() { advance(); };
+
+    // Keep a shorter timeout as a final safety
+    var timeout = setTimeout(function() {
+      if (!advanced) {
+        console.warn('Timed out waiting for ' + entry.name + ' to signal ready. Continuing.');
+        advance();
+      }
+    }, 1000); // 
+    document.head.appendChild(script);
+  }
+
+  function startScriptLoading() {
+    currentIndex = 0;
+    loadNext();
+  }
+
+  // Create an overlay the same size as the #txt display with "POWER SWITCH" text.
+  function createPowerOverlay() {
+    var txtEl = document.getElementById('txt') || document.body;
+    var rect = txtEl.getBoundingClientRect();
+
+    var overlay = document.createElement('div');
+    overlay.id = 'qandy-power-overlay';
+
+    // Position/size to match the txt element
+    overlay.style.position = 'absolute';
+    overlay.style.left = (rect.left + window.scrollX) + 'px';
+    overlay.style.top = (rect.top + window.scrollY) + 'px';
+    overlay.style.width = rect.width + 'px';
+    overlay.style.height = rect.height + 'px';
+
+    // Visual style (retro look)
+    overlay.style.background = '#000';
+    overlay.style.color = '#bbb';
+    overlay.style.border = '4px solid #bbb';
+    overlay.style.display = 'flex';
+    overlay.style.alignItems = 'center';
+    overlay.style.justifyContent = 'center';
+    overlay.style.fontFamily = 'monospace, monospace';
+    overlay.style.fontSize = '28px';
+    overlay.style.letterSpacing = '2px';
+    overlay.style.zIndex = '9999';
+    overlay.style.cursor = 'pointer';
+    overlay.style.userSelect = 'none';
+    overlay.style.whiteSpace = 'pre-wrap';
+    overlay.textContent = 'QANDY\nPOCKET\nCOMPUTER';
+
+    // Center small helper text beneath main label
+    var helper = document.createElement('div');
+    helper.style.position = 'absolute';
+    helper.style.bottom = '8%';
+    helper.style.left = '50%';
+    helper.style.transform = 'translateX(-50%)';
+    helper.style.fontSize = '12px';
+    helper.style.color = '#fff';
+    helper.textContent = 'Click any button, press any key, or touch screen to power on.';
+    overlay.appendChild(helper);
+
+    document.body.appendChild(overlay);
+
+    function engageHandler(e) {
+      // Only first interaction matters
+      overlay.removeEventListener('click', engageHandler);
+      document.removeEventListener('keydown', engageHandler);
+
+      // Play an immediate tiny beep using an ephemeral AudioContext (this is inside a user gesture)
+      try {
+        var ctx = new (window.AudioContext || window.webkitAudioContext)();
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = 1000;
+        gain.gain.value = 0.03;
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.03);
+        setTimeout(function() { if (ctx.close) ctx.close(); }, 150);
+      } catch (err) {
+        /* ignore audio errors for ephemeral feedback */
+      }
+
+      // Inject sound.js so subsequent keypresses can use beep()
+      if (!document.getElementById('qandy-sound-js')) {
+        var s = document.createElement('script');
+        s.id = 'qandy-sound-js';
+        s.src = 'sound.js';
+        s.onload = function() {
+          try {
+            // If sound.js created audioContext but left it suspended, resume it now
+            if (window.audioContext && audioContext.state === 'suspended' && typeof audioContext.resume === 'function') {
+              audioContext.resume();
+            }
+          } catch (e) {}
+        };
+        s.onerror = function() {
+          console.warn('qandy: failed to load sound.js');
+        };
+        document.head.appendChild(s);
+      }
+
+      // Remove the overlay and start loading the normal script queue
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      startScriptLoading();
+    }
+
+    overlay.addEventListener('click', engageHandler);
+    // Accept keyboard activation too
+    document.addEventListener('keydown', engageHandler, { once: true });
+    // On touch devices ensure a tap also works (click covers most cases)
+  }
+
+  // Wait until DOM layout is available so size/position are accurate
+  // if (document.readyState === 'loading') {
+  //   document.addEventListener('DOMContentLoaded', createPowerOverlay);
+  // } else {
+  //   // small timeout to allow layout to stabilize (optional)
+  //   setTimeout(createPowerOverlay, 0);
+  // }
+  
+  // Initialization: show overlay only when SOUND === true; otherwise skip to script loading
+  function init() {
+    if (window.SOUND === true) {
+      // Wait until DOM layout is available so size/position are accurate
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', createPowerOverlay);
+      } else {
+        // small timeout to allow layout to stabilize (optional)
+        setTimeout(createPowerOverlay, 0);
+      }
+    } else {
+      // SOUND is not enabled (false or undefined); skip overlay and load scripts immediately
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', startScriptLoading);
+      } else {
+        setTimeout(startScriptLoading, 0);
+      }
+    }
+  }
+
+  init();
+})();
+
+</script>
+</body></html>

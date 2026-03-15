@@ -3537,6 +3537,10 @@ function init_command_js() {
     d=d.replace(/\s+/g, ' ').trim();
 
     if (c.endsWith('.js')) {
+      if (HOST) {
+        print("Input \'user\' to execute scripts");
+        return;
+      }
       var res = await qdosScript(c);
       if (res === true) {} else {
         print(String(res) + "\n");
@@ -3598,6 +3602,13 @@ function init_command_js() {
           print(await qdosExists(f));
         } else {
           return('Error: invalid filename\n');
+        }
+        return;
+      case "fdisk":
+        if (HOST) {
+          print(await dosfdisk());
+        } else {
+          print("Input \'sysop\' for access\n");
         }
         return;
       default:
@@ -4830,13 +4841,13 @@ async function systemReady() {
     if (await qdosExists("dir.sys")) {
       //if (await qdosExists("autoexec.js")) { qdosScript("autoexec.js"); }
     } else {
-      print("localStorage not formated.\nInput \'sysop\' for access.");
+      print("localStorage not formated.\nInput \'sysop\' for access.\n\n");
     }
   } else {
     // host system ready
     print("[yellow]Qandy Sysop Access[white]\n\n");
     if (!qdosExists("dir.sys")) {
-      print("localStorage not formated.\nInput \'fdisk\' to install.");
+      print("localStorage not formated.\nInput \'fdisk\' to install.\n\n");
     }
   }
 }

@@ -1134,7 +1134,7 @@ var DEVICE = 'none';
   }
 
   // Public fdisk entry point
-  global.dosFormat = async function () {
+  global.dosfdisk = async function () {
     print("\n[-bwhite][black]     localStorage:     [-black][white]\n");
     // Prefer navigator.storage.estimate for better info
     if (typeof navigator !== 'undefined' && navigator.storage && typeof navigator.storage.estimate === 'function') {
