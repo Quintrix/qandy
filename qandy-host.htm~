@@ -4824,7 +4824,7 @@ if (HOST) {
   var s=document.createElement('script');
   s.id='dos.js';
   s.src='dos.js';
-  s.onload=function() { try { dosMount("local"); } catch (e) { print("Error mounting \'local\'\n\n"); }};
+  s.onload=function() { try { dosMount("local"); } catch (e) { print("Error: "+e+"\n"); }};
   document.head.appendChild(s);  
   systemReady();
 } else {
