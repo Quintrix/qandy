@@ -2920,8 +2920,8 @@ function init_keyboard_js() {
     btn.style.top = key.y + 'px';
     btn.onclick = function() {
       var keyData = {keyCode: key.keyCode, key: String.fromCharCode(key.keyCode), shiftKey: !!shift, ctrlKey: !!ctrl, altKey: !!alt, source: 'virtual', originalEvent: null};
-      dispatchKeyboardEvent('keydown', keyData);
-      setTimeout(function() { dispatchKeyboardEvent('keyup', keyData); }, 50);
+      press('keydown', keyData);
+      setTimeout(function() { press('keyup', keyData); }, 50);
     };
 
     // Append into the selected container (defensive: ensure it exists)
@@ -3400,6 +3400,7 @@ window.updateKeyLabels = updateKeyLabels;
 function init_command_js() {
   window.command=async function(cmd) {
     if (RUN != "qandy.js") {
+      console.log("RUN = "+RUN+" command "+cmd);
       print("\n");
       try { input(cmd); } catch (e) { /* ignore */ }
       // this needs testing AFTER run command works
@@ -3408,6 +3409,7 @@ function init_command_js() {
       return;
     }
     // system commands
+    console.log("system command "+cmd);
     print("\n");
     cmd=String(cmd || '').trim();
     switch (cmd) {
@@ -3513,15 +3515,15 @@ function init_command_js() {
     var args=tokens.slice(1); 
     var f = ''; var d = '';
     if (args.length > 0) {
-      var slashIndex = args.findIndex(function(t) { return t === '='; });
+      var slashIndex = args.findIndex(function(t) { return t === '/'; });
       if (slashIndex !== -1) {
         f = args.slice(0, slashIndex).join(' ').trim();
         d = args.slice(slashIndex + 1).join(' ').trim();
       } else {
-        if (args.length === 1 && args[0].indexOf('=') !== -1) {
+        if (args.length === 1 && args[0].indexOf('/') !== -1) {
           var parts = args[0].split('/');
           f = (parts.shift() || '').trim();
-          d = parts.join('=').trim();
+          d = parts.join('/').trim();
         } else {
           f = (args[0] || '').trim();
           d = (args[1] || '').trim();
@@ -3534,8 +3536,14 @@ function init_command_js() {
     f=f.replace(/\s+/g, ' ').trim();
     d=d.replace(/\s+/g, ' ').trim();
 
-    if (c.endsWith('.js')) { print(await qdosScript(c)+"\n"); return; }
-    if (c.endsWith('.prg')) { print(await qdosProgram(c)+"\n"); return; }
+    if (c.endsWith('.js')) {
+      var res = await qdosScript(c);
+      if (res === true) {} else {
+        print(String(res) + "\n");
+      } 
+      return;
+    }
+
     switch (c) {
       case "dir":
         print(await qdosDir()); 
@@ -3589,13 +3597,9 @@ function init_command_js() {
         if (f) {
           print(await qdosExists(f));
         } else {
-          // shouldn't this be print?
           return('Error: invalid filename\n');
         }
         return;
-      case "fdisk":
-       print(await qdosFormat(f));
-       return;
       default:
         if (GUEST) {
           evalCode(cmd);
@@ -3626,10 +3630,9 @@ window.__qandy_pending = window.__qandy_pending || Object.create(null);
 window.__qandy_reqCounter = window.__qandy_reqCounter || 0;
 var _pending = window.__qandy_pending;
 
-// qdosScript(name) - evaluate a .js file in global scope (Qandy Core).
 async function qdosScript(name) {
   var nm = (typeof name === 'string') ? name.trim() : '';
-  if (!nm) return Promise.reject(new Error('invalid filename'));
+  if (!nm) return "Error: invalid filename";
 
   function _isValid(n) {
     if (typeof validateSystemFilename === 'function') return !!validateSystemFilename(n);
@@ -3638,14 +3641,17 @@ async function qdosScript(name) {
     if (n.indexOf('..') !== -1) return false;
     return /^[A-Za-z0-9 _.\-\/]+$/.test(n);
   }
-  if (!_isValid(nm)) return Promise.reject(new Error('invalid filename'));
-  if (typeof HOST !== 'undefined' && HOST) { return "Error: input 'user' to run scripts"; }
+  if (!_isValid(nm)) return "Error: invalid filename";
+
+  if (typeof HOST !== 'undefined' && HOST) {
+    return "Error: input 'user' to run scripts";
+  }
 
   var content;
   try {
     content = await qdosXmitDos('localLoad', { file: nm });
   } catch (e) {
-    return Promise.reject(new Error('load failed: ' + ((e && e.message) ? e.message : String(e))));
+    return "Error: load failed: " + ((e && e.message) ? e.message : String(e));
   }
   content = (content === null || typeof content === 'undefined') ? '' : String(content);
 
@@ -3653,91 +3659,43 @@ async function qdosScript(name) {
   if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
   content = content.replace(/^\s*#!.*\r?\n/, '');
 
-  // Try global eval (indirect eval runs in global scope)
-  if (typeof globalThis !== 'undefined') globalThis.RUN = nm;
-  else if (typeof window !== 'undefined') window.RUN = nm;
-  else RUN = nm; // fallback
-try {
-  (0, eval)(content + "\n\n//# sourceURL=" + nm);
-  return "";
-} catch (e) {
-  // Basic error message
-  var msg = (e && e.message) ? e.message : String(e);
-
-  // Attempt to extract line/column from stack or error properties
-  var line = null, column = null;
+  // Eval the script in global scope via indirect eval and capture errors
+  var evalError = null;
   try {
-    // 1) Try parsing stack traces (works in Chrome/Firefox/Edge/Safari with different formats)
-    var stack = e && e.stack ? String(e.stack) : '';
-    if (stack) {
-      var stackLines = stack.split('\n');
-      // Walk stack lines and look for the first line containing ":<line>:<column>"
-      for (var i = 0; i < stackLines.length; i++) {
-        var sl = stackLines[i];
-        // Generic regex to find the last occurrence of :number:number
-        var m = sl.match(/:(\d+):(\d+)\)?\s*$/);
-        if (m) {
-          line = parseInt(m[1], 10);
-          column = parseInt(m[2], 10);
-          break;
-        }
-        // Some stacks embed "(<anonymous>:12:34)" etc. Try another pattern
-        m = sl.match(/\((?:.*):(\d+):(\d+)\)/);
-        if (m) {
-          line = parseInt(m[1], 10);
-          column = parseInt(m[2], 10);
-          break;
+    (0, eval)(content + "\n\n//# sourceURL=" + nm);
+    // success
+    return true;
+  } catch (e) {
+    evalError = e;
+    // Attempt to extract line/column from stack or error properties
+    var line = null, column = null;
+    try {
+      var stack = e && e.stack ? String(e.stack) : '';
+      if (stack) {
+        var stackLines = stack.split('\n');
+        for (var i = 0; i < stackLines.length; i++) {
+          var sl = stackLines[i].trim();
+          var m = sl.match(/:(\d+):(\d+)\)?\s*$/);
+          if (m) { line = parseInt(m[1], 10); column = parseInt(m[2], 10); break; }
+          m = sl.match(/\((?:.*):(\d+):(\d+)\)/);
+          if (m) { line = parseInt(m[1], 10); column = parseInt(m[2], 10); break; }
         }
       }
-    }
-
-    // 2) Fallback to engine-specific properties
-    if (!line) {
-      if (typeof e.lineNumber === 'number') line = e.lineNumber;
-      else if (typeof e.lineno === 'number') line = e.lineno;
-      if (typeof e.columnNumber === 'number') column = e.columnNumber;
-      else if (typeof e.colno === 'number') column = e.colno;
-    }
-  } catch (ex) {
-    // Ignore extraction errors and continue with best-effort info
-  }
-
-  // Prepare a small snippet of source around the error line (if available)
-  var snippet = '';
-  try {
-    if (line) {
-      // Treat extracted line as 1-based. content is the source we evaluated.
-      var srcLines = String(content || '').split('\n');
-      var idx = Math.max(0, line - 1); // convert to 0-based
-      var from = Math.max(0, idx - 3);
-      var to = Math.min(srcLines.length - 1, idx + 3);
-      for (var j = from; j <= to; j++) {
-        var prefix = (j === idx) ? '>> ' : '   ';
-        // Show line numbers to help debugging
-        var ln = String(j + 1).padStart(4, ' ');
-        snippet += prefix + ln + ': ' + srcLines[j] + '\n';
+      if (!line) {
+        if (typeof e.lineNumber === 'number') line = e.lineNumber;
+        else if (typeof e.lineno === 'number') line = e.lineno;
+        if (typeof e.columnNumber === 'number') column = e.columnNumber;
+        else if (typeof e.colno === 'number') column = e.colno;
       }
+    } catch (ex) {
+      /* ignore extraction errors */
     }
-  } catch (ex) {
-    // ignore snippet generation errors
+
+    var emsg = (e && e.message) ? e.message : String(e);
+    var loc = (line ? (nm + ':' + line + (column ? (':' + column) : '')) : nm);
+    return "Error: " + emsg + " at " + loc;
   }
-
-  // Print to on-screen console (best-effort) and to dev console
-  try {
-    var locationText = line ? (nm + ':' + line + (column ? (':' + column) : '')) : nm;
-    print("Error: " + msg + "  (" + locationText + ")\n");
-    if (snippet) print(snippet);
-  } catch (pe) {
-    // print might fail in some contexts; ignore
-  }
-  // Also log full error to console for stack trace
-  console.error("Error: qdosScript() ", nm, e);
-
-  // Reject with useful info to calling code
-  var rejMsg = 'script error: ' + msg + (line ? (' at ' + nm + ':' + line + (column ? (':' + column) : '')) : '');
-  return Promise.reject(new Error(rejMsg));
-}}
-
+}
 async function qdosDir() {
   if (typeof HOST !== 'undefined' && HOST) {
     try {
@@ -3890,21 +3848,6 @@ async function qdosExists(filename, timeoutMs) {
     // If you want to surface errors instead, replace the next line with: throw e;
     return false;
   }
-}
-
-async function qdosFormat() {
-  if (HOST) {
-    try {
-      var res = await Promise.resolve().then(function () { return dosFormat(); });
-      res = _normalizeResult(res);
-      return String(res) + '\n';
-    } catch (e) {
-      return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
-    }
-    return 'Error: DOS not available\n';
-  }
-  print("Input \'sysop\' for access\n");
-  return;
 }
 
 function qdosValidateFilename(name) {
@@ -4450,18 +4393,12 @@ window.button=function(b, event) {
   pokeCursorOn();
 }
 
-
-
-
-
-
-
 document.addEventListener('keydown', function (event) {
  if (event.keycode === 32) { event.preventDefault(); }
  press(event);
 });
-document.addEventListener('keyup', function (event) { pressup(event); });
 
+document.addEventListener('keyup', function (event) { pressup(event); });
 document.addEventListener('paste', function (event) {
  if (keyon) {
   event.preventDefault();
@@ -4479,13 +4416,6 @@ document.addEventListener('paste', function (event) {
   }
  }
 });
-
-function isFunctionKey(ev) {
-  if (!ev) return false;
-  if (typeof ev.key === 'string' && /^F\d{1,2}$/.test(ev.key)) return true;
-  var kc = ev.keyCode || ev.which || 0;
-  return (kc >= 112 && kc <= 123); // F1..F12
-}
 
 window.press=function(event) { 
   key=""; k=event.keyCode; shift=event.shiftKey;
@@ -4676,6 +4606,8 @@ function formatError(e) {
   }
 }
 
+
+// this can be deleted, press() and press() now dispatch their own keyboard events
 window.dispatchKeyboardEvent = function(eventType, keyData) {
   if (eventType === 'keydown') {
     if (RUN != "qandy.js" && typeof keydown !== 'undefined') {
@@ -4687,7 +4619,6 @@ window.dispatchKeyboardEvent = function(eventType, keyData) {
       return;
     }
   }
-
   if (eventType === 'keyup') {
     if (RUN != "qandy.js" && typeof keyup !== 'undefined') {
       print("Error: keyup(): " + (e && e.message ? e.message : String(e)) + "\n");
@@ -4696,6 +4627,7 @@ window.dispatchKeyboardEvent = function(eventType, keyData) {
   }
 };
 
+// is this still used?? i don't think so
 window.hostScript=function(name) {
   if (!name || typeof name !== 'string') return false;
   name = name.trim();
@@ -4785,6 +4717,11 @@ async function _processPrintQueue() {
   } finally {
     q.running = false;
   }
+}
+
+function exit() {
+  // guest scripts use this to exit back to qandy.js
+  RUN="qandy.js"
 }
 
 window.dosExit=function() {
@@ -4893,13 +4830,13 @@ async function systemReady() {
     if (await qdosExists("dir.sys")) {
       //if (await qdosExists("autoexec.js")) { qdosScript("autoexec.js"); }
     } else {
-      print("localStorage not formated.\nInput \'sysop\' for access.\n\n");
+      print("localStorage not formated.\nInput \'sysop\' for access.");
     }
   } else {
     // host system ready
     print("[yellow]Qandy Sysop Access[white]\n\n");
     if (!qdosExists("dir.sys")) {
-      print("localStorage not formated.\nInput \'fdisk\' to install.\n\n");
+      print("localStorage not formated.\nInput \'fdisk\' to install.");
     }
   }
 }
