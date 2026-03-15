@@ -1107,10 +1107,111 @@ var DEVICE = 'none';
   };
 
 
+  function hasLocalStorage() {
+    try {
+      if (typeof localStorage === 'undefined' || localStorage === null) return false;
+      var _ = localStorage.length;
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function _calcLocalStorage() {
+    try {
+      var total = 0;
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (!k) continue;
+        var v = localStorage.getItem(k) || '';
+        // estimate bytes as UTF-16 (2 bytes per JS char)
+        total += (k.length + v.length) * 2;
+      }
+      return total;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Public fdisk entry point
+  global.dosFormat = async function () {
+    print("\n[-bwhite][black]     localStorage:     [-black][white]\n");
+    // Prefer navigator.storage.estimate for better info
+    if (typeof navigator !== 'undefined' && navigator.storage && typeof navigator.storage.estimate === 'function') {
+      navigator.storage.estimate().then(function(est) {
+        var used = (est && est.usage) ? est.usage : null;
+        var quota = (est && est.quota) ? est.quota : null;
+        var free = Math.max(0, quota - used); 
+        print(" size: "+formatFileSize(quota)+"\n used: "+formatFileSize(used)+"\n free: "+formatFileSize(free)+"\n"); 
+        dosInstall();
+      }).catch(function() {
+        var used = _calcLocalStorage();
+        print(" size: unknown\nused: "+formatFileSize(used)+"\n");
+        dosInstall();
+      });
+    } else {
+    	if (hasLocalStorage) {
+        var used = _calcLocalStorageUsage();
+        print(" size: unknown\n used: " +formatFileSize(used)+"\n");
+        dosInstall();
+      } else {
+        print("\n This device has no\n localStorage avaialbe.\n\n");
+      }
+    }
+  };
+
+  function getLoadProtocol() { try { var p = (location && location.protocol) ? String(location.protocol) : ''; return p.replace(':', '') || 'unknown'; } catch (e) { return 'unknown'; }}
+  function isFileProtocol() { return getLoadProtocol() === 'file'; }
+  function isHttpProtocol() { var p = getLoadProtocol(); return p === 'http' || p === 'https'; }
+  function getBaseURL() { try { return new URL('.', location.href).href; } catch (e) { return location.href; }}
+
+  async function dosInstallFetch(file) {
+    try {
+      if (dosExists(file)) {
+        print("exists");
+      } else {
+        const url = new URL(file, location.href).href;
+        const resp = await fetch(url, { cache: 'no-store' });
+        if (!resp.ok) {
+          return(resp.status);
+        } else {
+          const text = await resp.text();
+          const saveRes = await dosSave(file, text);
+          if (saveRes === true) {
+            print("installed");
+          }
+        }
+      }
+    } catch (err) {
+      print(String(err));
+    }
+  }
+ 
+  window.dosInstall=function() {
+
+    if (!_readManifestRaw()) {
+      try {
+        localStorage.setItem(LOCAL_PREFIX + MANIFEST_KEY, MANIFEST_KEY+'|27|'+_timestamp()+"\n");
+        print("\nlocalStorage has been formated\n");
+      } catch (e) {
+        return 'Error: Disk Full';
+      }
+    }
+
+  	 if (isHttpProtocol()==true) {
+  	   print("\nInstalling Qandy:\n");
+  	   print("\n  ansi.js: "); dosInstallFetch("ansi.js");
+      print("\n  ascii.js: "); dosInstallFetch("ascii.js");
+      print("\n");
+      return;
+    }
+    print("\ncannot install from file://\n");
+    print("use DOS to copy .js files\n\n");
+  }
+
   if (dosExists("dir.sys")) {} else {  
     print("localStorage not formated,\n");
     print("input \'fdisk\' to install.\n\n");
   }
-
 
 })(window);

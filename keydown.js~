@@ -1,0 +1,30 @@
+RUN="runtime.js"; // first line should be name of script so it can be found on localStorage
+
+// qandy sends keydown event here
+window.keydown = function(kc, ev) {
+  try {
+    var key = (ev && ev.key) ? ev.key : String.fromCharCode(kc || 0);
+    if (ev && ev.shiftKey) print('shift ');
+    if (ev && ev.ctrlKey)  print('ctrl ');
+    if (ev && ev.altKey)   print('alt ');
+    t=(ev && ev.timeStamp ? Math.round(ev.timeStamp) : Date.now());
+    print(" "+kc+" "+key+" "+t+"\n");
+  } catch (e) { print('Error: keydown() '+e+'\n'); }
+  if (key == "Escape") { window.dosExit(); }
+};
+
+// qandy sends keyup event here
+window.keyup = function(kc, ev) {
+  try {
+    //var key = (ev && ev.key) ? ev.key : String.fromCharCode(kc || 0);
+    //var line = 'UP    kc=' + kc + ' key=' + key + ' t=' + (ev && ev.timeStamp ? Math.round(ev.timeStamp) : Date.now());
+  } catch (e) { print('Error: keyup() ' + e); }
+};
+
+// qandy sents input line here if no keyup() keydown() 
+window.input = function(line) {
+  try {
+    // Echo back to emulator console
+    // print('> ' + String(line));
+  } catch (e) { print('Error: keydown() ' + e); }
+};

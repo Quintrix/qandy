@@ -79,29 +79,62 @@ function drawPiano() {
   
 }
 
-function keydown(key) {
-  // Note: ESC key is handled universally by qandy-host.htm
-  // It will terminate the script and return to OS automatically
-  
-  // Convert to lowercase for comparison
-  var keyLower = key.toLowerCase();
-  
-  // Check if this key is mapped to a piano note
-  if (pianoKeyMap[keyLower]) {
-    var note = pianoKeyMap[keyLower];
-    
-    // Only play if key wasn't already pressed (prevents key repeat)
-    if (!pressedKeys[keyLower]) {
-      playNote(note, 300);
-      pressedKeys[keyLower] = note;
+  window.keydown = function (kc, ev) {
+    try {
+      // Normalize key string: prefer ev.key when available
+      var keyRaw = (ev && typeof ev.key === 'string' && ev.key.length > 0) ? ev.key : String.fromCharCode(kc || 0);
+      // If named key (e.g., 'Escape') handle special cases
+      if (keyRaw === 'Escape' || keyRaw === 'Esc') {
+        window.dosExit();
+        return;
+      }
+
+      var keyChar = keyRaw.length === 1 ? keyRaw.toLowerCase() : keyRaw.toLowerCase();
+      // Only handle single-character letter keys mapped in pianoKeyMap
+      if (!pianoKeyMap.hasOwnProperty(keyChar)) return false;
+
+      // Prevent repeats from starting new notes if already pressed
+      if (pressedKeys[keyChar]) return true;
+
+      // Ensure sound subsystem loaded
+      //if (!soundLoaded) {
+      //  ensureSound(function () {
+      //    soundLoaded = (typeof playNote !== 'undefined');
+      //    // Start the note after ensuring sound is available
+      //    var note = pianoKeyMap[keyChar];
+      //    var handle = startNote(note);
+      //    pressedKeys[keyChar] = handle;
+      //    updateNowPlayingDisplay();
+      //  });
+      //  return true;
+      //}
+
+      var note = pianoKeyMap[keyChar];
+      var handle = startNote(note);
+      pressedKeys[keyChar] = handle;
       updateNowPlayingDisplay();
+      return true;
+    } catch (e) {
+      print("Error: keydown() "+e);
+      return false;
     }
-    
-    return true;
-  }
-  
-  return false;
-}
+  };
+
+  window.keyup = function (kc, ev) {
+    try {
+      var keyRaw = (ev && typeof ev.key === 'string' && ev.key.length > 0) ? ev.key : String.fromCharCode(kc || 0);
+      var keyChar = keyRaw.length === 1 ? keyRaw.toLowerCase() : keyRaw.toLowerCase();
+      if (!pressedKeys[keyChar]) return false;
+      var handle = pressedKeys[keyChar];
+      delete pressedKeys[keyChar];
+      stopNoteHandle(handle);
+      updateNowPlayingDisplay();
+      return true;
+    } catch (e) {
+      safeError(e, 'keyup');
+      return false;
+    }
+  };
 
 
 
@@ -250,113 +283,8 @@ function playChordProgression() {
   setTimeout(function() { playCMajorChord(); }, 2400);
 }
 
-function keyup(key, keyData) {
-  var keyLower = (keyData && keyData.key ? keyData.key : key).toLowerCase();
-  if (pianoKeyMap[keyLower] && pressedKeys[keyLower]) {
-    delete pressedKeys[keyLower];
-    updateNowPlayingDisplay();
-    return true;
-  }
-  return false;
-}
-
 // Function to initialize the piano display
 initializePiano = function() { drawPiano(); };
 if (typeof beep !== 'undefined' && typeof playNote !== 'undefined') {
   initializePiano();
 }
-
-  // --- Sound control helpers ---
-  function startNote(note) {
-    try {
-      if (typeof playNote === 'function') {
-        // If stopNote exists we'll play a long note; otherwise play short
-        if (typeof stopNote === 'function') {
-          // playNote may return an object/handle; but we'll rely on stopNote(note)
-          playNote(note, HOLD_DURATION);
-          return { note: note, stopper: true };
-        } else {
-          // play a note for a moderate duration (no stopper)
-          playNote(note, 800);
-          return { note: note, stopper: false };
-        }
-      } else {
-        // no sound available
-        return { note: note, stopper: false };
-      }
-    } catch (e) {
-      safeError(e, 'startNote');
-      return { note: note, stopper: false };
-    }
-  }
-
-  function stopNoteHandle(handle) {
-    try {
-      if (!handle) return;
-      if (handle.stopper && typeof stopNote === 'function') {
-        try { stopNote(handle.note); } catch (e) { /* ignore */ }
-      }
-      // If playNote used a fixed duration, nothing to stop
-    } catch (e) {
-      safeError(e, 'stopNoteHandle');
-    }
-  }
-
-  // --- key handlers (guest-facing) ---
-  // Note: host will call window.keydown(kc, ev) and window.keyup(kc, ev)
-  window.keydown = function (kc, ev) {
-    try {
-      // Normalize key string: prefer ev.key when available
-      var keyRaw = (ev && typeof ev.key === 'string' && ev.key.length > 0) ? ev.key : String.fromCharCode(kc || 0);
-      // If named key (e.g., 'Escape') handle special cases
-      if (keyRaw === 'Escape' || keyRaw === 'Esc') {
-        window.dosExit && window.dosExit();
-        return;
-      }
-
-      var keyChar = keyRaw.length === 1 ? keyRaw.toLowerCase() : keyRaw.toLowerCase();
-      // Only handle single-character letter keys mapped in pianoKeyMap
-      if (!pianoKeyMap.hasOwnProperty(keyChar)) return false;
-
-      // Prevent repeats from starting new notes if already pressed
-      if (pressedKeys[keyChar]) return true;
-
-      // Ensure sound subsystem loaded
-      //if (!soundLoaded) {
-      //  ensureSound(function () {
-      //    soundLoaded = (typeof playNote !== 'undefined');
-      //    // Start the note after ensuring sound is available
-      //    var note = pianoKeyMap[keyChar];
-      //    var handle = startNote(note);
-      //    pressedKeys[keyChar] = handle;
-      //    updateNowPlayingDisplay();
-      //  });
-      //  return true;
-      //}
-
-      var note = pianoKeyMap[keyChar];
-      var handle = startNote(note);
-      pressedKeys[keyChar] = handle;
-      updateNowPlayingDisplay();
-      return true;
-    } catch (e) {
-      print("Error: keydown() "+e);
-      return false;
-    }
-  };
-
-  window.keyup = function (kc, ev) {
-    try {
-      var keyRaw = (ev && typeof ev.key === 'string' && ev.key.length > 0) ? ev.key : String.fromCharCode(kc || 0);
-      var keyChar = keyRaw.length === 1 ? keyRaw.toLowerCase() : keyRaw.toLowerCase();
-      if (!pressedKeys[keyChar]) return false;
-      var handle = pressedKeys[keyChar];
-      delete pressedKeys[keyChar];
-      stopNoteHandle(handle);
-      updateNowPlayingDisplay();
-      return true;
-    } catch (e) {
-      print("Error: keyup() "+e);
-      return false;
-    }
-  };
