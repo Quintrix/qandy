@@ -3400,6 +3400,7 @@ window.updateKeyLabels = updateKeyLabels;
 function init_command_js() {
   window.command=async function(cmd) {
     if (RUN != "qandy.js") {
+      console.log("RUN = "+RUN+" command "+cmd);
       print("\n");
       try { input(cmd); } catch (e) { /* ignore */ }
       // this needs testing AFTER run command works
@@ -3408,6 +3409,7 @@ function init_command_js() {
       return;
     }
     // system commands
+    console.log("system command "+cmd);
     print("\n");
     cmd=String(cmd || '').trim();
     switch (cmd) {
@@ -3622,7 +3624,6 @@ window.__qandy_pending = window.__qandy_pending || Object.create(null);
 window.__qandy_reqCounter = window.__qandy_reqCounter || 0;
 var _pending = window.__qandy_pending;
 
-// qdosScript(name) - evaluate a .js file in global scope (Qandy Core).
 async function qdosScript(name) {
   var nm = (typeof name === 'string') ? name.trim() : '';
   if (!nm) return Promise.reject(new Error('invalid filename'));
@@ -3649,10 +3650,6 @@ async function qdosScript(name) {
   if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
   content = content.replace(/^\s*#!.*\r?\n/, '');
 
-  // Try global eval (indirect eval runs in global scope)
-  if (typeof globalThis !== 'undefined') globalThis.RUN = nm;
-  else if (typeof window !== 'undefined') window.RUN = nm;
-  else RUN = nm; // fallback
   try {
     (0, eval)(content + "\n\n//# sourceURL=" + nm);
     return "";

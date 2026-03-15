@@ -1202,7 +1202,7 @@ var DEVICE = 'none';
   	   print("\nInstalling Qandy: \n");
   	   print("\n  ansi.js: "); dosInstallFetch("ansi.js");
       print("\n  ascii.js: "); dosInstallFetch("ascii.js");
-      print("\n  keydown.js: "); dosInstallFetch("ascii.js");
+      print("\n  keydown.js: "); dosInstallFetch("keydown.js");
       print("\n  piano.js: "); dosInstallFetch("piano.js");
       print("\n  svga.js: "); dosInstallFetch("svga.js");
       print("\nInstallation Complete.\n\n");

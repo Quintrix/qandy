@@ -1199,7 +1199,7 @@ var DEVICE = 'none';
     }
 
   	 if (isHttpProtocol() == true) {
-  	   print("\nInstalling Qandy:\n");
+  	   print("\nInstalling Qandy: \n");
   	   print("\n  ansi.js: "); dosInstallFetch("ansi.js");
       print("\n  ascii.js: "); dosInstallFetch("ascii.js");
       print("\n  keydown.js: "); dosInstallFetch("ascii.js");
