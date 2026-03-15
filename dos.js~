@@ -1133,7 +1133,7 @@ var DEVICE = 'none';
     }
   }
 
-  // public fdisk entry point
+  // Public fdisk entry point
   global.dosfdisk = async function () {
     print("\n[-bwhite][black]     localStorage:     [-black][white]\n");
     // Prefer navigator.storage.estimate for better info
