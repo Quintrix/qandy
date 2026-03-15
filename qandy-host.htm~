@@ -3600,9 +3600,6 @@ function init_command_js() {
           return('Error: invalid filename\n');
         }
         return;
-      case "fdisk":
-        print(await qdosFormat(f));
-        return;
       default:
         if (GUEST) {
           evalCode(cmd);
