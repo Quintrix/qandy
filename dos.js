@@ -1206,7 +1206,7 @@ var DEVICE = 'none';
       return;
     }
     print("\ncannot install from file://\n");
-    print("use DOS to copy .js files\n\n");
+    print("use DOS to copy .js files to\nlocalStorage.\n\n");
   }
 
   if (dosExists("dir.sys")) {} else {  
