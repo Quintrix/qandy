@@ -1,0 +1,927 @@
+<html><head>
+<link rel="stylesheet" type="text/css" href="qandy.css">
+<style>
+/* qandy.htm specific overrides */
+.txt { 
+  left: 86px; 
+  font-family: courier; 
+  font-size: 18px;
+  padding: 2px;
+  line-height: normal;
+  white-space: normal;
+}
+.txt::-webkit-scrollbar { width: 12px; }
+.txt::-webkit-scrollbar-thumb { background: #444; border-radius: 6px; }
+.txt::-webkit-scrollbar-thumb:hover { background: #666; }
+.run { 
+  top: 0px; 
+  left: 0px; 
+  width: 106px; 
+  height: 18px;
+  font-size: 14px; 
+  padding-top: 4px; 
+  z-index: 2; 
+}
+.k1 { 
+  width: 24px; 
+  height: 24px;
+  max-width: 14px; 
+  max-height: 14px;
+  background-color: #333;
+  cursor: default; 
+  z-index: 1; 
+}
+.k1:hover { background-color: #333; }
+.k1:active { background-color: #333; }
+.k2 { 
+  width: 52px; 
+  height: 24px;
+  max-width: 42px; 
+  max-height: 12px;
+  background-color: #333;
+  cursor: default; 
+  z-index: 1; 
+}
+.k2:hover { background-color: #333; }
+.k2:active { background-color: #333; }
+.k3 { 
+  width: 71px; 
+  height: 24px;
+  max-width: 100px; 
+  max-height: 12px;
+  background-color: #333;
+  cursor: default; 
+  z-index: 1; 
+}
+.k3:hover { background-color: #333; }
+.k3:active { background-color: #333; }
+</style></head><body><p><br>
+<div id=txt class="txt"></div>
+<div id="pop" class="pop" onMouseOver='PopUpVis="visible";' onMouseOut='PopUpVis=PForce; PUV=setTimeout("document.getElementById(\"pop\").style.visibility=PopUpVis;",100);'></div>
+<div id=esc class="k2">ESC</div>
+<div id=run class="run" align=center>qandy.js</div>
+<div id=dash class="k1">-</div>
+<div id=equal class="k1">=</div>
+<div id=back class="k2">BACK</div>
+<div id=n1 class="k1">1</div>
+<div id=n2 class="k1">2</div>
+<div id=n3 class="k1">3</div>
+<div id=n4 class="k1">4</div>
+<div id=n5 class="k1">5</div>
+<div id=n6 class="k1">6</div>
+<div id=n7 class="k1">7</div>
+<div id=n8 class="k1">8</div>
+<div id=n9 class="k1">9</div>
+<div id=n0 class="k1">0</div>
+<div id=q class="k1">q</div>
+<div id=w class="k1">w</div>
+<div id=e class="k1">e</div>
+<div id=r class="k1">r</div>
+<div id=t class="k1">t</div>
+<div id=y class="k1">y</div>
+<div id=u class="k1">u</div>
+<div id=i class="k1">i</div>
+<div id=o class="k1">o</div>
+<div id=p class="k1">p</div>
+<div id=a class="k1">a</div>
+<div id=s class="k1">s</div>
+<div id=d class="k1">d</div>
+<div id=f class="k1">f</div>
+<div id=g class="k1">g</div>
+<div id=h class="k1">h</div>
+<div id=j class="k1">j</div>
+<div id=k class="k1">k</div>
+<div id=l class="k1">l</div>
+<div id=quote class="k1">"</div>
+<div id=z class="k1">z</div>
+<div id=x class="k1">x</div>
+<div id=c class="k1">c</div>
+<div id=v class="k1">v</div>
+<div id=b class="k1">b</div>
+<div id=n class="k1">n</div>
+<div id=m class="k1">m</div>
+<div id=colon class="k1">;</div>
+<div id=open class="k1">[</div>
+<div id=close class="k1">]</div>
+<div id=caps class="k2">CAPS</div>
+<div id=space class="k3">SPACE</div>
+<div id=comma class="k1">,</div>
+<div id=dot class="k1">.</div>
+<div id=slash class="k1">/</div>
+<div id=enter class="k2">ENTER</div>
+
+<script>
+
+var tile=[]; var item=[]; var chrs=[]; var buld=[];
+
+var devteam=1;  // developer mode
+var run="";
+var txt="<p>Qandy Pocket<br>Computer v.1i<p>";
+var mode="txt"; // gfx or txt display
+var mapx=7;
+var mapy=11;
+var map="";
+var caps=0;  // turns caps lock on/off
+var shift=0; // shift key pressed  
+var keyon=1; // turn keyboard input on/off
+var line=""; // input text line
+
+// Command history (Commodore 64-style)
+var commandHistory = [];  // Array to store command history
+var historyIndex = -1;    // Current position in history (-1 = not browsing, typing new command)
+var maxHistorySize = 50;  // Maximum number of commands to remember
+var tempCommand = "";     // Temporary storage for command being typed when browsing history
+
+var PopX=0;
+var PopY=0;
+var PopHide="hidden";
+var PopAlign="center";
+var PForce="hidden";
+
+var pop4="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAABGdBTUEAALGPC/xhBQAAAAZiS0dEAP8A/wD/oL2nkwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAAd0SU1FB9cKHRUjLyS5OncAAAAddEVYdENvbW1lbnQAQ3JlYXRlZCB3aXRoIFRoZSBHSU1Q72QlbgAAAC5JREFUeNrtzkEBAAAEBDD0z6nGieGzJVgn2Xo09UxAQEBAQEBAQEBAQEBAQOAAuq4EI/9axwQAAAAASUVORK5CYII=";
+var k64="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABsAAAAaCAYAAABGiCfwAAAACXBIWXMAAAsSAAALEgHS3X78AAAAKElEQVRIie3NMQEAAAgDILV/51nBywsK0Enqy7xNMplMJpPJZDLZ0QI7tAMxEF7bywAAAABJRU5ErkJggg==";
+var l64="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADQAAAAYCAYAAAC1Ft6mAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAAOklEQVRYhe3PgQkAIRDAsPf33/lcQrBIMkG7ZuZ7yX874DRDdYbqDNUZqjNUZ6jOUJ2hOkN1huoM1W10mgMt7zY1rwAAAABJRU5ErkJggg==";
+var m64="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAG0AAAAYCAYAAADwF3MkAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAAVUlEQVRoge3RwQkAIBDAMHX/nc8ZfEkhmaDQPTOLlvM7gHemBZkWZFqQaUGmBZkWZFqQaUGmBZkWZFqQaUGmBZkWZFqQaUGmBZkWZFqQaUGmBZkWdAFuuAMtk7qVEgAAAABJRU5ErkJggg==";
+
+img=document.createElement('img');
+img.id="qpc"; img.src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAA7EAAAOxAGVKw4bAAAAMklEQVRYhe3OMQEAMAjEwKei2wHxRQbLxUCu3u2fxc7mHAAAAAAAAAAAAAAAAAAAIEkGzIgCpxq6s7YAAAAASUVORK5CYII="; 
+img.style.width="300px"; img.style.height="600px"; img.style.zIndex="0"; 
+img.style.position="absolute";
+document.body.appendChild(img);
+img=document.createElement('img');
+img.id="kesc"; img.src=l64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(27); }
+document.body.appendChild(img);
+img=document.createElement('img'); img.id="kdash"; img.src=k64;
+img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(173); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="kequal"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(61); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="kback"; img.src=l64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(8); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="k1"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(49); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="k2"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(50); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="k3"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(51); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="k4"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(52); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="k5"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(53); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="k6"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(54); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="k7"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(55); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="k8"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(56); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="k9"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(57); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="k0"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(48); }
+document.body.appendChild(img); 
+img=document .createElement('img'); img.id="kq"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(81); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="kw"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(87); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="ke"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(69); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="kr"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(82); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="kt"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(84); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="ky"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(89); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="ku"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(85); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="ki"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(73); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="ko"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(79); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="kp"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(80); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="ka"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(65); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="ks"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(83); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="kd"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(68); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="kf"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(70); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="kg"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(71); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="kh"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(72); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="kj"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(74); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="kk"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(75); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="kl"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(76); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="kquote"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(222); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="kz"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(90); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="kx"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(88); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="kc"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(67); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="kv"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(86); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="kb"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(66); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="kn"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(78); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="km"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(77); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="kcolon"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99";
+img.onclick = function() { button(59); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="kopen"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(219); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="kclose"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(221); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="kcaps"; img.src=l64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(20); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="kspace"; img.src=m64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(32); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="kcomma"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(188); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="kdot"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(190); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="kslash"; img.src=k64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(191); }
+document.body.appendChild(img); 
+img=document.createElement('img'); img.id="kenter"; img.src=l64; img.style.position="absolute"; img.style.zIndex="99"; 
+img.onclick = function() { button(13); }
+document.body.appendChild(img); 
+
+tiles();  function tiles() {
+ Z=0;
+ for (Y=0; Y<=mapy; Y++) {
+  for (X=0; X<=mapx; X++) {
+   T=document.createElement("img");
+   T.id="T"+Z; T.src="t/Ga.png"; 
+   T.height=32; T.width=32;
+   T.className="tile";
+   T.onmousedown=new Function("ClickTile("+(Z)+",this.parentNode)");     
+   document.body.appendChild(T);
+   Z++;
+  }
+ }
+}
+
+resize(); function resize() {
+ document.getElementById("qpc").style.top = "32px"; 
+ document.getElementById("qpc").style.left = "32px";
+ kx0=47; kx1=75; kx2=103; kx3=132; kx4=160;  
+ kx5=189; kx6=218; kx7=247; kx8=275; kx9=303;
+ e=document.getElementById("qpc").style.top="32px"; 
+ e=document.getElementById("qpc").style.left="32px";
+ e=document.getElementById("esc").style.left=kx0+"px";        e=document.getElementById("esc").style.top="446px";
+ e=document.getElementById("kesc").style.left=(kx0-5)+"px";   e=document.getElementById("kesc").style.top="440px";
+ e=document.getElementById("run").style.left=kx2+"px";        e=document.getElementById("run").style.top="446px";
+ e=document.getElementById("dash").style.left=kx6+"px";       e=document.getElementById("dash").style.top="446px";
+ e=document.getElementById("kdash").style.left=(kx6-5)+"px";  e=document.getElementById("kdash").style.top="440px";
+ e=document.getElementById("equal").style.left=kx7+"px";      e=document.getElementById("equal").style.top="446px";
+ e=document.getElementById("kequal").style.left=(kx7-5)+"px"; e=document.getElementById("kequal").style.top="440px";
+ e=document.getElementById("back").style.left=kx8+"px";       e=document.getElementById("back").style.top="446px";
+ e=document.getElementById("kback").style.left=(kx8-5)+"px";  e=document.getElementById("kback").style.top="440px";
+ e=document.getElementById("n1").style.left=kx0+"px";       e=document.getElementById("n1").style.top="480px";
+ e=document.getElementById("k1").style.left=(kx0-5)+"px";   e=document.getElementById("k1").style.top="474px";
+ e=document.getElementById("n2").style.left=kx1+"px";       e=document.getElementById("n2").style.top="480px";
+ e=document.getElementById("k2").style.left=(kx1-5)+"px";   e=document.getElementById("k2").style.top="474px";
+ e=document.getElementById("n3").style.left=kx2+"px";       e=document.getElementById("n3").style.top="480px";
+ e=document.getElementById("k3").style.left=(kx2-5)+"px";   e=document.getElementById("k3").style.top="474px";
+ e=document.getElementById("n3").style.left=kx2+"px";       e=document.getElementById("n3").style.top="480px";
+ e=document.getElementById("k3").style.left=(kx2-5)+"px";   e=document.getElementById("k3").style.top="474px";
+ e=document.getElementById("n4").style.left=kx3+"px";       e=document.getElementById("n4").style.top="480px";
+ e=document.getElementById("k4").style.left=(kx3-5)+"px";   e=document.getElementById("k4").style.top="474px";
+ e=document.getElementById("n5").style.left=kx4+"px";       e=document.getElementById("n5").style.top="480px";
+ e=document.getElementById("k5").style.left=(kx4-5)+"px";   e=document.getElementById("k5").style.top="474px";
+ e=document.getElementById("n6").style.left=kx5+"px";       e=document.getElementById("n6").style.top="480px";
+ e=document.getElementById("k6").style.left=(kx-5)+"512px"; e=document.getElementById("k6").style.top="474px";
+ e=document.getElementById("n7").style.left=kx6+"px";       e=document.getElementById("n7").style.top="480px";
+ e=document.getElementById("k7").style.left=(kx6-5)+"px";   e=document.getElementById("k7").style.top="474px"; 
+ e=document.getElementById("n8").style.left=kx7+"px";       e=document.getElementById("n8").style.top="480px";
+ e=document.getElementById("k8").style.left=(kx7-5)+"px";   e=document.getElementById("k8").style.top="474px";
+ e=document.getElementById("n9").style.left=kx8+"px";       e=document.getElementById("n9").style.top="480px"; 
+ e=document.getElementById("k9").style.left=(kx8-5)+"px";   e=document.getElementById("k9").style.top="474px"; 
+ e=document.getElementById("n0").style.left=kx9+"px";       e=document.getElementById("n0").style.top="480px";
+ e=document.getElementById("k0").style.left=(kx9-5)+"px";   e=document.getElementById("k0").style.top="474px";
+ high=32; wide=32;
+ left=wide+15;  up=high+479; e=document.getElementById("q").style.left=left+"px"; e=document.getElementById("q").style.top=up+"px";
+ e=document.getElementById("kq").style.left=(left-5)+"px"; e=document.getElementById("kq").style.top=(up-6)+"px"; 
+ left=wide+43;  up=high+479; e=document.getElementById("w").style.left=left+"px"; e=document.getElementById("w").style.top=up+"px";
+ e=document.getElementById("kw").style.left=(left-5)+"px"; e=document.getElementById("kw").style.top=(up-6)+"px";
+ left=wide+71;  up=high+479; e=document.getElementById("e").style.left=left+"px"; e=document.getElementById("e").style.top=up+"px";
+ e=document.getElementById("ke").style.left=(left-5)+"px"; e=document.getElementById("ke").style.top=(up-6)+"px"; 
+ left=wide+100;  up=high+479; e=document.getElementById("r").style.left=left+"px"; e=document.getElementById("r").style.top=up+"px";
+ e=document.getElementById("kr").style.left=(left-5)+"px"; e=document.getElementById("kr").style.top=(up-6)+"px"; 
+ left=wide+128; up=high+479; e=document.getElementById("t").style.left=left+"px"; e=document.getElementById("t").style.top=up+"px";
+ e=document.getElementById("kt").style.left=(left-5)+"px"; e=document.getElementById("kt").style.top=(up-6)+"px";
+ left=wide+157; up=high+479; e=document.getElementById("y").style.left=left+"px"; e=document.getElementById("y").style.top=up+"px";
+ e=document.getElementById("ky").style.left=(left-5)+"px"; e=document.getElementById("ky").style.top=(up-6)+"px";
+ left=wide+186; up=high+479; e=document.getElementById("u").style.left=left+"px"; e=document.getElementById("u").style.top=up+"px";
+ e=document.getElementById("ku").style.left=(left-5)+"px"; e=document.getElementById("ku").style.top=(up-6)+"px";
+ left=wide+215; up=high+479; e=document.getElementById("i").style.left=left+"px"; e=document.getElementById("i").style.top=up+"px";
+ e=document.getElementById("ki").style.left=(left-5)+"px"; e=document.getElementById("ki").style.top=(up-6)+"px";
+ left=wide+243; up=high+479; e=document.getElementById("o").style.left=left+"px"; e=document.getElementById("o").style.top=up+"px";
+ e=document.getElementById("ko").style.left=(left-5)+"px"; e=document.getElementById("ko").style.top=(up-6)+"px";
+ left=wide+271; up=high+479; e=document.getElementById("p").style.left=left+"px"; e=document.getElementById("p").style.top=up+"px"; 
+ e=document.getElementById("kp").style.left=(left-5)+"px"; e=document.getElementById("kp").style.top=(up-6)+"px";
+ left=wide+15;  up=high+510; e=document.getElementById("a").style.left=left+"px"; e=document.getElementById("a").style.top=up+"px";
+ e=document.getElementById("ka").style.left=(left-5)+"px"; e=document.getElementById("ka").style.top=(up-6)+"px";
+ left=wide+43;  up=high+510; e=document.getElementById("s").style.left=left+"px"; e=document.getElementById("s").style.top=up+"px";
+ e=document.getElementById("ks").style.left=(left-5)+"px"; e=document.getElementById("ks").style.top=(up-6)+"px";
+ left=wide+71;  up=high+510; e=document.getElementById("d").style.left=left+"px"; e=document.getElementById("d").style.top=up+"px";
+ e=document.getElementById("kd").style.left=(left-5)+"px"; e=document.getElementById("kd").style.top=(up-6)+"px"; 
+ left=wide+100;  up=high+510; e=document.getElementById("f").style.left=left+"px"; e=document.getElementById("f").style.top=up+"px";
+ e=document.getElementById("kf").style.left=(left-5)+"px"; e=document.getElementById("kf").style.top=(up-6)+"px";
+ left=wide+128; up=high+510; e=document.getElementById("g").style.left=left+"px"; e=document.getElementById("g").style.top=up+"px";
+ e=document.getElementById("kg").style.left=(left-5)+"px"; e=document.getElementById("kg").style.top=(up-6)+"px";
+ left=wide+157; up=high+510; e=document.getElementById("h").style.left=left+"px"; e=document.getElementById("h").style.top=up+"px";
+ e=document.getElementById("kh").style.left=(left-5)+"px"; e=document.getElementById("kh").style.top=(up-6)+"px";
+ left=wide+186; up=high+510; e=document.getElementById("j").style.left=left+"px"; e=document.getElementById("j").style.top=up+"px";
+ e=document.getElementById("kj").style.left=(left-5)+"px"; e=document.getElementById("kj").style.top=(up-6)+"px";
+ left=wide+215; up=high+510; e=document.getElementById("k").style.left=left+"px"; e=document.getElementById("k").style.top=up+"px";
+ e=document.getElementById("kk").style.left=(left-5)+"px"; e=document.getElementById("kk").style.top=(up-6)+"px";
+ left=wide+243; up=high+510; e=document.getElementById("l").style.left=left+"px"; e=document.getElementById("l").style.top=up+"px";
+ etesting=document.getElementById("kl").style.left=(left-5)+"px"; e=document.getElementById("kl").style.top=(up-6)+"px";
+ left=wide+271; up=high+510; e=document.getElementById("quote").style.left=left+"px"; e=document.getElementById("quote").style.top=up+"px";
+ e=document.getElementById("kquote").style.left=(left-5)+"px"; e=document.getElementById("kquote").style.top=(up-6)+"px";
+ left=wide+15;  up=high+541; e=document.getElementById("z").style.left=left+"px"; e=document.getElementById("z").style.top=up+"px";
+ e=document.getElementById("kz").style.left=(left-5)+"px"; e=document.getElementById("kz").style.top=(up-6)+"px"; 
+ left=wide+43;  up=high+541; e=document.getElementById("x").style.left=left+"px"; e=document.getElementById("x").style.top=up+"px";
+ e=document.getElementById("kx").style.left=(left-5)+"px"; e=document.getElementById("kx").style.top=(up-6)+"px";
+ left=wide+71;  up=high+541; e=document.getElementById("c").style.left=left+"px"; e=document.getElementById("c").style.top=up+"px";
+ e=document.getElementById("kc").style.left=(left-5)+"px"; e=document.getElementById("kc").style.top=(up-6)+"px";
+ left=wide+100; up=high+541; e=document.getElementById("v").style.left=left+"px"; e=document.getElementById("v").style.top=up+"px";
+ e=document.getElementById("kv").style.left=(left-5)+"px"; e=document.getElementById("kv").style.top=(up-6)+"px";
+ left=wide+128; up=high+541; e=document.getElementById("b").style.left=left+"px"; e=document.getElementById("b").style.top=up+"px";
+ e=document.getElementById("kb").style.left=(left-5)+"px"; e=document.getElementById("kb").style.top=(up-6)+"px";
+ left=wide+157; up=high+541; e=document.getElementById("n").style.left=left+"px"; e=document.getElementById("n").style.top=up+"px";
+ etesting=document.getElementById("kn").style.left=(left-5)+"px"; e=document.getElementById("kn").style.top=(up-6)+"px";
+ left=wide+186; up=high+541; e=document.getElementById("m").style.left=left+"px"; e=document.getElementById("m").style.top=up+"px";
+ e=document.getElementById("km").style.left=(left-5)+"px"; e=document.getElementById("km").style.top=(up-6)+"px";
+ left=wide+215; up=high+541; e=document.getElementById("colon").style.left=left+"px"; e=document.getElementById("colon").style.top=up+"px";
+ e=document.getElementById("kcolon").style.left=(left-5)+"px"; e=document.getElementById("kcolon").style.top=(up-6)+"px";
+ left=wide+243;  up=high+541; e=document.getElementById("open").style.left=left+"px"; e=document.getElementById("open").style.top=up+"px";
+ e=document.getElementById("kopen").style.left=(left-5)+"px"; e=document.getElementById("kopen").style.top=(up-6)+"px";
+ left=wide+271;  up=high+541; e=document.getElementById("close").style.left=left+"px"; e=document.getElementById("close").style.top=up+"px";
+ e=document.getElementById("kclose").style.left=(left-5)+"px"; e=document.getElementById("kclose").style.top=(up-6)+"px";
+ left=wide+15;  up=high+570; e=document.getElementById("caps").style.left=left+"px"; e=document.getElementById("caps").style.top=up+"px";
+ e=document.getElementById("kcaps").style.left=(left-5)+"px"; e=document.getElementById("kcaps").style.top=(up-6)+"px"; 
+ left=wide+71; up=high+570; e=document.getElementById("space").style.left=left+"px"; e=document.getElementById("space").style.top=up+"px";
+ e=document.getElementById("kspace").style.left=(left-5)+"px"; e=document.getElementById("kspace").style.top=(up-6)+"px"; 
+ left=wide+157; up=high+570; e=document.getElementById("comma").style.left=left+"px"; e=document.getElementById("comma").style.top=up+"px";
+ e=document.getElementById("kcomma").style.left=(left-5)+"px"; e=document.getElementById("kcomma").style.top=(up-6)+"px";
+ left=wide+186; up=high+570; e=document.getElementById("dot").style.left=left+"px"; e=document.getElementById("dot").style.top=up+"px";
+ e=document.getElementById("kdot").style.left=(left-5)+"px"; e=document.getElementById("kdot").style.top=(up-6)+"px"; 
+ left=wide+215; up=high+570;e=document.getElementById("slash").style.left=left+"px"; e=document.getElementById("slash").style.top=up+"px";
+ e=document.getElementById("kslash").style.left=(left-5)+"px"; e=document.getElementById("kslash").style.top=(up-6)+"px";
+ left=wide+243; up=high+570; e=document.getElementById("enter").style.left=left+"px"; e=document.getElementById("enter").style.top=up+"px"; 
+ e=document.getElementById("kenter").style.left=(left-5)+"px"; e=document.getElementById("kenter").style.top=(up-6)+"px";
+ if (mode=="gfx") {
+  up=32+(404-(document.getElementById('txt').offsetHeight));
+  left=32+22+300;
+  document.getElementById("txt").style.left=left+"px";
+  document.getElementById("txt").style.top=up+"px";
+ } else {
+  left=32+22;
+  up=32+(402-(document.getElementById('txt').offsetHeight));
+  document.getElementById("txt").style.left="54px";
+  document.getElementById("txt").style.top=up+"px";
+ }
+ const textElement=document.getElementById("txt");
+ textElement.scrollTop=textElement.scrollHeight;
+ Z=0; for (Y=0; Y<=mapy; Y++) {
+  for (X=0; X<=mapx; X++) {
+   e=document.getElementById("T"+Z).style.top=50+(Y*32)+"px";  
+   e=document.getElementById("T"+Z).style.left=54+(X*32)+"px"; 
+   Z++;
+  }
+ }
+}
+
+document.addEventListener('keydown', function () { press(); });
+function press() { 
+ key=""; k=event.keyCode; shift=event.shiftKey; button(k);
+}
+
+function button(b) {
+ k=""; l=""; switch (b) {
+  case 37: k="left"; break;
+  case 38: k="up"; break;
+  case 39: k="right"; break;
+  case 40: k="down"; break;
+  case 27: k="esc"; break;
+  case 18: k="alt"; break;
+  case 13: k="enter"; break;
+  case  8: k="back"; break;
+  case 20: k="caps"; break;
+  case 49: if (shift||caps) { k="!"; l=k; } else { k="1"; l=k; } break;  
+  case 50: if (shift||caps) { k="@"; l=k; } else { k="2"; l=k; } break;  
+  case 51: if (shift||caps) { k="#"; l=k; } else { k="3"; l=k; } break;  
+  case 52: if (shift||caps) { k="$"; l=k; } else { k="4"; l=k; } break;  
+  case 53: if (shift||caps) { k="%"; l=k; } else { k="5"; l=k; } break;  
+  case 54: if (shift||caps) { k="^"; l=k; } else { k="6"; l=k; } break;  
+  case 55: if (shift||caps) { k="&"; l=k; } else { k="7"; l=k; } break;
+  case 56: if (shift||caps) { k="*"; l=k; } else { k="8"; l=k; } break;
+  case 57: if (shift||caps) { k="("; l=k; } else { k="9"; l=k; } break;
+  case 48: if (shift||caps) { k=")"; l=k; } else { k="0"; l=k; } break;
+  case 81: if (shift||caps) { k="Q"; l=k; } else { k="q"; l=k; } break; 
+  case 87: if (shift||caps) { k="W"; l=k; } else { k="w"; l=k; } break; 
+  case 69: if (shift||caps) { k="E"; l=k; } else { k="e"; l=k; } break; 
+  case 82: if (shift||caps) { k="R"; l=k; } else { k="r"; l=k; } break; 
+  case 84: if (shift||caps) { k="T"; l=k; } else { k="t"; l=k; } break; 
+  case 89: if (shift||caps) { k="Y"; l=k; } else { k="y"; l=k; } break; 
+  case 85: if (shift||caps) { k="U"; l=k; } else { k="u"; l=k; } break; 
+  case 73: if (shift||caps) { k="I"; l=k; } else { k="i"; l=k; } break; 
+  case 79: if (shift||caps) { k="O"; l=k; } else { k="o"; l=k; } break; 
+  case 80: if (shift||caps) { k="P"; l=k; } else { k="p"; l=k; } break; 
+  case 65: if (shift||caps) { k="A"; l=k; } else { k="a"; l=k; } break; 
+  case 83: if (shift||caps) { k="S"; l=k; } else { k="s"; l=k; } break; 
+  case 68: if (shift||caps) { k="D"; l=k; } else { k="d"; l=k; } break; 
+  case 70: if (shift||caps) { k="F"; l=k; } else { k="f"; l=k; } break; 
+  case 71: if (shift||caps) { k="G"; l=k; } else { k="g"; l=k; } break; 
+  case 72: if (shift||caps) { k="H"; l=k; } else { k="h"; l=k; } break; 
+  case 74: if (shift||caps) { k="J"; l=k; } else { k="j"; l=k; } break; 
+  case 75: if (shift||caps) { k="K"; l=k; } else { k="k"; l=k; } break; 
+  case 76: if (shift||caps) { k="L"; l=k; } else { k="l"; l=k; } break; 
+  case 90: if (shift||caps) { k="Z"; l=k; } else { k="z"; l=k; } break; 
+  case 88: if (shift||caps) { k="X"; l=k; } else { k="x"; l=k; } break; 
+  case 67: if (shift||caps) { k="C"; l=k; } else { k="c"; l=k; } break; 
+  case 86: if (shift||caps) { k="V"; l=k; } else { k="v"; l=k; } break; 
+  case 66: if (shift||caps) { k="B"; l=k; } else { k="b"; l=k; } break; 
+  case 78: if (shift||caps) { k="N"; l=k; } else { k="n"; l=k; } break;  
+  case 77: if (shift||caps) { k="M"; l=k; } else { k="m"; l=k; } break;
+  case  61: if (shift||caps) { k="equal"; l="+"; } else { k="="; l=k; } break; 
+  case 191: if (shift||caps) { k="slash"; l="?"; } else { k="/"; l=k; } break; 
+  case  59: if (shift||caps) { k="colon"; l=":"; } else { k=";"; l=k; } break; 
+  case 222: if (shift||caps) { k="quote"; l="\""; } else { k="\'"; l=k; } break; 
+  case  32: if (shift||caps) { k="space"; l=" "; } else { k=" "; l=k; } break;
+  case 188: if (shift||caps) { k="comma"; l="<"; } else { k=","; l=k; } break;
+  case 190: if (shift||caps) { k="dot";   l=">"; } else { k="."; l=k; } break;
+  case 173: if (shift||caps) { k="dash";  l="_"; } else { k="-"; l=k; } break;
+  case 219: if (shift||caps) { k="open";  l="{"; } else { k="["; l=k; } break;
+  case 221: if (shift||caps) { k="close"; l="}"; } else { k="]"; l=k; } break;  
+ }
+ if (k === "esc") {
+  if (mode === "txt") {
+   mode = "gfx";
+  } else {
+   mode = "txt";
+  }
+ } else {
+  if (k === "caps") {
+   caps=1-caps;
+   if (caps) {
+    e=document.getElementById("open").innerHTML="<p>{";
+    e=document.getElementById("close").innerHTML="<p>}";
+    e=document.getElementById("n1").innerHTML="<p>!";
+    e=document.getElementById("n2").innerHTML="<p>@";
+    e=document.getElementById("n3").innerHTML="<p>#";
+    e=document.getElementById("n4").innerHTML="<p>$";
+    e=document.getElementById("n5").innerHTML="<p>%";
+    e=document.getElementById("n6").innerHTML="<p>^";
+    e=document.getElementById("n7").innerHTML="<p>&";
+    e=document.getElementById("n8").innerHTML="<p>*";
+    e=document.getElementById("n9").innerHTML="<p>(";
+    e=document.getElementById("n0").innerHTML="<p>)";
+    e=document.getElementById("q").innerHTML="<p>Q";
+    e=document.getElementById("w").innerHTML="<p>W";
+    e=document.getElementById("e").innerHTML="<p>E";
+    e=document.getElementById("r").innerHTML="<p>R";
+    e=document.getElementById("t").innerHTML="<p>T";
+    e=document.getElementById("y").innerHTML="<p>Y";
+    e=document.getElementById("u").innerHTML="<p>U";
+    e=document.getElementById("i").innerHTML="<p>I";
+    e=document.getElementById("o").innerHTML="<p>O";
+    e=document.getElementById("p").innerHTML="<p>P";
+    e=document.getElementById("a").innerHTML="<p>A";
+    e=document.getElementById("s").innerHTML="<p>S";
+    e=document.getElementById("d").innerHTML="<p>D";
+    e=document.getElementById("f").innerHTML="<p>F";
+    e=document.getElementById("g").innerHTML="<p>G";
+    e=document.getElementById("h").innerHTML="<p>H";
+    e=document.getElementById("j").innerHTML="<p>J";
+    e=document.getElementById("k").innerHTML="<p>K";
+    e=document.getElementById("l").innerHTML="<p>L";
+    e=document.getElementById("z").innerHTML="<p>Z";
+    e=document.getElementById("x").innerHTML="<p>X";
+    e=document.getElementById("c").innerHTML="<p>C";
+    e=document.getElementById("v").innerHTML="<p>V";
+    e=document.getElementById("b").innerHTML="<p>B";
+    e=document.getElementById("n").innerHTML="<p>N";
+    e=document.getElementById("m").innerHTML="<p>M";
+    e=document.getElementById("equal").innerHTML="<p>+";
+    e=document.getElementById("slash").innerHTML="<p>?";
+    e=document.getElementById("colon").innerHTML="<p>:";
+    e=document.getElementById("quote").innerHTML="<p>\"";
+    e=document.getElementById("comma").innerHTML="<p><";
+    e=document.getElementById("dot").innerHTML="<p>>";
+    e=document.getElementById("caps").style.backgroundColor="#fff";
+    e=document.getElementById("caps").style.color="#000";
+   } else {
+    e=document.getElementById("open").innerHTML="<p>[";
+    e=document.getElementById("close").innerHTML="<p>]";
+    e=document.getElementById("n0").innerHTML="<p>0";
+    e=document.getElementById("n1").innerHTML="<p>1";
+    e=document.getElementById("n2").innerHTML="<p>2";
+    e=document.getElementById("n3").innerHTML="<p>3";
+    e=document.getElementById("n4").innerHTML="<p>4";
+    e=document.getElementById("n5").innerHTML="<p>5";
+    e=document.getElementById("n6").innerHTML="<p>6";
+    e=document.getElementById("n7").innerHTML="<p>7";
+    e=document.getElementById("n8").innerHTML="<p>8";
+    e=document.getElementById("n9").innerHTML="<p>9";
+    e=document.getElementById("q").innerHTML="<p>q";
+    e=document.getElementById("w").innerHTML="<p>w";
+    e=document.getElementById("e").innerHTML="<p>e";
+    e=document.getElementById("r").innerHTML="<p>r";
+    e=document.getElementById("t").innerHTML="<p>t";
+    e=document.getElementById("y").innerHTML="<p>y";
+    e=document.getElementById("u").innerHTML="<p>u";
+    e=document.getElementById("i").innerHTML="<p>i";
+    e=document.getElementById("o").innerHTML="<p>o";
+    e=document.getElementById("p").innerHTML="<p>p";
+    e=document.getElementById("a").innerHTML="<p>a";
+    e=document.getElementById("s").innerHTML="<p>s";
+    e=document.getElementById("d").innerHTML="<p>d";
+    e=document.getElementById("f").innerHTML="<p>f";
+    e=document.getElementById("g").innerHTML="<p>g";
+    e=document.getElementById("h").innerHTML="<p>h";
+    e=document.getElementById("j").innerHTML="<p>j";
+    e=document.getElementById("k").innerHTML="<p>k";
+    e=document.getElementById("l").innerHTML="<p>l";
+    e=document.getElementById("z").innerHTML="<p>z";
+    e=document.getElementById("x").innerHTML="<p>x";
+    e=document.getElementById("c").innerHTML="<p>c";
+    e=document.getElementById("v").innerHTML="<p>v";
+    e=document.getElementById("b").innerHTML="<p>b";
+    e=document.getElementById("n").innerHTML="<p>n";
+    e=document.getElementById("m").innerHTML="<p>m";
+    e=document.getElementById("equal").innerHTML="<p>=";
+    e=document.getElementById("slash").innerHTML="<p>/";
+    e=document.getElementById("colon").innerHTML="<p>\;";
+    e=document.getElementById("quote").innerHTML="<p>\'";
+    e=document.getElementById("comma").innerHTML="<p>,";
+    e=document.getElementById("dot").innerHTML="<p>.";
+    e=document.getElementById("caps").style.backgroundColor="#444"; 
+    e=document.getElementById("caps").style.color="#fff";
+   }
+  } else {
+   // Command history handling for up/down arrows
+   if (k === "up" && keyon && !run) {
+    if (commandHistory.length > 0) {
+     // Save current command if starting to browse history
+     if (historyIndex === -1) {
+      tempCommand = line;
+      historyIndex = commandHistory.length;
+     }
+     // Move to previous command in history
+     if (historyIndex > 0) {
+      historyIndex--;
+      line = commandHistory[historyIndex];
+     }
+    }
+   } else if (k === "down" && keyon && !run) {
+    if (historyIndex !== -1) {
+     // Move to next command in history
+     if (historyIndex < commandHistory.length - 1) {
+      historyIndex++;
+      line = commandHistory[historyIndex];
+     } else {
+      // Return to command being typed
+      historyIndex = -1;
+      line = tempCommand;
+      tempCommand = "";
+     }
+    }
+   } else
+   if (k === "back") {
+    if (line.length > 0) {
+     line = line.substr(0, line.length - 1);
+    }
+   } else {
+    if (k === "enter") {
+     if (keyon) {
+      // Add command to history (skip empty commands and duplicates)
+      if (line.trim().length > 0 && !run) {
+       // Don't add if it's the same as the last command
+       if (commandHistory.length === 0 || commandHistory[commandHistory.length - 1] !== line) {
+        commandHistory.push(line);
+        // Limit history size
+        if (commandHistory.length > maxHistorySize) {
+         commandHistory.shift();
+        }
+       }
+      }
+      // Reset history navigation
+      historyIndex = -1;
+      tempCommand = "";
+      
+      if (run) {
+       // Program is running - pass input to program
+       txt=txt+line+"<br>";
+       input(line);
+       line = "";
+       print("");
+      } else {
+       // OS command mode
+       if (line.slice(-3) === ".js") {
+        keyon=0;
+        txt=txt+line+"<br>";
+        const prg=document.createElement('script');
+        prg.src=line;
+        prg.onload=() => { keyon = 1; };
+        prg.onerror=() => { print("Error loading program"); keyon = 1; };
+        document.head.appendChild(prg);
+        line="";
+       } else if (line.substr(0, 3)==="cls") {
+        txt=""; print(""); line="";
+       } else {
+        txt=txt+line+"<br>";
+        executeCode(line);
+        line="";
+       }
+       print("");
+      }
+     }
+    }
+   }
+   if (keyon) {
+    // Reset history navigation when typing
+    if (l.length > 0 && historyIndex !== -1) {
+     historyIndex = -1;
+     tempCommand = "";
+    }
+    line=line+l;
+   }
+   if (run) { keydown(k); }
+  }
+ }
+ print("");
+}
+
+function executeCode(code) {
+ try {
+  const result=eval(code);
+  if (result !== undefined) {
+   print(String(result)+"<br>");
+  }
+  return true;
+ } catch (error) {
+  print(`Error: ${error.message}`+"<br>");
+  return false;
+ }
+}
+
+// system functions
+function print(a) {
+ txt=txt+a;
+ if (keyon) { a = line; } else { a = ""; }
+ if (keyon) {
+  document.getElementById("txt").innerHTML = "<p>" + txt + a + "<font id=cursor>&nbsp;</font>";
+ } else {
+  document.getElementById("txt").innerHTML = "<p>" + txt + a;
+ }
+ if (mode == "gfx") {
+  up=32+(404-(document.getElementById('txt').offsetHeight));
+  left=32+22+300;
+  document.getElementById("txt").style.left = left + "px";
+  document.getElementById("txt").style.top = up + "px";
+ } else {
+  left=32+22;
+  up=32+(402-(document.getElementById('txt').offsetHeight));
+  document.getElementById("txt").style.left = "54px";
+  document.getElementById("txt").style.top = up + "px";
+ }
+ const textElement = document.getElementById("txt");
+ textElement.scrollTop = textElement.scrollHeight;
+}
+
+function cls() { txt=""; e=document.getElementById("txt").innerHTML="<p>"+txt+"<p>"; print(""); }
+function gfx(scr) { a=0; for (b=0; b<=mapy; b++) { for (c=0; c<=mapx; c++) { e=document.getElementById("T"+a).src="t/"+scr.charAt(a*2)+scr.charAt((a*2)+1)+".png"; a++; }}}
+
+function hpop() { document.getElementById("pop").style.visibility="hidden"; }
+
+function pop(htm) {
+ e=document.getElementById("pop").innerHTML="<p>"+htm;
+ TopYPos=32+22; TopXPos=32+22;
+ 
+ PopAlign="center";
+ 
+ switch (PopAlign) {
+  case "char":
+   PopY=TopYPos+(PY*32)+8; PopX=TopXPos+(PX*32)+32; 
+   if (PopY<TopYPos) { PopY=TopYPos; } if (PopY<TopYPos+10) { PopY=TopYPos+10; }
+   if (PopX<TopXPos) { PopX=TopXPos; } if (PopX<TopXPos+10) { PopX=TopXPos+10; }
+   if (PopX+document.getElementById("pop").scrollWidth>TopXPos+256) { PopX=(TopXPos+256)-document.getElementById("PopUp").scrollWidth; }
+   if (PopY+document.getElementById("pop").scrollHeight>TopYPos+384) { PopY=(TopYPos+384)-document.getElementById("PopUp").scrollHeight; }
+   break;
+   // width: 256px; height: 384px;
+  case "center":
+   PopX=TopXPos+((256-document.getElementById("pop").scrollWidth)/2);
+   PopY=TopYPos+((384-document.getElementById("pop").scrollHeight)/2);
+   break;
+  case "click":
+   PopY=Math.floor(PopClick/(MapSizeX+1));
+   PopX=PopClick-(PopY*(MapSizeX+1));
+   PopY=(PopY*32)+22; PopX=(PopX*32)+22;
+   if (PopX+document.getElementById("PopUp").scrollWidth>TopXPos+424) { PopX=(TopXPos+424)-document.getElementById("PopUp").scrollWidth; }
+   if (PopY+document.getElementById("PopUp").scrollHeight>TopYPos+300) { PopY=(TopYPos+300)-document.getElementById("PopUp").scrollHeight; }
+   break;
+ }  
+ document.getElementById("pop").style.top=PopY; 
+ document.getElementById("pop").style.left=PopX;
+ document.getElementById("pop").style.visibility="visible";
+ //poptimer=setTimeout('document.getElementById("pop").style.visibility="visible";',200);
+}
+
+function char(C,O,Z) {
+ Y=Math.floor(Z/(mapx+1)); X=Z-(Y*(mapx+1)); Y--;
+ idface="cf"+C; idbody="cb"+C; idwpn="cw"+C; idarm="ca"+C; idhat="ch"+C;
+ face=""; body=""; wpn=""; arm=""; hat="";
+
+ if (O.indexOf("A")>-1) { face="A"+O.charAt(O.indexOf("A")+1); }
+ if (O.indexOf("B")>-1) { face="B"+O.charAt(O.indexOf("B")+1); }
+ if (O.indexOf("E")>-1) { face="E"+O.charAt(O.indexOf("E")+1); }
+ if (O.indexOf("F")>-1) { face="F"+O.charAt(O.indexOf("F")+1); }
+
+ if (O.indexOf("C")>-1) { body="C"+O.charAt(O.indexOf("C")+1); }
+ if (O.indexOf("D")>-1) { body="D"+O.charAt(O.indexOf("D")+1); }
+ if (O.indexOf("G")>-1) { body="G"+O.charAt(O.indexOf("G")+1); }
+ if (O.indexOf("H")>-1) { body="H"+O.charAt(O.indexOf("H")+1); }
+
+ if (document.getElementById("cb"+C)) {
+  e=document.getElementById("cb"+C).src="c/"+body+".png";
+  e=document.getElementById("cb"+C).style.top=32+22+(Y*32)+"px";
+  e=document.getElementById("cb"+C).style.left=(32+22+(X*32))+"px";
+ } else {
+  chr=document.createElement("img");
+  chr.id="cb"+C; chr.src="c/"+body+".png";
+  chr.className="char";  
+  chr.style.position="absolute"; chr.style.height=64; chr.style.width=32;
+  chr.style.top=32+22+(Y*32)+"px"; chr.style.left=(32+22+(X*32))+"px";
+  chr.onclick=function() { chr.onmousedown=new Function("ClickChar("+(PZ)+",this.parentNode)"); }
+  chr.style.zIndex="150";  
+  document.body.appendChild(chr);
+ }
+ if (document.getElementById("cf"+C)) {
+  e=document.getElementById("cf"+C).src="c/"+face+".png";
+  e=document.getElementById("cf"+C).style.top=32+22+(Y*32)+"px";
+  e=document.getElementById("cf"+C).style.left=(32+22+(X*32))+"px";
+ } else {
+  chr=document.createElement("img");
+  chr.id="cf"+C; chr.src="c/"+face+".png";
+  chr.className="char";  
+  chr.style.position="absolute"; chr.style.height=64; chr.style.width=32;
+  chr.style.top=32+22+(Y*32)+"px"; chr.style.left=(32+22+(X*32))+"px";
+  chr.onclick=function() { chr.onmousedown=new Function("ClickChar("+(PZ)+",this.parentNode)"); }
+  chr.style.zIndex="151";
+  document.body.appendChild(chr);
+ }
+
+ if (O.indexOf("I")>-1) { hat="I"+O.charAt(O.indexOf("I")+1); }
+ if (O.indexOf("J")>-1) { hat="J"+O.charAt(O.indexOf("J")+1); }
+ if (hat) {
+  if (document.getElementById("ch"+C)) {
+   e=document.getElementById("ch"+C).src="c/"+hat+".png";
+   e=document.getElementById("ch"+C).style.top=32+22+(Y*32)+"px";
+   e=document.getElementById("ch"+C).style.left=(32+22+(X*32))+"px";
+  } else {
+   chr=document.createElement("img");
+   chr.id="ch"+C; chr.src="c/"+hat+".png";
+   chr.className="char";  
+   chr.style.position="absolute"; chr.style.height=64; chr.style.width=32;
+   chr.style.top=32+22+(Y*32)+"px"; chr.style.left=(32+22+(X*32))+"px";
+   chr.onclick=function() { chr.onmousedown=new Function("ClickChar("+(PZ)+",this.parentNode)"); }
+   chr.style.zIndex="152";
+   document.body.appendChild(chr);
+  } 
+ } else {
+  if (document.getElementById("ch"+PName)) { document.getElementById("ch"+PName).remove(); } 
+ }
+}
+
+function ItemID(I) {
+ switch (I) {
+  case "Aa": return "Travel Boots"; break;
+  case "Ab": return "Hiking Boots"; break;
+  case "Ac": return "Swamp Boots"; break;
+  case "Ad": return "Mountain Boots"; break;
+  case "Ae": return "Lava Boots"; break;
+  case "Bd": return "Bucket"; break;
+  case "Be": return "Lantern"; break;
+  case "Cg": return "Log"; break;
+  case "Ek": return "Bucket of Tar"; break;
+  case "El": return "Bucket of Water"; break;
+  case "Fa": return "Tomato"; break;
+  case "Fb": return "Tomatoes"; break;
+  case "Fc": return "Tomatoes"; break;
+  case "Fd": return "Tomatoes"; break;
+  case "Jc": return "Candy"; break;
+  case "Ka": return "Plant"; break;
+  case "Kf": return "Bread"; break;
+  case "La": return "DevTeam Hat"; break;
+  case "Lb": return "Player Hat"; break;
+  case "Lc": return "Player Hat"; break;
+  case "Ld": return "Red Bandana"; break;
+  case "Lg": return "Blue Bandana"; break;
+  case "Ma": return "Cylon Helmet"; break;
+  case "Mb": return "Cylon Helmet"; break;
+  case "Md": return "Mask"; break;
+  case "Ob": return "Shield"; break; 
+  case "Pj": return "Sword"; break;
+  case "Re": return "Medicine"; break;
+   
+  case "Va": return "Spider"; break;
+  case "Vb": return "Mosquito"; break;
+  case "Vc": return "Scorpion"; break;
+  case "Vd": return "Fire Ant"; break;
+  case "Yb": return "Cart"; break;
+  case "Yc": return "Furnace"; break;
+  case "Ye": return "Seeds"; break;
+  case "Yi": return "Goblin Village"; break;  
+  case "Ze": return "Teleport"; break
+  case "Zf": return "Sign"; break
+  case "Zg": return "Pier"; break  
+  case "Zi": return "Fire Pit"; break;  
+  case "Zj": return "Fire"; break;
+  case "Zh": return "Well"; break;
+  case "Zm": return "City"; break
+ } 
+}
+
+function ClickTile(Z) {
+ Y=Math.floor(Z/mapx); X=Z-(Y*mapx); 
+ if (run) { MenuTile(Z); }
+}
+
+function ClickChar(Z) {
+ if (run) { MenuChar(Z); }
+}
+
+// system ready
+print(""); 
+
+mySearch=location.search.substr(1).split("&")
+for (i=0;i<mySearch.length;i++) {
+ nameVal=mySearch[i].split("=");
+ for (j in nameVal) { nameVal[j]=unescape(nameVal[j]); } 
+ if (nameVal[0]=="run") {
+  script=document.createElement('script');
+  script.src=nameVal[1];
+  document.head.appendChild(script);
+ }
+}
+
+</script>
+</body></html>
