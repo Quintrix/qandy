@@ -2688,10 +2688,11 @@ window.pokeScroll = function() {
     BRow[i] = CURBG;
     ARow[i] = CURATTR;
   }
-  VIDEO.shift(); VIDEO.push(VRow.slice());
+   VIDEO.shift();  VIDEO.push(VRow.slice());
   FCOLOR.shift(); FCOLOR.push(FRow.slice());
   BCOLOR.shift(); BCOLOR.push(BRow.slice());
-  ATTR.shift(); ATTR.push(ARow.slice());
+    ATTR.shift();   ATTR.push(ARow.slice());
+
   CURY  = clampRow((typeof CURY === 'number' ? CURY : 0) - 1);
   LINEY = clampRow((typeof LINEY === 'number' ? LINEY : 0) - 1);
   CURX  = Math.max(0, Math.min(W - 1, (typeof CURX === 'number' ? CURX : 0)));
