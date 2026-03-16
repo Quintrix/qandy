@@ -2688,11 +2688,10 @@ window.pokeScroll = function() {
     BRow[i] = CURBG;
     ARow[i] = CURATTR;
   }
-   VIDEO.shift();  VIDEO.push(VRow.slice());
+  VIDEO.shift(); VIDEO.push(VRow.slice());
   FCOLOR.shift(); FCOLOR.push(FRow.slice());
   BCOLOR.shift(); BCOLOR.push(BRow.slice());
-    ATTR.shift();   ATTR.push(ARow.slice());
-
+  ATTR.shift(); ATTR.push(ARow.slice());
   CURY  = clampRow((typeof CURY === 'number' ? CURY : 0) - 1);
   LINEY = clampRow((typeof LINEY === 'number' ? LINEY : 0) - 1);
   CURX  = Math.max(0, Math.min(W - 1, (typeof CURX === 'number' ? CURX : 0)));
@@ -2781,7 +2780,7 @@ function init_keyboard_js() {
     btn.style.top = key.y + 'px';
     btn.onclick = function() {
       var keyData = {keyCode: key.keyCode, key: String.fromCharCode(key.keyCode), shiftKey: !!shift, ctrlKey: !!ctrl, altKey: !!alt, source: 'virtual', originalEvent: null};
-      press('keydown', keyData);
+      press('keydown', keyData); @@@
       setTimeout(function() { press('keyup', keyData); }, 50);
     };
 
@@ -4484,7 +4483,7 @@ window.dispatchKeyboardEvent = function(eventType, keyData) {
   if (eventType === 'keydown') {
     if (RUN != "qandy.js" && typeof keydown !== 'undefined') {
       try {
-        keydown(keyData.key, keyData);
+        press(keyData);
       } catch (e) {
         print("ERROR: keydown():\n" + formatError(e) + "\n\n");
       }
@@ -4694,7 +4693,7 @@ if (HOST) {
 
 async function systemReady() {
   // system ready
-  print("\n[bgreen]Qandy Pocket\nComputer v1.k\n\n");
+  print("\n[bgreen]Qandy Pocket\nComputer v.1l\n\n");
   print("[cyan]Alpha Testing\nPrototype Release\n\n");
   if (GUEST) {
     // guest system ready
