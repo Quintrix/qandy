@@ -73,6 +73,10 @@ var DEVICE = 'none';
   var MAX_NAME_BYTES = 255;
   var VALID_NAME_RE = /^(?!\.)[A-Za-z0-9 \-_.()+=]+$/;
   var SUPPORTED_DEVICES = ['local', 'echo', 'harddrive', 'none'];
+  var _LS_PFX = 'qandy_file:';           // per-file value prefix (existing)
+  var _LS_MAN = 'qandy_manifest_local';  // manifest key (existing)
+  var _LS_CWD = 'qandy_cwd';             // new: current working directory
+  var _LS_PS = ':';                      // local storage path separator
 
   // ── Internal state ───────────────────────────────────────────────────────
   var _echoStore = Object.create(null);

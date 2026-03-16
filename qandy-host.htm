@@ -520,6 +520,9 @@ var ctrl=0;  // ctrl key pressed
 var alt=0;   // alt key pressed
 var ctrlPhysical=false;  // track if ctrl was activated by physical keyboard
 var altPhysical=false;   // track if alt was activated by physical keyboard
+var ctrlVirtual = false; // virtual ctrl key lock 
+var altVirtual = false;  // virtual alt key lock 
+
 var keyboard=1; // turn keyboard input on/off
 
 var LINE ="";  // input line
@@ -694,10 +697,10 @@ function loadNext() {
   signalAdvance = advance;
 
   switch (entry.name) {
-    case "video.js": init_video_js(); break;
-    case "keyboard.js": init_keyboard_js(); break;
-    case "command.js": init_command_js(); break;
-    case "qandy.js": init_qandy_js(); break; 
+    case "video.js": video_js(); break;
+    case "keyboard.js": keyboard_js(); break;
+    case "command.js": command_js(); break;
+    case "qandy.js": qandy_js(); break; 
   }
 
   // Keep a shorter timeout as a final safety
@@ -807,14 +810,14 @@ function powerOn() {
       console.warn('qandy: beep failed', err);
     }
 
-    // IMPORTANT: call init_sound_js() (embedded) synchronously so the embedded sound module
+    // IMPORTANT: call sound_js() (embedded) synchronously so the embedded sound module
     // initializes within the user gesture and can create/resume an AudioContext.
     try {
-      if (typeof init_sound_js === 'function') {
+      if (typeof sound_js === 'function') {
         try {
-          init_sound_js(); // initialize embedded sound module
+          sound_js(); // initialize embedded sound module
         } catch (innerErr) {
-          console.warn('qandy: init_sound_js() threw', innerErr);
+          console.warn('qandy: sound_js() threw', innerErr);
         }
         // If the embedded sound module exposed an audioContext, attempt to resume it if suspended.
         try {
@@ -823,11 +826,11 @@ function powerOn() {
           }
         } catch (e) { /* ignore */ }
       } else {
-        // Fallback: if init_sound_js not present, try to resume any existing global audio context.
+        // Fallback: if sound_js not present, try to resume any existing global audio context.
         if (window.audioContext && typeof window.audioContext.resume === 'function') {
           window.audioContext.resume().catch(function(){});
         } else {
-          console.warn('qandy: init_sound_js() not found; sound may be unavailable.');
+          console.warn('qandy: sound_js() not found; sound may be unavailable.');
         }
       }
     } catch (e) {
@@ -1346,7 +1349,7 @@ function user() {
 
 function sysop() { 
   console.log('Guest requested to show host');
-  if (isAudioUnlocked()===false) { init_sound_js(); }        
+  if (isAudioUnlocked()===false) { sound_js(); }        
   console.log('Guest requested to show host');
   // Hide guest VM and guest keyboard only; keep host UI visible
   try {
@@ -1437,7 +1440,7 @@ async function startup() {
 // sound.js 
 //
 
-window.init_sound_js=function() {
+window.sound_js=function() {
   window.audioContext = null;
   window.noteFrequencies = {
     'C0': 16.35, 'C#0': 17.32, 'Db0': 17.32, 'D0': 18.35, 'D#0': 19.45, 'Eb0': 19.45, 'E0': 20.60,
@@ -1651,7 +1654,7 @@ if (typeof window.qandySignalReady === 'function') {
 // video.js
 //
 
-function init_video_js() {
+function video_js() {
 //
 // Qandy Video Graphics Adaptor
 // 
@@ -2718,7 +2721,7 @@ if (typeof window.qandySignalReady === 'function') {
 // keyboard.js
 //
 
-function init_keyboard_js() { 
+function keyboard_js() { 
   window.keyson=function() {
     //keyon=1;
     //cursor(1);
@@ -3257,7 +3260,7 @@ window.updateKeyLabels = updateKeyLabels;
 //
 // command.js (modified)
 //
-function init_command_js() {
+function command_js() {
   window.command=async function(cmd) {
     if (RUN != "qandy.js") {
       console.log("RUN = "+RUN+" command "+cmd);
@@ -3457,6 +3460,13 @@ function init_command_js() {
           return('Error: invalid filename\n');
         }
         return;
+      case "mkdir":
+        if (f) {
+          print(await qMkDir(f));
+        } else {
+          return('Error: invalid dir name\n');
+        }
+        return;     
       case "exists":
         if (f) {
           print(await qdosExists(f));
@@ -3641,6 +3651,7 @@ async function qdosDelete(filename, timeoutMs) {
     
   });
 }
+
 async function qdosRename(file, dest, timeoutMs) {
   var validSrc = qdosValidateFilename(file);
   var validDest = qdosValidateFilename(dest);
@@ -3696,6 +3707,31 @@ async function qdosCopy(filename, timeoutMs) {
     throw new Error('copy failed: ' + (err && err.message ? err.message : String(err)));
   });
 }
+
+async function qdosMkDir(filename, timeoutMs) {
+  var valid = qdosValidateFilename(filename);
+  if (!valid) return Promise.reject(new Error('invalid filename'));
+  // qdosXmitDos resolves only on host success (host sends success:false -> guest handler rejects)
+  return qdosXmitDos('localMakeDir', { file: valid }, timeoutMs).then(function (/*result*/) {
+    // success - resolve with undefined (same pattern as qdosDelete)
+  });
+}
+
+// Export for convenience if not already exported
+if (typeof window !== 'undefined') {
+  window.qdosMkDir = window.qdosMkDir || qdosMkDir;
+}
+
+async function qdosDelete(filename, timeoutMs) {
+  var valid = qdosValidateFilename(filename);
+  if (!valid) return Promise.reject(new Error('invalid filename'));
+  // qdosXmitDos resolves only on host success (host sends success:false -> guest handler rejects)
+  return qdosXmitDos('localDelete', { file: valid }, timeoutMs).then(function (/*result*/) {
+    
+  });
+}
+
+
 
 async function qdosExists(filename, timeoutMs) {
   var name = (typeof filename === 'string') ? filename.trim() : filename;
@@ -3856,18 +3892,15 @@ if (typeof window.qandySignalReady === 'function') {
 // qandy.js
 //
 
-window.init_qandy_js=function() {
+window.qandy_js=function() {
 RUN="qandy.js"; 
 
 window.button=function(b, event) {
-  pokeCursorOff();
-  // debug: uncomment if you need to trace key routing
-  // console.log("button()", b, "RUN=", typeof RUN !== 'undefined' ? RUN : '(undef)');
-
-  // Check if we need to unlock audio on first host keypress
+  pokeCursorOff(); 
+  var virtualclick=!!(event && event.source === 'virtual'); 
   if (event && typeof event.shiftKey !== 'undefined') shift = !!event.shiftKey;
   var k = "", l = "";
-  if (b===32 && event) { event.preventDefault(); }
+  if (b===32 && event) { if (!virtualclick) { event.preventDefault(); }}
 
   // Fast-path: if a user script (not qandy.js) is running and defines keydown(),
   // deliver the event directly to that function for lowest latency.
@@ -4002,7 +4035,7 @@ window.button=function(b, event) {
 
   // Host editing / navigation / input handling
   if (k === "back") {
-    event && event.preventDefault();
+    if (!virtualclick) { event && event.preventDefault(); }
     if (window.QandyKeyboard && QandyKeyboard.handleBackspace()) {
       pokeCursorOn(); return;
     }
@@ -4030,7 +4063,7 @@ window.button=function(b, event) {
     pokeCursorOn();
     return;
   } else if (k === "delete") {
-    event && event.preventDefault();
+    if (!virtualclick) { event && event.preventDefault(); }
     var str = String(LINE || "");
     var maxLen = str.length;
     var s = Math.max(0, Math.min(SSTART, SEND));
@@ -4050,7 +4083,7 @@ window.button=function(b, event) {
     SEND = -1;
     pokeInput();
   } else if (k === "left") {
-    event && event.preventDefault();
+    if (!virtualclick) { event && event.preventDefault(); }
     if (CURP > 0) {
       if (shift) {
         if (SSTART === -1) SSTART = CURP;   // anchor at the starting cursor pos
@@ -4069,7 +4102,7 @@ window.button=function(b, event) {
       }
     }
   } else if (k === "right") {
-    event && event.preventDefault();
+    if (!virtualclick) { event && event.preventDefault(); }
     if (CURP < LINE.length) {
       if (shift) {
         if (SSTART === -1) SSTART = CURP;
@@ -4088,7 +4121,7 @@ window.button=function(b, event) {
       }
     }
   } else if (k === "home") {
-    event && event.preventDefault();
+    if (!virtualclick) { event && event.preventDefault(); }
     if (shift) {
       if (SSTART === -1) SSTART = CURP; // anchor
       SEND = 0;
@@ -4105,7 +4138,7 @@ window.button=function(b, event) {
       CURX = absCol % W;
     }
   } else if (k === "end") {
-    event && event.preventDefault();
+    if (!virtualclick) { event && event.preventDefault(); }
     if (shift) {
       if (SSTART === -1) SSTART = CURP;
       SEND = LINE.length;
@@ -4122,7 +4155,7 @@ window.button=function(b, event) {
       CURX = absCol % W;
     }
   } else if (k === "up") {
-    event && event.preventDefault();
+    if (!virtualclick) { event && event.preventDefault(); }
     if (commandHistory && commandHistory.length > 0) {
       if (historyIndex === -1) {
         tempCommand = LINE || "";
@@ -4141,7 +4174,7 @@ window.button=function(b, event) {
       pokeInput();
     }
   } else if (k === "down") {
-    event && event.preventDefault();
+    if (!virtualclick) { event && event.preventDefault(); }
     if (historyIndex !== -1) {
       if (historyIndex < commandHistory.length - 1) {
         historyIndex++;
@@ -4157,7 +4190,7 @@ window.button=function(b, event) {
       pokeInput();
     }
   } else if (k === "enter") {
-    event && event.preventDefault();
+    if (!virtualclick) { event && event.preventDefault(); }
     if (window.QandyKeyboard && QandyKeyboard.handleEnter()) { pokeCursorOn(); return; }
     if (SSTART>-1) { pokeSelect(false); SSTART = -1; SEND = -1; }
     if (LINE !== undefined) {
