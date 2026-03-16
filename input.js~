@@ -1,0 +1,77 @@
+// Public input API (replaces the previous implementation)
+  function input(opts) {
+    if (pending) return Promise.reject(new Error('input already pending'));
+    var options = {};
+    if (typeof opts === 'string') options.prompt = opts;
+    else if (typeof opts === 'object' && opts !== null) options = Object.assign({}, opts);
+
+    // create the pending promise object early so we can return it immediately
+    var p = {};
+    var promise = new Promise(function(resolve, reject) {
+      p.resolve = resolve;
+      p.reject = reject;
+    });
+    // attach common fields now (pending will be set only after prompt printing finishes)
+    p.options = options;
+    p.buffer = "";
+    p.savedLINE = LINE;
+    p.savedCURP = CURP;
+
+    // async setup: wait for any current printing to finish, then print prompt and wait for that,
+    // then enable interactive pending state (so prompt doesn't cancel earlier output).
+    (async function() {
+      try {
+        // 1) wait for any existing paced output (e.g., previous print()) to finish
+        await waitForCursorIdle();
+
+        // 2) print the prompt (if any)
+        if (options.prompt) {
+          print(options.prompt);
+        }
+
+        // 3) wait for the prompt's paced printing to finish
+        await waitForCursorIdle();
+
+        // 4) now it's safe to enable pending input without cancelling the printed prompt
+        pending = p;
+
+        // timeout handling
+        if (typeof options.timeout === 'number' && options.timeout > 0) {
+          p.timeoutId = setTimeout(function() {
+            if (pending === p) {
+              pending = null;
+              p.reject(new Error('input timeout'));
+            }
+          }, options.timeout);
+        }
+
+        // Ensure the cursor is visible for user input
+        try { pokeCursorOn(); } catch (e) {}
+
+      } catch (err) {
+        // If any error during setup, reject the promise
+        try { p.reject(err); } catch (e) {}
+      }
+    })();
+
+    // ensure finalizers clear timeout if any
+    return promise.finally(function() {
+      if (p.timeoutId) try { clearTimeout(p.timeoutId); } catch (e) {}
+    });
+  }
+
+
+  // Expose API
+  var API = {
+    input: input,
+    acceptPending: acceptPending,
+    cancelPending: cancelPending,
+    handleTypedChar: handleTypedChar,
+    handleBackspace: handleBackspace,
+    handleEnter: handleEnter,
+    _pendingState: _pendingState
+  };
+
+  global.QandyKeyboard = API;
+  // convenience global for guest scripts: await input(...)
+  global.input = input;
