@@ -1395,39 +1395,10 @@ var DEVICE = 'none';
   }
 
   //
-  // API: localMakeDir, localChangeDir, localRemoveDir
+  // API: localMkDir, localChangeDir, localRemoveDir
   //
 
-  async function localMakeDir(name) {
-    return new Promise(function (resolve, reject) {
-      try {
-        var cwd = getCwdSync();
-        var target = resolveDirPath(name, cwd);
-        if (!target) return reject(new Error('invalid or disallowed directory name'));
-
-        // Load manifest
-        var man = loadManifest();
-
-        // If a file exists at target, error
-        if (manifestHasFile(man, target)) {
-          return reject(new Error('A file with that name already exists: ' + target));
-        }
-
-        // If directory already exists: set cwd to it
-        if (manifestHasDir(man, target)) {
-          setCwdSync(target);
-          return resolve({ ok: true, message: 'directory exists; switched to ' + target, cwd: target });
-        }
-
-        // create directory
-        addManifestDir(man, target);
-        saveManifest(man);
-        setCwdSync(target);
-        return resolve({ ok: true, message: 'directory created ' + target, cwd: target });
-      } catch (e) {
-        return reject(e);
-      }
-    });
+  async function localMkDir(name) {
   }
 
   async function localChangeDir(name) {
@@ -1503,7 +1474,7 @@ var DEVICE = 'none';
   }
 
   // Export to global namespace (do not overwrite if already present)
-  if (typeof window.localMakeDir !== 'function') window.localMakeDir = localMakeDir;
+  if (typeof window.localMkDir !== 'function') window.localMkDir = localMkDir;
   if (typeof window.localChangeDir !== 'function') window.localChangeDir = localChangeDir;
   if (typeof window.localRemoveDir !== 'function') window.localRemoveDir = localRemoveDir;
 
