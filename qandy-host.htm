@@ -195,7 +195,7 @@ body { margin: 0; background-color: #333; }
       padding-left: 0px; padding-right: 0px; align-items: center;
       max-width: 24px; max-height: 24px; margin: 0; padding: 4; 
       display: flex; justify-content: center;  align-items: center;       
-      color: white; background-color: #222; text-align: center;
+	      color: white; background-color: #222; text-align: center;
       font-family: Arial; font-size: 14px; weight: bold;
       cursor: pointer; z-index: 99; 
       border: 1px solid #555; border-radius: 3px;
@@ -389,10 +389,6 @@ html { -webkit-text-size-adjust: 100%; }     /* keep text size stable across zoo
   head.appendChild(style);
 })();
 </script>
-
-<!--- cellphone debug console -->
-<!--- <scr ipt src="https://cdn.jsdelivr.net/npm/eruda"></sc ript> -->
-<!--- <scr ipt>eruda.init();</scr ipt> -->
 
 <script>
 // Define Global Variables
@@ -933,7 +929,7 @@ async function qandyGuestHtm(options) {
   }
 }
 
-function hostMessageHandler(ev) {
+async function hostMessageHandler(ev) {
   //if (!iframe.contentWindow || ev.source !== iframe.contentWindow) {
   //  console.log("Message is not from our iframe");
   //  return;
@@ -972,6 +968,28 @@ function hostMessageHandler(ev) {
             .catch(function (err) {
               dosXmitQdos(_dosIframe, d.id, 'localList', false, err && err.message ? err.message : String(err));
             });
+          break;
+        }
+
+        case 'localMkDir': {
+          var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+          // coerce and validate filename
+          var fname = (typeof d.file === 'undefined' || d.file === null) ? '' : String(d.file);
+          var validName = validateGuestFilename(fname);
+          if (!validName) {
+            // reject invalid filenames explicitly
+            dosXmitQdos(_dosIframe, d.id, 'localMkDir', false, 'invalid filename');
+            break;
+          }
+          // call localMkDir (supports sync or Promise)
+          try {
+            const result = await localMkDir(validName);
+            // result may be a string or object; keep same behavior as your .then branch
+            dosXmitQdos(_dosIframe, d.id, 'localMkDir', true, result);
+          } catch (err) {
+            // Convert any thrown/rejected error into plain-text
+            dosXmitQdos(_dosIframe, d.id, 'localMkDir', false, err && err.message ? err.message : String(err));
+          }
           break;
         }
 
@@ -1129,7 +1147,6 @@ function hostMessageHandler(ev) {
         });
       break;
       }
-
 
         case 'dosFormat': {
           var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
@@ -1820,23 +1837,12 @@ window.pokeCursor = function(t) {
       if (ch === '\n') {
         CURX = 0;
         CURY = CURY + 1;
-        if (CURY >= H) { pokeScroll(1); CURY = H - 1; CURX = Math.min(CURX, W - 1); }
+        if (CURY >= H) { pokeScroll(); CURY = H - 1; CURX = Math.min(CURX, W - 1); }
         LINEX = CURX; LINEY = CURY;
         state.idx++;
         state.charsEmitted++;
         continue;
       }
-
-      // does this ever get executed?? 
-      //if (CURX >= W) {
-      //  CURX = 0; CURY = CURY + 1;
-      //  if (CURY >= H) {
-      //    pokeScroll(1); CURY = H - 1; CURX = 0;
-      //    pokeCursorOn();
-      //    window._pokeCursor_state = null;
-      //    pokeCursorOn();
-      //  }
-      //}
 
       pokeCell(CURX, CURY, ch, CURFG, CURBG, CURATTR);
       if (SOUND && typeof beep === 'function') { try { beep(900, 25, 0.01); } catch (e) {}}
@@ -1845,7 +1851,7 @@ window.pokeCursor = function(t) {
       if (CURX >= W) {
         CURX = 0; CURY = CURY + 1;
         if (CURY >= H) {
-          pokeScroll(1);
+          pokeScroll();
           CURY = H - 1; CURX = Math.min(CURX, W - 1);
         }
       }
@@ -2695,165 +2701,36 @@ function cursorVarsToAttr(vars) {
   return mask;
 }
 
-window.pokeScroll = function(n) {
-  // Hide cursor while we mutate screen state
-  // if (typeof pokeCursorOff === 'function') try { pokeCursorOff(); } catch (e) {}
-
-  if (typeof n === 'undefined') n = 0;
-  n = Number(n) || 0;
-  if (n === 0) {
-    // restore cursor and exit
-    // if (typeof pokeCursorOn === 'function') try { pokeCursorOn(); } catch (e) {}
-    return true;
+window.pokeScroll = function() {
+  var VRow=new Array(W);
+  var FRow=new Array(W);
+  var BRow=new Array(W);
+  var ARow=new Array(W);
+  for (var i=0; i<W; i++) {
+    VRow[i] = ' ';
+    FRow[i] = CURFG;
+    BRow[i] = CURBG;
+    ARow[i] = CURATTR;
   }
-
-  // clamp distance to screen height
-  var distance = Math.max(-H, Math.min(H, n));
-  var defAttr = 0;
-
-  // defaults for new/cleared cells
-  var defaultFG = (typeof window.defaultColor !== 'undefined') ? window.defaultColor : ((window.currentStyle && currentStyle.color) ? currentStyle.color : 37);
-  var defaultBG = (typeof window.defaultBg !== 'undefined') ? window.defaultBg : ((window.currentStyle && currentStyle.bgcolor) ? currentStyle.bgcolor : 40);
-
-  // helpers to ensure typed arrays / arrays exist
-  function ensureRowBanks(y) {
-    if (!window.FCOLOR) FCOLOR = [];
-    if (!window.BCOLOR) BCOLOR = [];
-    if (!FCOLOR[y]) FCOLOR[y] = new Uint8Array(W);
-    if (!BCOLOR[y]) BCOLOR[y] = new Uint8Array(W);
-    if (!window.ATTR) ATTR = [];
-    if (!ATTR[y]) {
-      try { ATTR[y] = new Uint16Array(W); } catch (e) { ATTR[y] = new Array(W).fill(0); }
-    }
-    if (window.COLOR && !COLOR[y]) COLOR[y] = new Array(W);
-  }
-
-  // helper to set legacy COLOR object at (y,x)
-  function setLegacyColor(y, x, fg, bg, attrObj) {
-    if (!window.COLOR) return;
-    if (!COLOR[y]) COLOR[y] = new Array(W);
-    var o = COLOR[y][x];
-    if (!o || typeof o !== 'object') o = {};
-    o.color = fg;
-    o.bgcolor = bg;
-    if (attrObj) {
-      if (typeof attrObj.bold !== 'undefined') o.bold = !!attrObj.bold;
-      if (typeof attrObj.inverse !== 'undefined') o.inverse = !!attrObj.inverse;
-      if (typeof attrObj.italic !== 'undefined') o.italic = !!attrObj.italic;
-      if (typeof attrObj.underline !== 'undefined') o.underline = !!attrObj.underline;
-      if (typeof attrObj.dim !== 'undefined') o.dim = !!attrObj.dim;
-      if (typeof attrObj.blink !== 'undefined') o.blink = !!attrObj.blink;
-    }
-    COLOR[y][x] = o;
-  }
-
-  if (distance > 0) {
-    // Scroll up (content moves up; blank lines appear at bottom)
-    for (var y = 0; y < H; y++) {
-      ensureRowBanks(y);
-      var src = y + distance;
-      if (src < H) {
-        // copy from src -> y
-        ensureRowBanks(src);
-        for (var x = 0; x < W; x++) {
-          VIDEO[y][x] = VIDEO[src][x];
-          FCOLOR[y][x] = FCOLOR[src][x];
-          BCOLOR[y][x] = BCOLOR[src][x];
-          ATTR[y][x]   = (ATTR[src] && typeof ATTR[src][x] !== 'undefined') ? ATTR[src][x] : defAttr;
-
-          // sync legacy color object if present
-          if (window.COLOR) {
-            var srcCol = (COLOR[src] && COLOR[src][x]) ? COLOR[src][x] : null;
-            if (srcCol) {
-              setLegacyColor(y, x, srcCol.color, srcCol.bgcolor, srcCol);
-            } else {
-              setLegacyColor(y, x, FCOLOR[y][x], BCOLOR[y][x], {});
-            }
-          }
-        }
-      } else {
-        // fill bottom lines with blanks + defaults
-        for (var x2 = 0; x2 < W; x2++) {
-          VIDEO[y][x2] = ' ';
-          FCOLOR[y][x2] = defaultFG;
-          BCOLOR[y][x2] = defaultBG;
-          ATTR[y][x2] = defAttr;
-          if (window.COLOR) setLegacyColor(y, x2, defaultFG, defaultBG, {});
-        }
-      }
-
-      // refresh the updated row at once
-      if (typeof pokeRefreshRow === 'function') {
-        try { pokeRefreshRow(0, y, W); } catch (e) { pokeRefresh(0, y, W); }
-      } else {
-        try { pokeRefresh(0, y, W); } catch (e) { /* best-effort */ }
-      }
-    }
-  } else {
-    // Scroll down (content moves down; blank lines appear at top)
-    var d = -distance;
-    for (var y2 = H - 1; y2 >= 0; y2--) {
-      ensureRowBanks(y2);
-      var src2 = y2 - d;
-      if (src2 >= 0) {
-        ensureRowBanks(src2);
-        for (var x3 = 0; x3 < W; x3++) {
-          VIDEO[y2][x3] = VIDEO[src2][x3];
-          FCOLOR[y2][x3] = FCOLOR[src2][x3];
-          BCOLOR[y2][x3] = BCOLOR[src2][x3];
-          ATTR[y2][x3]   = (ATTR[src2] && typeof ATTR[src2][x3] !== 'undefined') ? ATTR[src2][x3] : defAttr;
-
-          if (window.COLOR) {
-            var sc = (COLOR[src2] && COLOR[src2][x3]) ? COLOR[src2][x3] : null;
-            if (sc) setLegacyColor(y2, x3, sc.color, sc.bgcolor, sc);
-            else setLegacyColor(y2, x3, FCOLOR[y2][x3], BCOLOR[y2][x3], {});
-          }
-        }
-      } else {
-        // fill top lines with blanks + defaults
-        for (var x4 = 0; x4 < W; x4++) {
-          VIDEO[y2][x4] = ' ';
-          FCOLOR[y2][x4] = defaultFG;
-          BCOLOR[y2][x4] = defaultBG;
-          ATTR[y2][x4] = defAttr;
-          if (window.COLOR) setLegacyColor(y2, x4, defaultFG, defaultBG, {});
-        }
-      }
-
-      // refresh the updated row at once
-      if (typeof pokeRefreshRow === 'function') {
-        try { pokeRefreshRow(0, y2, W); } catch (e) { pokeRefresh(0, y2, W); }
-      } else {
-        try { pokeRefresh(0, y2, W); } catch (e) { /* best-effort */ }
-      }
-    }
-  }
-
-  // Adjust cursor and input-line anchors: distance > 0 means rows moved up => cursor row reduces
-  function clampRow(r) {
-    if (typeof r !== 'number' || isNaN(r)) return 0;
-    if (r < 0) return 0;
-    if (r >= H) return H - 1;
-    return r;
-  }
-
-  CURY  = clampRow((typeof CURY === 'number' ? CURY : 0) - distance);
-  LINEY = clampRow((typeof LINEY === 'number' ? LINEY : 0) - distance);
+  VIDEO.shift(); VIDEO.push(VRow.slice());
+  FCOLOR.shift(); FCOLOR.push(FRow.slice());
+  BCOLOR.shift(); BCOLOR.push(BRow.slice());
+  ATTR.shift(); ATTR.push(ARow.slice());
+  CURY  = clampRow((typeof CURY === 'number' ? CURY : 0) - 1);
+  LINEY = clampRow((typeof LINEY === 'number' ? LINEY : 0) - 1);
   CURX  = Math.max(0, Math.min(W - 1, (typeof CURX === 'number' ? CURX : 0)));
   LINEX = Math.max(0, Math.min(W - 1, (typeof LINEX === 'number' ? LINEX : 0)));
-
-  // Restore cursor
-  // if (typeof pokeCursorOn === 'function') try { pokeCursorOn(); } catch (e) {}
-
+  if (SYNC) { pokeRefresh(); }
   return true;
 };
 
-//window.pokeScroll = function() {
-//  pokeCursorOff();
-//  pokeText(0,0," ",800);
-//  CURX=0; CURY=0; LINEX=0; LINEY=0;
-//  pokeCursorOn();  
-//}
+function clampRow(r) {
+  if (typeof r !== 'number' || isNaN(r)) return 0;
+  if (r < 0) return 0;
+  if (r >= H) return H - 1;
+  return r;
+}
+
 
 // Signal that video.js is ready
 if (typeof window.qandySignalReady === 'function') {
@@ -2928,8 +2805,9 @@ function keyboard_js() {
     btn.onclick = function() {
       var keyData = {keyCode: key.keyCode, key: String.fromCharCode(key.keyCode), shiftKey: !!shift, ctrlKey: !!ctrl, altKey: !!alt, source: 'virtual', originalEvent: null};
       press(keyData);
-      setTimeout(function() { pressup(keyData); }, 50);
+      setTimeout(function() { press('keyup', keyData); }, 50);
     };
+
     // Append into the selected container (defensive: ensure it exists)
     try {
       (kbContainer || document.body).appendChild(btn);
@@ -2942,25 +2820,45 @@ function keyboard_js() {
 
   updateKeyLabels();
 
+// Replace existing updateKeyLabels() with this version
+function updateKeyLabels() {
+  // Normalize modifier state from globals (same logic as before)
+  window.altActive = !!window.alt || !!window.altPhysical;
+  window.shiftActive = !!window.shift;
+  window.capsActive = !!window.caps;
 
-  function updateKeyLabels() {
-    // Normalize modifier state from globals (same logic as before)
-    window.altActive = !!window.alt || !!window.altPhysical;
-    window.shiftActive = !!window.shift;
-    window.capsActive = !!window.caps;
-    // owners to update (host and guest). Order: update host first (if you prefer)
-    var owners = ['host', 'guest'];
-    // helper to pick label for a logical key given modifier state
-    function pickLabel(base) {
-      if (!base || base.length === 0) return base;
-      var lookup = String(base).toLowerCase();
-      var label = base;
-      if (window.altActive) {
-        if (window.shiftActive && typeof altShiftKeys === 'object' && altShiftKeys.hasOwnProperty(lookup)) {
-          label = altShiftKeys[lookup];
-        } else if (typeof altKeys === 'object' && altKeys.hasOwnProperty(lookup)) {
-          label = altKeys[lookup];
-        } else if (window.shiftActive && typeof shiftedKeys === 'object' && shiftedKeys.hasOwnProperty(lookup)) {
+  // owners to update (host and guest). Order: update host first (if you prefer)
+  var owners = ['host', 'guest'];
+
+  // helper to pick label for a logical key given modifier state
+  function pickLabel(base) {
+    if (!base || base.length === 0) return base;
+    var lookup = String(base).toLowerCase();
+    var label = base;
+
+    if (window.altActive) {
+      if (window.shiftActive && typeof altShiftKeys === 'object' && altShiftKeys.hasOwnProperty(lookup)) {
+        label = altShiftKeys[lookup];
+      } else if (typeof altKeys === 'object' && altKeys.hasOwnProperty(lookup)) {
+        label = altKeys[lookup];
+      } else if (window.shiftActive && typeof shiftedKeys === 'object' && shiftedKeys.hasOwnProperty(lookup)) {
+        label = shiftedKeys[lookup];
+      } else if (typeof normalKeys === 'object' && normalKeys.hasOwnProperty(lookup)) {
+        label = normalKeys[lookup];
+      } else {
+        label = base;
+      }
+    } else {
+      if (window.capsActive) {
+        if (typeof shiftedKeys === 'object' && shiftedKeys.hasOwnProperty(lookup)) {
+          label = shiftedKeys[lookup];
+        } else if (typeof normalKeys === 'object' && normalKeys.hasOwnProperty(lookup)) {
+          label = normalKeys[lookup];
+        } else {
+          label = base;
+        }
+      } else if (window.shiftActive) {
+        if (typeof shiftedKeys === 'object' && shiftedKeys.hasOwnProperty(lookup)) {
           label = shiftedKeys[lookup];
         } else if (typeof normalKeys === 'object' && normalKeys.hasOwnProperty(lookup)) {
           label = normalKeys[lookup];
@@ -2968,101 +2866,93 @@ function keyboard_js() {
           label = base;
         }
       } else {
-        if (window.capsActive) {
-          if (typeof shiftedKeys === 'object' && shiftedKeys.hasOwnProperty(lookup)) {
-            label = shiftedKeys[lookup];
-          } else if (typeof normalKeys === 'object' && normalKeys.hasOwnProperty(lookup)) {
-            label = normalKeys[lookup];
-          } else {
-            label = base;
-          }
-        } else if (window.shiftActive) {
-          if (typeof shiftedKeys === 'object' && shiftedKeys.hasOwnProperty(lookup)) {
-            label = shiftedKeys[lookup];
-          } else if (typeof normalKeys === 'object' && normalKeys.hasOwnProperty(lookup)) {
-            label = normalKeys[lookup];
-          } else {
-            label = base;
-          }
+        if (typeof normalKeys === 'object' && normalKeys.hasOwnProperty(lookup)) {
+          label = normalKeys[lookup];
         } else {
-          if (typeof normalKeys === 'object' && normalKeys.hasOwnProperty(lookup)) {
-            label = normalKeys[lookup];
-          } else {
-            label = base;
-          }
+          label = base;
         }
       }
-      return String(label);
     }
-
-    // iterate all logical keys and update per-owner DOM elements
-    if (!Array.isArray(keyboardData)) return false;
-    keyboardData.forEach(function(key) {
-      // For each owner prefix, try to find the element and update it
-      owners.forEach(function(owner) {
-        var domId = owner + '-' + key.id;
-        var el = document.getElementById(domId);
-        // fallback to legacy id (no prefix) for migration support
-        if (!el) el = document.getElementById(key.id);
-        if (!el) return; // not present in this document
-        // Determine base character for label selection:
-        // prefer dataset.keyChar (set during creation), else fall back to logical label, else current text
-        var base = (el.dataset && el.dataset.keyChar) ? el.dataset.keyChar :
-                   (typeof key.label === 'string' ? key.label : '') ;
-        // If dataset.keyChar missing and we can set it, do so (helps future updates)
-        try { if ((!el.dataset || !el.dataset.keyChar) && base) el.dataset.keyChar = base; } catch (e) {}
-        // compute desired label
-        var newLabel = pickLabel(base);
-        // update DOM content safely (use textContent)
-        try {
-          if (el.textContent !== newLabel) el.textContent = newLabel;
-          // accessibility hint
-          el.setAttribute && el.setAttribute('aria-label', 'key ' + newLabel);
-        } catch (e) {
-          // ignore DOM exceptions
-        }
-
-        // Visual locked appearance for some special keys (per-owner)
-        // caps
-        if (key.id === 'caps') {
-          try {
-            if (window.caps) {
-              el.style.backgroundColor = '#fff';
-              el.style.color = '#000';
-            } else {
-              el.style.backgroundColor = '';
-              el.style.color = '';
-            }
-          } catch (e) {}
-        }
-        // ctrl
-        if (key.id === 'ctrl') {
-          try {
-            if (ctrl || ctrlPhysical) {
-              el.style.backgroundColor = ctrlPhysical ? '#bbb' : '#fff';
-              el.style.color = '#000';
-            } else {
-              el.style.backgroundColor = '';
-              el.style.color = '';
-            }
-          } catch (e) {}
-        }
-        if (key.id === 'alt') {
-          try {
-            if (alt || altPhysical) {
-              el.style.backgroundColor = altPhysical ? '#444' : '#fff';
-              el.style.color = '#000';
-            } else {
-              el.style.backgroundColor = '';
-              el.style.color = '';
-            }
-          } catch (e) {}
-        }
-      }); // end owners.forEach
-    }); // end keyboardData.forEach
-    return true;
+    return String(label);
   }
-  window.updateKeyLabels = updateKeyLabels;
+
+  // iterate all logical keys and update per-owner DOM elements
+  if (!Array.isArray(keyboardData)) return false;
+  keyboardData.forEach(function(key) {
+    // For each owner prefix, try to find the element and update it
+    owners.forEach(function(owner) {
+      var domId = owner + '-' + key.id;
+      var el = document.getElementById(domId);
+      // fallback to legacy id (no prefix) for migration support
+      if (!el) el = document.getElementById(key.id);
+
+      if (!el) return; // not present in this document
+
+      // Determine base character for label selection:
+      // prefer dataset.keyChar (set during creation), else fall back to logical label, else current text
+      var base = (el.dataset && el.dataset.keyChar) ? el.dataset.keyChar :
+                 (typeof key.label === 'string' ? key.label : '') ;
+
+      // If dataset.keyChar missing and we can set it, do so (helps future updates)
+      try { if ((!el.dataset || !el.dataset.keyChar) && base) el.dataset.keyChar = base; } catch (e) {}
+
+      // compute desired label
+      var newLabel = pickLabel(base);
+
+      // update DOM content safely (use textContent)
+      try {
+        if (el.textContent !== newLabel) el.textContent = newLabel;
+        // accessibility hint
+        el.setAttribute && el.setAttribute('aria-label', 'key ' + newLabel);
+      } catch (e) {
+        // ignore DOM exceptions
+      }
+
+      // Visual locked appearance for some special keys (per-owner)
+      // caps
+      if (key.id === 'caps') {
+        try {
+          if (window.caps) {
+            el.style.backgroundColor = '#fff';
+            el.style.color = '#000';
+          } else {
+            el.style.backgroundColor = '';
+            el.style.color = '';
+          }
+        } catch (e) {}
+      }
+
+      // ctrl
+      if (key.id === 'ctrl') {
+        try {
+          if (ctrl || ctrlPhysical) {
+            el.style.backgroundColor = ctrlPhysical ? '#bbb' : '#fff';
+            el.style.color = '#000';
+          } else {
+            el.style.backgroundColor = '';
+            el.style.color = '';
+          }
+        } catch (e) {}
+      }
+
+      // alt
+      if (key.id === 'alt') {
+        try {
+          if (alt || altPhysical) {
+            el.style.backgroundColor = altPhysical ? '#444' : '#fff';
+            el.style.color = '#000';
+          } else {
+            el.style.backgroundColor = '';
+            el.style.color = '';
+          }
+        } catch (e) {}
+      }
+    }); // end owners.forEach
+  }); // end keyboardData.forEach
+
+  return true;
+}
+window.updateKeyLabels = updateKeyLabels;
 
   // Create a mapping from keyCode to element ID for quick lookup
   window.keyCodeToId = {};
@@ -3135,6 +3025,220 @@ function keyboard_js() {
    }
   }
 
+// Qandy keyboard input glue
+// Exposes: window.QandyKeyboard and global input(...) for guest scripts.
+// Use: name = await input("Name: "); password = await input({ prompt: "Password: ", mask: true });
+
+(function(global) {
+  if (global.QandyKeyboard) return; // don't re-install
+
+  var pending = null; // { resolve, reject, options, buffer, timeoutId, savedLINE, savedCURP }
+
+  function _ensureString(s) { return (typeof s === 'string') ? s : String(s || ""); }
+
+  // Accept the pending input value and resolve the Promise
+  function acceptPending(value) {
+    if (!pending) return false;
+    var p = pending;
+    pending = null;
+    try { if (p.timeoutId) clearTimeout(p.timeoutId); } catch(e) {}
+    // resolve asynchronously to avoid reentrancy with key handlers
+    setTimeout(function() {
+      try { p.resolve(value); } catch (e) { p.reject(e); }
+    }, 0);
+    return true;
+  }
+
+  // Cancel pending input (reject)
+  function cancelPending(reason) {
+    if (!pending) return false;
+    var p = pending;
+    pending = null;
+    try { if (p.timeoutId) clearTimeout(p.timeoutId); } catch(e) {}
+    p.reject(reason || new Error('input cancelled'));
+    return true;
+  }
+
+  // Called by key handler for printable character; return true if consumed
+  function handleTypedChar(ch) {
+    if (!pending) return false;
+    var o = pending.options || {};
+    if (o.mask) {
+      // Append to internal buffer and show '*' in LINE at CURP
+      pending.buffer = (pending.buffer || "") + ch;
+      LINE = (LINE || "");
+      LINE = LINE.substring(0, CURP) + '*' + LINE.substring(CURP);
+      CURP = CURP + 1;
+      pokeInput();
+      return true;
+    }
+    // Not masked -> let normal insertion happen (not consumed)
+    return false;
+  }
+
+  // Called by key handler for backspace; return true if consumed
+  function handleBackspace() {
+    if (!pending) return false;
+    var o = pending.options || {};
+    if (o.mask) {
+      if (!pending.buffer || pending.buffer.length === 0) return true; // nothing to delete
+      // remove last char from buffer
+      pending.buffer = pending.buffer.slice(0, -1);
+      // remove last '*' from LINE before CURP
+      if (CURP > 0) {
+        LINE = LINE.substring(0, CURP-1) + LINE.substring(CURP);
+        CURP = Math.max(0, CURP - 1);
+        pokeInput();
+      }
+      return true;
+    }
+    // not masked -> don't consume (let normal backspace handler run)
+    return false;
+  }
+
+  // Called by key handler for Enter; return true if consumed
+  function handleEnter() {
+    if (!pending) return false;
+    var o = pending.options || {};
+    var val;
+    if (o.mask) {
+      val = pending.buffer || "";
+    } else {
+      val = _ensureString(LINE || "");
+    }
+    // Optionally trim final newline/CR
+    // val = val.replace(/\r?\n$/, "");
+    // Prevent pokeInput / eraseInput from erasing what was just typed.
+    // pokeInput/eraseInput uses `lastin` to remove previous input; clear it.
+    try { lastin = ""; } catch (e) { /* ignore if not defined */ }
+
+    // Move the logical cursor to the start of the next line BEFORE resolving
+    try {
+      // Advance to column 0, next row
+      CURX = 0;
+      CURY = (typeof CURY === 'number' && typeof H === 'number') ? Math.min(H - 1, CURY + 1) :
+             ((typeof CURY === 'number') ? CURY + 1 : 0);
+
+      // Sync the LINE insertion coordinates to the new cursor position
+      LINEX = (typeof CURX === 'number') ? CURX : 0;
+      LINEY = (typeof CURY === 'number') ? CURY : 0;
+
+      // Reset visible edit buffer and cursor-in-line, but DO NOT call pokeInput()
+      // (calling pokeInput might call eraseInput and remove visible characters).
+      LINE = "";
+      CURP = 0;
+
+      // Refresh UI cursor/viewport — avoid calling pokeInput which may erase;
+      // a lightweight refresh is safer.
+      pokeRefresh(); pokeCursorOn();
+    } catch (e) {
+      // ignore UI errors and still resolve the input
+    }
+    acceptPending(val);
+    return true;
+  }
+
+  // helper: resolve when any paced pokeCursor output finishes (or immediately if none)
+  function waitForCursorIdle(timeoutMs) {
+    timeoutMs = typeof timeoutMs === 'number' ? timeoutMs : 5000;
+    return new Promise(function(resolve) {
+      if (!window._pokeCursor_state) return resolve();
+      var start = Date.now();
+      var iv = setInterval(function() {
+        if (!window._pokeCursor_state) {
+          clearInterval(iv);
+          return resolve();
+        }
+        if (Date.now() - start > timeoutMs) {
+          clearInterval(iv);
+          return resolve();
+        }
+      }, 8);
+    });
+  }
+
+  // Public input API (replaces the previous implementation)
+  function input(opts) {
+    if (pending) return Promise.reject(new Error('input already pending'));
+    var options = {};
+    if (typeof opts === 'string') options.prompt = opts;
+    else if (typeof opts === 'object' && opts !== null) options = Object.assign({}, opts);
+
+    // create the pending promise object early so we can return it immediately
+    var p = {};
+    var promise = new Promise(function(resolve, reject) {
+      p.resolve = resolve;
+      p.reject = reject;
+    });
+    // attach common fields now (pending will be set only after prompt printing finishes)
+    p.options = options;
+    p.buffer = "";
+    p.savedLINE = LINE;
+    p.savedCURP = CURP;
+
+    // async setup: wait for any current printing to finish, then print prompt and wait for that,
+    // then enable interactive pending state (so prompt doesn't cancel earlier output).
+    (async function() {
+      try {
+        // 1) wait for any existing paced output (e.g., previous print()) to finish
+        await waitForCursorIdle();
+
+        // 2) print the prompt (if any)
+        if (options.prompt) {
+          print(options.prompt);
+        }
+
+        // 3) wait for the prompt's paced printing to finish
+        await waitForCursorIdle();
+
+        // 4) now it's safe to enable pending input without cancelling the printed prompt
+        pending = p;
+
+        // timeout handling
+        if (typeof options.timeout === 'number' && options.timeout > 0) {
+          p.timeoutId = setTimeout(function() {
+            if (pending === p) {
+              pending = null;
+              p.reject(new Error('input timeout'));
+            }
+          }, options.timeout);
+        }
+
+        // Ensure the cursor is visible for user input
+        try { pokeCursorOn(); } catch (e) {}
+
+      } catch (err) {
+        // If any error during setup, reject the promise
+        try { p.reject(err); } catch (e) {}
+      }
+    })();
+
+    // ensure finalizers clear timeout if any
+    return promise.finally(function() {
+      if (p.timeoutId) try { clearTimeout(p.timeoutId); } catch (e) {}
+    });
+  }
+
+  // Read-only access to pending state (debug)
+  function _pendingState() { return pending; }
+
+  // Expose API
+  var API = {
+    input: input,
+    acceptPending: acceptPending,
+    cancelPending: cancelPending,
+    handleTypedChar: handleTypedChar,
+    handleBackspace: handleBackspace,
+    handleEnter: handleEnter,
+    _pendingState: _pendingState
+  };
+
+  global.QandyKeyboard = API;
+  // convenience global for guest scripts: await input(...)
+  global.input = input;
+
+})(window);
+
  if (typeof updateKeyLabels === 'function') {
   // Replace local references inside updateKeyLabels with window.* as needed.
   // If you can't edit the body in-place, export a wrapper that ensures window-safety:
@@ -3177,6 +3281,7 @@ function keyboard_js() {
 //
 // command.js (modified)
 //
+
 function command_js() {
   window.command=async function(cmd) {
     if (RUN != "qandy.js") {
@@ -3280,9 +3385,7 @@ function command_js() {
           }
         }
         return;
-      case "log": 
-        print(window.LOG);
-        return;
+        
       default:
         break;
     }
@@ -3379,6 +3482,27 @@ function command_js() {
           return('Error: invalid filename\n');
         }
         return;
+      case "mkdir":
+        if (f) {
+          print(await qdosMkDir(f));
+        } else {
+          return('Error: invalid dir name\n');
+        }
+        return;     
+      case "chdir":
+        if (f) {
+          print(await qdosChDir(f));
+        } else {
+          return('Error: invalid dir name\n');
+        }
+        return;     
+      case "rmdir":
+        if (f) {
+          print(await qdosRmDir(f));
+        } else {
+          return('Error: invalid dir name\n');
+        }
+        return;     
       case "exists":
         if (f) {
           print(await qdosExists(f));
@@ -3423,160 +3547,162 @@ window.__qandy_pending = window.__qandy_pending || Object.create(null);
 window.__qandy_reqCounter = window.__qandy_reqCounter || 0;
 var _pending = window.__qandy_pending;
 
-async function qdosScript(name) {
-  var nm = (typeof name === 'string') ? name.trim() : '';
-  if (!nm) return "Error: invalid filename";
-
-  function _isValid(n) {
-    if (typeof validateSystemFilename === 'function') return !!validateSystemFilename(n);
-    if (typeof n !== 'string') return false;
-    if (n.length === 0 || n.length > 128) return false;
-    if (n.indexOf('..') !== -1) return false;
-    return /^[A-Za-z0-9 _.\-\/]+$/.test(n);
-  }
-  if (!_isValid(nm)) return "Error: invalid filename";
-
-  if (typeof HOST !== 'undefined' && HOST) {
-    return "Error: input 'user' to run scripts";
-  }
-
-  var content;
-  try {
-    content = await qdosXmitDos('localLoad', { file: nm });
-  } catch (e) {
-    return "Error: load failed: " + ((e && e.message) ? e.message : String(e));
-  }
-  content = (content === null || typeof content === 'undefined') ? '' : String(content);
-
-  // sanitize BOM / shebang
-  if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
-  content = content.replace(/^\s*#!.*\r?\n/, '');
-
-  // Eval the script in global scope via indirect eval and capture errors
-  var evalError = null;
-  try {
-    (0, eval)(content + "\n\n//# sourceURL=" + nm);
-    // success
-    return true;
-  } catch (e) {
-    evalError = e;
-    // Attempt to extract line/column from stack or error properties
-    var line = null, column = null;
+  async function qdosScript(name) {
+    if (typeof HOST !== 'undefined' && HOST) { return "Error: input 'user' to run scripts"; }
+    var nm = (typeof name === 'string') ? name.trim() : '';
+    if (!nm) return "Error: invalid filename";
+    function _isValid(n) {
+      if (typeof validateSystemFilename === 'function') return !!validateSystemFilename(n);
+      if (typeof n !== 'string') return false;
+      if (n.length === 0 || n.length > 128) return false;
+      if (n.indexOf('..') !== -1) return false;
+      return /^[A-Za-z0-9 _.\-\/]+$/.test(n);
+    }
+    if (!_isValid(nm)) return "Error: invalid filename";
+    var content;
     try {
-      var stack = e && e.stack ? String(e.stack) : '';
-      if (stack) {
-        var stackLines = stack.split('\n');
-        for (var i = 0; i < stackLines.length; i++) {
-          var sl = stackLines[i].trim();
-          var m = sl.match(/:(\d+):(\d+)\)?\s*$/);
-          if (m) { line = parseInt(m[1], 10); column = parseInt(m[2], 10); break; }
-          m = sl.match(/\((?:.*):(\d+):(\d+)\)/);
-          if (m) { line = parseInt(m[1], 10); column = parseInt(m[2], 10); break; }
+      content = await qdosXmitDos('localLoad', { file: nm });
+    } catch (e) {
+      return "Error: load failed: " + ((e && e.message) ? e.message : String(e));
+    }
+    content = (content === null || typeof content === 'undefined') ? '' : String(content);
+    // sanitize BOM / shebang
+    if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
+    content = content.replace(/^\s*#!.*\r?\n/, '');
+    // Eval the script in global scope via indirect eval and capture errors
+    var evalError = null;
+    try {
+      (0, eval)(content + "\n\n//# sourceURL=" + nm);
+      // success
+      return true;
+    } catch (e) {
+      evalError = e;
+      // Attempt to extract line/column from stack or error properties
+      var line = null, column = null;
+      try {
+        var stack = e && e.stack ? String(e.stack) : '';
+        if (stack) {
+          var stackLines = stack.split('\n');
+          for (var i = 0; i < stackLines.length; i++) {
+            var sl = stackLines[i].trim();
+            var m = sl.match(/:(\d+):(\d+)\)?\s*$/);
+            if (m) { line = parseInt(m[1], 10); column = parseInt(m[2], 10); break; }
+            m = sl.match(/\((?:.*):(\d+):(\d+)\)/);
+            if (m) { line = parseInt(m[1], 10); column = parseInt(m[2], 10); break; }
+          }
         }
+        if (!line) {
+          if (typeof e.lineNumber === 'number') line = e.lineNumber;
+          else if (typeof e.lineno === 'number') line = e.lineno;
+          if (typeof e.columnNumber === 'number') column = e.columnNumber;
+          else if (typeof e.colno === 'number') column = e.colno;
+        }
+      } catch (ex) {
+        /* ignore extraction errors */
       }
-      if (!line) {
-        if (typeof e.lineNumber === 'number') line = e.lineNumber;
-        else if (typeof e.lineno === 'number') line = e.lineno;
-        if (typeof e.columnNumber === 'number') column = e.columnNumber;
-        else if (typeof e.colno === 'number') column = e.colno;
+
+      var emsg = (e && e.message) ? e.message : String(e);
+      var loc = (line ? (nm + ':' + line + (column ? (':' + column) : '')) : nm);
+      return "Error: " + emsg + " at " + loc;
+    }
+  }
+
+  async function qdosDir() {
+   if (typeof HOST !== 'undefined' && HOST) {
+      try {
+        var res = await Promise.resolve().then(function () { return dosDir(); });
+        res = _normalizeResult(res);
+        return String(res) + '\n';
+      } catch (e) {
+        return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
       }
-    } catch (ex) {
-      /* ignore extraction errors */
+      return 'Error: DOS not available\n';
     }
-
-    var emsg = (e && e.message) ? e.message : String(e);
-    var loc = (line ? (nm + ':' + line + (column ? (':' + column) : '')) : nm);
-    return "Error: " + emsg + " at " + loc;
-  }
-}
-async function qdosDir() {
-  if (typeof HOST !== 'undefined' && HOST) {
-    try {
-      var res = await Promise.resolve().then(function () { return dosDir(); });
-      res = _normalizeResult(res);
-      return String(res) + '\n';
-    } catch (e) {
+    return qdosXmitDos('localDir').then(function (result) {
+      // result is already normalized to a string by the handler
+      return String(result) + '\n';
+    }).catch(function (e) {
       return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
-    }
-    return 'Error: DOS not available\n';
+    });
   }
-  return qdosXmitDos('localDir').then(function (result) {
-    // result is already normalized to a string by the handler
-    return String(result) + '\n';
-  }).catch(function (e) {
-    return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
-  });
-}
 
-async function qdosList() {
-  if (typeof HOST !== 'undefined' && HOST) {
-    try {
-      var res = await Promise.resolve().then(function () { return dosList(); });
-      res = _normalizeResult(res);
-      return String(res) + '\n';
-    } catch (e) {
+  async function qdosList() {
+    if (typeof HOST !== 'undefined' && HOST) {
+      try {
+        var res = await Promise.resolve().then(function () { return dosList(); });
+        res = _normalizeResult(res);
+        return String(res) + '\n';
+      } catch (e) {
+        return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+      }
+      return 'Error: DOS not available\n';
+    }
+    return qdosXmitDos('localList').then(function (result) {
+      // result is already normalized to a string by the handler
+      return String(result) + '\n';
+    }).catch(function (e) {
       return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
-    }
-    return 'Error: DOS not available\n';
+    });
   }
-  return qdosXmitDos('localList').then(function (result) {
-    // result is already normalized to a string by the handler
-    return String(result) + '\n';
-  }).catch(function (e) {
-    return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
-  });
-}
 
-async function qdosLoad(filename, timeoutMs) {
-  var valid = (typeof qdosValidateFilename === 'function') ? qdosValidateFilename(filename) :
-              (typeof filename === 'string' ? filename.trim() : null);
-  if (!valid) return Promise.reject(new Error('invalid filename'));
-  if (typeof HOST !== 'undefined' && HOST) {
-    var loader = (typeof localLoad === 'function') ? localLoad : (typeof dosLoad === 'function' ? dosLoad : null);
-    if (!loader) return Promise.reject(new Error('Error: DOS not available'));
-    try {
-      var res = await Promise.resolve().then(function () { return loader(valid); });
-      if (typeof _normalizeResult === 'function') res = _normalizeResult(res);
-      else if (Array.isArray(res)) res = res.join('\n');
-      else if (res === null || typeof res === 'undefined') res = '';
-      else if (typeof res === 'object') {
-        try { res = JSON.stringify(res); } catch (e) { res = String(res); }
-      } else res = String(res);
-      return res;
-    } catch (e) {
-      return Promise.reject(new Error((e && e.message) ? e.message : String(e)));
+  async function qdosLoad(filename, timeoutMs) {
+    var valid = (typeof qdosValidateFilename === 'function') ? qdosValidateFilename(filename) :
+                (typeof filename === 'string' ? filename.trim() : null);
+    if (!valid) return Promise.reject(new Error('invalid filename'));
+    if (typeof HOST !== 'undefined' && HOST) {
+      var loader = (typeof localLoad === 'function') ? localLoad : (typeof dosLoad === 'function' ? dosLoad : null);
+      if (!loader) return Promise.reject(new Error('Error: DOS not available'));
+      try {
+        var res = await Promise.resolve().then(function () { return loader(valid); });
+        if (typeof _normalizeResult === 'function') res = _normalizeResult(res);
+        else if (Array.isArray(res)) res = res.join('\n');
+        else if (res === null || typeof res === 'undefined') res = '';
+        else if (typeof res === 'object') {
+          try { res = JSON.stringify(res); } catch (e) { res = String(res); }
+        } else res = String(res);
+        return res;
+      } catch (e) {
+        return Promise.reject(new Error((e && e.message) ? e.message : String(e)));
+      }
     }
+    return qdosXmitDos('localLoad', { file: valid }, timeoutMs).then(function (result) {
+      if (typeof _normalizeResult === 'function') return _normalizeResult(result);
+      if (result === null || typeof result === 'undefined') return '';
+      if (typeof result === 'string') return result;
+      try { return String(result); } catch (e) { return JSON.stringify(result); }
+    });
   }
-  return qdosXmitDos('localLoad', { file: valid }, timeoutMs).then(function (result) {
-    if (typeof _normalizeResult === 'function') return _normalizeResult(result);
-    if (result === null || typeof result === 'undefined') return '';
-    if (typeof result === 'string') return result;
-    try { return String(result); } catch (e) { return JSON.stringify(result); }
-  });
-}
 
 async function qdosDelete(filename, timeoutMs) {
-  var valid = qdosValidateFilename(filename);
-  if (!valid) return Promise.reject(new Error('invalid filename'));
-  // qdosXmitDos resolves only on host success (host sends success:false -> guest handler rejects)
-  return qdosXmitDos('localDelete', { file: valid }, timeoutMs).then(function (/*result*/) {
-    return true;
-  });
+  //
+  // this function doesn't work, need host/guest branch
+  //
+  //var valid=filename.trim()
+  //valid=qdosValidateFilename(filename);
+  //if (!valid) return Promise.reject(new Error('invalid filename'));
+  //if (typeof HOST !== 'undefined' && HOST) {
+  //if (!valid) return Promise.reject(new Error('invalid filename'));
+  //return qdosXmitDos('localDelete', { file: valid }, timeoutMs).then(function (/*result*/) {
+  //});
 }
+
 async function qdosRename(file, dest, timeoutMs) {
-  var validSrc = qdosValidateFilename(file);
-  var validDest = qdosValidateFilename(dest);
-  if (!validSrc || !validDest) return Promise.reject(new Error('invalid filename(s)'));
-  if (validSrc === validDest) return Promise.reject(new Error('source and destination are identical'));
-  return qdosXmitDos('localRename', { file: validSrc, dest: validDest }, timeoutMs)
-    .then(function (result) {
-      // resolution means host reported success; return true for convenience
-      return true;
-    })
-    .catch(function (err) {
-      // propagate error
-      throw err;
-    });
+  //
+  // this function doesn't work, need host/guest branch
+  //
+  //var validSrc = qdosValidateFilename(file);
+  //var validDest = qdosValidateFilename(dest);
+  //if (!validSrc || !validDest) return Promise.reject(new Error('invalid filename(s)'));
+  //if (validSrc === validDest) return Promise.reject(new Error('source and destination are identical'));
+  //return qdosXmitDos('localRename', { file: validSrc, dest: validDest }, timeoutMs)
+  //  .then(function (result) {
+  //    // resolution means host reported success; return true for convenience
+  //    return true;
+  //  })
+  //  .catch(function (err) {
+  //    // propagate error
+  //   throw err;
+  //  });
 }
 
 async function qdosMount(device) {
@@ -3596,26 +3722,141 @@ async function qdosMount(device) {
 }
 
 async function qdosPaste(filename, timeoutMs) {
-  var valid = qdosValidateFilename(filename);
-  if (!valid) return Promise.reject(new Error('invalid filename'));
-  return qdosXmitDos('qdosPaste', { file: valid }, timeoutMs).then(function (res) {
-    // host replies with success:true or success:false (handler will resolve / reject appropriately)
-    // For success we may receive true or a message string; normalize to string.
-    if (res === true || res === undefined) return 'OK: pasted to ' + valid + '\n';
-    return String(res) + '\n';
-  }).catch(function (err) {
-    throw new Error('paste failed: ' + (err && err.message ? err.message : String(err)));
-  });
+  //
+  // this function doesn't work, need host/guest branch
+  //
+  //var valid = qdosValidateFilename(filename);
+  //if (!valid) return Promise.reject(new Error('invalid filename'));
+  //return qdosXmitDos('qdosPaste', { file: valid }, timeoutMs).then(function (res) {
+  //  // host replies with success:true or success:false (handler will resolve / reject appropriately)
+  //  // For success we may receive true or a message string; normalize to string.
+  //  if (res === true || res === undefined) return 'OK: pasted to ' + valid + '\n';
+  //  return String(res) + '\n';
+  //}).catch(function (err) {
+  //  throw new Error('paste failed: ' + (err && err.message ? err.message : String(err)));
+  //});
 }
 
 async function qdosCopy(filename, timeoutMs) {
-  var valid = qdosValidateFilename(filename);
-  if (!valid) return Promise.reject(new Error('invalid filename'));
-  return qdosXmitDos('qdosCopy', { file: valid }, timeoutMs).then(function (res) {
-    if (res === true || res === undefined) return 'OK: copied ' + valid + ' to clipboard\n';
-    return String(res) + '\n';
-  }).catch(function (err) {
-    throw new Error('copy failed: ' + (err && err.message ? err.message : String(err)));
+  //
+  // this function doesn't work, need host/guest branch
+  // also need user interaction I thinks?
+  //
+  //var valid = qdosValidateFilename(filename);
+  //if (!valid) return Promise.reject(new Error('invalid filename'));
+  //return qdosXmitDos('qdosCopy', { file: valid }, timeoutMs).then(function (res) {
+  //  if (res === true || res === undefined) return 'OK: copied ' + valid + ' to clipboard\n';
+  //  return String(res) + '\n';
+  //}).catch(function (err) {
+  //  throw new Error('copy failed: ' + (err && err.message ? err.message : String(err)));
+  //});
+}
+
+async function qdosMkDir(name, timeoutMs) {
+  var valid = (typeof qdosValidateFilename === 'function') ? qdosValidateFilename(name) : (typeof name === 'string' ? name.trim() : null);
+  if (!valid) return Promise.reject(new Error('invalid name'));
+  if (typeof HOST !== 'undefined' && HOST) {
+  
+  } else {
+    var valid = qdosValidateFilename(name);
+    if (!valid) { return Promise.reject(new Error('invalid name')); }
+    return qdosXmitDos('localMkDir', { file: valid }, timeoutMs).then(function (/*result*/) {
+      // success - resolve with undefined (same pattern as qdosDelete)
+    });
+  }
+}
+
+// this functions is correct, it returns the string results not an object 
+async function qdosChDir(name) {
+  var valid = (typeof qdosValidateFilename === 'function') ? qdosValidateFilename(name) : (typeof name === 'string' ? name.trim() : null);
+  if (!valid) return Promise.reject(new Error('invalid name'));
+  if (typeof HOST !== 'undefined' && HOST) {
+  
+  } else {
+    var valid = qdosValidateFilename(name);
+    if (!valid) { return Promise.reject(new Error('invalid name')); }
+    try {
+      const result = await qdosXmitDos('localChDir', { file: valid });
+      return (typeof result === 'string') ? result : "";
+    } catch (err) {
+      return String(err && err.message ? err.message : err);
+    }  
+  }
+};
+
+async function localRmDir(name) {
+  try {
+    if (typeof name !== 'string' || String(name).trim() === '') { return 'Error: invalid dir name'; }
+    var cwd = getCwdSync();
+    var target = resolveDirPath(name, cwd);
+    if (!target) return 'Error: invalid dir name';
+    var manifest = _loadManifest() || [];
+    var token = '<' + target + '>';
+    var idx = -1;
+    for (var i = 0; i < manifest.length; i++) {
+      if (manifest[i] && manifest[i].name === token) { idx = i; break; }
+    }
+    if (idx === -1) return 'Error: dir not found';
+
+    // Ensure directory is empty: no files or subdirs that belong to it.
+    // Files inside would be represented with path prefixes (if implemented).
+    // Here we conservatively check for any directory tokens that are descendants.
+    var prefix = target === ROOT_SEG ? (SEP) : (target + SEP);
+    for (var j = 0; j < manifest.length; j++) {
+      var e = manifest[j];
+      if (!e || !e.name) continue;
+      // skip the dir token itself
+      if (e.name === token) continue;
+      // if other dir tokens start with '<prefix...' it's a subdir
+      if (e.name.charAt(0) === '<') {
+        var inner = e.name.slice(1, -1); // strip < and >
+        if (inner === target) continue;
+        if (inner.indexOf(prefix) === 0) return 'Error: directory not empty';
+      }
+      // Optionally: if file entries include path prefixes, check those too:
+      if (typeof e.name === 'string') {
+        // canonical file names might include path prefix; check base - best-effort
+        if (e.name.indexOf(prefix) === 0) return 'Error: directory not empty';
+      }
+    }
+
+    // Safe to remove dir entry
+    manifest.splice(idx, 1);
+    var mres = _saveManifest(manifest);
+    if (mres === 'Error: Disk Full') return 'Error: Disk Full';
+    // If cwd was inside this dir, move to parent (simple behaviour)
+    var cur = getCwdSync();
+    if (cur.indexOf(prefix) === 0 || cur === target) {
+      // set to parent
+      var parts = target.split(SEP).filter(Boolean);
+      parts.pop();
+      var parent = parts.length ? SEP + parts.join(SEP) : ROOT_SEG;
+      setCwdSync(parent);
+    }
+    return true;
+  } catch (e) {
+    return 'Error: ' + (e && e.message ? e.message : String(e));
+  }
+};
+
+
+
+async function qdosDelete(filename, timeoutMs) {
+  var valid=filename.trim()
+  valid=qdosValidateFilename(filename);
+  if (!valid) { return Promise.reject(new Error('invalid filename')); }
+  if (typeof HOST !== 'undefined' && HOST) {
+    if (typeof dosMount !== 'function') { return 'Error: dosMount not available\n'; }
+    try {
+      var res = await Promise.resolve().then(function () { return dosDelete(valid); });
+      var out = (typeof _normalizeResult === 'function') ? _normalizeResult(res) : (res === null || res === undefined ? '' : String(res));
+      return String(out) + '\n';
+    } catch (e) {
+      return 'Error: ' + ((e && e.message) ? e.message : String(e)) + '\n';
+    }
+  }
+  return qdosXmitDos('localDelete', { file: valid }, timeoutMs).then(function (/*result*/) {
+    // success
   });
 }
 
@@ -3666,6 +3907,9 @@ window.qdosMount = qdosMount;
 window.qdosPaste = qdosPaste;
 window.qdosCopy = qdosCopy;
 window.qdosExists = qdosExists;
+window.qdosMkDir = window.qdosMkDir;
+window.qdosChDir = window.qdosMkDir;
+window.qdosRmDir = window.qdosMkDir;
 
 //
 // these functions transmit packets to and from the host
@@ -3779,7 +4023,6 @@ if (typeof window.qandySignalReady === 'function') {
 //
 
 window.qandy_js=function() {
-
 RUN="qandy.js"; 
 
 window.button=function(b, event) {
@@ -4184,6 +4427,7 @@ window.button=function(b, event) {
   pokeCursorOn();
 }
 
+
 document.addEventListener('keydown', function (event) {
  if (event.keycode === 32) { event.preventDefault(); }
  press(event);
@@ -4210,8 +4454,8 @@ document.addEventListener('paste', function (event) {
 
 window.press=function(event) { 
   key=""; k=event.keyCode; shift=event.shiftKey;
-  var virtualclick=!!(event && event.source === 'virtual');
   if (HOST) { kid="host-"; } else { kid="guest-"; }
+
   // Handle physical CapsLock keypress (keyCode 20)
   if (event.keyCode === 20) {
     // Determine the platform state if available
@@ -4258,7 +4502,7 @@ window.press=function(event) {
     }
 
     // Prevent default browser handling side-effects and stop further processing for this key event
-    if (!virtualclick) { event.preventDefault && event.preventDefault(); }
+    event.preventDefault && event.preventDefault();
     return;
   }
 
@@ -4267,8 +4511,8 @@ window.press=function(event) {
     return;
   }
 
-  if (event.keyCode === 18 || event.altKey) { if (!virtualclick) { event.preventDefault(); }}
-  if (event.keyCode === 27) { if (!virtualclick) { event.preventDefault(); }}
+  if (event.keyCode === 18 || event.altKey) { event.preventDefault(); }
+  if (event.keyCode === 27) { event.preventDefault(); }
   if (event.keyCode === 16) {
     var capsBtn = document.getElementById(kid+"caps");
     if (capsBtn) { capsBtn.style.backgroundColor = "#444"; capsBtn.style.color = "#fff"; }
@@ -4293,7 +4537,7 @@ window.press=function(event) {
   if (event.ctrlKey) {
     var ctrlKey = event.key ? event.key.toLowerCase() : '';
     if (ctrlKey === 'c' || ctrlKey === 'a') {
-      if (!virtualclick) { event.preventDefault(); }
+      event.preventDefault();
       highlightKey(k);
       button(k, event); 
     }
@@ -4325,10 +4569,9 @@ window.press=function(event) {
 
 window.pressup=function(event) {
   // Prevent browser from handling ALT key - must be done before any conditionals
-  var virtualclick=!!(event && event.source === 'virtual');
   if (HOST) { kid="host-"; } else { kid="guest-"; }
   if (event.keyCode === 18 || event.altKey) {
-    if (!virtualclick) { event.preventDefault(); } 
+    event.preventDefault(); // Prevent browser menu from opening
   }
   // Handle physical CTRL key release (unhighlight)
   if (event.keyCode === 17 && ctrlPhysical) {
@@ -4397,74 +4640,6 @@ function formatError(e) {
     return Object.prototype.toString.call(e);
   }
 }
-
-
-// this can be deleted, press() and press() now dispatch their own keyboard events
-window.dispatchKeyboardEvent = function(eventType, keyData) {
-  if (eventType === 'keydown') {
-    if (RUN != "qandy.js" && typeof keydown !== 'undefined') {
-      try {
-        keydown(keyData.key, keyData);
-      } catch (e) {
-        print("ERROR: keydown():\n" + formatError(e) + "\n\n");
-      }
-      return;
-    }
-  }
-  if (eventType === 'keyup') {
-    if (RUN != "qandy.js" && typeof keyup !== 'undefined') {
-      print("Error: keyup(): " + (e && e.message ? e.message : String(e)) + "\n");
-      return;
-    }
-  }
-};
-
-// is this still used?? i don't think so
-window.hostScript=function(name) {
-  if (!name || typeof name !== 'string') return false;
-  name = name.trim();
-  if (!/^[A-Za-z0-9.\-]+\.js$/i.test(name)) return false;
-  if (/^[.\-]/.test(name) || /[.\-]$/.test(name)) return false;
-  if (/\.\./.test(name)) return false;
-  if (name.length > 64) return false;
-
-  window.hostScript._cnt = (window.hostScript._cnt || 0) + 1;
-  var reqId = 'hs_' + Date.now() + '_' + window.hostScript._cnt;
-
-  var timer = setTimeout(function() {
-    window.removeEventListener('message', handler);
-    print("Timeout loading: " + name + "\n");
-  }, 10000);
-
-  function handler(ev) {
-    var d = ev.data || {};
-    if (d && d.type === 'scriptLoaded' && d.id === reqId) {
-      clearTimeout(timer);
-      window.removeEventListener('message', handler);
-      if (d.error || d.code === null || d.code === undefined) {
-        print("File Error\n");
-      } else {
-        try {
-          // eslint-disable-next-line no-eval
-          (0, eval)(String(d.code) + '\n//# sourceURL=' + name);
-        } catch (e) {
-          print("Error running " + name + ": " + String(e) + "\n");
-        }
-      }
-    }
-  }
-
-  window.addEventListener('message', handler, false);
-  try {
-    window.parent.postMessage({ type: 'loadScript', id: reqId, name: name }, '*');
-  } catch (e) {
-    clearTimeout(timer);
-    window.removeEventListener('message', handler);
-    print("Error requesting script: " + String(e) + "\n");
-  }
-}
-
-function showFiles() {}
 
 window.waitForCursorIdle=function(timeoutMs) {
   timeoutMs = typeof timeoutMs === 'number' ? timeoutMs : 5000;
@@ -4604,7 +4779,7 @@ pokeCursorOn(); pokeRefresh();
 if (HOST) {
   var s=document.createElement('script');
   s.id='dos.js';
-  s.src='dos.js';
+  s.src='dos2.js';
   s.onload=function() { try { dosMount("local"); } catch (e) { print("Error: "+e+"\n"); }};
   document.head.appendChild(s);  
   systemReady();
@@ -4612,10 +4787,9 @@ if (HOST) {
   systemReady();
 }
 
-
 async function systemReady() {
   // system ready
-  print("\n[bgreen]Qandy Pocket\nComputer v1.k\n\n");
+  print("\n[bgreen]Qandy Pocket\nComputer v.1l\n\n");
   print("[cyan]Alpha Testing\nPrototype Release\n\n");
   if (GUEST) {
     // guest system ready
@@ -4636,7 +4810,6 @@ async function systemReady() {
 
 
 if (typeof qandySignalReady === 'function') { qandySignalReady('qandy.js'); }}
-
 
 </script>
 </body>
