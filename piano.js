@@ -42,8 +42,7 @@ function drawPiano() {
   pokeCursorOff();
   print("[-black][cls]\n[bold][bgreen]  ╔══════════════════════════╗\n");
   print("  ║        [yellow]QANDY PIANO[bgreen]       ║\n");
-  print("  ╚══════════════════════════╝\n");
-  print("\n");
+  print("  ╚══════════════════════════╝\n\n");
   
   // Compact piano keyboard (32 chars max)
 
