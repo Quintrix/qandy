@@ -1011,10 +1011,10 @@ async function hostMessageHandler(ev) {
           // Use Promise.resolve() to handle both sync and async implementations
           Promise.resolve(localRmDir(validName))
             .then(function(result) {
-              dosXmitQdos(_dosIframe, d.id, 'localChDir', true, result);
+              dosXmitQdos(_dosIframe, d.id, 'localRmDir', true, result);
             })
             .catch(function(err) {
-              dosXmitQdos(_dosIframe, d.id, 'localChDir', false, err && err.message ? err.message : String(err));
+              dosXmitQdos(_dosIframe, d.id, 'localRmDir', false, err && err.message ? err.message : String(err));
             });
           break;
         }
@@ -1064,16 +1064,13 @@ async function hostMessageHandler(ev) {
           var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
           var fname = (typeof d.file === 'undefined' || d.file === null) ? '' : String(d.file);
           var validName = (typeof validateGuestFilename === 'function') ? validateGuestFilename(fname) : null;
-          if (!validName) {
-            dosXmitQdos(_dosIframe, d.id, 'localDelete', false, 'invalid filename');
-            break;
-          }
-          Promise.resolve().then(function () { return localDelete(validName); })
+          if (!validName) { dosXmitQdos(_dosIframe, d.id, 'localDelete', false, 'invalid filename'); break; }
+          Promise.resolve().then(function () { localDelete(validName); })
             .then(function (result) {
-              dosXmitQdos(_dosIframe, d.id, 'localDelete', true, result === undefined ? true : result);
+              dosXmitQdos(_dosIframe, d.id, 'localDelete', true, result);
             })
             .catch(function (err) {
-              dosXmitQdos(_dosIframe, d.id, 'localDelete', false, err && err.message ? err.message : String(err));
+              dosXmitQdos(_dosIframe, d.id, 'localDelete', false, 'Error: '+err);
             });
           break;
         }
@@ -3522,6 +3519,13 @@ function command_js() {
           return('Error: invalid dir name\n');
         }
         return;     
+      case "cd":
+        if (f) {
+          print(await qdosChDir(f));
+        } else {
+          return('Error: invalid dir name\n');
+        }
+        return;     
       case "rmdir":
         if (f) {
           print(await qdosRmDir(f));
@@ -3700,16 +3704,19 @@ var _pending = window.__qandy_pending;
   }
 
 async function qdosDelete(filename, timeoutMs) {
-  //
-  // this function doesn't work, need host/guest branch
-  //
-  //var valid=filename.trim()
-  //valid=qdosValidateFilename(filename);
-  //if (!valid) return Promise.reject(new Error('invalid filename'));
-  //if (typeof HOST !== 'undefined' && HOST) {
-  //if (!valid) return Promise.reject(new Error('invalid filename'));
-  //return qdosXmitDos('localDelete', { file: valid }, timeoutMs).then(function (/*result*/) {
-  //});
+  var valid=filename.trim()
+  valid=qdosValidateFilename(filename);
+  if (!valid) return Promise.reject(new Error('invalid filename'));
+  if (HOST) {
+  
+  } else {
+    return qdosXmitDos('localDelete', { file: valid }, timeoutMs).then(function (result) {
+      if (typeof _normalizeResult === 'function') return _normalizeResult(result);
+      if (result === null || typeof result === 'undefined') return 'Error: no file';
+      if (typeof result === 'string') return result;
+      try { return String(result); } catch (e) { return "Error: "+e; }
+    });
+  }
 }
 
 async function qdosRename(file, dest, timeoutMs) {
