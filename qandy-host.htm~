@@ -3750,14 +3750,18 @@ async function qdosMount(device) {
 async function qdosPaste(filename, timeoutMs) {
   var valid = qdosValidateFilename(filename);
   if (!valid) return Promise.reject(new Error('invalid filename'));
-  return qdosXmitDos('qdosPaste', { file: valid }, timeoutMs).then(function (res) {
-    // host replies with success:true or success:false (handler will resolve / reject appropriately)
-    // For success we may receive true or a message string; normalize to string.
-    if (res === true || res === undefined) return 'OK: pasted to ' + valid + '\n';
-    return String(res) + '\n';
-  }).catch(function (err) {
-    throw new Error('paste failed: ' + (err && err.message ? err.message : String(err)));
-  });
+  if (HOST) {
+  
+  } else {
+    return qdosXmitDos('qdosPaste', { file: valid }, timeoutMs).then(function (res) {
+      // host replies with success:true or success:false (handler will resolve / reject appropriately)
+      // For success we may receive true or a message string; normalize to string.
+      if (res === true || res === undefined) return 'OK: pasted to ' + valid + '\n';
+      return String(res) + '\n';
+    }).catch(function (err) {
+      throw new Error('paste failed: ' + (err && err.message ? err.message : String(err)));
+    });
+  }
 }
 
 async function qdosChDir(name) {
