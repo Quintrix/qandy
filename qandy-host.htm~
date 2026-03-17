@@ -973,26 +973,52 @@ async function hostMessageHandler(ev) {
 
         case 'localMkDir': {
           var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
-          // coerce and validate filename
           var fname = (typeof d.file === 'undefined' || d.file === null) ? '' : String(d.file);
           var validName = validateGuestFilename(fname);
-          if (!validName) {
-            // reject invalid filenames explicitly
-            dosXmitQdos(_dosIframe, d.id, 'localMkDir', false, 'invalid filename');
-            break;
-          }
-          // call localMkDir (supports sync or Promise)
-          try {
-            const result = await localMkDir(validName);
-            // result may be a string or object; keep same behavior as your .then branch
-            dosXmitQdos(_dosIframe, d.id, 'localMkDir', true, result);
-          } catch (err) {
-            // Convert any thrown/rejected error into plain-text
-            dosXmitQdos(_dosIframe, d.id, 'localMkDir', false, err && err.message ? err.message : String(err));
-          }
+          if (!validName) { dosXmitQdos(_dosIframe, d.id, 'localMkDir', false, 'invalid filename'); break; }
+          // Use Promise.resolve() to handle both sync and async implementations
+          Promise.resolve(localMkDir(validName))
+            .then(function(result) {
+              dosXmitQdos(_dosIframe, d.id, 'localMkDir', true, result);
+            })
+            .catch(function(err) {
+              dosXmitQdos(_dosIframe, d.id, 'localMkDir', false, err && err.message ? err.message : String(err));
+            });
           break;
         }
 
+        case 'localChDir': {
+          var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+          var fname = (typeof d.file === 'undefined' || d.file === null) ? '' : String(d.file);
+          var validName = validateGuestFilename(fname);
+          if (!validName) { dosXmitQdos(_dosIframe, d.id, 'localChDir', false, 'invalid filename'); break; }
+          // Use Promise.resolve() to handle both sync and async implementations
+          Promise.resolve(localChDir(validName))
+            .then(function(result) {
+              dosXmitQdos(_dosIframe, d.id, 'localChDir', true, result);
+            })
+            .catch(function(err) {
+              dosXmitQdos(_dosIframe, d.id, 'localChDir', false, err && err.message ? err.message : String(err));
+            });
+          break;
+        }
+
+        case 'localRmDir': {
+          var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+          var fname = (typeof d.file === 'undefined' || d.file === null) ? '' : String(d.file);
+          var validName = validateGuestFilename(fname);
+          if (!validName) { dosXmitQdos(_dosIframe, d.id, 'localRmDir', false, 'invalid filename'); break; }
+          // Use Promise.resolve() to handle both sync and async implementations
+          Promise.resolve(localRmDir(validName))
+            .then(function(result) {
+              dosXmitQdos(_dosIframe, d.id, 'localChDir', true, result);
+            })
+            .catch(function(err) {
+              dosXmitQdos(_dosIframe, d.id, 'localChDir', false, err && err.message ? err.message : String(err));
+            });
+          break;
+        }
+      
         case 'localLoad': {
           var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
           // coerce and validate filename
@@ -3722,20 +3748,32 @@ async function qdosMount(device) {
 }
 
 async function qdosPaste(filename, timeoutMs) {
-  //
-  // this function doesn't work, need host/guest branch
-  //
-  //var valid = qdosValidateFilename(filename);
-  //if (!valid) return Promise.reject(new Error('invalid filename'));
-  //return qdosXmitDos('qdosPaste', { file: valid }, timeoutMs).then(function (res) {
-  //  // host replies with success:true or success:false (handler will resolve / reject appropriately)
-  //  // For success we may receive true or a message string; normalize to string.
-  //  if (res === true || res === undefined) return 'OK: pasted to ' + valid + '\n';
-  //  return String(res) + '\n';
-  //}).catch(function (err) {
-  //  throw new Error('paste failed: ' + (err && err.message ? err.message : String(err)));
-  //});
+  var valid = qdosValidateFilename(filename);
+  if (!valid) return Promise.reject(new Error('invalid filename'));
+  return qdosXmitDos('qdosPaste', { file: valid }, timeoutMs).then(function (res) {
+    // host replies with success:true or success:false (handler will resolve / reject appropriately)
+    // For success we may receive true or a message string; normalize to string.
+    if (res === true || res === undefined) return 'OK: pasted to ' + valid + '\n';
+    return String(res) + '\n';
+  }).catch(function (err) {
+    throw new Error('paste failed: ' + (err && err.message ? err.message : String(err)));
+  });
 }
+
+async function qdosChDir(name) {
+  var valid = (typeof qdosValidateFilename === 'function') ? qdosValidateFilename(name) : (typeof name === 'string' ? name.trim() : null);
+  if (!valid) return Promise.reject(new Error('invalid name'));
+  if (typeof HOST !== 'undefined' && HOST) {
+  
+  } else {
+    var valid = qdosValidateFilename(name);
+    if (!valid) { return Promise.reject(new Error('invalid name')); }
+    return qdosXmitDos('localChDir', { file: valid });
+  }
+};
+
+
+
 
 async function qdosCopy(filename, timeoutMs) {
   //
@@ -3760,9 +3798,7 @@ async function qdosMkDir(name, timeoutMs) {
   } else {
     var valid = qdosValidateFilename(name);
     if (!valid) { return Promise.reject(new Error('invalid name')); }
-    return qdosXmitDos('localMkDir', { file: valid }, timeoutMs).then(function (/*result*/) {
-      // success - resolve with undefined (same pattern as qdosDelete)
-    });
+    return qdosXmitDos('localMkDir', { file: valid }, timeoutMs);
   }
 }
 
@@ -3775,67 +3811,19 @@ async function qdosChDir(name) {
   } else {
     var valid = qdosValidateFilename(name);
     if (!valid) { return Promise.reject(new Error('invalid name')); }
-    try {
-      const result = await qdosXmitDos('localChDir', { file: valid });
-      return (typeof result === 'string') ? result : "";
-    } catch (err) {
-      return String(err && err.message ? err.message : err);
-    }  
+    return qdosXmitDos('localChDir', { file: valid });
   }
 };
 
-async function localRmDir(name) {
-  try {
-    if (typeof name !== 'string' || String(name).trim() === '') { return 'Error: invalid dir name'; }
-    var cwd = getCwdSync();
-    var target = resolveDirPath(name, cwd);
-    if (!target) return 'Error: invalid dir name';
-    var manifest = _loadManifest() || [];
-    var token = '<' + target + '>';
-    var idx = -1;
-    for (var i = 0; i < manifest.length; i++) {
-      if (manifest[i] && manifest[i].name === token) { idx = i; break; }
-    }
-    if (idx === -1) return 'Error: dir not found';
-
-    // Ensure directory is empty: no files or subdirs that belong to it.
-    // Files inside would be represented with path prefixes (if implemented).
-    // Here we conservatively check for any directory tokens that are descendants.
-    var prefix = target === ROOT_SEG ? (SEP) : (target + SEP);
-    for (var j = 0; j < manifest.length; j++) {
-      var e = manifest[j];
-      if (!e || !e.name) continue;
-      // skip the dir token itself
-      if (e.name === token) continue;
-      // if other dir tokens start with '<prefix...' it's a subdir
-      if (e.name.charAt(0) === '<') {
-        var inner = e.name.slice(1, -1); // strip < and >
-        if (inner === target) continue;
-        if (inner.indexOf(prefix) === 0) return 'Error: directory not empty';
-      }
-      // Optionally: if file entries include path prefixes, check those too:
-      if (typeof e.name === 'string') {
-        // canonical file names might include path prefix; check base - best-effort
-        if (e.name.indexOf(prefix) === 0) return 'Error: directory not empty';
-      }
-    }
-
-    // Safe to remove dir entry
-    manifest.splice(idx, 1);
-    var mres = _saveManifest(manifest);
-    if (mres === 'Error: Disk Full') return 'Error: Disk Full';
-    // If cwd was inside this dir, move to parent (simple behaviour)
-    var cur = getCwdSync();
-    if (cur.indexOf(prefix) === 0 || cur === target) {
-      // set to parent
-      var parts = target.split(SEP).filter(Boolean);
-      parts.pop();
-      var parent = parts.length ? SEP + parts.join(SEP) : ROOT_SEG;
-      setCwdSync(parent);
-    }
-    return true;
-  } catch (e) {
-    return 'Error: ' + (e && e.message ? e.message : String(e));
+async function qdosRmDir(name) {
+  var valid = (typeof qdosValidateFilename === 'function') ? qdosValidateFilename(name) : (typeof name === 'string' ? name.trim() : null);
+  if (!valid) return Promise.reject(new Error('invalid name'));
+  if (typeof HOST !== 'undefined' && HOST) {
+  
+  } else {
+    var valid = qdosValidateFilename(name);
+    if (!valid) { return Promise.reject(new Error('invalid name')); }
+    return qdosXmitDos('localRmDir', { file: valid });
   }
 };
 
