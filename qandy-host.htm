@@ -3438,6 +3438,72 @@ function command_js() {
       case "dir":
         print(await qdosDir()); 
         return;
+      case "list":
+        print(await qdosList()); 
+        return;
+      case "ls": 
+        print(await qdosList()); 
+        return;
+      case "load":
+        print(await qdosLoad(f));
+        return;
+      case "delete":
+        if (f) { print(await qdosDelete(f)); } else { return('Error: invalid filename\n'); }
+        return;
+      case "del":
+        if (f) { print(await qdosDelete(f)); } else { return('Error: invalid filename\n'); }
+        return;
+      case "rm":
+        if (f) { print(await qdosDelete(f)); } else { return('Error: invalid filename\n'); }
+        return;
+      case "rename":
+        if (f && d) { print(await qdosRename(f,d)); } else { return('Error: invalid filename\n'); }
+        return; 
+      case "ren":
+        if (f && d) { print(await qdosRename(f,d)); } else { return('Error: invalid filename\n'); }
+        return; 
+      case "mount":
+        if (f) {
+          print(await qdosMount(f));
+        } else {
+          return('Error: invalid filename\n');
+        }
+        return;
+      case "qpaste":
+        if (f) {
+          print(await qdosPaste(f));
+        } else {
+          return('Error: invalid filename\n');
+        }
+        return;
+      case "qcopy":
+        if (f) {
+          print(await qdosCopy(f));
+        } else {
+          return('Error: invalid filename\n');
+        }
+        return;
+      case "mkdir":
+        if (f) {
+          print(await qdosMkDir(f));
+        } else {
+          return('Error: invalid dir name\n');
+        }
+        return;     
+      case "exists":
+        if (f) {
+          print(await qdosExists(f));
+        } else {
+          return('Error: invalid filename\n');
+        }
+        return;
+      case "fdisk":
+        if (HOST) {
+          print(await dosfdisk());
+        } else {
+          print("Input \'sysop\' for access\n");
+        }
+        return;
       default:
         if (GUEST) {
           evalCode(cmd);
@@ -3468,132 +3534,136 @@ window.__qandy_pending = window.__qandy_pending || Object.create(null);
 window.__qandy_reqCounter = window.__qandy_reqCounter || 0;
 var _pending = window.__qandy_pending;
 
-async function qdosScript(name) {
-  if (typeof HOST !== 'undefined' && HOST) { return "Error: input 'user' to run scripts"; }
-  var nm = (typeof name === 'string') ? name.trim() : '';
-  if (!nm) return "Error: invalid filename";
-  function _isValid(n) {
-    if (typeof validateSystemFilename === 'function') return !!validateSystemFilename(n);
-    if (typeof n !== 'string') return false;
-    if (n.length === 0 || n.length > 128) return false;
-    if (n.indexOf('..') !== -1) return false;
-    return /^[A-Za-z0-9 _.\-\/]+$/.test(n);
-  }
-  if (!_isValid(nm)) return "Error: invalid filename";
-  var content;
-  try {
-    content = await qdosXmitDos('localLoad', { file: nm });
-  } catch (e) {
-    return "Error: load failed: " + ((e && e.message) ? e.message : String(e));
-  }
-  content = (content === null || typeof content === 'undefined') ? '' : String(content);
-  // sanitize BOM / shebang
-  if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
-  content = content.replace(/^\s*#!.*\r?\n/, '');
-  // Eval the script in global scope via indirect eval and capture errors
-  var evalError = null;
-  try {
-    (0, eval)(content + "\n\n//# sourceURL=" + nm);
-    // success
-    return true;
-  } catch (e) {
-    evalError = e;
-    // Attempt to extract line/column from stack or error properties
-    var line = null, column = null;
+  async function qdosScript(name) {
+    if (typeof HOST !== 'undefined' && HOST) { return "Error: input 'user' to run scripts"; }
+    var nm = (typeof name === 'string') ? name.trim() : '';
+    if (!nm) return "Error: invalid filename";
+    function _isValid(n) {
+      if (typeof validateSystemFilename === 'function') return !!validateSystemFilename(n);
+      if (typeof n !== 'string') return false;
+      if (n.length === 0 || n.length > 128) return false;
+      if (n.indexOf('..') !== -1) return false;
+      return /^[A-Za-z0-9 _.\-\/]+$/.test(n);
+    }
+    if (!_isValid(nm)) return "Error: invalid filename";
+    var content;
     try {
-      var stack = e && e.stack ? String(e.stack) : '';
-      if (stack) {
-        var stackLines = stack.split('\n');
-        for (var i = 0; i < stackLines.length; i++) {
-          var sl = stackLines[i].trim();
-          var m = sl.match(/:(\d+):(\d+)\)?\s*$/);
-          if (m) { line = parseInt(m[1], 10); column = parseInt(m[2], 10); break; }
-          m = sl.match(/\((?:.*):(\d+):(\d+)\)/);
-          if (m) { line = parseInt(m[1], 10); column = parseInt(m[2], 10); break; }
+      content = await qdosXmitDos('localLoad', { file: nm });
+    } catch (e) {
+      return "Error: load failed: " + ((e && e.message) ? e.message : String(e));
+    }
+    content = (content === null || typeof content === 'undefined') ? '' : String(content);
+    // sanitize BOM / shebang
+    if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
+    content = content.replace(/^\s*#!.*\r?\n/, '');
+    // Eval the script in global scope via indirect eval and capture errors
+    var evalError = null;
+    try {
+      (0, eval)(content + "\n\n//# sourceURL=" + nm);
+      // success
+      return true;
+    } catch (e) {
+      evalError = e;
+      // Attempt to extract line/column from stack or error properties
+      var line = null, column = null;
+      try {
+        var stack = e && e.stack ? String(e.stack) : '';
+        if (stack) {
+          var stackLines = stack.split('\n');
+          for (var i = 0; i < stackLines.length; i++) {
+            var sl = stackLines[i].trim();
+            var m = sl.match(/:(\d+):(\d+)\)?\s*$/);
+            if (m) { line = parseInt(m[1], 10); column = parseInt(m[2], 10); break; }
+            m = sl.match(/\((?:.*):(\d+):(\d+)\)/);
+            if (m) { line = parseInt(m[1], 10); column = parseInt(m[2], 10); break; }
+          }
         }
+        if (!line) {
+          if (typeof e.lineNumber === 'number') line = e.lineNumber;
+          else if (typeof e.lineno === 'number') line = e.lineno;
+          if (typeof e.columnNumber === 'number') column = e.columnNumber;
+          else if (typeof e.colno === 'number') column = e.colno;
+        }
+      } catch (ex) {
+        /* ignore extraction errors */
       }
-      if (!line) {
-        if (typeof e.lineNumber === 'number') line = e.lineNumber;
-        else if (typeof e.lineno === 'number') line = e.lineno;
-        if (typeof e.columnNumber === 'number') column = e.columnNumber;
-        else if (typeof e.colno === 'number') column = e.colno;
+
+      var emsg = (e && e.message) ? e.message : String(e);
+      var loc = (line ? (nm + ':' + line + (column ? (':' + column) : '')) : nm);
+      return "Error: " + emsg + " at " + loc;
+    }
+  }
+
+  async function qdosDir() {
+   if (typeof HOST !== 'undefined' && HOST) {
+      try {
+        var res = await Promise.resolve().then(function () { return dosDir(); });
+        res = _normalizeResult(res);
+        return String(res) + '\n';
+      } catch (e) {
+        return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
       }
-    } catch (ex) {
-      /* ignore extraction errors */
+      return 'Error: DOS not available\n';
     }
-
-    var emsg = (e && e.message) ? e.message : String(e);
-    var loc = (line ? (nm + ':' + line + (column ? (':' + column) : '')) : nm);
-    return "Error: " + emsg + " at " + loc;
-  }
-}
-async function qdosDir() {
-  if (typeof HOST !== 'undefined' && HOST) {
-    try {
-      var res = await Promise.resolve().then(function () { return dosDir(); });
-      res = _normalizeResult(res);
-      return String(res) + '\n';
-    } catch (e) {
+    return qdosXmitDos('localDir').then(function (result) {
+      // result is already normalized to a string by the handler
+      return String(result) + '\n';
+    }).catch(function (e) {
       return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
-    }
-    return 'Error: DOS not available\n';
+    });
   }
-  return qdosXmitDos('localDir').then(function (result) {
-    // result is already normalized to a string by the handler
-    return String(result) + '\n';
-  }).catch(function (e) {
-    return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
-  });
-}
 
-async function qdosList() {
-  if (typeof HOST !== 'undefined' && HOST) {
-    try {
-      var res = await Promise.resolve().then(function () { return dosList(); });
-      res = _normalizeResult(res);
-      return String(res) + '\n';
-    } catch (e) {
+  async function qdosList() {
+    if (typeof HOST !== 'undefined' && HOST) {
+      try {
+        var res = await Promise.resolve().then(function () { return dosList(); });
+        res = _normalizeResult(res);
+        return String(res) + '\n';
+      } catch (e) {
+        return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+      }
+      return 'Error: DOS not available\n';
+    }
+    return qdosXmitDos('localList').then(function (result) {
+      // result is already normalized to a string by the handler
+      return String(result) + '\n';
+    }).catch(function (e) {
       return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
-    }
-    return 'Error: DOS not available\n';
+    });
   }
-  return qdosXmitDos('localList').then(function (result) {
-    // result is already normalized to a string by the handler
-    return String(result) + '\n';
-  }).catch(function (e) {
-    return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
-  });
-}
 
-async function qdosLoad(filename, timeoutMs) {
-  var valid = (typeof qdosValidateFilename === 'function') ? qdosValidateFilename(filename) :
-              (typeof filename === 'string' ? filename.trim() : null);
-  if (!valid) return Promise.reject(new Error('invalid filename'));
-  if (typeof HOST !== 'undefined' && HOST) {
-    var loader = (typeof localLoad === 'function') ? localLoad : (typeof dosLoad === 'function' ? dosLoad : null);
-    if (!loader) return Promise.reject(new Error('Error: DOS not available'));
-    try {
-      var res = await Promise.resolve().then(function () { return loader(valid); });
-      if (typeof _normalizeResult === 'function') res = _normalizeResult(res);
-      else if (Array.isArray(res)) res = res.join('\n');
-      else if (res === null || typeof res === 'undefined') res = '';
-      else if (typeof res === 'object') {
-        try { res = JSON.stringify(res); } catch (e) { res = String(res); }
-      } else res = String(res);
-      return res;
-    } catch (e) {
-      return Promise.reject(new Error((e && e.message) ? e.message : String(e)));
+  async function qdosLoad(filename, timeoutMs) {
+    var valid = (typeof qdosValidateFilename === 'function') ? qdosValidateFilename(filename) :
+                (typeof filename === 'string' ? filename.trim() : null);
+    if (!valid) return Promise.reject(new Error('invalid filename'));
+    if (typeof HOST !== 'undefined' && HOST) {
+      var loader = (typeof localLoad === 'function') ? localLoad : (typeof dosLoad === 'function' ? dosLoad : null);
+      if (!loader) return Promise.reject(new Error('Error: DOS not available'));
+      try {
+        var res = await Promise.resolve().then(function () { return loader(valid); });
+        if (typeof _normalizeResult === 'function') res = _normalizeResult(res);
+        else if (Array.isArray(res)) res = res.join('\n');
+        else if (res === null || typeof res === 'undefined') res = '';
+        else if (typeof res === 'object') {
+          try { res = JSON.stringify(res); } catch (e) { res = String(res); }
+        } else res = String(res);
+        return res;
+      } catch (e) {
+        return Promise.reject(new Error((e && e.message) ? e.message : String(e)));
+      }
     }
+    return qdosXmitDos('localLoad', { file: valid }, timeoutMs).then(function (result) {
+      if (typeof _normalizeResult === 'function') return _normalizeResult(result);
+      if (result === null || typeof result === 'undefined') return '';
+      if (typeof result === 'string') return result;
+      try { return String(result); } catch (e) { return JSON.stringify(result); }
+    });
   }
-  return qdosXmitDos('localLoad', { file: valid }, timeoutMs).then(function (result) {
-    if (typeof _normalizeResult === 'function') return _normalizeResult(result);
-    if (result === null || typeof result === 'undefined') return '';
-    if (typeof result === 'string') return result;
-    try { return String(result); } catch (e) { return JSON.stringify(result); }
-  });
-}
 
 async function qdosDelete(filename, timeoutMs) {
+  //
+  // this function doesn't work, need host/guest branch
+  //
   //var valid=filename.trim()
   //valid=qdosValidateFilename(filename);
   //if (!valid) return Promise.reject(new Error('invalid filename'));
@@ -3604,6 +3674,9 @@ async function qdosDelete(filename, timeoutMs) {
 }
 
 async function qdosRename(file, dest, timeoutMs) {
+  //
+  // this function doesn't work, need host/guest branch
+  //
   //var validSrc = qdosValidateFilename(file);
   //var validDest = qdosValidateFilename(dest);
   //if (!validSrc || !validDest) return Promise.reject(new Error('invalid filename(s)'));
@@ -3636,27 +3709,34 @@ async function qdosMount(device) {
 }
 
 async function qdosPaste(filename, timeoutMs) {
-  var valid = qdosValidateFilename(filename);
-  if (!valid) return Promise.reject(new Error('invalid filename'));
-  return qdosXmitDos('qdosPaste', { file: valid }, timeoutMs).then(function (res) {
-    // host replies with success:true or success:false (handler will resolve / reject appropriately)
-    // For success we may receive true or a message string; normalize to string.
-    if (res === true || res === undefined) return 'OK: pasted to ' + valid + '\n';
-    return String(res) + '\n';
-  }).catch(function (err) {
-    throw new Error('paste failed: ' + (err && err.message ? err.message : String(err)));
-  });
+  //
+  // this function doesn't work, need host/guest branch
+  //
+  //var valid = qdosValidateFilename(filename);
+  //if (!valid) return Promise.reject(new Error('invalid filename'));
+  //return qdosXmitDos('qdosPaste', { file: valid }, timeoutMs).then(function (res) {
+  //  // host replies with success:true or success:false (handler will resolve / reject appropriately)
+  //  // For success we may receive true or a message string; normalize to string.
+  //  if (res === true || res === undefined) return 'OK: pasted to ' + valid + '\n';
+  //  return String(res) + '\n';
+  //}).catch(function (err) {
+  //  throw new Error('paste failed: ' + (err && err.message ? err.message : String(err)));
+  //});
 }
 
 async function qdosCopy(filename, timeoutMs) {
-  var valid = qdosValidateFilename(filename);
-  if (!valid) return Promise.reject(new Error('invalid filename'));
-  return qdosXmitDos('qdosCopy', { file: valid }, timeoutMs).then(function (res) {
-    if (res === true || res === undefined) return 'OK: copied ' + valid + ' to clipboard\n';
-    return String(res) + '\n';
-  }).catch(function (err) {
-    throw new Error('copy failed: ' + (err && err.message ? err.message : String(err)));
-  });
+  //
+  // this function doesn't work, need host/guest branch
+  // also need user interaction I thinks?
+  //
+  //var valid = qdosValidateFilename(filename);
+  //if (!valid) return Promise.reject(new Error('invalid filename'));
+  //return qdosXmitDos('qdosCopy', { file: valid }, timeoutMs).then(function (res) {
+  //  if (res === true || res === undefined) return 'OK: copied ' + valid + ' to clipboard\n';
+  //  return String(res) + '\n';
+  //}).catch(function (err) {
+  //  throw new Error('copy failed: ' + (err && err.message ? err.message : String(err)));
+  //});
 }
 
 async function qdosMkDir(filename, timeoutMs) {
@@ -3672,17 +3752,24 @@ async function qdosMkDir(filename, timeoutMs) {
     });
   }
 }
-if (typeof window !== 'undefined') { window.qdosMkDir = window.qdosMkDir || qdosMkDir; }
+
 
 async function qdosDelete(filename, timeoutMs) {
-  var valid =filename.trim()
+  var valid=filename.trim()
   valid=qdosValidateFilename(filename);
-  if (!valid) return Promise.reject(new Error('invalid filename'));
+  if (!valid) { return Promise.reject(new Error('invalid filename')); }
   if (typeof HOST !== 'undefined' && HOST) {
-   if (!valid) return Promise.reject(new Error('invalid filename'));
-  // qdosXmitDos resolves only on host success (host sends success:false -> guest handler rejects)
+    if (typeof dosMount !== 'function') { return 'Error: dosMount not available\n'; }
+    try {
+      var res = await Promise.resolve().then(function () { return dosDelete(valid); });
+      var out = (typeof _normalizeResult === 'function') ? _normalizeResult(res) : (res === null || res === undefined ? '' : String(res));
+      return String(out) + '\n';
+    } catch (e) {
+      return 'Error: ' + ((e && e.message) ? e.message : String(e)) + '\n';
+    }
+  }
   return qdosXmitDos('localDelete', { file: valid }, timeoutMs).then(function (/*result*/) {
-    
+    // success
   });
 }
 
@@ -3733,6 +3820,9 @@ window.qdosMount = qdosMount;
 window.qdosPaste = qdosPaste;
 window.qdosCopy = qdosCopy;
 window.qdosExists = qdosExists;
+window.qdosMkDir = window.qdosMkDir;
+window.qdosChDir = window.qdosMkDir;
+window.qdosRmDir = window.qdosMkDir;
 
 //
 // these functions transmit packets to and from the host
@@ -4633,7 +4723,6 @@ async function systemReady() {
 
 
 if (typeof qandySignalReady === 'function') { qandySignalReady('qandy.js'); }}
-
 
 </script>
 </body>

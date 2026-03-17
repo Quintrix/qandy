@@ -73,10 +73,6 @@ var DEVICE = 'none';
   var MAX_NAME_BYTES = 255;
   var VALID_NAME_RE = /^(?!\.)[A-Za-z0-9 \-_.()+=]+$/;
   var SUPPORTED_DEVICES = ['local', 'echo', 'harddrive', 'none'];
-  var _LS_PFX = 'qandy_file:';           // per-file value prefix (existing)
-  var _LS_MAN = 'qandy_manifest_local';  // manifest key (existing)
-  var _LS_CWD = 'qandy_cwd';             // new: current working directory
-  var _LS_PS = ':';                      // local storage path separator
 
   // ── Internal state ───────────────────────────────────────────────────────
   var _echoStore = Object.create(null);
@@ -931,14 +927,7 @@ var DEVICE = 'none';
   };
 
 
-  // ── Local* public API (hardcoded to localStorage, DEVICE-independent) ────
-  // These functions operate exclusively on localStorage regardless of which
-  // device is currently mounted via dosMount().  They are intended for HOST-side
-  // use by the postMessage handler so that guest iframe requests for file
-  // operations cannot be affected by the DEVICE variable.
-
   // localLoad(file) — load file from localStorage
-  // Handles virtual files dir.txt and dir.sys; returns null for missing files.
   global.localLoad = async function (file) {
     var fname = _normName(file);
     var cls = _classify(fname);
@@ -951,6 +940,76 @@ var DEVICE = 'none';
     if (!found) return "Error: file not found";
     return _localLoad(found.entry.name);
   };
+
+  // mkdir on localStorage
+  global.localMkDir = async function (name) {
+    try {
+      if (typeof name !== 'string' || String(name).trim() === '') { return 'Error: invalid dir name'; }
+      var cwd = getCwdSync();
+      var target = resolveDirPath(name, cwd);
+      if (!target) return 'Error: invalid dir name';
+      // Normalize target (remove trailing separators beyond single root)
+      if (target.length > 1) {
+        while (target.length > 1 && target.slice(-SEP.length) === SEP) {
+          target = target.slice(0, -SEP.length);
+        }
+      }
+      var manifest = _loadManifest() || [];
+      var dirToken = "<"+target+">";
+      var fileConflict = manifest.some(function (e) { return e && e.name === target; });
+      if (fileConflict) return 'Error: dir exists';
+      var dirExists = manifest.some(function (e) { return e && e.name === dirToken; });
+      if (dirExists) return 'Error: dir already exists';
+      if (target !== ROOT_SEG) {
+        var parts = target.split(SEP).filter(Boolean);
+        if (parts.length === 0) return 'Error: invalid dir name';
+        parts.pop(); // parent path tokens
+        var parent = parts.length ? parts.join(SEP) : ROOT_SEG;
+        var parentToken = "<"+parent+">";
+        var parentExists = (parent === ROOT_SEG) || manifest.some(function (e) { return e && e.name === parentToken; });
+        if (!parentExists) return 'Error: parent dir not found';
+      }
+      manifest.push({ name: dirToken, size: 0, timestamp: _timestamp() });
+      var saveRes = _saveManifest(manifest);
+      if (saveRes === 'Error: Disk Full') { return 'Error: Disk Full'; }
+      setCwdSync(target);
+      return true;
+    } catch (e) {
+      return 'Error: ' + (e && e.message ? e.message : String(e));
+    }
+  };
+
+  // chdir current working directory on localStorage
+  global.localChDir = async function (name) {
+    return new Promise(function (resolve, reject) {
+      try {
+        var cwd = getCwdSync();
+        if (!name || String(name).trim() === '' || name === '.' || name === './') {
+          setCwdSync(ROOT_SEG);
+          return resolve({ ok: true, cwd: ROOT_SEG });
+        }
+        var target = resolveDirPath(name, cwd);
+        if (!target) return reject(new Error('invalid dir name'));
+        var man = loadManifest();
+        if (!manifestHasDir(man, target)) return reject(new Error('dir not found'));
+        setCwdSync(target);
+        return resolve({ ok: true, cwd: target });
+      } catch (e) {
+        return reject(e);
+      }
+    });
+  }
+
+  // rmdir from localStorage
+  global.localRmDir = async function (name) {
+  	 //
+  	 // if dir name is empty, remove it from manifest 
+  	 //
+  }
+
+
+
+
 
   // localSave(file, text) — save text to localStorage
   // ">file" prefix appends; write-protected and system files rejected.
@@ -1005,21 +1064,22 @@ var DEVICE = 'none';
   // Returns: Promise resolving to true or rejects on error
   global.localDelete = async function (file) {
     var fname = _normName(file);
-    if (_classify(fname) !== 'normal') { return 'Error: read only file'; }
+    if (_classify(fname) !== 'normal') throw new Error('read only file');
+
     var fbase = _baseName(fname);
     var fv = _validateBase(fbase);
-    if (!fv.ok) { return 'Error: '+fv.reason; }
+    if (!fv.ok) throw new Error(fv.reason);
 
     var manifest = _loadManifest();
     var found = _findEntry(manifest, fname);
-    if (!found) { return 'Error: file not found'; }
-    if (_isProtected(found.entry.name)) { return 'Error: read only file'; }
+    if (!found) throw new Error('file not found');
+    if (_isProtected(found.entry.name)) throw new Error('read only file');
 
     _localDelete(found.entry.name);
     manifest.splice(found.index, 1);
     var mres = _saveManifest(manifest);
-    if (mres === 'Error: Disk Full') { return 'Error: disk full'; }
-    return file+" deleted\n";
+    if (mres === 'Error: Disk Full') throw new Error('Disk Full');
+    return true;
   };
 
   // localExists(file) — check if file exists in localStorage
@@ -1221,271 +1281,3 @@ var DEVICE = 'none';
   }
 
 })(window);
-
-
-//
-// this code is a patch to add support for directories, 
-// it needs to be reduced by using existing dos.js helpers
-//
-
-(function () {
-  'use strict';
-
-  // Config / key names (fall back to sane defaults if not defined)
-  var SEP = (typeof _LS_PS !== 'undefined') ? String(_LS_PS) : ':';
-  var MAN_KEY = (typeof _LS_MAN !== 'undefined') ? _LS_MAN : 'qandy_manifest_local';
-  var CWD_KEY = (typeof _LS_CWD !== 'undefined') ? _LS_CWD : 'qandy_cwd';
-  var ROOT_SEG = 'qandy';
-
-  // Allowed path segment characters
-  var SEG_RE = /^[A-Za-z0-9 _.\-]+$/;
-
-  // Helper: safe JSON parse
-  function safeParse(raw) {
-    try { return JSON.parse(raw); } catch (e) { return null; }
-  }
-
-  // Normalize an arbitrary input path into canonical internal form using SEP.
-  // Accepts separators SEP or '/' in input. Collapses repeated separators.
-  // Returns canonical path string like 'qandy:dir:sub' (uses SEP) or null on invalid.
-  function normalizeLogicalPath(input) {
-    if (input === null || typeof input === 'undefined') input = '';
-    input = String(input).trim();
-
-    // Accept both / and current SEP as separators; split on either
-    var reSplit = new RegExp('[:\\/]+'); // accept both colon and slash regardless of SEP
-    var raw = input.split(reSplit).filter(Boolean);
-
-    // If empty -> root
-    if (raw.length === 0) {
-      return ROOT_SEG;
-    }
-
-    // If first token equals ROOT then treat as absolute; otherwise treat as relative to caller
-    // For normalization we just ensure tokens are valid and join with SEP.
-    var segs = [];
-    for (var i = 0; i < raw.length; i++) {
-      var s = raw[i];
-      if (s === '.' || s === '') continue;
-      if (s === '..') {
-        // keep .. for resolve stage (caller should use resolveDirPath). Here, we simply mark invalid.
-        // For pure normalization we won't resolve relative directives to avoid ambiguity.
-        return null; // caller should call resolveDirPath for relative paths
-      }
-      if (!SEG_RE.test(s)) return null;
-      segs.push(s);
-    }
-
-    // If first segment is not ROOT, we still return a joined string (caller will resolve relative).
-    return segs.length ? segs.join(SEP) : ROOT_SEG;
-  }
-
-  // Resolve a directory path name (may be relative) against a base cwd.
-  // name may include '.' or '..' tokens and may use either ':' or '/' separators.
-  // baseCwd should be canonical (using SEP) or omitted (then root is used).
-  // Returns canonical path (using SEP), or null if resolution fails (invalid or attempts to escape root).
-  function resolveDirPath(name, baseCwd) {
-    baseCwd = (typeof baseCwd === 'string' && baseCwd) ? String(baseCwd) : getCwdSync();
-    // split base
-    var baseSegs = baseCwd.split(SEP).filter(Boolean);
-    if (baseSegs.length === 0) baseSegs = [ROOT_SEG];
-
-    // Quick: if name is empty or '.' -> return base
-    if (name === null || typeof name === 'undefined' || String(name).trim() === '' || name === '.' || name === './') {
-      return baseSegs.join(SEP);
-    }
-
-    // Split input on both separators
-    var reSplit = new RegExp('[:\\/]+');
-    var parts = String(name).trim().split(reSplit).filter(Boolean);
-
-    // If absolute (first token === ROOT_SEG) start fresh
-    var idx = 0;
-    var working = baseSegs.slice();
-    if (parts.length > 0 && parts[0].toLowerCase() === ROOT_SEG.toLowerCase()) {
-      working = [];
-      idx = 0;
-    }
-
-    for (; idx < parts.length; idx++) {
-      var token = parts[idx];
-      if (!token || token === '.') continue;
-      if (token === '..') {
-        // pop unless at root
-        if (working.length > 1) working.pop();
-        else {
-          // cannot escape root
-          return null;
-        }
-        continue;
-      }
-      if (!SEG_RE.test(token)) return null;
-      working.push(token);
-    }
-
-    // Ensure first segment is ROOT_SEG
-    if (working.length === 0) working = [ROOT_SEG];
-    if (working[0].toLowerCase() !== ROOT_SEG.toLowerCase()) {
-      // Prepend root if user supplied relative path with no explicit root
-      working.unshift(ROOT_SEG);
-    }
-
-    return working.join(SEP);
-  }
-
-  // Manifest helpers
-  function loadManifest() {
-    try {
-      var raw = localStorage.getItem(MAN_KEY);
-      if (!raw) return [];
-      var arr = safeParse(raw);
-      if (!Array.isArray(arr)) return [];
-      return arr.slice();
-    } catch (e) {
-      console.warn('qandy: manifest parse failed', e);
-      return [];
-    }
-  }
-  function saveManifest(arr) {
-    try {
-      localStorage.setItem(MAN_KEY, JSON.stringify(Array.isArray(arr) ? arr : []));
-      return true;
-    } catch (e) {
-      console.error('qandy: save manifest failed', e);
-      return false;
-    }
-  }
-  function isDirEntryToken(token) { return (typeof token === 'string' && token.indexOf('[dir]') === 0); }
-  function dirTokenFor(path) { return '[dir]' + path; }
-
-  function manifestHasDir(man, dirPath) {
-    if (!Array.isArray(man)) man = loadManifest();
-    return man.indexOf(dirTokenFor(dirPath)) !== -1;
-  }
-  function manifestHasFile(man, filePath) {
-    if (!Array.isArray(man)) man = loadManifest();
-    return man.indexOf(filePath) !== -1;
-  }
-  function addManifestDir(man, dirPath) {
-    var t = dirTokenFor(dirPath);
-    if (man.indexOf(t) === -1) man.push(t);
-    return man;
-  }
-  function removeManifestDir(man, dirPath) {
-    var t = dirTokenFor(dirPath);
-    var i = man.indexOf(t);
-    if (i !== -1) man.splice(i, 1);
-    return man;
-  }
-
-  // CWD helpers
-  function getCwdSync() {
-    try {
-      var c = localStorage.getItem(CWD_KEY);
-      if (!c) return ROOT_SEG;
-      return String(c);
-    } catch (e) {
-      return ROOT_SEG;
-    }
-  }
-  function setCwdSync(p) {
-    if (!p || typeof p !== 'string') p = ROOT_SEG;
-    localStorage.setItem(CWD_KEY, p);
-    return p;
-  }
-
-  //
-  // API: localMkDir, localChangeDir, localRemoveDir
-  //
-
-  async function localMkDir(name) {
-  }
-
-  async function localChangeDir(name) {
-    return new Promise(function (resolve, reject) {
-      try {
-        var cwd = getCwdSync();
-        if (!name || String(name).trim() === '' || name === '.' || name === './') {
-          setCwdSync(ROOT_SEG);
-          return resolve({ ok: true, cwd: ROOT_SEG });
-        }
-        var target = resolveDirPath(name, cwd);
-        if (!target) return reject(new Error('invalid or disallowed directory name'));
-        var man = loadManifest();
-        if (!manifestHasDir(man, target)) return reject(new Error('directory not found: ' + target));
-        setCwdSync(target);
-        return resolve({ ok: true, cwd: target });
-      } catch (e) {
-        return reject(e);
-      }
-    });
-  }
-
-  async function localRemoveDir(name) {
-    return new Promise(function (resolve, reject) {
-      try {
-        var cwd = getCwdSync();
-        var target = resolveDirPath(name, cwd);
-        if (!target) return reject(new Error('invalid or disallowed directory name'));
-        if (target === ROOT_SEG) return reject(new Error('cannot remove root directory'));
-
-        var man = loadManifest();
-        if (!manifestHasDir(man, target)) return reject(new Error('directory not found: ' + target));
-
-        // Check for any manifest entries that are files or dirs under this path
-        var prefix = target + SEP;
-        for (var i = 0; i < man.length; i++) {
-          var e = man[i];
-          if (!e) continue;
-          if (isDirEntryToken(e)) {
-            var dp = e.slice(5); // strip '[dir]'
-            if (dp === target) continue;
-            if (dp.indexOf(prefix) === 0) {
-              return reject(new Error('directory not empty: contains subdirectory ' + dp));
-            }
-          } else {
-            if (e === target || e.indexOf(prefix) === 0) {
-              return reject(new Error('directory not empty: contains file ' + e));
-            }
-          }
-        }
-
-        // Safe to remove
-        removeManifestDir(man, target);
-        saveManifest(man);
-
-        // If cwd was inside removed dir, move to parent
-        var cur = getCwdSync();
-        if (cur === target || cur.indexOf(prefix) === 0) {
-          var segs = cur.split(SEP).filter(Boolean);
-          if (segs.length > 1) {
-            segs.pop();
-            setCwdSync(segs.join(SEP));
-          } else {
-            setCwdSync(ROOT_SEG);
-          }
-        }
-
-        return resolve({ ok: true, message: 'directory removed ' + target });
-      } catch (e) {
-        return reject(e);
-      }
-    });
-  }
-
-  // Export to global namespace (do not overwrite if already present)
-  if (typeof window.localMkDir !== 'function') window.localMkDir = localMkDir;
-  if (typeof window.localChangeDir !== 'function') window.localChangeDir = localChangeDir;
-  if (typeof window.localRemoveDir !== 'function') window.localRemoveDir = localRemoveDir;
-
-  // Also export utility accessors for other modules
-  window._qandy_local_fs = window._qandy_local_fs || {};
-  window._qandy_local_fs.SEP = SEP;
-  window._qandy_local_fs.normalizeLogicalPath = normalizeLogicalPath;
-  window._qandy_local_fs.resolveDirPath = resolveDirPath;
-  window._qandy_local_fs.getCwdSync = getCwdSync;
-  window._qandy_local_fs.setCwdSync = setCwdSync;
-  window._qandy_local_fs.loadManifest = loadManifest;
-  window._qandy_local_fs.saveManifest = saveManifest;
-
-})();
