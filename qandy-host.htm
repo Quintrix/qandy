@@ -390,6 +390,10 @@ html { -webkit-text-size-adjust: 100%; }     /* keep text size stable across zoo
 })();
 </script>
 
+<!--- cellphone debug console -->
+<!--- <scr ipt src="https://cdn.jsdelivr.net/npm/eruda"></sc ript> -->
+<!--- <scr ipt>eruda.init();</scr ipt> -->
+
 <script>
 // Define Global Variables
 // sound.js
@@ -2806,9 +2810,8 @@ function keyboard_js() {
     btn.onclick = function() {
       var keyData = {keyCode: key.keyCode, key: String.fromCharCode(key.keyCode), shiftKey: !!shift, ctrlKey: !!ctrl, altKey: !!alt, source: 'virtual', originalEvent: null};
       press(keyData);
-      setTimeout(function() { press('keyup', keyData); }, 50);
+      setTimeout(function() { pressup(keyData); }, 50);
     };
-
     // Append into the selected container (defensive: ensure it exists)
     try {
       (kbContainer || document.body).appendChild(btn);
@@ -2821,45 +2824,25 @@ function keyboard_js() {
 
   updateKeyLabels();
 
-// Replace existing updateKeyLabels() with this version
-function updateKeyLabels() {
-  // Normalize modifier state from globals (same logic as before)
-  window.altActive = !!window.alt || !!window.altPhysical;
-  window.shiftActive = !!window.shift;
-  window.capsActive = !!window.caps;
 
-  // owners to update (host and guest). Order: update host first (if you prefer)
-  var owners = ['host', 'guest'];
-
-  // helper to pick label for a logical key given modifier state
-  function pickLabel(base) {
-    if (!base || base.length === 0) return base;
-    var lookup = String(base).toLowerCase();
-    var label = base;
-
-    if (window.altActive) {
-      if (window.shiftActive && typeof altShiftKeys === 'object' && altShiftKeys.hasOwnProperty(lookup)) {
-        label = altShiftKeys[lookup];
-      } else if (typeof altKeys === 'object' && altKeys.hasOwnProperty(lookup)) {
-        label = altKeys[lookup];
-      } else if (window.shiftActive && typeof shiftedKeys === 'object' && shiftedKeys.hasOwnProperty(lookup)) {
-        label = shiftedKeys[lookup];
-      } else if (typeof normalKeys === 'object' && normalKeys.hasOwnProperty(lookup)) {
-        label = normalKeys[lookup];
-      } else {
-        label = base;
-      }
-    } else {
-      if (window.capsActive) {
-        if (typeof shiftedKeys === 'object' && shiftedKeys.hasOwnProperty(lookup)) {
-          label = shiftedKeys[lookup];
-        } else if (typeof normalKeys === 'object' && normalKeys.hasOwnProperty(lookup)) {
-          label = normalKeys[lookup];
-        } else {
-          label = base;
-        }
-      } else if (window.shiftActive) {
-        if (typeof shiftedKeys === 'object' && shiftedKeys.hasOwnProperty(lookup)) {
+  function updateKeyLabels() {
+    // Normalize modifier state from globals (same logic as before)
+    window.altActive = !!window.alt || !!window.altPhysical;
+    window.shiftActive = !!window.shift;
+    window.capsActive = !!window.caps;
+    // owners to update (host and guest). Order: update host first (if you prefer)
+    var owners = ['host', 'guest'];
+    // helper to pick label for a logical key given modifier state
+    function pickLabel(base) {
+      if (!base || base.length === 0) return base;
+      var lookup = String(base).toLowerCase();
+      var label = base;
+      if (window.altActive) {
+        if (window.shiftActive && typeof altShiftKeys === 'object' && altShiftKeys.hasOwnProperty(lookup)) {
+          label = altShiftKeys[lookup];
+        } else if (typeof altKeys === 'object' && altKeys.hasOwnProperty(lookup)) {
+          label = altKeys[lookup];
+        } else if (window.shiftActive && typeof shiftedKeys === 'object' && shiftedKeys.hasOwnProperty(lookup)) {
           label = shiftedKeys[lookup];
         } else if (typeof normalKeys === 'object' && normalKeys.hasOwnProperty(lookup)) {
           label = normalKeys[lookup];
@@ -2867,93 +2850,101 @@ function updateKeyLabels() {
           label = base;
         }
       } else {
-        if (typeof normalKeys === 'object' && normalKeys.hasOwnProperty(lookup)) {
-          label = normalKeys[lookup];
+        if (window.capsActive) {
+          if (typeof shiftedKeys === 'object' && shiftedKeys.hasOwnProperty(lookup)) {
+            label = shiftedKeys[lookup];
+          } else if (typeof normalKeys === 'object' && normalKeys.hasOwnProperty(lookup)) {
+            label = normalKeys[lookup];
+          } else {
+            label = base;
+          }
+        } else if (window.shiftActive) {
+          if (typeof shiftedKeys === 'object' && shiftedKeys.hasOwnProperty(lookup)) {
+            label = shiftedKeys[lookup];
+          } else if (typeof normalKeys === 'object' && normalKeys.hasOwnProperty(lookup)) {
+            label = normalKeys[lookup];
+          } else {
+            label = base;
+          }
         } else {
-          label = base;
+          if (typeof normalKeys === 'object' && normalKeys.hasOwnProperty(lookup)) {
+            label = normalKeys[lookup];
+          } else {
+            label = base;
+          }
         }
       }
+      return String(label);
     }
-    return String(label);
+
+    // iterate all logical keys and update per-owner DOM elements
+    if (!Array.isArray(keyboardData)) return false;
+    keyboardData.forEach(function(key) {
+      // For each owner prefix, try to find the element and update it
+      owners.forEach(function(owner) {
+        var domId = owner + '-' + key.id;
+        var el = document.getElementById(domId);
+        // fallback to legacy id (no prefix) for migration support
+        if (!el) el = document.getElementById(key.id);
+        if (!el) return; // not present in this document
+        // Determine base character for label selection:
+        // prefer dataset.keyChar (set during creation), else fall back to logical label, else current text
+        var base = (el.dataset && el.dataset.keyChar) ? el.dataset.keyChar :
+                   (typeof key.label === 'string' ? key.label : '') ;
+        // If dataset.keyChar missing and we can set it, do so (helps future updates)
+        try { if ((!el.dataset || !el.dataset.keyChar) && base) el.dataset.keyChar = base; } catch (e) {}
+        // compute desired label
+        var newLabel = pickLabel(base);
+        // update DOM content safely (use textContent)
+        try {
+          if (el.textContent !== newLabel) el.textContent = newLabel;
+          // accessibility hint
+          el.setAttribute && el.setAttribute('aria-label', 'key ' + newLabel);
+        } catch (e) {
+          // ignore DOM exceptions
+        }
+
+        // Visual locked appearance for some special keys (per-owner)
+        // caps
+        if (key.id === 'caps') {
+          try {
+            if (window.caps) {
+              el.style.backgroundColor = '#fff';
+              el.style.color = '#000';
+            } else {
+              el.style.backgroundColor = '';
+              el.style.color = '';
+            }
+          } catch (e) {}
+        }
+        // ctrl
+        if (key.id === 'ctrl') {
+          try {
+            if (ctrl || ctrlPhysical) {
+              el.style.backgroundColor = ctrlPhysical ? '#bbb' : '#fff';
+              el.style.color = '#000';
+            } else {
+              el.style.backgroundColor = '';
+              el.style.color = '';
+            }
+          } catch (e) {}
+        }
+        if (key.id === 'alt') {
+          try {
+            if (alt || altPhysical) {
+              el.style.backgroundColor = altPhysical ? '#444' : '#fff';
+              el.style.color = '#000';
+            } else {
+              el.style.backgroundColor = '';
+              el.style.color = '';
+            }
+          } catch (e) {}
+        }
+      }); // end owners.forEach
+    }); // end keyboardData.forEach
+    return true;
   }
-
-  // iterate all logical keys and update per-owner DOM elements
-  if (!Array.isArray(keyboardData)) return false;
-  keyboardData.forEach(function(key) {
-    // For each owner prefix, try to find the element and update it
-    owners.forEach(function(owner) {
-      var domId = owner + '-' + key.id;
-      var el = document.getElementById(domId);
-      // fallback to legacy id (no prefix) for migration support
-      if (!el) el = document.getElementById(key.id);
-
-      if (!el) return; // not present in this document
-
-      // Determine base character for label selection:
-      // prefer dataset.keyChar (set during creation), else fall back to logical label, else current text
-      var base = (el.dataset && el.dataset.keyChar) ? el.dataset.keyChar :
-                 (typeof key.label === 'string' ? key.label : '') ;
-
-      // If dataset.keyChar missing and we can set it, do so (helps future updates)
-      try { if ((!el.dataset || !el.dataset.keyChar) && base) el.dataset.keyChar = base; } catch (e) {}
-
-      // compute desired label
-      var newLabel = pickLabel(base);
-
-      // update DOM content safely (use textContent)
-      try {
-        if (el.textContent !== newLabel) el.textContent = newLabel;
-        // accessibility hint
-        el.setAttribute && el.setAttribute('aria-label', 'key ' + newLabel);
-      } catch (e) {
-        // ignore DOM exceptions
-      }
-
-      // Visual locked appearance for some special keys (per-owner)
-      // caps
-      if (key.id === 'caps') {
-        try {
-          if (window.caps) {
-            el.style.backgroundColor = '#fff';
-            el.style.color = '#000';
-          } else {
-            el.style.backgroundColor = '';
-            el.style.color = '';
-          }
-        } catch (e) {}
-      }
-
-      // ctrl
-      if (key.id === 'ctrl') {
-        try {
-          if (ctrl || ctrlPhysical) {
-            el.style.backgroundColor = ctrlPhysical ? '#bbb' : '#fff';
-            el.style.color = '#000';
-          } else {
-            el.style.backgroundColor = '';
-            el.style.color = '';
-          }
-        } catch (e) {}
-      }
-
-      // alt
-      if (key.id === 'alt') {
-        try {
-          if (alt || altPhysical) {
-            el.style.backgroundColor = altPhysical ? '#444' : '#fff';
-            el.style.color = '#000';
-          } else {
-            el.style.backgroundColor = '';
-            el.style.color = '';
-          }
-        } catch (e) {}
-      }
-    }); // end owners.forEach
-  }); // end keyboardData.forEach
-
-  return true;
-}
-window.updateKeyLabels = updateKeyLabels;
+  window.updateKeyLabels = updateKeyLabels;
 
   // Create a mapping from keyCode to element ID for quick lookup
   window.keyCodeToId = {};
@@ -3026,220 +3017,6 @@ window.updateKeyLabels = updateKeyLabels;
    }
   }
 
-// Qandy keyboard input glue
-// Exposes: window.QandyKeyboard and global input(...) for guest scripts.
-// Use: name = await input("Name: "); password = await input({ prompt: "Password: ", mask: true });
-
-(function(global) {
-  if (global.QandyKeyboard) return; // don't re-install
-
-  var pending = null; // { resolve, reject, options, buffer, timeoutId, savedLINE, savedCURP }
-
-  function _ensureString(s) { return (typeof s === 'string') ? s : String(s || ""); }
-
-  // Accept the pending input value and resolve the Promise
-  function acceptPending(value) {
-    if (!pending) return false;
-    var p = pending;
-    pending = null;
-    try { if (p.timeoutId) clearTimeout(p.timeoutId); } catch(e) {}
-    // resolve asynchronously to avoid reentrancy with key handlers
-    setTimeout(function() {
-      try { p.resolve(value); } catch (e) { p.reject(e); }
-    }, 0);
-    return true;
-  }
-
-  // Cancel pending input (reject)
-  function cancelPending(reason) {
-    if (!pending) return false;
-    var p = pending;
-    pending = null;
-    try { if (p.timeoutId) clearTimeout(p.timeoutId); } catch(e) {}
-    p.reject(reason || new Error('input cancelled'));
-    return true;
-  }
-
-  // Called by key handler for printable character; return true if consumed
-  function handleTypedChar(ch) {
-    if (!pending) return false;
-    var o = pending.options || {};
-    if (o.mask) {
-      // Append to internal buffer and show '*' in LINE at CURP
-      pending.buffer = (pending.buffer || "") + ch;
-      LINE = (LINE || "");
-      LINE = LINE.substring(0, CURP) + '*' + LINE.substring(CURP);
-      CURP = CURP + 1;
-      pokeInput();
-      return true;
-    }
-    // Not masked -> let normal insertion happen (not consumed)
-    return false;
-  }
-
-  // Called by key handler for backspace; return true if consumed
-  function handleBackspace() {
-    if (!pending) return false;
-    var o = pending.options || {};
-    if (o.mask) {
-      if (!pending.buffer || pending.buffer.length === 0) return true; // nothing to delete
-      // remove last char from buffer
-      pending.buffer = pending.buffer.slice(0, -1);
-      // remove last '*' from LINE before CURP
-      if (CURP > 0) {
-        LINE = LINE.substring(0, CURP-1) + LINE.substring(CURP);
-        CURP = Math.max(0, CURP - 1);
-        pokeInput();
-      }
-      return true;
-    }
-    // not masked -> don't consume (let normal backspace handler run)
-    return false;
-  }
-
-  // Called by key handler for Enter; return true if consumed
-  function handleEnter() {
-    if (!pending) return false;
-    var o = pending.options || {};
-    var val;
-    if (o.mask) {
-      val = pending.buffer || "";
-    } else {
-      val = _ensureString(LINE || "");
-    }
-    // Optionally trim final newline/CR
-    // val = val.replace(/\r?\n$/, "");
-    // Prevent pokeInput / eraseInput from erasing what was just typed.
-    // pokeInput/eraseInput uses `lastin` to remove previous input; clear it.
-    try { lastin = ""; } catch (e) { /* ignore if not defined */ }
-
-    // Move the logical cursor to the start of the next line BEFORE resolving
-    try {
-      // Advance to column 0, next row
-      CURX = 0;
-      CURY = (typeof CURY === 'number' && typeof H === 'number') ? Math.min(H - 1, CURY + 1) :
-             ((typeof CURY === 'number') ? CURY + 1 : 0);
-
-      // Sync the LINE insertion coordinates to the new cursor position
-      LINEX = (typeof CURX === 'number') ? CURX : 0;
-      LINEY = (typeof CURY === 'number') ? CURY : 0;
-
-      // Reset visible edit buffer and cursor-in-line, but DO NOT call pokeInput()
-      // (calling pokeInput might call eraseInput and remove visible characters).
-      LINE = "";
-      CURP = 0;
-
-      // Refresh UI cursor/viewport — avoid calling pokeInput which may erase;
-      // a lightweight refresh is safer.
-      pokeRefresh(); pokeCursorOn();
-    } catch (e) {
-      // ignore UI errors and still resolve the input
-    }
-    acceptPending(val);
-    return true;
-  }
-
-  // helper: resolve when any paced pokeCursor output finishes (or immediately if none)
-  function waitForCursorIdle(timeoutMs) {
-    timeoutMs = typeof timeoutMs === 'number' ? timeoutMs : 5000;
-    return new Promise(function(resolve) {
-      if (!window._pokeCursor_state) return resolve();
-      var start = Date.now();
-      var iv = setInterval(function() {
-        if (!window._pokeCursor_state) {
-          clearInterval(iv);
-          return resolve();
-        }
-        if (Date.now() - start > timeoutMs) {
-          clearInterval(iv);
-          return resolve();
-        }
-      }, 8);
-    });
-  }
-
-  // Public input API (replaces the previous implementation)
-  function input(opts) {
-    if (pending) return Promise.reject(new Error('input already pending'));
-    var options = {};
-    if (typeof opts === 'string') options.prompt = opts;
-    else if (typeof opts === 'object' && opts !== null) options = Object.assign({}, opts);
-
-    // create the pending promise object early so we can return it immediately
-    var p = {};
-    var promise = new Promise(function(resolve, reject) {
-      p.resolve = resolve;
-      p.reject = reject;
-    });
-    // attach common fields now (pending will be set only after prompt printing finishes)
-    p.options = options;
-    p.buffer = "";
-    p.savedLINE = LINE;
-    p.savedCURP = CURP;
-
-    // async setup: wait for any current printing to finish, then print prompt and wait for that,
-    // then enable interactive pending state (so prompt doesn't cancel earlier output).
-    (async function() {
-      try {
-        // 1) wait for any existing paced output (e.g., previous print()) to finish
-        await waitForCursorIdle();
-
-        // 2) print the prompt (if any)
-        if (options.prompt) {
-          print(options.prompt);
-        }
-
-        // 3) wait for the prompt's paced printing to finish
-        await waitForCursorIdle();
-
-        // 4) now it's safe to enable pending input without cancelling the printed prompt
-        pending = p;
-
-        // timeout handling
-        if (typeof options.timeout === 'number' && options.timeout > 0) {
-          p.timeoutId = setTimeout(function() {
-            if (pending === p) {
-              pending = null;
-              p.reject(new Error('input timeout'));
-            }
-          }, options.timeout);
-        }
-
-        // Ensure the cursor is visible for user input
-        try { pokeCursorOn(); } catch (e) {}
-
-      } catch (err) {
-        // If any error during setup, reject the promise
-        try { p.reject(err); } catch (e) {}
-      }
-    })();
-
-    // ensure finalizers clear timeout if any
-    return promise.finally(function() {
-      if (p.timeoutId) try { clearTimeout(p.timeoutId); } catch (e) {}
-    });
-  }
-
-  // Read-only access to pending state (debug)
-  function _pendingState() { return pending; }
-
-  // Expose API
-  var API = {
-    input: input,
-    acceptPending: acceptPending,
-    cancelPending: cancelPending,
-    handleTypedChar: handleTypedChar,
-    handleBackspace: handleBackspace,
-    handleEnter: handleEnter,
-    _pendingState: _pendingState
-  };
-
-  global.QandyKeyboard = API;
-  // convenience global for guest scripts: await input(...)
-  global.input = input;
-
-})(window);
-
  if (typeof updateKeyLabels === 'function') {
   // Replace local references inside updateKeyLabels with window.* as needed.
   // If you can't edit the body in-place, export a wrapper that ensures window-safety:
@@ -3282,7 +3059,6 @@ window.updateKeyLabels = updateKeyLabels;
 //
 // command.js (modified)
 //
-
 function command_js() {
   window.command=async function(cmd) {
     if (RUN != "qandy.js") {
@@ -3307,7 +3083,7 @@ function command_js() {
         var context = HOST ? "HOST (sysop access)" : "GUEST (user sandbox)";
         print("\n"+context+"\n"); print("URL:"+window.location.href+"\n");
         print("localStorage: " + (typeof localStorage !== 'undefined' ? "yes" : "no") + "\n\n");
-        return;
+dos.js        return;
       case 'hostname':
         print("\nHOST=" + HOST + "\n");
         print("GUEST=" + GUEST + "\n");
@@ -3386,7 +3162,9 @@ function command_js() {
           }
         }
         return;
-        
+      case "log": 
+        print(window.LOG);
+        return;
       default:
         break;
     }
@@ -3936,6 +3714,7 @@ if (typeof window.qandySignalReady === 'function') {
 //
 
 window.qandy_js=function() {
+
 RUN="qandy.js"; 
 
 window.button=function(b, event) {
@@ -4367,8 +4146,8 @@ document.addEventListener('paste', function (event) {
 
 window.press=function(event) { 
   key=""; k=event.keyCode; shift=event.shiftKey;
+  var virtualclick=!!(event && event.source === 'virtual');
   if (HOST) { kid="host-"; } else { kid="guest-"; }
-
   // Handle physical CapsLock keypress (keyCode 20)
   if (event.keyCode === 20) {
     // Determine the platform state if available
@@ -4415,7 +4194,7 @@ window.press=function(event) {
     }
 
     // Prevent default browser handling side-effects and stop further processing for this key event
-    event.preventDefault && event.preventDefault();
+    if (!virtualclick) { event.preventDefault && event.preventDefault(); }
     return;
   }
 
@@ -4424,8 +4203,8 @@ window.press=function(event) {
     return;
   }
 
-  if (event.keyCode === 18 || event.altKey) { event.preventDefault(); }
-  if (event.keyCode === 27) { event.preventDefault(); }
+  if (event.keyCode === 18 || event.altKey) { if (!virtualclick) { event.preventDefault(); }}
+  if (event.keyCode === 27) { if (!virtualclick) { event.preventDefault(); }}
   if (event.keyCode === 16) {
     var capsBtn = document.getElementById(kid+"caps");
     if (capsBtn) { capsBtn.style.backgroundColor = "#444"; capsBtn.style.color = "#fff"; }
@@ -4450,7 +4229,7 @@ window.press=function(event) {
   if (event.ctrlKey) {
     var ctrlKey = event.key ? event.key.toLowerCase() : '';
     if (ctrlKey === 'c' || ctrlKey === 'a') {
-      event.preventDefault();
+      if (!virtualclick) { event.preventDefault(); }
       highlightKey(k);
       button(k, event); 
     }
@@ -4482,9 +4261,10 @@ window.press=function(event) {
 
 window.pressup=function(event) {
   // Prevent browser from handling ALT key - must be done before any conditionals
+  var virtualclick=!!(event && event.source === 'virtual');
   if (HOST) { kid="host-"; } else { kid="guest-"; }
   if (event.keyCode === 18 || event.altKey) {
-    event.preventDefault(); // Prevent browser menu from opening
+    if (!virtualclick) { event.preventDefault(); } 
   }
   // Handle physical CTRL key release (unhighlight)
   if (event.keyCode === 17 && ctrlPhysical) {

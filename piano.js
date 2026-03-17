@@ -1,5 +1,4 @@
-
-run="piano.js"; 
+RUN="piano.js"; 
 
 if (typeof beep === 'undefined' || typeof playNote === 'undefined') {
   var soundScript=document.createElement('script');
@@ -79,26 +78,50 @@ function drawPiano() {
   
 }
 
-function keydown(key, data) {
-  if (key=="esc") {
-    RUN="qandy.js";
+function keydown(keyCode, event) {
+  // keyCode: numeric event.keyCode from press()
+  // event: the original event object (optional)
+  if (typeof keyCode !== 'number') return false;
+
+  // Escape -> exit
+  if (keyCode === 27) {
+    dosExit();
     return;
-  }  
-  var keyLower = key.toLowerCase();
-  var note = pianoKeyMap[key];
-  if (pianoKeyMap[key]) {
-    // Only play if key wasn't already pressed (prevents key repeat)
-    if (!pressedKeys[keyLower]) {
-      playNote(note, 300);
-      pressedKeys[keyLower] = note;
-      updateNowPlayingDisplay();
-    }
-    return true;
   }
-  return false;
+
+  // Convert keyCode (e.g. 65) to character 'a'
+  var keyChar = String.fromCharCode(keyCode).toLowerCase();
+
+  // Look up the note for that piano key
+  var note = pianoKeyMap[keyChar];
+  if (!note) return false;
+
+  // Only play if key wasn't already pressed (prevents key repeat)
+  if (!pressedKeys[keyChar]) {
+    playNote(note, 300);
+    pressedKeys[keyChar] = note;
+    updateNowPlayingDisplay();
+  }
+
+  return true;
 }
 
+function keyup(keyCode, event) {
+  // Expect numeric keyCode from press()
+  if (typeof keyCode !== 'number') return false;
 
+  // Convert keyCode to lowercase character used by pianoKeyMap/pressedKeys
+  var keyChar = String.fromCharCode(keyCode).toLowerCase();
+
+  // If this key maps to a piano note and is currently marked pressed, release it
+  if (pianoKeyMap[keyChar] && pressedKeys[keyChar]) {
+    delete pressedKeys[keyChar];
+    updateNowPlayingDisplay();
+    return true;
+  }
+
+  return false;
+}
 
 function updateNowPlayingDisplay() {
   var keys = Object.keys(pressedKeys);
@@ -243,21 +266,6 @@ function playChordProgression() {
   setTimeout(function() { playFMajorChord(); }, 800);
   setTimeout(function() { playGMajorChord(); }, 1600);
   setTimeout(function() { playCMajorChord(); }, 2400);
-}
-
-function keyup(key, keyData) {
-
-  if (key=="esc") {
-    alert(RUN);
-  }
-  
-  var keyLower = (keyData && keyData.key ? keyData.key : key).toLowerCase();
-  if (pianoKeyMap[keyLower] && pressedKeys[keyLower]) {
-    delete pressedKeys[keyLower];
-    updateNowPlayingDisplay();
-    return true;
-  }
-  return false;
 }
 
 // Function to initialize the piano display
