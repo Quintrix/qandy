@@ -971,28 +971,24 @@ async function hostMessageHandler(ev) {
           break;
         }
 
-        case 'localMkDir': {
-          var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
-          // coerce and validate filename
-          var fname = (typeof d.file === 'undefined' || d.file === null) ? '' : String(d.file);
-          var validName = validateGuestFilename(fname);
-          if (!validName) {
-            // reject invalid filenames explicitly
-            dosXmitQdos(_dosIframe, d.id, 'localMkDir', false, 'invalid filename');
-            break;
-          }
-          // call localMkDir (supports sync or Promise)
-          try {
-            const result = await localMkDir(validName);
-            // result may be a string or object; keep same behavior as your .then branch
-            dosXmitQdos(_dosIframe, d.id, 'localMkDir', true, result);
-          } catch (err) {
-            // Convert any thrown/rejected error into plain-text
-            dosXmitQdos(_dosIframe, d.id, 'localMkDir', false, err && err.message ? err.message : String(err));
-          }
-          break;
-        }
-
+case 'localMkDir': {
+  var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+  var fname = (typeof d.file === 'undefined' || d.file === null) ? '' : String(d.file);
+  var validName = validateGuestFilename(fname);
+  if (!validName) {
+    dosXmitQdos(_dosIframe, d.id, 'localMkDir', false, 'invalid filename');
+    break;
+  }
+  // Use Promise.resolve() to handle both sync and async implementations
+  Promise.resolve(localMkDir(validName))
+    .then(function(result) {
+      dosXmitQdos(_dosIframe, d.id, 'localMkDir', true, result);
+    })
+    .catch(function(err) {
+      dosXmitQdos(_dosIframe, d.id, 'localMkDir', false, err && err.message ? err.message : String(err));
+    });
+  break;
+}
         case 'localLoad': {
           var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
           // coerce and validate filename

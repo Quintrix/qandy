@@ -929,7 +929,7 @@ async function qandyGuestHtm(options) {
   }
 }
 
-function hostMessageHandler(ev) {
+async function hostMessageHandler(ev) {
   //if (!iframe.contentWindow || ev.source !== iframe.contentWindow) {
   //  console.log("Message is not from our iframe");
   //  return;
