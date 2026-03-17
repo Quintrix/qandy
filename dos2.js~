@@ -929,6 +929,7 @@ global.localMkDir = async function (name) {
   try {
     if (typeof name !== 'string' || String(name).trim() === '') { return 'Error: invalid dir name'; }
     var cwd = getCwdSync();
+    alert(cwd);
     var target = resolveDirPath(name, cwd);
     if (!target) return 'Error: invalid dir name';
     // Normalize target (remove trailing separators beyond single root)
