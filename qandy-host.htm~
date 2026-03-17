@@ -972,7 +972,6 @@ function hostMessageHandler(ev) {
         }
 
         case 'localMkDir': {
-          console.log("qandy 975");
           var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
           // coerce and validate filename
           var fname = (typeof d.file === 'undefined' || d.file === null) ? '' : String(d.file);
@@ -3486,7 +3485,6 @@ function command_js() {
         return;
       case "mkdir":
         if (f) {
-          console.log("command_js 3489");
           print(await qdosMkDir(f));
         } else {
           return('Error: invalid dir name\n');
