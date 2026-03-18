@@ -108,6 +108,13 @@ var DEVICE = 'none';
     return false;
   }
 
+  // Helper function to get directory path from a file's canonical name
+  function _getFileDir(canonicalName) {
+    // Files are stored as-is: e.g., "/system/file.txt" or just "file.txt"
+    var lastSep = canonicalName.lastIndexOf(SEP);
+    return lastSep > 0 ? canonicalName.substring(0, lastSep) : ROOT_SEG;
+  }
+
   // ── System-file detection ─────────────────────────────────────────────────
   /**
    * Classify user-supplied name.
@@ -466,42 +473,50 @@ var DEVICE = 'none';
 
   // dosSave(file, data)
   // ">file" prefix appends; write-protected and system files rejected.
+  // dosSave(file, data) — save file TO CURRENT DIRECTORY
   global.dosSave = async function (file, data) {
     var fname = _normName(file);
     var append = false;
     if (fname.charAt(0) === '>') { append = true; fname = fname.substring(1).trimStart(); }
-
     var cls = _classify(fname);
     if (cls !== 'normal') return 'Error: read only file';
-
     var fbase = _baseName(fname);
     var fv = _validateBase(fbase);
     if (!fv.ok) return 'Error: ' + fv.reason;
-
     var dev = global.DEVICE;
     var manifest = _loadManifest();
-    var found = _findEntry(manifest, fname);
-
+    var cwd = getCwdSync();
+    // Find file in current directory only
+    var found = null;
+    for (var i = 0; i < manifest.length; i++) {
+      var e = manifest[i];
+      if (e.name.charAt(0) === '<') continue; // Skip directories
+      if (_baseName(e.name).toLowerCase() === fbase.toLowerCase()) {
+        var fileDir = _getFileDir(e.name);
+        if (fileDir === cwd) {
+          found = { index: i, entry: e };
+          break;
+        }
+      }
+    }
     if (found && _isProtected(found.entry.name)) return 'Error: read only file';
-
-    // Determine canonical name for this file
+    // Determine canonical name (with directory path)
     var canonical;
     if (found) {
       canonical = found.entry.name;
     } else {
-      canonical = (_isHidden(fname) ? '_' : '') + fbase + (_isProtected(fname) ? '!' : '');
+      // Create file in current directory
+      var pathPrefix = cwd === ROOT_SEG ? '' : cwd + SEP;
+      canonical = pathPrefix + (_isHidden(fname) ? '_' : '') + fbase + (_isProtected(fname) ? '!' : '');
     }
-
     var content = String(data == null ? '' : data);
     if (append && found) {
       var existing = await _load(dev, canonical);
       if (existing !== null) content = existing + content;
     }
-
     var res = await _save(dev, canonical, content);
     if (res === 'Error: Disk Full') return 'Error: Disk Full';
     if (res === false) return 'Error: write failed';
-
     var size = _utf8len(content);
     var ts = _timestamp();
     if (found) {
@@ -514,9 +529,10 @@ var DEVICE = 'none';
     if (mres === 'Error: Disk Full') return 'Error: Disk Full';
     return true;
   };
-
+  
   // dosLoad(file)
   // "dir.txt" → visible filenames; "dir.sys" → manifest-format entries; otherwise normal file.
+  // dosLoad(file) — load file FROM CURRENT DIRECTORY
   global.dosLoad = async function (file) {
     var fname = _normName(file);
     var cls = _classify(fname);
@@ -530,9 +546,22 @@ var DEVICE = 'none';
 
     var dev = global.DEVICE;
     var manifest = _loadManifest();
-    var found = _findEntry(manifest, fname);
+    var cwd = getCwdSync();
+  
+    // Find file in current directory only
+    var found = null;
+    for (var i = 0; i < manifest.length; i++) {
+      var e = manifest[i];
+      if (e.name.charAt(0) === '<') continue; // Skip directories
+      if (_baseName(e.name).toLowerCase() === fbase.toLowerCase()) {
+        var fileDir = _getFileDir(e.name);
+        if (fileDir === cwd) {
+          found = { index: i, entry: e };
+          break;
+        }
+      }
+    }
     if (!found) return null;
-
     return await _load(dev, found.entry.name);
   };
 
@@ -580,115 +609,155 @@ var DEVICE = 'none';
   global.dosPaste = async function (dest) {
     var dev = global.DEVICE;
     var content = null;
-
     if (_clipboard && _clipboard.content !== undefined) {
       content = _clipboard.content;
-    } else if (typeof navigator !== 'undefined' && navigator.clipboard &&
-               typeof navigator.clipboard.readText === 'function') {
-      try { content = await navigator.clipboard.readText(); } catch (e) {
-        return 'Error: clipboard read denied';
-      }
+    } else if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.readText === 'function') {
+      try { content = await navigator.clipboard.readText(); } catch (e) { return 'Error: clipboard read denied'; }
     }
-    if (content === null || content === undefined) return 'Error: clipboard empty';
-
+    if (content === null || content === undefined) { return 'Error: clipboard empty'; }
     var append = false;
     var dname = _normName(String(dest));
     if (dname.charAt(0) === '>') { append = true; dname = dname.substring(1).trimStart(); }
-
     if (_classify(dname) !== 'normal') return 'Error: read only file';
     var dbase = _baseName(dname);
     var dv = _validateBase(dbase);
     if (!dv.ok) return 'Error: ' + dv.reason;
-
     var manifest = _loadManifest();
-    var destFound = _findEntry(manifest, dname);
-    if (destFound && _isProtected(destFound.entry.name)) return 'Error: read only file';
-
-    var destCanonical;
-    if (destFound) {
-      destCanonical = destFound.entry.name;
-    } else {
-      destCanonical = (_isHidden(dname) ? '_' : '') + dbase + (_isProtected(dname) ? '!' : '');
+    var cwd = getCwdSync();
+    // Find file in current directory only
+    var destFound = null;
+    for (var i = 0; i < manifest.length; i++) {
+      var e = manifest[i];
+      if (e.name.charAt(0) === '<') continue; // Skip directories
+      if (_baseName(e.name).toLowerCase() === dbase.toLowerCase()) {
+        var fileDir = _getFileDir(e.name);
+        if (fileDir === cwd) {
+          destFound = { index: i, entry: e };
+          break;
+        }
+      }
     }
+   if (destFound && _isProtected(destFound.entry.name)) return 'Error: read only file';
+   // Determine canonical name (with directory path)
+   var destCanonical;
+   if (destFound) {
+     destCanonical = destFound.entry.name;
+   } else {
+     // Create file in current directory
+     var pathPrefix = cwd === ROOT_SEG ? '' : cwd + SEP;
+     destCanonical = pathPrefix + (_isHidden(dname) ? '_' : '') + dbase + (_isProtected(dname) ? '!' : '');
+   }
+   if (append && destFound) {
+     var existing = await _load(dev, destCanonical);
+     if (existing !== null) content = existing + content;
+   } else if (!append && destFound) {
+     return 'Error: file already exists';
+   }
 
-    if (append && destFound) {
-      var existing = await _load(dev, destCanonical);
-      if (existing !== null) content = existing + content;
-    } else if (!append && destFound) {
-      return 'Error: file already exists';
-    }
-
-    var res = await _save(dev, destCanonical, content);
-    if (res === 'Error: Disk Full') return 'Error: Disk Full';
-
-    var size = _utf8len(content);
-    var ts = _timestamp();
-    if (destFound) {
-      destFound.entry.size = size;
-      destFound.entry.timestamp = ts;
-    } else {
-      manifest.push({ name: destCanonical, size: size, timestamp: ts });
-    }
-    var mres = _saveManifest(manifest);
-    if (mres === 'Error: Disk Full') return 'Error: Disk Full';
-    return 'done\n';
+   var res = await _save(dev, destCanonical, content);
+   if (res === 'Error: Disk Full') return 'Error: Disk Full';
+   var size = _utf8len(content);
+   var ts = _timestamp();
+   if (destFound) {
+     destFound.entry.size = size;
+     destFound.entry.timestamp = ts;
+   } else {
+     manifest.push({ name: destCanonical, size: size, timestamp: ts });
+   }
+   var mres = _saveManifest(manifest);
+   if (mres === 'Error: Disk Full') return 'Error: Disk Full';
+   return 'done';
   };
 
-  // dosRename(file, dest)
+  // dosRename(file, dest) — rename file in CURRENT DIRECTORY
   global.dosRename = async function (file, dest) {
     var dev = global.DEVICE;
     var fname = _normName(file);
     var dname = _normName(dest);
-
     if (_classify(fname) !== 'normal') return 'Error: read only file';
     if (_classify(dname) !== 'normal') return 'Error: read only file';
-
     var fbase = _baseName(fname);
     var fv = _validateBase(fbase);
     if (!fv.ok) return 'Error: ' + fv.reason;
     var dbase = _baseName(dname);
     var dv = _validateBase(dbase);
     if (!dv.ok) return 'Error: invalid destination: ' + dv.reason;
-
     var manifest = _loadManifest();
-    var srcFound = _findEntry(manifest, fname);
+    var cwd = getCwdSync();
+    // Find source file in current directory only
+    var srcFound = null;
+    for (var i = 0; i < manifest.length; i++) {
+      var e = manifest[i];
+      if (e.name.charAt(0) === '<') continue; // Skip directories
+      if (_baseName(e.name).toLowerCase() === fbase.toLowerCase()) {
+        var fileDir = _getFileDir(e.name);
+        if (fileDir === cwd) {
+          srcFound = { index: i, entry: e };
+          break;
+        }
+      }
+    }
     if (!srcFound) return 'Error: file not found';
     if (_isProtected(srcFound.entry.name)) return 'Error: read only file';
-
-    var destFound = _findEntry(manifest, dname);
+    // Check if destination already exists in current directory
+    var destFound = null;
+    for (var j = 0; j < manifest.length; j++) {
+      var e = manifest[j];
+      if (e.name.charAt(0) === '<') continue; // Skip directories
+      if (_baseName(e.name).toLowerCase() === dbase.toLowerCase()) {
+        var fileDir = _getFileDir(e.name);
+        if (fileDir === cwd) {
+          destFound = { index: j, entry: e };
+          break;
+        }
+      }
+    }
     if (destFound) return 'Error: destination file already exists';
-
     var content = await _load(dev, srcFound.entry.name);
     if (content === null) return 'Error: file not found';
-
-    var destCanonical = (_isHidden(dname) ? '_' : '') + dbase + (_isProtected(dname) ? '!' : '');
+    // Create destination canonical name with directory path
+    var pathPrefix = cwd === ROOT_SEG ? '' : cwd + SEP;
+    var destCanonical = pathPrefix + (_isHidden(dname) ? '_' : '') + dbase + (_isProtected(dname) ? '!' : '');
     var res = await _save(dev, destCanonical, content);
     if (res === 'Error: Disk Full') return 'Error: Disk Full';
-
     await _del(dev, srcFound.entry.name);
     srcFound.entry.name = destCanonical;
     srcFound.entry.timestamp = _timestamp();
     var mres = _saveManifest(manifest);
     if (mres === 'Error: Disk Full') return 'Error: Disk Full';
-    return true;
+    return 'done';
   };
 
-  // dosDelete(file)
+  // dosDelete(file) — delete file FROM CURRENT DIRECTORY
   global.dosDelete = async function (file) {
-    var dev = global.DEVICE; var fname = _normName(file);
+    var dev = global.DEVICE;
+    var fname = _normName(file);
     if (_classify(fname) !== 'normal') return 'Error: read only file';
     var fbase = _baseName(fname);
     var fv = _validateBase(fbase);
     if (!fv.ok) return 'Error: ' + fv.reason;
     var manifest = _loadManifest();
-    var found = _findEntry(manifest, fname);
+    var cwd = getCwdSync();
+    // Find file in current directory only
+    var found = null;
+    for (var i = 0; i < manifest.length; i++) {
+      var e = manifest[i];
+      if (e.name.charAt(0) === '<') continue; // Skip directories
+      if (_baseName(e.name).toLowerCase() === fbase.toLowerCase()) {
+        var fileDir = _getFileDir(e.name);
+        if (fileDir === cwd) {
+          found = { index: i, entry: e };
+          break;
+        }
+      }
+    }
     if (!found) return 'Error: file not found';
     if (_isProtected(found.entry.name)) return 'Error: read only file';
     await _del(dev, found.entry.name);
     manifest.splice(found.index, 1);
     var mres = _saveManifest(manifest);
     if (mres === 'Error: Disk Full') return 'Error: Disk Full';
-    return true;
+    return 'done';
   };
 
   // dosExists(file) — synchronous
@@ -808,23 +877,57 @@ var DEVICE = 'none';
 
   // dosList() — visible (non-hidden) filenames for current device, newline-separated
   global.dosList = async function () {
-    var entries = await _dirEntries(global.DEVICE);
+    var cwd = getCwdSync();
+    var manifest = _loadManifest();
     var out = [];
-    for (var i = 0; i < entries.length; i++) {
-      if (!_isHidden(entries[i].name)) {
-        out.push(_baseName(entries[i].name));
-      }
+  
+    for (var i = 0; i < manifest.length; i++) {
+      var e = manifest[i];
+      // Skip hidden files and directory tokens
+      if (_isHidden(e.name) || e.name.charAt(0) === '<') continue;
+    
+      // Skip files not in current directory
+      var fileDir = _getFileDir(e.name);
+      if (fileDir !== cwd) continue;
+    
+      // Add the filename
+      out.push(_baseName(e.name));
     }
+  
     return out.join('\n');
   };
 
+  // dosDir() — all entries in CURRENT DIRECTORY in manifest format
   global.dosDir = async function () {
-    var entries = await _dirEntries(global.DEVICE);
+    var cwd = getCwdSync();
+    var manifest = _loadManifest();
     var lines = [];
-    for (var i = 0; i < entries.length; i++) {
-      var e = entries[i];
-      lines.push(e.name + '|' + e.size + '|' + e.timestamp);
+    // First list directories in current location
+    for (var i = 0; i < manifest.length; i++) {
+      var e = manifest[i];
+      // Only show directory tokens for directories directly in cwd
+      if (e.name.charAt(0) === '<' && e.name.charAt(e.name.length - 1) === '>') {
+        var dirPath = e.name.substring(1, e.name.length - 1);
+        // Check if this is a direct child of cwd
+        var parentPath = dirPath.substring(0, dirPath.lastIndexOf(SEP));
+        if (parentPath === cwd || (parentPath === '' && cwd === ROOT_SEG)) {
+          lines.push(e.name + '|' + e.size + '|' + e.timestamp);
+        }
+      }
     }
+  
+    // Then list files in current directory
+    for (var j = 0; j < manifest.length; j++) {
+      var e = manifest[j];
+      if (e.name.charAt(0) === '<') continue; // Skip directory tokens
+      if (_isHidden(e.name)) continue; // Skip hidden files for dosDir
+    
+      var fileDir = _getFileDir(e.name);
+      if (fileDir === cwd) {
+        lines.push(e.name + '|' + e.size + '|' + e.timestamp);
+      }
+    }
+  
     return lines.join('\n');
   };
 
@@ -918,155 +1021,150 @@ var DEVICE = 'none';
     var fv = _validateBase(fbase);
     if (!fv.ok) return null;
     var manifest = _loadManifest();
-    var found = _findEntry(manifest, fname);
-    if (!founthesed) return "Error: file not found";
+    var found = _findEntryFlexible(manifest, fname);
+    if (!found) return "Error: file not found";
     return _localLoad(found.entry.name);
   };
 
   // mkdir on localStorage
-
-global.localMkDir = async function (name) {
-  try {
-    if (typeof name !== 'string' || String(name).trim() === '') { return 'Error: invalid dir name'; }
-    var cwd = getCwdSync();
-    var target = resolveDirPath(name, cwd);
-    if (!target) return 'Error: invalid dir name';
-    // Normalize target (remove trailing separators beyond single root)
-    if (target.length > 1) {
-      while (target.length > 1 && target.slice(-SEP.length) === SEP) {
-        target = target.slice(0, -SEP.length);
-      }
-    }
-    var manifest = _loadManifest() || [];
-    var dirToken = '<'+target+'>';
-
-    // detect a file whose base (last segment) would conflict with this new dir
-    var parts = target.split(SEP).filter(Boolean);
-    var last = parts.length ? parts[parts.length - 1] : '';
-    var fileConflict = manifest.some(function (e) {
-      if (!e || !e.name) return false;
-      // compare base name (strip flags) against last segment
-      return _baseName(e.name).toLowerCase() === last.toLowerCase();
-    });
-    if (fileConflict) return 'Error: dir exists';
-
-    var dirExists = manifest.some(function (e) { return e && e.name === dirToken; });
-    if (dirExists) return 'Error: dir already exists';
-
-    if (target !== ROOT_SEG) {
-      if (parts.length === 0) return 'Error: invalid dir name';
-      parts.pop(); // parent path tokens
-      var parent = parts.length ? SEP + parts.join(SEP) : ROOT_SEG;
-      var parentToken = '<' + parent + '>';
-      var parentExists = (parent === ROOT_SEG) || manifest.some(function (e) { return e && e.name === parentToken; });
-      if (!parentExists) return 'Error: parent dir not found';
-    }
-
-    manifest.push({ name: dirToken, size: 0, timestamp: _timestamp() });
-    var saveRes = _saveManifest(manifest);
-    if (saveRes === 'Error: Disk Full') { return 'Error: Disk Full'; }
-    setCwdSync(target);
-    return "done";
-  } catch (e) {
-    return 'Error: ' + (e && e.message ? e.message : String(e));
-  }
-};
-
-async function localChDir(name) {
-  return new Promise(function (resolve, reject) {
+  global.localMkDir = async function (name) {
     try {
+      if (typeof name !== 'string' || String(name).trim() === '') { return 'Error: invalid dir name'; }
       var cwd = getCwdSync();
-      if (!name || String(name).trim() === '' || name === '.' || name === './') {
-        setCwdSync(ROOT_SEG);
-        return resolve({ ok: true, cwd: ROOT_SEG });
-      }
       var target = resolveDirPath(name, cwd);
-      if (!target) { return "Error: invalid dir name"; }
-      var man = _loadManifest(); 
-      if (!manifestHasDir(man, target)) { return "Error: dir not found"; }
+      if (!target) return 'Error: invalid dir name';
+      // Normalize target (remove trailing separators beyond single root)
+      if (target.length > 1) {
+        while (target.length > 1 && target.slice(-SEP.length) === SEP) {
+          target = target.slice(0, -SEP.length);
+        }
+      }
+      var manifest = _loadManifest() || [];
+      var dirToken = '<'+target+'>';
+      // detect a file whose base (last segment) would conflict with this new dir
+      var parts = target.split(SEP).filter(Boolean);
+      var last = parts.length ? parts[parts.length - 1] : '';
+      var fileConflict = manifest.some(function (e) {
+        if (!e || !e.name) return false;
+        // compare base name (strip flags) against last segment
+        return _baseName(e.name).toLowerCase() === last.toLowerCase();
+      });
+      if (fileConflict) return 'Error: dir exists';
+      var dirExists = manifest.some(function (e) { return e && e.name === dirToken; });
+      if (dirExists) return 'Error: dir already exists';
+      if (target !== ROOT_SEG) {
+        if (parts.length === 0) return 'Error: invalid dir name';
+        parts.pop(); // parent path tokens
+        var parent = parts.length ? SEP + parts.join(SEP) : ROOT_SEG;
+        var parentToken = '<' + parent + '>';
+        var parentExists = (parent === ROOT_SEG) || manifest.some(function (e) { return e && e.name === parentToken; });
+        if (!parentExists) return 'Error: parent dir not found';
+      }
+      manifest.push({ name: dirToken, size: 0, timestamp: _timestamp() });
+      var saveRes = _saveManifest(manifest);
+      if (saveRes === 'Error: Disk Full') { return 'Error: Disk Full'; }
       setCwdSync(target);
-      return resolve({ ok: true, cwd: target });
+      return "done";
     } catch (e) {
-      return reject(e);
+      return 'Error: ' + (e && e.message ? e.message : String(e));
     }
-  });
-};
+  };
+
+  global.localChDir = async function (name) {
+    return new Promise(function (resolve, reject) {
+      try {
+        var cwd = getCwdSync();
+        if (!name || String(name).trim() === '' || name === '.' || name === './') {
+          setCwdSync(ROOT_SEG);
+          return resolve('done');  // ← resolve() instead of return
+        }
+        var target = resolveDirPath(name, cwd);
+        if (!target) { 
+          return resolve('Error: invalid dir name');  // ← resolve() instead of return
+        }
+        var man = _loadManifest(); 
+        if (!manifestHasDir(man, target)) { 
+          return resolve('Error: dir not found');  // ← resolve() instead of return
+        }
+        setCwdSync(target);
+        return resolve('done');  // ← resolve() instead of return
+      } catch (e) {
+        return reject(new Error('Error: ' + (e && e.message ? e.message : String(e))));  // ← reject()
+      }
+    });
+  };
 
   // rmdir from localStorage
-global.localRmDir = async function (name) {
-  try {
-    if (typeof name !== 'string' || String(name).trim() === '') { 
-      return 'Error: invalid dir name'; 
-    }
-    var cwd = getCwdSync();
-    var target = resolveDirPath(name, cwd);
-    if (!target) return 'Error: invalid dir name';
-    
-    // Normalize target (remove trailing separators beyond single root)
-    if (target.length > 1) {
-      while (target.length > 1 && target.slice(-SEP.length) === SEP) {
-        target = target.slice(0, -SEP.length);
+  global.localRmDir = async function (name) {
+    try {
+      if (typeof name !== 'string' || String(name).trim() === '') { 
+        return 'Error: invalid dir name'; 
       }
-    }
-    
-    // Cannot remove root directory
-    if (target === ROOT_SEG) return 'Error: cannot remove root directory';
-    
-    var manifest = _loadManifest() || [];
-    var dirToken = '<' + target + '>';
-    
-    // Check if the directory exists
-    var dirExists = manifest.some(function (e) { return e && e.name === dirToken; });
-    if (!dirExists) return 'Error: dir not found';
-    
-    // Check if directory is empty by looking for any entries that start with target path
-    var isDirEmpty = !manifest.some(function (e) {
-      if (!e || !e.name) return false;
-      // Check if this entry is inside the target directory
-      // Both files and subdirectories will have names that start with target + SEP
-      // or are dir tokens like <target/subdir>
-      var entryPath = e.name;
-      // Remove flags to get the base path
-      var baseName = _baseName(entryPath);
+      var cwd = getCwdSync();
+      var target = resolveDirPath(name, cwd);
+      if (!target) return 'Error: invalid dir name';
       
-      // Check if this is a file in the target directory
-      if (entryPath.indexOf(target + SEP) === 0) return true;
-      
-      // Check if this is a subdirectory in the target directory
-      if (entryPath.charAt(0) === '<' && entryPath.charAt(entryPath.length - 1) === '>') {
-        var subDirPath = entryPath.substring(1, entryPath.length - 1);
-        if (subDirPath.indexOf(target + SEP) === 0) return true;
+      // Normalize target (remove trailing separators beyond single root)
+      if (target.length > 1) {
+        while (target.length > 1 && target.slice(-SEP.length) === SEP) {
+          target = target.slice(0, -SEP.length);
+        }
       }
+    
+      // Cannot remove root directory
+      if (target === ROOT_SEG) return 'Error: cannot remove root directory';
+    
+      var manifest = _loadManifest() || [];
+      var dirToken = '<' + target + '>';
+    
+      // Check if the directory exists
+      var dirExists = manifest.some(function (e) { return e && e.name === dirToken; });
+      if (!dirExists) return 'Error: dir not found';
+    
+      // Check if directory is empty by looking for any entries that start with target path
+      var isDirEmpty = !manifest.some(function (e) {
+        if (!e || !e.name) return false;
+        // Check if this entry is inside the target directory
+        // Both files and subdirectories will have names that start with target + SEP
+        // or are dir tokens like <target/subdir>
+        var entryPath = e.name;
+        // Remove flags to get the base path
+        var baseName = _baseName(entryPath);
       
-      return false;
-    });
+        // Check if this is a file in the target directory
+        if (entryPath.indexOf(target + SEP) === 0) return true;
+      
+        // Check if this is a subdirectory in the target directory
+        if (entryPath.charAt(0) === '<' && entryPath.charAt(entryPath.length - 1) === '>') {
+          var subDirPath = entryPath.substring(1, entryPath.length - 1);
+          if (subDirPath.indexOf(target + SEP) === 0) return true;
+        }
+      
+        return false;
+      });
     
-    if (!isDirEmpty) return 'Error: dir not empty';
+      if (!isDirEmpty) return 'Error: dir not empty';
     
-    // Remove the directory token from manifest
-    var dirIndex = manifest.findIndex(function (e) { return e && e.name === dirToken; });
-    if (dirIndex !== -1) {
-      manifest.splice(dirIndex, 1);
+      // Remove the directory token from manifest
+      var dirIndex = manifest.findIndex(function (e) { return e && e.name === dirToken; });
+      if (dirIndex !== -1) {
+        manifest.splice(dirIndex, 1);
+      }
+    
+      // Save the updated manifest
+      var saveRes = _saveManifest(manifest);
+      if (saveRes === 'Error: Disk Full') { return 'Error: Disk Full'; }
+    
+      // If we were in the removed directory, change to root
+      if (cwd === target || cwd.indexOf(target + SEP) === 0) {
+        setCwdSync(ROOT_SEG);
+      }
+    
+      return 'done';
+    } catch (e) {
+      return 'Error: ' + (e && e.message ? e.message : String(e));
     }
-    
-    // Save the updated manifest
-    var saveRes = _saveManifest(manifest);
-    if (saveRes === 'Error: Disk Full') { return 'Error: Disk Full'; }
-    
-    // If we were in the removed directory, change to root
-    if (cwd === target || cwd.indexOf(target + SEP) === 0) {
-      setCwdSync(ROOT_SEG);
-    }
-    
-    return 'done';
-  } catch (e) {
-    return 'Error: ' + (e && e.message ? e.message : String(e));
-  }
-};
-
-
-
-
+  };
 
   // localSave(file, text) — save text to localStorage
   // ">file" prefix appends; write-protected and system files rejected.
@@ -1117,27 +1215,42 @@ global.localRmDir = async function (name) {
     return true;
   };
 
-  // localDelete(file) — delete file from localStorage
+  // localDelete(file) — delete file from localStorage in CURRENT DIRECTORY
   // Returns: Promise resolving to true or rejects on error
   global.localDelete = async function (file) {
     var fname = _normName(file);
-    if (_classify(fname) !== 'normal') throw new Error('read only file');
+    if (_classify(fname) !== 'normal') { return 'Error: read only file'; }
 
-    var fbase = _baseName(fname);
-    var fv = _validateBase(fbase);
-    if (!fv.ok) throw new Error(fv.reason);
+  var fbase = _baseName(fname);
+  var fv = _validateBase(fbase);
+  if (!fv.ok) return "Error: "+fv.reason;
 
-    var manifest = _loadManifest();
-    var found = _findEntry(manifest, fname);
-    if (!found) throw new Error('file not found');
-    if (_isProtected(found.entry.name)) throw new Error('read only file');
+  var manifest = _loadManifest();
+  var cwd = getCwdSync();
+  
+  // Find file in current directory only
+  var found = null;
+  for (var i = 0; i < manifest.length; i++) {
+    var e = manifest[i];
+    if (e.name.charAt(0) === '<') continue; // Skip directories
+    if (_baseName(e.name).toLowerCase() === fbase.toLowerCase()) {
+      var fileDir = _getFileDir(e.name);
+      if (fileDir === cwd) {
+        found = { index: i, entry: e };
+        break;
+      }
+    }
+  }
+  
+  if (!found) return 'file not found';
+  if (_isProtected(found.entry.name)) return 'read only file';
 
-    _localDelete(found.entry.name);
-    manifest.splice(found.index, 1);
-    var mres = _saveManifest(manifest);
-    if (mres === 'Error: Disk Full') throw new Error('Disk Full');
-    return true;
-  };
+  _localDelete(found.entry.name);
+  manifest.splice(found.index, 1);
+  var mres = _saveManifest(manifest);
+  if (mres === 'Error: Disk Full') return 'Disk Full';
+  return true;
+};
 
   // localExists(file) — check if file exists in localStorage
   // Returns: Promise resolving to boolean
@@ -1192,37 +1305,34 @@ global.localRmDir = async function (name) {
   global.localRename = async function (file, dest) {
     var fname = _normName(file);
     var dname = _normName(dest);
-
-    if (_classify(fname) !== 'normal') throw new Error('read only file');
-    if (_classify(dname) !== 'normal') throw new Error('read only file');
-
+    if (_classify(fname) !== 'normal') return 'read only file';
     var fbase = _baseName(fname);
     var fv = _validateBase(fbase);
-    if (!fv.ok) throw new Error(fv.reason);
+    if (!fv.ok) return 'Error: '+fv.reason;
     var dbase = _baseName(dname);
     var dv = _validateBase(dbase);
-    if (!dv.ok) throw new Error('invalid destination: ' + dv.reason);
+    if (!dv.ok) return 'Error: invalid destination';
 
     var manifest = _loadManifest();
     var srcFound = _findEntry(manifest, fname);
-    if (!srcFound) throw new Error('file not found');
-    if (_isProtected(srcFound.entry.name)) throw new Error('read only file');
+    if (!srcFound) return 'file not found';
+    if (_isProtected(srcFound.entry.name)) return 'read only file';
 
     var destFound = _findEntry(manifest, dname);
-    if (destFound) throw new Error('destination file already exists');
+    if (destFound) return 'destination file already exists';
 
     var content = _localLoad(srcFound.entry.name);
-    if (content === null) throw new Error('file not found');
+    if (content === null) return 'file not found';
 
     var destCanonical = (_isHidden(dname) ? '_' : '') + dbase + (_isProtected(dname) ? '!' : '');
     var res = _localSave(destCanonical, content);
-    if (res === 'Error: Disk Full') throw new Error('Disk Full');
+    if (res === 'Error: Disk Full') return 'Disk Full';
 
     _localDelete(srcFound.entry.name);
     srcFound.entry.name = destCanonical;
     srcFound.entry.timestamp = _timestamp();
     var mres = _saveManifest(manifest);
-    if (mres === 'Error: Disk Full') throw new Error('Disk Full');
+    if (mres === 'Error: Disk Full') return 'Disk Full';
     return true;
   };
 
