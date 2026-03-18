@@ -1,4 +1,3 @@
-
 var DOS = true;
 var DEVICE = 'none';
 
@@ -7,20 +6,19 @@ var DEVICE = 'none';
 
   // ── Constants ────────────────────────────────────────────────────────────
   var LOCAL_PREFIX = 'qandy:file:';
-  var MANIFEST_KEY = '_dir.sys!';          // canonical key for the manifest file
+  var MANIFEST_KEY = '_dir.sys!';
   var MAX_NAME_BYTES = 255;
-  var VALID_NAME_RE = /^(?!\.)[A-Za-z0-9 \-_.()+=]+$/;
+  var VALID_NAME_RE = /^(?!\\.)[A-Za-z0-9 \\-_.()+=!]+$/;
   var SUPPORTED_DEVICES = ['local', 'echo', 'harddrive', 'none'];
   var SEP = '/';
   var ROOT_SEG = '/';
   var _cwd = ROOT_SEG;
 
-  // ── Internal state ───────────────────────────────────────────────────────
   var _echoStore = Object.create(null);
   var _harddriveHandle = null;
-  var _clipboard = null; // { name, content }
+  var _clipboard = null;
 
-  // ── Utility ──────────────────────────────────────────────────────────────
+  // ── Utility Functions ────────────────────────────────────────────────────
   function _utf8len(s) {
     try { return (new TextEncoder()).encode(String(s)).length; } catch (e) { return String(s).length; }
   }
@@ -29,7 +27,6 @@ var DEVICE = 'none';
     return (typeof n === 'string') ? n.trim() : String(n == null ? '' : n).trim();
   }
 
-  /** Strip leading _ and trailing ! to get the plain base name. */
   function _baseName(name) {
     var n = _normName(name);
     if (n.charAt(0) === '_') n = n.substring(1);
@@ -46,7 +43,6 @@ var DEVICE = 'none';
            canonicalName.charAt(canonicalName.length - 1) === '!';
   }
 
-  /** Validate the base (flag-stripped) filename. */
   function _validateBase(name) {
     var n = _normName(name);
     if (!n) return { ok: false, reason: 'empty filename' };
@@ -55,24 +51,19 @@ var DEVICE = 'none';
     return { ok: true, name: n };
   }
 
-  /** yyyymmddhhmmss from a Date object. */
   function _tsFromDate(d) {
     var p = function (n) { return String(n).padStart(2, '0'); };
     return '' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate())
               + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
   }
 
-  /** yyyymmddhhmmss timestamp using the system clock. */
   function _timestamp() {
     return _tsFromDate(new Date());
   }
 
-
   function getCwdSync() { return _cwd || ROOT_SEG; }
   function setCwdSync(p) {
     _cwd = (typeof p === 'string' && p.length) ? String(p) : ROOT_SEG;
-    // optional: persist to localStorage if you want cross-refresh persistence
-    //try { localStorage.setItem(LOCAL_PREFIX + 'cwd', _cwd); } catch (e) {}
   }
   function resolveDirPath(name, cwd) {
     if (typeof name !== 'string') return null;
@@ -92,11 +83,8 @@ var DEVICE = 'none';
     return out.length ? SEP + out.join(SEP) : ROOT_SEG;
   }
 
-  // compatibility shim to expose the internal manifest loader if caller expects loadManifest()
-  // replace old calls with the new one and remove this
   function loadManifest() { return typeof _loadManifest === 'function' ? _loadManifest() : []; }
 
-  // Check if manifest contains a directory token for the given normalized target path
   function manifestHasDir(manifest, target) {
     if (!Array.isArray(manifest)) manifest = [];
     var token = '<' + target + '>';
@@ -108,18 +96,6 @@ var DEVICE = 'none';
     return false;
   }
 
-  // Helper function to get directory path from a file's canonical name
-  function _getFileDir(canonicalName) {
-    // Files are stored as-is: e.g., "/system/file.txt" or just "file.txt"
-    var lastSep = canonicalName.lastIndexOf(SEP);
-    return lastSep > 0 ? canonicalName.substring(0, lastSep) : ROOT_SEG;
-  }
-
-  // ── System-file detection ─────────────────────────────────────────────────
-  /**
-   * Classify user-supplied name.
-   * Returns 'dir.txt' | 'dir.sys' | 'normal'
-   */
   function _classify(userInput) {
     var base = _baseName(_normName(userInput)).toLowerCase();
     if (base === 'dir.txt') return 'dir.txt';
@@ -127,17 +103,13 @@ var DEVICE = 'none';
     return 'normal';
   }
 
-  // ── Manifest (always localStorage) ───────────────────────────────────────
+  // ── Manifest Functions ───────────────────────────────────────────────────
   function _readManifestRaw() {
     try {
       return localStorage.getItem(LOCAL_PREFIX + MANIFEST_KEY) || '';
     } catch (e) { return ''; }
   }
 
-  /**
-   * Parse manifest text into array of { name, size, timestamp }.
-   * Skips the _dir.sys! self-entry (handled separately).
-   */
   function _parseManifest(raw) {
     var manifest = [];
     if (!raw) return manifest;
@@ -159,32 +131,22 @@ var DEVICE = 'none';
     return _parseManifest(_readManifestRaw());
   }
 
-  /**
-   * Serialise manifest array to text, append self-entry, and write to localStorage.
-   * Returns true on success or 'Error: Disk Full'.
-   */
   function _saveManifest(manifest) {
     var ts = _timestamp();
-
-    // Build body lines (excluding any stale self-entry)
     var lines = [];
     for (var i = 0; i < manifest.length; i++) {
       var e = manifest[i];
-      if (e.name === MANIFEST_KEY) continue; // remove old self-entry
+      if (e.name === MANIFEST_KEY) continue;
       lines.push(e.name + '|' + e.size + '|' + e.timestamp);
     }
 
-    // Append self-entry: compute size of the full string including itself
     var bodyText = lines.length ? lines.join('\n') + '\n' : '';
-    // placeholder to compute approximate size
     var selfLine = MANIFEST_KEY + '|0|' + ts;
     var full = bodyText + selfLine;
     var manifestSize = _utf8len(full);
-    // replace with actual size
     selfLine = MANIFEST_KEY + '|' + manifestSize + '|' + ts;
     full = bodyText + selfLine;
 
-    // Update self-entry size with precise value (one iteration is sufficient)
     var finalSize = _utf8len(full);
     if (finalSize !== manifestSize) {
       selfLine = MANIFEST_KEY + '|' + finalSize + '|' + ts;
@@ -199,10 +161,6 @@ var DEVICE = 'none';
     }
   }
 
-  /**
-   * Find manifest entry whose base name matches the user-supplied name.
-   * Returns { index, entry } or null.
-   */
   function _findEntry(manifest, userInput) {
     var base = _baseName(_normName(userInput)).toLowerCase();
     for (var i = 0; i < manifest.length; i++) {
@@ -213,14 +171,65 @@ var DEVICE = 'none';
     return null;
   }
 
+  function _findEntryFlexible(manifest, userInput) {
+    var base = _baseName(_normName(userInput)).toLowerCase();
+    for (var i = 0; i < manifest.length; i++) {
+      var entryBase = _baseName(manifest[i].name).toLowerCase();
+      if (entryBase === base) {
+        return { index: i, entry: manifest[i] };
+      }
+    }
+    return null;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // WILDCARD SUPPORT FUNCTIONS
+  // ─────────────────────────────────────────────────────────────────────────
+
+  function _hasWildcards(pattern) {
+    return typeof pattern === 'string' && (/[*?]/.test(pattern));
+  }
+
+  function _patternToRegex(pattern) {
+    if (!pattern || typeof pattern !== 'string') return null;
+    var escaped = pattern
+      .replace(/\./g, '\\.')
+      .replace(/\?/g, '.')
+      .replace(/\*/g, '.*');
+    try {
+      return new RegExp('^' + escaped + '$', 'i');
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function _findEntries(manifest, userInput) {
+    if (!Array.isArray(manifest)) return [];
+    var base = _baseName(_normName(userInput)).toLowerCase();
+    
+    if (!_hasWildcards(base)) {
+      for (var i = 0; i < manifest.length; i++) {
+        if (_baseName(manifest[i].name).toLowerCase() === base) {
+          return [{ index: i, entry: manifest[i] }];
+        }
+      }
+      return [];
+    }
+    
+    var regex = _patternToRegex(base);
+    if (!regex) return [];
+    
+    var results = [];
+    for (var i = 0; i < manifest.length; i++) {
+      var entryBase = _baseName(manifest[i].name).toLowerCase();
+      if (regex.test(entryBase)) {
+        results.push({ index: i, entry: manifest[i] });
+      }
+    }
+    return results;
+  }
+
   // ── Device-aware directory listing ────────────────────────────────────────
-  /**
-   * Return all file entries for the given device as array of {name, size, timestamp}.
-   * For 'local':     reads from localStorage manifest.
-   * For 'echo':      reads from in-memory _echoStore.
-   * For 'harddrive': iterates the directory via File System Access API.
-   * For 'none':      returns [].
-   */
   async function _dirEntries(device) {
     switch (device) {
       case 'local':
@@ -259,8 +268,6 @@ var DEVICE = 'none';
   }
 
   // ── Storage backends ──────────────────────────────────────────────────────
-
-  // local ─────────────────────────────────────────────────────────────────
   function _localLoad(canonicalName) {
     try {
       var v = localStorage.getItem(LOCAL_PREFIX + canonicalName);
@@ -280,7 +287,6 @@ var DEVICE = 'none';
     try { localStorage.removeItem(LOCAL_PREFIX + canonicalName); } catch (e) {}
   }
 
-  // harddrive ─────────────────────────────────────────────────────────────
   async function _ensureHarddrive() {
     if (_harddriveHandle) return true;
     if (typeof window === 'undefined' ||
@@ -316,7 +322,6 @@ var DEVICE = 'none';
     try { await _harddriveHandle.removeEntry(name); } catch (e) {}
   }
 
-  // Dispatch ──────────────────────────────────────────────────────────────
   async function _load(device, canonicalName) {
     switch (device) {
       case 'local':      return _localLoad(canonicalName);
@@ -332,7 +337,7 @@ var DEVICE = 'none';
       case 'local':     return _localSave(canonicalName, content);
       case 'echo':      _echoStore[canonicalName] = String(content == null ? '' : content); return true;
       case 'harddrive': return await _hdSave(canonicalName, content);
-      case 'none':      return true; // silently discard
+      case 'none':      return true;
       default:          return false;
     }
   }
@@ -345,7 +350,7 @@ var DEVICE = 'none';
     }
   }
 
-  // ── File-picker / save-as helpers ─────────────────────────────────────────
+  // ── File-picker / save-as helpers ──────────────────────────��──────────────
   async function _pickFile() {
     if (typeof window !== 'undefined' &&
         typeof window.showOpenFilePicker === 'function') {
@@ -357,7 +362,6 @@ var DEVICE = 'none';
         return { name: f.name, text: await f.text() };
       } catch (e) { return null; }
     }
-    // Fallback: hidden <input type="file">
     return new Promise(function (resolve) {
       var inp = document.createElement('input');
       inp.type = 'file';
@@ -402,12 +406,18 @@ var DEVICE = 'none';
     return true;
   }
 
-  // ── Public API ────────────────────────────────────────────────────────────
+  function formatFileSize(bytes) {
+    bytes = parseInt(bytes, 10) || 0;
+    if (bytes === 0) return '0b';
+    if (bytes < 1024) return bytes + 'b';
+    if (bytes < 1048576) return Math.round(bytes / 1024) + 'k';
+    return Math.round(bytes / 1048576) + 'm';
+  }
 
+  // ── Public API ────────────────────────────────────────────────────────────
   global.DOS = true;
   global.DEVICE = global.DEVICE || 'none';
 
-  // dosMount(device)
   global.dosMount = async function (device) {
     if (!device || typeof device !== 'string') return global.DEVICE;
     device = device.trim();
@@ -420,14 +430,9 @@ var DEVICE = 'none';
     return device;
   };
 
-  // dosFormat(data)
-  // No data → export JSON archive of current device.
-  // data provided → import JSON archive into current device (clears first).
   global.dosFormat = async function (data) {
     var dev = global.DEVICE;
-
     if (typeof data === 'undefined') {
-      // Export
       var manifest = _loadManifest();
       var files = {};
       for (var i = 0; i < manifest.length; i++) {
@@ -438,21 +443,18 @@ var DEVICE = 'none';
       return JSON.stringify({ device: dev, created: new Date().toISOString(), files: files });
     }
 
-    // Import
     var obj = data;
     if (typeof data === 'string') {
       try { obj = JSON.parse(data); } catch (e) { return 'Error: invalid archive format'; }
     }
     if (!obj || typeof obj !== 'object' || !obj.files) return 'Error: invalid archive';
 
-    // Clear current device files tracked in manifest
     var curManifest = _loadManifest();
     for (var j = 0; j < curManifest.length; j++) {
       if (curManifest[j].name !== MANIFEST_KEY) await _del(dev, curManifest[j].name);
     }
     if (dev === 'echo') _echoStore = Object.create(null);
 
-    // Write new files
     var newManifest = [];
     var keys = Object.keys(obj.files);
     for (var k = 0; k < keys.length; k++) {
@@ -471,52 +473,42 @@ var DEVICE = 'none';
     return true;
   };
 
-  // dosSave(file, data)
-  // ">file" prefix appends; write-protected and system files rejected.
-  // dosSave(file, data) — save file TO CURRENT DIRECTORY
   global.dosSave = async function (file, data) {
     var fname = _normName(file);
     var append = false;
     if (fname.charAt(0) === '>') { append = true; fname = fname.substring(1).trimStart(); }
+
     var cls = _classify(fname);
     if (cls !== 'normal') return 'Error: read only file';
+
     var fbase = _baseName(fname);
+    if (_hasWildcards(fbase)) return 'Error: invalid character';
     var fv = _validateBase(fbase);
     if (!fv.ok) return 'Error: ' + fv.reason;
+
     var dev = global.DEVICE;
     var manifest = _loadManifest();
-    var cwd = getCwdSync();
-    // Find file in current directory only
-    var found = null;
-    for (var i = 0; i < manifest.length; i++) {
-      var e = manifest[i];
-      if (e.name.charAt(0) === '<') continue; // Skip directories
-      if (_baseName(e.name).toLowerCase() === fbase.toLowerCase()) {
-        var fileDir = _getFileDir(e.name);
-        if (fileDir === cwd) {
-          found = { index: i, entry: e };
-          break;
-        }
-      }
-    }
+    var found = _findEntryFlexible(manifest, fname);
+
     if (found && _isProtected(found.entry.name)) return 'Error: read only file';
-    // Determine canonical name (with directory path)
+
     var canonical;
     if (found) {
       canonical = found.entry.name;
     } else {
-      // Create file in current directory
-      var pathPrefix = cwd === ROOT_SEG ? '' : cwd + SEP;
-      canonical = pathPrefix + (_isHidden(fname) ? '_' : '') + fbase + (_isProtected(fname) ? '!' : '');
+      canonical = (_isHidden(fname) ? '_' : '') + fbase + (_isProtected(fname) ? '!' : '');
     }
+
     var content = String(data == null ? '' : data);
     if (append && found) {
       var existing = await _load(dev, canonical);
       if (existing !== null) content = existing + content;
     }
+
     var res = await _save(dev, canonical, content);
     if (res === 'Error: Disk Full') return 'Error: Disk Full';
     if (res === false) return 'Error: write failed';
+
     var size = _utf8len(content);
     var ts = _timestamp();
     if (found) {
@@ -529,10 +521,7 @@ var DEVICE = 'none';
     if (mres === 'Error: Disk Full') return 'Error: Disk Full';
     return true;
   };
-  
-  // dosLoad(file)
-  // "dir.txt" → visible filenames; "dir.sys" → manifest-format entries; otherwise normal file.
-  // dosLoad(file) — load file FROM CURRENT DIRECTORY
+
   global.dosLoad = async function (file) {
     var fname = _normName(file);
     var cls = _classify(fname);
@@ -541,38 +530,25 @@ var DEVICE = 'none';
     if (cls === 'dir.sys') return global.dosDir();
 
     var fbase = _baseName(fname);
+    if (_hasWildcards(fbase)) return 'Error: invalid character';
     var fv = _validateBase(fbase);
     if (!fv.ok) return null;
 
     var dev = global.DEVICE;
     var manifest = _loadManifest();
-    var cwd = getCwdSync();
-  
-    // Find file in current directory only
-    var found = null;
-    for (var i = 0; i < manifest.length; i++) {
-      var e = manifest[i];
-      if (e.name.charAt(0) === '<') continue; // Skip directories
-      if (_baseName(e.name).toLowerCase() === fbase.toLowerCase()) {
-        var fileDir = _getFileDir(e.name);
-        if (fileDir === cwd) {
-          found = { index: i, entry: e };
-          break;
-        }
-      }
-    }
+    var found = _findEntryFlexible(manifest, fname);
     if (!found) return null;
+
     return await _load(dev, found.entry.name);
   };
 
-  // dosCopy(file, dest)
-  // Copies file into internal clipboard; if dest provided, also saves as dest.
   global.dosCopy = async function (file, dest) {
     var dev = global.DEVICE;
     var fname = _normName(file);
 
     if (_classify(fname) !== 'normal') return 'Error: cannot copy system file';
     var fbase = _baseName(fname);
+    if (_hasWildcards(fbase)) return 'Error: invalid character';
     var fv = _validateBase(fbase);
     if (!fv.ok) return 'Error: ' + fv.reason;
 
@@ -589,6 +565,7 @@ var DEVICE = 'none';
       var dname = _normName(String(dest));
       if (_classify(dname) !== 'normal') return 'Error: read only file';
       var dbase = _baseName(dname);
+      if (_hasWildcards(dbase)) return 'Error: invalid character';
       var dv = _validateBase(dbase);
       if (!dv.ok) return 'Error: invalid destination: ' + dv.reason;
       var destFound = _findEntry(manifest, dname);
@@ -604,163 +581,169 @@ var DEVICE = 'none';
     return true;
   };
 
-  // dosPaste(dest)
-  // Pastes clipboard into dest. ">dest" appends; otherwise errors if dest exists.
   global.dosPaste = async function (dest) {
     var dev = global.DEVICE;
     var content = null;
+
     if (_clipboard && _clipboard.content !== undefined) {
       content = _clipboard.content;
-    } else if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.readText === 'function') {
-      try { content = await navigator.clipboard.readText(); } catch (e) { return 'Error: clipboard read denied'; }
+    } else if (typeof navigator !== 'undefined' && navigator.clipboard &&
+               typeof navigator.clipboard.readText === 'function') {
+      try { content = await navigator.clipboard.readText(); } catch (e) {
+        return 'Error: clipboard read denied';
+      }
     }
-    if (content === null || content === undefined) { return 'Error: clipboard empty'; }
+    if (content === null || content === undefined) return 'Error: clipboard empty';
+
     var append = false;
     var dname = _normName(String(dest));
     if (dname.charAt(0) === '>') { append = true; dname = dname.substring(1).trimStart(); }
+
     if (_classify(dname) !== 'normal') return 'Error: read only file';
     var dbase = _baseName(dname);
+    if (_hasWildcards(dbase)) return 'Error: invalid character';
     var dv = _validateBase(dbase);
     if (!dv.ok) return 'Error: ' + dv.reason;
-    var manifest = _loadManifest();
-    var cwd = getCwdSync();
-    // Find file in current directory only
-    var destFound = null;
-    for (var i = 0; i < manifest.length; i++) {
-      var e = manifest[i];
-      if (e.name.charAt(0) === '<') continue; // Skip directories
-      if (_baseName(e.name).toLowerCase() === dbase.toLowerCase()) {
-        var fileDir = _getFileDir(e.name);
-        if (fileDir === cwd) {
-          destFound = { index: i, entry: e };
-          break;
-        }
-      }
-    }
-   if (destFound && _isProtected(destFound.entry.name)) return 'Error: read only file';
-   // Determine canonical name (with directory path)
-   var destCanonical;
-   if (destFound) {
-     destCanonical = destFound.entry.name;
-   } else {
-     // Create file in current directory
-     var pathPrefix = cwd === ROOT_SEG ? '' : cwd + SEP;
-     destCanonical = pathPrefix + (_isHidden(dname) ? '_' : '') + dbase + (_isProtected(dname) ? '!' : '');
-   }
-   if (append && destFound) {
-     var existing = await _load(dev, destCanonical);
-     if (existing !== null) content = existing + content;
-   } else if (!append && destFound) {
-     return 'Error: file already exists';
-   }
 
-   var res = await _save(dev, destCanonical, content);
-   if (res === 'Error: Disk Full') return 'Error: Disk Full';
-   var size = _utf8len(content);
-   var ts = _timestamp();
-   if (destFound) {
-     destFound.entry.size = size;
-     destFound.entry.timestamp = ts;
-   } else {
-     manifest.push({ name: destCanonical, size: size, timestamp: ts });
-   }
-   var mres = _saveManifest(manifest);
-   if (mres === 'Error: Disk Full') return 'Error: Disk Full';
-   return 'done';
+    var manifest = _loadManifest();
+    var destFound = _findEntry(manifest, dname);
+    if (destFound && _isProtected(destFound.entry.name)) return 'Error: read only file';
+
+    var destCanonical;
+    if (destFound) {
+      destCanonical = destFound.entry.name;
+    } else {
+      destCanonical = (_isHidden(dname) ? '_' : '') + dbase + (_isProtected(dname) ? '!' : '');
+    }
+
+    if (append && destFound) {
+      var existing = await _load(dev, destCanonical);
+      if (existing !== null) content = existing + content;
+    } else if (!append && destFound) {
+      return 'Error: file already exists';
+    }
+
+    var res = await _save(dev, destCanonical, content);
+    if (res === 'Error: Disk Full') return 'Error: Disk Full';
+
+    var size = _utf8len(content);
+    var ts = _timestamp();
+    if (destFound) {
+      destFound.entry.size = size;
+      destFound.entry.timestamp = ts;
+    } else {
+      manifest.push({ name: destCanonical, size: size, timestamp: ts });
+    }
+    var mres = _saveManifest(manifest);
+    if (mres === 'Error: Disk Full') return 'Error: Disk Full';
+    return 'done\n';
   };
 
-  // dosRename(file, dest) — rename file in CURRENT DIRECTORY
   global.dosRename = async function (file, dest) {
     var dev = global.DEVICE;
     var fname = _normName(file);
     var dname = _normName(dest);
+
     if (_classify(fname) !== 'normal') return 'Error: read only file';
     if (_classify(dname) !== 'normal') return 'Error: read only file';
+
     var fbase = _baseName(fname);
+    if (_hasWildcards(fbase)) return 'Error: invalid character';
     var fv = _validateBase(fbase);
     if (!fv.ok) return 'Error: ' + fv.reason;
     var dbase = _baseName(dname);
+    if (_hasWildcards(dbase)) return 'Error: invalid character';
     var dv = _validateBase(dbase);
     if (!dv.ok) return 'Error: invalid destination: ' + dv.reason;
+
     var manifest = _loadManifest();
-    var cwd = getCwdSync();
-    // Find source file in current directory only
-    var srcFound = null;
-    for (var i = 0; i < manifest.length; i++) {
-      var e = manifest[i];
-      if (e.name.charAt(0) === '<') continue; // Skip directories
-      if (_baseName(e.name).toLowerCase() === fbase.toLowerCase()) {
-        var fileDir = _getFileDir(e.name);
-        if (fileDir === cwd) {
-          srcFound = { index: i, entry: e };
-          break;
-        }
-      }
-    }
+    var srcFound = _findEntry(manifest, fname);
     if (!srcFound) return 'Error: file not found';
     if (_isProtected(srcFound.entry.name)) return 'Error: read only file';
-    // Check if destination already exists in current directory
-    var destFound = null;
-    for (var j = 0; j < manifest.length; j++) {
-      var e = manifest[j];
-      if (e.name.charAt(0) === '<') continue; // Skip directories
-      if (_baseName(e.name).toLowerCase() === dbase.toLowerCase()) {
-        var fileDir = _getFileDir(e.name);
-        if (fileDir === cwd) {
-          destFound = { index: j, entry: e };
-          break;
-        }
-      }
-    }
+
+    var destFound = _findEntry(manifest, dname);
     if (destFound) return 'Error: destination file already exists';
+
     var content = await _load(dev, srcFound.entry.name);
     if (content === null) return 'Error: file not found';
-    // Create destination canonical name with directory path
-    var pathPrefix = cwd === ROOT_SEG ? '' : cwd + SEP;
-    var destCanonical = pathPrefix + (_isHidden(dname) ? '_' : '') + dbase + (_isProtected(dname) ? '!' : '');
+
+    var destCanonical = (_isHidden(dname) ? '_' : '') + dbase + (_isProtected(dname) ? '!' : '');
     var res = await _save(dev, destCanonical, content);
     if (res === 'Error: Disk Full') return 'Error: Disk Full';
+
     await _del(dev, srcFound.entry.name);
     srcFound.entry.name = destCanonical;
     srcFound.entry.timestamp = _timestamp();
     var mres = _saveManifest(manifest);
     if (mres === 'Error: Disk Full') return 'Error: Disk Full';
-    return 'done';
+    return true;
   };
 
-  // dosDelete(file) — delete file FROM CURRENT DIRECTORY
-  global.dosDelete = async function (file) {
+  global.dosDelete = async function (filePattern) {
     var dev = global.DEVICE;
-    var fname = _normName(file);
+    var fname = _normName(filePattern);
     if (_classify(fname) !== 'normal') return 'Error: read only file';
+    
     var fbase = _baseName(fname);
-    var fv = _validateBase(fbase);
-    if (!fv.ok) return 'Error: ' + fv.reason;
     var manifest = _loadManifest();
-    var cwd = getCwdSync();
-    // Find file in current directory only
-    var found = null;
-    for (var i = 0; i < manifest.length; i++) {
-      var e = manifest[i];
-      if (e.name.charAt(0) === '<') continue; // Skip directories
-      if (_baseName(e.name).toLowerCase() === fbase.toLowerCase()) {
-        var fileDir = _getFileDir(e.name);
-        if (fileDir === cwd) {
-          found = { index: i, entry: e };
-          break;
-        }
+    var matches = _findEntries(manifest, fname);
+
+    if (matches.length === 0) return 'Error: file not found';
+
+    for (var i = 0; i < matches.length; i++) {
+      if (_isProtected(matches[i].entry.name)) {
+        return 'Error: read only file (at least one)';
       }
     }
-    if (!found) return 'Error: file not found';
-    if (_isProtected(found.entry.name)) return 'Error: read only file';
-    await _del(dev, found.entry.name);
-    manifest.splice(found.index, 1);
+
+    if (_hasWildcards(fbase) && matches.length > 10) {
+      return 'Error: pattern matches ' + matches.length + ' file(s), limit is 10. Use dosDeleteForce() to override.';
+    }
+
+    for (var j = matches.length - 1; j >= 0; j--) {
+      var entry = matches[j];
+      await _del(dev, entry.entry.name);
+      manifest.splice(entry.index, 1);
+    }
+
     var mres = _saveManifest(manifest);
     if (mres === 'Error: Disk Full') return 'Error: Disk Full';
-    return 'done';
+
+    if (matches.length === 1) {
+      return true;
+    } else {
+      return 'deleted ' + matches.length + ' file(s)';
+    }
   };
 
-  // dosExists(file) — synchronous
+  global.dosDeleteForce = async function (filePattern) {
+    var dev = global.DEVICE;
+    var fname = _normName(filePattern);
+    if (_classify(fname) !== 'normal') return 'Error: read only file';
+    
+    var manifest = _loadManifest();
+    var matches = _findEntries(manifest, fname);
+
+    if (matches.length === 0) return 'Error: file not found';
+
+    for (var i = 0; i < matches.length; i++) {
+      if (_isProtected(matches[i].entry.name)) {
+        return 'Error: read only file (at least one)';
+      }
+    }
+
+    for (var j = matches.length - 1; j >= 0; j--) {
+      var entry = matches[j];
+      await _del(dev, entry.entry.name);
+      manifest.splice(entry.index, 1);
+    }
+
+    var mres = _saveManifest(manifest);
+    if (mres === 'Error: Disk Full') return 'Error: Disk Full';
+
+    return 'deleted ' + matches.length + ' file(s)';
+  };
+
   global.dosExists = function (file) {
     var fname = _normName(file);
     var cls = _classify(fname);
@@ -770,13 +753,13 @@ var DEVICE = 'none';
     var manifest = _loadManifest();
     if (!manifest || (Array.isArray(manifest) && manifest.length === 0)) { return false; }
     return _findEntry(manifest, fname) !== null;
-  };  
+  };
 
-  // dosDownload(file)
   global.dosDownload = async function (file) {
     var fname = _normName(file);
     var cls = _classify(fname);
     var fbase = _baseName(fname);
+    if (_hasWildcards(fbase)) return 'Error: invalid character';
     var fv = _validateBase(fbase);
     if (!fv.ok) return 'Error: ' + fv.reason;
 
@@ -798,16 +781,16 @@ var DEVICE = 'none';
     return true;
   };
 
-  // dosUpload(optionalDest)
   global.dosUpload = async function (optionalDest) {
     var picked = await _pickFile();
-    if (!picked) return null; // user cancelled
+    if (!picked) return null;
 
     var dname = (typeof optionalDest === 'string' && optionalDest.trim() !== '')
                 ? _normName(optionalDest) : _normName(picked.name);
 
     if (_classify(dname) !== 'normal') return 'Error: read only file';
     var dbase = _baseName(dname);
+    if (_hasWildcards(dbase)) return 'Error: invalid character';
     var dv = _validateBase(dbase);
     if (!dv.ok) return 'Error: invalid destination: ' + dv.reason;
 
@@ -840,12 +823,12 @@ var DEVICE = 'none';
     return destCanonical;
   };
 
-  // dosStash(file) — retrieve file from current device and force-save to localStorage
   global.dosStash = async function (file) {
     var dev = global.DEVICE;
     var fname = _normName(file);
     if (_classify(fname) !== 'normal') return 'Error: read only file';
     var fbase = _baseName(fname);
+    if (_hasWildcards(fbase)) return 'Error: invalid character';
     var fv = _validateBase(fbase);
     if (!fv.ok) return 'Error: ' + fv.reason;
 
@@ -862,11 +845,11 @@ var DEVICE = 'none';
     return true;
   };
 
-  // dosRetrieve(file) — read file from localStorage regardless of current device
   global.dosRetrieve = async function (file) {
     var fname = _normName(file);
     if (_classify(fname) !== 'normal') return null;
     var fbase = _baseName(fname);
+    if (_hasWildcards(fbase)) return 'Error: invalid character';
     var fv = _validateBase(fbase);
     if (!fv.ok) return null;
     var manifest = _loadManifest();
@@ -875,63 +858,140 @@ var DEVICE = 'none';
     return _localLoad(found.entry.name);
   };
 
-  // dosList() — visible (non-hidden) filenames for current device, newline-separated
-  global.dosList = async function () {
-    var cwd = getCwdSync();
-    var manifest = _loadManifest();
+  global.dosList = async function (filePattern) {
+    var entries = await _dirEntries(global.DEVICE);
     var out = [];
-  
-    for (var i = 0; i < manifest.length; i++) {
-      var e = manifest[i];
-      // Skip hidden files and directory tokens
-      if (_isHidden(e.name) || e.name.charAt(0) === '<') continue;
     
-      // Skip files not in current directory
-      var fileDir = _getFileDir(e.name);
-      if (fileDir !== cwd) continue;
-    
-      // Add the filename
-      out.push(_baseName(e.name));
+    for (var i = 0; i < entries.length; i++) {
+      var entry = entries[i];
+      
+      if (_isHidden(entry.name)) continue;
+      
+      var basename = _baseName(entry.name);
+      
+      if (filePattern) {
+        var pattern = _baseName(_normName(filePattern));
+        if (_hasWildcards(pattern)) {
+          var regex = _patternToRegex(pattern);
+          if (!regex || !regex.test(basename.toLowerCase())) continue;
+        } else {
+          if (basename.toLowerCase() !== pattern.toLowerCase()) continue;
+        }
+      }
+      
+      out.push(basename);
     }
-  
+    
     return out.join('\n');
   };
 
-  // dosDir() — all entries in CURRENT DIRECTORY in manifest format
-  global.dosDir = async function () {
+  global.dosDir = async function (filePattern) {
     var cwd = getCwdSync();
-    var manifest = _loadManifest();
+    var manifest = await _dirEntries(global.DEVICE);
     var lines = [];
-    // First list directories in current location
+    var totalSize = 0;
+    var fileCount = 0;
+
     for (var i = 0; i < manifest.length; i++) {
       var e = manifest[i];
-      // Only show directory tokens for directories directly in cwd
-      if (e.name.charAt(0) === '<' && e.name.charAt(e.name.length - 1) === '>') {
-        var dirPath = e.name.substring(1, e.name.length - 1);
-        // Check if this is a direct child of cwd
-        var parentPath = dirPath.substring(0, dirPath.lastIndexOf(SEP));
-        if (parentPath === cwd || (parentPath === '' && cwd === ROOT_SEG)) {
-          lines.push(e.name + '|' + e.size + '|' + e.timestamp);
+      var entryName = e.name;
+
+      var isDir = (entryName.charAt(0) === '<' && entryName.charAt(entryName.length - 1) === '>');
+      var entryPath;
+
+      if (isDir) {
+        entryPath = entryName.substring(1, entryName.length - 1);
+      } else {
+        entryPath = entryName;
+      }
+
+      var lastSlash = entryPath.lastIndexOf('/');
+      var parentPath;
+      if (lastSlash === 0) {
+        parentPath = '/';
+      } else if (lastSlash > 0) {
+        parentPath = entryPath.substring(0, lastSlash);
+      } else {
+        parentPath = '/';
+      }
+
+      if (parentPath !== cwd) continue;
+
+      if (filePattern) {
+        var pattern = _baseName(_normName(filePattern));
+        if (_hasWildcards(pattern)) {
+          var regex = _patternToRegex(pattern);
+          var displayName = isDir ? entryPath.substring(lastSlash + 1) : _baseName(entryName);
+          if (!regex || !regex.test(displayName.toLowerCase())) continue;
+        } else {
+          var displayName = isDir ? entryPath.substring(lastSlash + 1) : _baseName(entryName);
+          if (displayName.toLowerCase() !== pattern.toLowerCase()) continue;
         }
       }
-    }
-  
-    // Then list files in current directory
-    for (var j = 0; j < manifest.length; j++) {
-      var e = manifest[j];
-      if (e.name.charAt(0) === '<') continue; // Skip directory tokens
-      if (_isHidden(e.name)) continue; // Skip hidden files for dosDir
-    
-      var fileDir = _getFileDir(e.name);
-      if (fileDir === cwd) {
-        lines.push(e.name + '|' + e.size + '|' + e.timestamp);
+
+      fileCount++;
+      totalSize += e.size;
+
+      if (isDir) {
+        var dirName = entryPath.substring(lastSlash + 1);
+        lines.push(dirName + ' ' + formatFileSize(0) + ' (dir)');
+      } else {
+        var fileName = _baseName(entryName);
+        lines.push(fileName + ' ' + formatFileSize(e.size));
       }
     }
-  
+
+    var summary = fileCount + ' file(s), ' + formatFileSize(totalSize);
+    lines.push(summary);
+
     return lines.join('\n');
   };
 
-  // dosShare(file) — copy file from current device into localStorage so guest can access it
+  global.dosFind = async function (filePattern) {
+    if (!filePattern) return 'Error: pattern required';
+    
+    var manifest = _loadManifest();
+    var matches = _findEntries(manifest, filePattern);
+    
+    if (matches.length === 0) return 'Error: no files match pattern';
+    
+    var lines = [];
+    var totalSize = 0;
+    
+    for (var i = 0; i < matches.length; i++) {
+      var e = matches[i].entry;
+      if (!_isHidden(e.name)) {
+        var name = _baseName(e.name);
+        var size = formatFileSize(e.size);
+        lines.push(name + ' (' + size + ')');
+        totalSize += e.size;
+      }
+    }
+    
+    var summary = 'Found ' + matches.length + ' file(s), ' + formatFileSize(totalSize);
+    lines.push(summary);
+    
+    return lines.join('\n');
+  };
+
+  global.dosCount = async function (filePattern) {
+    if (!filePattern) filePattern = '*';
+    
+    var manifest = _loadManifest();
+    var matches = _findEntries(manifest, filePattern);
+    
+    var count = 0;
+    var size = 0;
+    for (var i = 0; i < matches.length; i++) {
+      if (!_isHidden(matches[i].entry.name)) {
+        count++;
+        size += matches[i].entry.size;
+      }
+    }
+    
+    return count + ' file(s), ' + formatFileSize(size);
+  };
+
   global.dosShare = async function (file) {
     var dev = global.DEVICE;
     if (dev === 'none') return 'Error: no device mounted';
@@ -939,10 +999,10 @@ var DEVICE = 'none';
     var fname = _normName(file);
     if (_classify(fname) !== 'normal') return 'Error: read only file';
     var fbase = _baseName(fname);
+    if (_hasWildcards(fbase)) return 'Error: invalid character';
     var fv = _validateBase(fbase);
     if (!fv.ok) return 'Error: ' + fv.reason;
 
-    // Locate file on current device — try manifest first, then search device directly
     var canonical = null;
     var content = null;
     var manifest = _loadManifest();
@@ -952,7 +1012,6 @@ var DEVICE = 'none';
       content = await _load(dev, canonical);
     }
 
-    // Fallback: search device store directly by base name
     if (content === null) {
       if (dev === 'echo') {
         var eKeys = Object.keys(_echoStore);
@@ -990,11 +1049,9 @@ var DEVICE = 'none';
 
     if (content === null) return 'Error: file not found';
 
-    // Write to localStorage
     var saveRes = _localSave(canonical, content);
     if (saveRes === 'Error: Disk Full') return 'Error: Disk Full';
 
-    // Update localStorage manifest
     var size = _utf8len(content);
     var ts = _timestamp();
     var lsManifest = _loadManifest();
@@ -1011,8 +1068,6 @@ var DEVICE = 'none';
     return true;
   };
 
-
-  // localLoad(file) — load file from localStorage
   global.localLoad = async function (file) {
     var fname = _normName(file);
     var cls = _classify(fname);
@@ -1026,14 +1081,12 @@ var DEVICE = 'none';
     return _localLoad(found.entry.name);
   };
 
-  // mkdir on localStorage
   global.localMkDir = async function (name) {
     try {
       if (typeof name !== 'string' || String(name).trim() === '') { return 'Error: invalid dir name'; }
       var cwd = getCwdSync();
       var target = resolveDirPath(name, cwd);
       if (!target) return 'Error: invalid dir name';
-      // Normalize target (remove trailing separators beyond single root)
       if (target.length > 1) {
         while (target.length > 1 && target.slice(-SEP.length) === SEP) {
           target = target.slice(0, -SEP.length);
@@ -1041,25 +1094,27 @@ var DEVICE = 'none';
       }
       var manifest = _loadManifest() || [];
       var dirToken = '<'+target+'>';
-      // detect a file whose base (last segment) would conflict with this new dir
+
       var parts = target.split(SEP).filter(Boolean);
       var last = parts.length ? parts[parts.length - 1] : '';
       var fileConflict = manifest.some(function (e) {
         if (!e || !e.name) return false;
-        // compare base name (strip flags) against last segment
         return _baseName(e.name).toLowerCase() === last.toLowerCase();
       });
       if (fileConflict) return 'Error: dir exists';
+
       var dirExists = manifest.some(function (e) { return e && e.name === dirToken; });
       if (dirExists) return 'Error: dir already exists';
+
       if (target !== ROOT_SEG) {
         if (parts.length === 0) return 'Error: invalid dir name';
-        parts.pop(); // parent path tokens
+        parts.pop();
         var parent = parts.length ? SEP + parts.join(SEP) : ROOT_SEG;
         var parentToken = '<' + parent + '>';
         var parentExists = (parent === ROOT_SEG) || manifest.some(function (e) { return e && e.name === parentToken; });
         if (!parentExists) return 'Error: parent dir not found';
       }
+
       manifest.push({ name: dirToken, size: 0, timestamp: _timestamp() });
       var saveRes = _saveManifest(manifest);
       if (saveRes === 'Error: Disk Full') { return 'Error: Disk Full'; }
@@ -1094,7 +1149,6 @@ var DEVICE = 'none';
     });
   };
 
-  // rmdir from localStorage
   global.localRmDir = async function (name) {
     try {
       if (typeof name !== 'string' || String(name).trim() === '') { 
@@ -1104,71 +1158,54 @@ var DEVICE = 'none';
       var target = resolveDirPath(name, cwd);
       if (!target) return 'Error: invalid dir name';
       
-      // Normalize target (remove trailing separators beyond single root)
       if (target.length > 1) {
         while (target.length > 1 && target.slice(-SEP.length) === SEP) {
           target = target.slice(0, -SEP.length);
         }
       }
-    
-      // Cannot remove root directory
+      
       if (target === ROOT_SEG) return 'Error: cannot remove root directory';
-    
+      
       var manifest = _loadManifest() || [];
       var dirToken = '<' + target + '>';
-    
-      // Check if the directory exists
+      
       var dirExists = manifest.some(function (e) { return e && e.name === dirToken; });
       if (!dirExists) return 'Error: dir not found';
-    
-      // Check if directory is empty by looking for any entries that start with target path
+      
       var isDirEmpty = !manifest.some(function (e) {
         if (!e || !e.name) return false;
-        // Check if this entry is inside the target directory
-        // Both files and subdirectories will have names that start with target + SEP
-        // or are dir tokens like <target/subdir>
         var entryPath = e.name;
-        // Remove flags to get the base path
-        var baseName = _baseName(entryPath);
-      
-        // Check if this is a file in the target directory
+        
         if (entryPath.indexOf(target + SEP) === 0) return true;
-      
-        // Check if this is a subdirectory in the target directory
+        
         if (entryPath.charAt(0) === '<' && entryPath.charAt(entryPath.length - 1) === '>') {
           var subDirPath = entryPath.substring(1, entryPath.length - 1);
           if (subDirPath.indexOf(target + SEP) === 0) return true;
         }
-      
+        
         return false;
       });
-    
+      
       if (!isDirEmpty) return 'Error: dir not empty';
-    
-      // Remove the directory token from manifest
+      
       var dirIndex = manifest.findIndex(function (e) { return e && e.name === dirToken; });
       if (dirIndex !== -1) {
         manifest.splice(dirIndex, 1);
       }
-    
-      // Save the updated manifest
+      
       var saveRes = _saveManifest(manifest);
       if (saveRes === 'Error: Disk Full') { return 'Error: Disk Full'; }
-    
-      // If we were in the removed directory, change to root
+      
       if (cwd === target || cwd.indexOf(target + SEP) === 0) {
         setCwdSync(ROOT_SEG);
       }
-    
+      
       return 'done';
     } catch (e) {
       return 'Error: ' + (e && e.message ? e.message : String(e));
     }
   };
 
-  // localSave(file, text) — save text to localStorage
-  // ">file" prefix appends; write-protected and system files rejected.
-  // Returns: Promise resolving to true or error message string
   global.localSave = async function (file, text) {
     var fname = _normName(file);
     var append = false;
@@ -1215,45 +1252,26 @@ var DEVICE = 'none';
     return true;
   };
 
-  // localDelete(file) — delete file from localStorage in CURRENT DIRECTORY
-  // Returns: Promise resolving to true or rejects on error
   global.localDelete = async function (file) {
     var fname = _normName(file);
-    if (_classify(fname) !== 'normal') { return 'Error: read only file'; }
-
-  var fbase = _baseName(fname);
-  var fv = _validateBase(fbase);
-  if (!fv.ok) return "Error: "+fv.reason;
-
-  var manifest = _loadManifest();
-  var cwd = getCwdSync();
+    if (_classify(fname) !== 'normal') return 'Error: read only file';
+    
+    var fbase = _baseName(fname);
+    var fv = _validateBase(fbase);
+    if (!fv.ok) return "Error: " + fv.reason;
+    var manifest = _loadManifest();
+    // Use flexible matching - find file regardless of _ or ! in user input
+    var found = _findEntryFlexible(manifest, fname);
+    if (!found) { return 'Error: file not found'; }
+    // Check if the actual stored entry is protected
+    if (_isProtected(found.entry.name)) return 'Error: read only file';
+    _localDelete(found.entry.name);
+    manifest.splice(found.index, 1);
+    var mres = _saveManifest(manifest);
+    if (mres === 'Error: Disk Full') return 'Error: Disk Full';
+    return "done";
+  };
   
-  // Find file in current directory only
-  var found = null;
-  for (var i = 0; i < manifest.length; i++) {
-    var e = manifest[i];
-    if (e.name.charAt(0) === '<') continue; // Skip directories
-    if (_baseName(e.name).toLowerCase() === fbase.toLowerCase()) {
-      var fileDir = _getFileDir(e.name);
-      if (fileDir === cwd) {
-        found = { index: i, entry: e };
-        break;
-      }
-    }
-  }
-  
-  if (!found) return 'file not found';
-  if (_isProtected(found.entry.name)) return 'read only file';
-
-  _localDelete(found.entry.name);
-  manifest.splice(found.index, 1);
-  var mres = _saveManifest(manifest);
-  if (mres === 'Error: Disk Full') return 'Disk Full';
-  return true;
-};
-
-  // localExists(file) — check if file exists in localStorage
-  // Returns: Promise resolving to boolean
   global.localExists = async function (file) {
     var fname = _normName(file);
     var cls = _classify(fname);
@@ -1263,32 +1281,196 @@ var DEVICE = 'none';
     var fv = _validateBase(fbase);
     if (!fv.ok) return false;
 
-    return _findEntry(_loadManifest(), fname) !== null;
+    return _findEntryFlexible(_loadManifest(), fname) !== null;  // ✅ CHANGED from _findEntry
   };
 
-  // localDir() — all localStorage entries in manifest format
-  // Format: canonical_name|size|timestamp  (one per line, all files including hidden)
-  global.localDir = async function () {
-    var entries = _loadManifest();
-    var lines = [];
-    for (var i = 0; i < entries.length; i++) {
-      var e = entries[i];
-      var bytes=formatFileSize(e.size);	
-      lines.push(' '+e.name+' '+bytes);
+
+  global.localDir = async function (switchesStr) {
+    var manifest = _loadManifest();
+    if (!manifest || !Array.isArray(manifest)) manifest = [];
+
+    // ── Parse switches ──────────────────────────────────────────────────────
+    var switches = {
+      hidden: false,      // -h: show hidden files
+      timestamps: false,  // -t: show timestamps
+      sortBy: 'name',     // -n, -e, -s: sort by name, extension, or size
+      showDirs: true      // always show directories
+    };
+
+    if (switchesStr && typeof switchesStr === 'string') {
+      var switchStr = switchesStr.toLowerCase().replace(/^-/, '');
+      if (switchStr.indexOf('h') !== -1) switches.hidden = true;
+      if (switchStr.indexOf('t') !== -1) switches.timestamps = true;
+      if (switchStr.indexOf('e') !== -1) switches.sortBy = 'extension';
+      if (switchStr.indexOf('s') !== -1) switches.sortBy = 'size';
+      if (switchStr.indexOf('n') !== -1) switches.sortBy = 'name';
     }
-    return "\n"+lines.join('\n')+"\n";
+
+    // ── Separate directories and files ──────────────────────────────────────
+    var dirs = [];
+    var files = [];
+
+    for (var i = 0; i < manifest.length; i++) {
+      var e = manifest[i];
+      if (!e || !e.name) continue;
+      if (e.name === MANIFEST_KEY) continue;
+
+      var isDir = (e.name.charAt(0) === '<' && e.name.charAt(e.name.length - 1) === '>');
+      var isHidden = _isHidden(e.name);
+
+      if (isDir) {
+        dirs.push(e);
+      } else {
+        if (isHidden && !switches.hidden) continue;
+        files.push(e);
+      }
+    }
+
+    // ── Sort files ──────────────────────────────────────────────────────────
+    if (switches.sortBy === 'size') {
+      files.sort(function (a, b) { return a.size - b.size; });
+    } else if (switches.sortBy === 'extension') {
+      files.sort(function (a, b) {
+        var aExt = _getExtension(_baseName(a.name));
+        var bExt = _getExtension(_baseName(b.name));
+        if (aExt !== bExt) return aExt.localeCompare(bExt);
+        return _baseName(a.name).localeCompare(_baseName(b.name));
+      });
+    } else { // 'name'
+      files.sort(function (a, b) {
+        return _baseName(a.name).localeCompare(_baseName(b.name));
+      });
+    }
+
+    // ── Format output ───────────────────────────────────────────────────────
+    var lines = [];
+    var title="qandy:/"+_cwd;
+    title=title.substring(0, 28);
+    title=title.padEnd(28);
+    lines.push(" \x1B[7m "+title+" \x1B[27m");
+    // Directories first (always show, no sorting needed for now)
+    for (var i = 0; i < dirs.length; i++) {
+      var dirName = dirs[i].name.substring(1, dirs[i].name.length - 1);
+      var dirBaseName = dirName.substring(dirName.lastIndexOf('/') + 1);
+      var line = _formatDirLine("<"+dirBaseName+">", dirs[i].timestamp, switches);
+      lines.push(line);
+    }
+
+    // Files
+    for (var i = 0; i < files.length; i++) {
+      var line = _formatFileLine(files[i], switches);
+      lines.push(line);
+    }
+
+    return lines.length > 0 ? '\n' + lines.join('\n') + '\n' : 'empty\n';
   };
 
-  function formatFileSize(bytes) {
-    bytes = parseInt(bytes, 10) || 0;
-    if (bytes === 0) return '0b';
-    if (bytes < 1024) return bytes + 'b';
-    if (bytes < 1048576) return Math.round(bytes / 1024) + 'k';
-    return Math.round(bytes / 1048576) + 'm';
+  function _getExtension(filename) {
+    var lastDot = filename.lastIndexOf('.');
+    if (lastDot === -1 || lastDot === 0) return '';
+    return filename.substring(lastDot + 1).toLowerCase();
   }
 
-  // localList() — visible (non-hidden) filenames from localStorage, newline-separated
-  // Excludes files with a leading _ (hidden flag)
+  function _formatTimestamp(tsStr) {
+    if (!tsStr || tsStr.length < 8) return '     '; // fallback
+
+    // Parse timestamp: yyyymmddhhmmss
+    var year = parseInt(tsStr.substring(0, 4), 10);
+    var month = parseInt(tsStr.substring(4, 6), 10);
+    var day = parseInt(tsStr.substring(6, 8), 10);
+    var hour = parseInt(tsStr.substring(8, 10), 10);
+    var min = parseInt(tsStr.substring(10, 12), 10);
+    // var sec = parseInt(tsStr.substring(12, 14), 10);
+
+    var fileDate = new Date(year, month - 1, day, hour, min, 0);
+    var now = new Date();
+    var diffMs = now.getTime() - fileDate.getTime();
+    var diffHours = diffMs / (1000 * 60 * 60);
+    var diffDays = diffHours / 24;
+    var diffYears = diffDays / 365.25;
+
+    if (diffYears >= 1) {
+      // Show year: "yyyy"
+      return String(year).padStart(5, ' ');
+    } else if (diffDays >= 1) {
+      // Show month/day: "mm/dd"
+      var mStr = String(month).padStart(2, '0');
+      var dStr = String(day).padStart(2, '0');
+      return ' ' + mStr + '/' + dStr;
+    } else {
+      // Show hour:minute: "hh:mm"
+      var hStr = String(hour).padStart(2, '0');
+      var minStr = String(min).padStart(2, '0');
+      return ' ' + hStr + ':' + minStr;
+    }
+  }
+
+  function _formatSizeCompact(bytes) {
+    bytes = parseInt(bytes, 10) || 0;
+    var tags = ['b', 'k', 'm', 'g', 't'];
+    var size = bytes;
+    var tagIdx = 0;
+    while (size >= 1024 && tagIdx < tags.length - 1) { size = size / 1024; tagIdx++; }
+    var formatted;
+    if (tagIdx === 0) { formatted = String(size) + tags[tagIdx]; } else { formatted = Math.round(size) + tags[tagIdx]; }
+    return formatted.padStart(4, ' ')+' '; 
+  }
+
+  function _formatDirLine(dirName, ts, switches) {
+    var sizeCol = '     '; // directories have no size column
+    var protectCol = '';  // no protection marker for dirs
+    var tsCol = switches.timestamps ? _formatTimestamp(ts) : '     ';
+    var filenameCol = dirName;
+    return _padColumns(sizeCol, protectCol, filenameCol, tsCol);
+  }
+
+  function _formatFileLine(entry, switches) {
+    var baseName = _baseName(entry.name);
+    var isHidden = _isHidden(entry.name);
+    var isProtected = _isProtected(entry.name);
+    // Size column (5 chars, right-justified)
+    var sizeCol = _formatSizeCompact(entry.size);
+    // Protect column (2 chars): space + (! if protected, else space)
+    var protectCol = (isProtected ? ' !' : '');
+    // Timestamp column (5 chars) if requested
+    var tsCol = switches.timestamps ? _formatTimestamp(entry.timestamp) : '     ';
+    // If hidden, prepend underscore; otherwise just the name
+    var displayName = isHidden ? ('_' + baseName) : baseName;
+    return _padColumns(sizeCol, protectCol, displayName, tsCol);
+  }
+
+  function _padColumns(sizeCol, protectCol, filename, tsCol) {
+    //var maxFileWidth = switches.timestamps ? 18 : '     ';
+    var maxFileWidth=19; 
+    if (tsCol === "     ") { tsCol=""; maxFileWidth=25; }         
+    var lines = [];
+
+    // First line: all columns
+    var firstPart = filename.substring(0, maxFileWidth)+protectCol;
+    var line1 = " "+ sizeCol + _padRight(firstPart, maxFileWidth) + tsCol ;
+    lines.push(line1);
+
+    // Additional lines if filename is longer (no size, protect, or timestamp columns)
+    var remaining = filename.substring(maxFileWidth);
+    while (remaining.length > 0) {
+      var part = remaining.substring(0, maxFileWidth);
+      var line = '      ' + _padRight(part, maxFileWidth) + '     '; // 7 spaces (5+2), then name, then 5 spaces for ts
+      lines.push(line);
+      remaining = remaining.substring(maxFileWidth);
+    }
+
+    return lines.join('\n');
+  }
+
+  function _padRight(str, width) {
+    str = String(str || '');
+    while (str.length < width) {
+      str = str + ' ';
+    }
+    return str.substring(0, width); // truncate if too long
+  }
+
+
   global.localList = async function () {
     var entries = _loadManifest();
     var out = [];
@@ -1300,42 +1482,50 @@ var DEVICE = 'none';
     return "\n"+out.join('\n')+"\n";
   };
 
-  // localRename(file, dest) — rename file in localStorage
-  // Returns: Promise resolving to true or rejects on error
   global.localRename = async function (file, dest) {
     var fname = _normName(file);
     var dname = _normName(dest);
-    if (_classify(fname) !== 'normal') return 'read only file';
+
+    if (_classify(fname) !== 'normal') return 'Error: read only file';
+    if (_classify(dname) !== 'normal') return 'Error: read only file';
+
     var fbase = _baseName(fname);
     var fv = _validateBase(fbase);
-    if (!fv.ok) return 'Error: '+fv.reason;
+    if (!fv.ok) return "Error: " + fv.reason;
     var dbase = _baseName(dname);
     var dv = _validateBase(dbase);
-    if (!dv.ok) return 'Error: invalid destination';
+    if (!dv.ok) return 'Error: invalid destination: ' + dv.reason;
 
     var manifest = _loadManifest();
-    var srcFound = _findEntry(manifest, fname);
-    if (!srcFound) return 'file not found';
-    if (_isProtected(srcFound.entry.name)) return 'read only file';
+    var srcFound = _findEntryFlexible(manifest, fname);  // ✅ CHANGED from _findEntry
+    if (!srcFound) return 'Error: file not found';
+    if (_isProtected(srcFound.entry.name)) return 'Error: read only file';
 
-    var destFound = _findEntry(manifest, dname);
-    if (destFound) return 'destination file already exists';
+    // ✅ KEY FIX: For destination, check if base name already exists (ignoring flags)
+    // This allows "piano.js" -> "piano.js!" (same base name, different protection)
+    var destFound = _findEntryFlexible(manifest, dname);  // ✅ CHANGED from _findEntry
+    if (destFound && _baseName(destFound.entry.name).toLowerCase() === dbase.toLowerCase()) {
+      // Same base name: allow rename if it's changing protection/hidden status
+      // Destination is the same file, just with different flags
+      destFound = null; // treat as "not found" so we can rename
+    }
+    if (destFound) return 'Error: destination file already exists';
 
     var content = _localLoad(srcFound.entry.name);
-    if (content === null) return 'file not found';
+    if (content === null) return 'Error: file not found';
 
+    // ✅ Build the new canonical name based on dest input (which may have ! or _)
     var destCanonical = (_isHidden(dname) ? '_' : '') + dbase + (_isProtected(dname) ? '!' : '');
     var res = _localSave(destCanonical, content);
-    if (res === 'Error: Disk Full') return 'Disk Full';
+    if (res === 'Error: Disk Full') return 'Error: Disk Full';
 
     _localDelete(srcFound.entry.name);
     srcFound.entry.name = destCanonical;
     srcFound.entry.timestamp = _timestamp();
     var mres = _saveManifest(manifest);
-    if (mres === 'Error: Disk Full') return 'Disk Full';
-    return true;
+    if (mres === 'Error: Disk Full') return 'Error: Disk Full';
+    return "done";
   };
-
 
   function hasLocalStorage() {
     try {
@@ -1354,7 +1544,6 @@ var DEVICE = 'none';
         var k = localStorage.key(i);
         if (!k) continue;
         var v = localStorage.getItem(k) || '';
-        // estimate bytes as UTF-16 (2 bytes per JS char)
         total += (k.length + v.length) * 2;
       }
       return total;
@@ -1363,10 +1552,8 @@ var DEVICE = 'none';
     }
   }
 
-  // public fdisk entry point
   global.dosfdisk = async function () {
     print("\n[-bwhite][black]     localStorage:     [-black][white]\n");
-    // Prefer navigator.storage.estimate for better info
     if (typeof navigator !== 'undefined' && navigator.storage && typeof navigator.storage.estimate === 'function') {
       navigator.storage.estimate().then(function(est) {
         var used = (est && est.usage) ? est.usage : null;
@@ -1380,8 +1567,8 @@ var DEVICE = 'none';
         dosInstall();
       });
     } else {
-    	if (hasLocalStorage) {
-        var used = _calcLocalStorageUsage();
+      if (hasLocalStorage) {
+        var used = _calcLocalStorage();
         print(" size: unknown\n used: " +formatFileSize(used)+"\n");
         dosInstall();
       } else {
@@ -1428,9 +1615,9 @@ var DEVICE = 'none';
       }
     }
 
-  	 if (isHttpProtocol() == true) {
-  	   print("\nInstalling Qandy: \n");
-  	   print("\n  ansi.js: "); dosInstallFetch("ansi.js");
+    if (isHttpProtocol() == true) {
+      print("\nInstalling Qandy: \n");
+      print("\n  ansi.js: "); dosInstallFetch("ansi.js");
       print("\n  ascii.js: "); dosInstallFetch("ascii.js");
       print("\n  keydown.js: "); dosInstallFetch("keydown.js");
       print("\n  piano.js: "); dosInstallFetch("piano.js");
@@ -1444,7 +1631,7 @@ var DEVICE = 'none';
 
   if (dosExists("dir.sys")) {} else {  
     print("localStorage not formated,\n");
-    print("input \'fdisk\' to install.\n\n");
+    print("input 'fdisk' to install.\n\n");
   }
 
 })(window);

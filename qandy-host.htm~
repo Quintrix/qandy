@@ -977,7 +977,7 @@ async function hostMessageHandler(ev) {
           var validName = validateGuestFilename(fname);
           if (!validName) { dosXmitQdos(_dosIframe, d.id, 'localMkDir', false, 'invalid filename'); break; }
           // Use Promise.resolve() to handle both sync and async implementations
-          Promise.resolve(localMkDir(validName))
+          Promise.resolve().then(function () { return localMkDir(); })
             .then(function(result) {
               dosXmitQdos(_dosIframe, d.id, 'localMkDir', true, result);
             })
@@ -993,7 +993,7 @@ async function hostMessageHandler(ev) {
           var validName = validateGuestFilename(fname);
           if (!validName) { dosXmitQdos(_dosIframe, d.id, 'localChDir', false, 'invalid filename'); break; }
           // Use Promise.resolve() to handle both sync and async implementations
-          Promise.resolve(localChDir(validName))
+          Promise.resolve().then(function () { return localChDir(validName); })
             .then(function(result) {
               dosXmitQdos(_dosIframe, d.id, 'localChDir', true, result);
             })
@@ -1009,7 +1009,7 @@ async function hostMessageHandler(ev) {
           var validName = validateGuestFilename(fname);
           if (!validName) { dosXmitQdos(_dosIframe, d.id, 'localRmDir', false, 'invalid filename'); break; }
           // Use Promise.resolve() to handle both sync and async implementations
-          Promise.resolve(localRmDir(validName))
+          Promise.resolve().then(function () { return localRmDir(); })
             .then(function(result) {
               dosXmitQdos(_dosIframe, d.id, 'localRmDir', true, result);
             })
@@ -1021,19 +1021,15 @@ async function hostMessageHandler(ev) {
       
         case 'localLoad': {
           var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
-          // coerce and validate filename
           var fname = (typeof d.file === 'undefined' || d.file === null) ? '' : String(d.file);
           var validName = validateGuestFilename(fname);
-          if (!validName) {
-            // reject invalid filenames explicitly
-            dosXmitQdos(_dosIframe, d.id, 'localLoad', false, 'invalid filename');
-            break;
-          }
-
-          // call localLoad (supports sync or Promise)
+          //if (!validName) {
+          //  // reject invalid filenames explicitly
+          //  dosXmitQdos(_dosIframe, d.id, 'localLoad', false, 'invalid filename');
+          //  break;
+          //}
           Promise.resolve().then(function () { return localLoad(validName); })
             .then(function (result) {
-              // result could be string (file contents) or some other object; dosXmitQdos will normalize
               dosXmitQdos(_dosIframe, d.id, 'localLoad', true, result);
             })
             .catch(function (err) {
@@ -1248,7 +1244,7 @@ function validateGuestFilename(name) {
   // Allow letters, numbers, spaces, dot, dash, underscore (adjust to taste)
   // Limit length to reasonable size to avoid DOS attacks
   if (s.length > 128) return null;
-  if (!/^[A-Za-z0-9 _.\-]+$/.test(s)) return null;
+  if (!/^[A-Za-z0-9 _.\-!]+$/.test(s)) return null;
   // Optionally normalize repeated spaces
   s = s.replace(/\s+/g, ' ');
   return s;
@@ -3423,15 +3419,15 @@ function command_js() {
     var args=tokens.slice(1); 
     var f = ''; var d = '';
     if (args.length > 0) {
-      var slashIndex = args.findIndex(function(t) { return t === '/'; });
+      var slashIndex = args.findIndex(function(t) { return t === '='; });
       if (slashIndex !== -1) {
         f = args.slice(0, slashIndex).join(' ').trim();
         d = args.slice(slashIndex + 1).join(' ').trim();
       } else {
-        if (args.length === 1 && args[0].indexOf('/') !== -1) {
-          var parts = args[0].split('/');
+        if (args.length === 1 && args[0].indexOf('=') !== -1) {
+          var parts = args[0].split('=');
           f = (parts.shift() || '').trim();
-          d = parts.join('/').trim();
+          d = parts.join('=').trim();
         } else {
           f = (args[0] || '').trim();
           d = (args[1] || '').trim();
@@ -3455,7 +3451,7 @@ function command_js() {
       } 
       return;
     }
-
+    console.log("f="+f+" d="+d);
     switch (c) {
       case "dir":
         print(await qdosDir()); 
@@ -3703,39 +3699,22 @@ var _pending = window.__qandy_pending;
     });
   }
 
-async function qdosDelete(filename, timeoutMs) {
-  var valid=filename.trim()
-  valid=qdosValidateFilename(filename);
-  if (!valid) return Promise.reject(new Error('invalid filename'));
-  if (HOST) {
-  
-  } else {
-    return qdosXmitDos('localDelete', { file: valid }, timeoutMs).then(function (result) {
-      if (typeof _normalizeResult === 'function') return _normalizeResult(result);
-      if (result === null || typeof result === 'undefined') return 'Error: no file';
-      if (typeof result === 'string') return result;
-      try { return String(result); } catch (e) { return "Error: "+e; }
-    });
-  }
-}
-
 async function qdosRename(file, dest, timeoutMs) {
-  //
-  // this function doesn't work, need host/guest branch
-  //
-  //var validSrc = qdosValidateFilename(file);
-  //var validDest = qdosValidateFilename(dest);
-  //if (!validSrc || !validDest) return Promise.reject(new Error('invalid filename(s)'));
-  //if (validSrc === validDest) return Promise.reject(new Error('source and destination are identical'));
-  //return qdosXmitDos('localRename', { file: validSrc, dest: validDest }, timeoutMs)
-  //  .then(function (result) {
-  //    // resolution means host reported success; return true for convenience
-  //    return true;
-  //  })
-  //  .catch(function (err) {
-  //    // propagate error
-  //   throw err;
-  //  });
+  var validSrc = qdosValidateFilename(file); 
+  var validDest = qdosValidateFilename(dest); 
+  if (!validSrc || !validDest) return 'invalid filename(s)';
+  if(HOST) { return "Input \'user\' to rename files"; } 
+  return qdosXmitDos('localRename', { file: validSrc, dest: validDest }, timeoutMs)
+    .then(function (result) {
+      console.log("3734");
+      // resolution means host reported success; return true for convenience
+      return result;
+    })
+    .catch(function (err) {
+      console.log("3739");
+      // propagate error
+     return err;
+    });
 }
 
 async function qdosMount(device) {
@@ -3772,17 +3751,6 @@ async function qdosPaste(filename, timeoutMs) {
   }
 }
 
-async function qdosChDir(name) {
-  var valid = (typeof qdosValidateFilename === 'function') ? qdosValidateFilename(name) : (typeof name === 'string' ? name.trim() : null);
-  if (!valid) return Promise.reject(new Error('invalid name'));
-  if (typeof HOST !== 'undefined' && HOST) {
-  
-  } else {
-    var valid = qdosValidateFilename(name);
-    if (!valid) { return Promise.reject(new Error('invalid name')); }
-    return qdosXmitDos('localChDir', { file: valid });
-  }
-};
 
 
 
@@ -3855,9 +3823,7 @@ async function qdosDelete(filename, timeoutMs) {
       return 'Error: ' + ((e && e.message) ? e.message : String(e)) + '\n';
     }
   }
-  return qdosXmitDos('localDelete', { file: valid }, timeoutMs).then(function (/*result*/) {
-    // success
-  });
+  return qdosXmitDos('localDelete', { file: valid });
 }
 
 async function qdosExists(filename, timeoutMs) {
@@ -3891,7 +3857,7 @@ function qdosValidateFilename(name) {
   if (/[\/\\]/.test(s)) return null;
   if (/\.\./.test(s)) return null;
   if (s.length > 128) return null;
-  if (!/^[A-Za-z0-9 _.\-]+$/.test(s)) return null;
+  if (!/^[A-Za-z0-9 _.\-!]+$/.test(s)) return null;
   return s;
 }
 
@@ -3899,7 +3865,7 @@ function qdosValidateFilename(name) {
 window.qdosXmitDos = qdosXmitDos;
 window.qdosScript = qdosScript;
 window.qdosDir = qdosDir;
-window.qdosList = qdosDir; 
+window.qdosList = qdosList; 
 window.qdosLoad = qdosLoad; 
 window.qdosDelete = qdosDelete;
 window.qdosRename = qdosRename; 
@@ -3941,7 +3907,7 @@ function qdosXmitDos(action, packet, timeoutMs) {
     } catch (e) {
       clearTimeout(timer);
       delete _pending[id];
-      reject(e);
+      return e;
     }
   });
 }
@@ -4779,7 +4745,7 @@ pokeCursorOn(); pokeRefresh();
 if (HOST) {
   var s=document.createElement('script');
   s.id='dos.js';
-  s.src='dos2.js';
+  s.src='dos3.js';
   s.onload=function() { try { dosMount("local"); } catch (e) { print("Error: "+e+"\n"); }};
   document.head.appendChild(s);  
   systemReady();
