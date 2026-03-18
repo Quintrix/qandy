@@ -1125,27 +1125,29 @@ var DEVICE = 'none';
     }
   };
 
-  async function localChDir(name) {
+  global.localChDir = async function (name) {
     return new Promise(function (resolve, reject) {
       try {
         var cwd = getCwdSync();
         if (!name || String(name).trim() === '' || name === '.' || name === './') {
           setCwdSync(ROOT_SEG);
-          return cwd;
+          return resolve('done');  // ← resolve() instead of return
         }
         var target = resolveDirPath(name, cwd);
-        if (!target) { return "Error: invalid dir name"; }
+        if (!target) { 
+          return resolve('Error: invalid dir name');  // ← resolve() instead of return
+        }
         var man = _loadManifest(); 
-        if (!manifestHasDir(man, target)) { return "Error: dir not found"; }
+        if (!manifestHasDir(man, target)) { 
+          return resolve('Error: dir not found');  // ← resolve() instead of return
+        }
         setCwdSync(target);
-        return cwd;
+        return resolve('done');  // ← resolve() instead of return
       } catch (e) {
-        return "Error: "+e;
+        return reject(new Error('Error: ' + (e && e.message ? e.message : String(e))));  // ← reject()
       }
     });
-  }
-
-  global.localChDir = localChDir;
+  };
 
   global.localRmDir = async function (name) {
     try {

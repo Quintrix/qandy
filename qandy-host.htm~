@@ -960,13 +960,15 @@ async function hostMessageHandler(ev) {
 
         case 'localDir': {
           var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+          var fname = (typeof d.file === 'undefined' || d.file === null) ? '' : String(d.file);
+          var validName = validateGuestFilename(fname);
           // call localDir() and handle both sync and Promise-returning implementations
-          Promise.resolve().then(function () { return localDir(); })
+          Promise.resolve().then(function () { return localDir(validName); })
             .then(function (result) {
-              dosXmitQdos(_dosIframe, d.id, 'localList', true, result);
+              dosXmitQdos(_dosIframe, d.id, 'localLoad', true, result);
             })
             .catch(function (err) {
-              dosXmitQdos(_dosIframe, d.id, 'localList', false, err && err.message ? err.message : String(err));
+              dosXmitQdos(_dosIframe, d.id, 'localLoad', false, err && err.message ? err.message : String(err));
             });
           break;
         }
@@ -3454,7 +3456,7 @@ function command_js() {
     console.log("f="+f+" d="+d);
     switch (c) {
       case "dir":
-        print(await qdosDir()); 
+        print(await qdosDir(f));
         return;
       case "list":
         print(await qdosList()); 
@@ -3633,8 +3635,11 @@ var _pending = window.__qandy_pending;
     }
   }
 
-  async function qdosDir() {
-   if (typeof HOST !== 'undefined' && HOST) {
+  async function qdosDir(filename) {
+    var valid = (typeof qdosValidateFilename === 'function') ? qdosValidateFilename() :
+                (typeof filename === 'string' ? filename.trim() : null);
+    alert("."+filename+".");
+    if (typeof HOST !== 'undefined' && HOST) {
       try {
         var res = await Promise.resolve().then(function () { return dosDir(); });
         res = _normalizeResult(res);
@@ -3644,7 +3649,8 @@ var _pending = window.__qandy_pending;
       }
       return 'Error: DOS not available\n';
     }
-    return qdosXmitDos('localDir').then(function (result) {
+
+    return qdosXmitDos('localDir'),{ file: valid } {
       // result is already normalized to a string by the handler
       return String(result) + '\n';
     }).catch(function (e) {
