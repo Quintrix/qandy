@@ -1285,9 +1285,16 @@ var DEVICE = 'none';
   };
 
 
-  global.localDir = async function (switchesStr) {
+  global.localDir = async function (patternStr, switchesStr) {
     var manifest = _loadManifest();
     if (!manifest || !Array.isArray(manifest)) manifest = [];
+
+    // ── Parse pattern ───────────────────────────────────────────────────────
+    var patternRegex = null;
+    if (patternStr && typeof patternStr === 'string') {
+      var pat = _baseName(_normName(patternStr.trim()));
+      if (pat) patternRegex = _patternToRegex(pat);
+    }
 
     // ── Parse switches ──────────────────────────────────────────────────────
     var switches = {
@@ -1322,6 +1329,7 @@ var DEVICE = 'none';
         dirs.push(e);
       } else {
         if (isHidden && !switches.hidden) continue;
+        if (patternRegex && !patternRegex.test(_baseName(e.name).toLowerCase())) continue;
         files.push(e);
       }
     }
