@@ -3485,7 +3485,7 @@ function command_js() {
     console.log("f="+f+" d="+d);
     switch (c) {
       case "dir":
-        print(await qdosDir(f, d)+"\n");
+        print(await qdosDir(f, d));
         return;
       case "list":
         print(await qdosList()); 
@@ -3497,50 +3497,50 @@ function command_js() {
         print(await qdosLoad(f));
         return;
       case "delete":
-        print(await qdosDelete(f)); 
+        print(await qdosDelete(f)+"\n"); 
         return;
       case "del":
-        print(await qdosDelete(f));
+        print(await qdosDelete(f)+"\n");
         return;
       case "rm":
-        print(await qdosDelete(f));
+        print(await qdosDelete(f)+"\n");
         return;
       case "rename":
-        print(await qdosRename(f,d));
+        print(await qdosRename(f,d)+"\n");
         return; 
       case "ren":
-        print(await qdosRename(f,d));
+        print(await qdosRename(f,d)+"\n");
         return; 
       case "mount":
-        print(await qdosMount(f));
+        print(await qdosMount(f)+"\n");
         return;
       case "qpaste":
-        print(await qdosPaste(f));
+        print(await qdosPaste(f)+"\n");
         return;
       case "qcopy":
-        print(await qdosCopy(f));
+        print(await qdosCopy(f)+"\n");
         return;
       case "mkdir":
-        print(await qdosMkDir(f));
+        print(await qdosMkDir(f)+"\n");
         return;     
       case "chdir":
-        print(await qdosChDir(f));
+        print(await qdosChDir(f)+"\n");
         return;     
       case "cd":
-        print(await qdosChDir(f));
+        print(await qdosChDir(f)+"\n");
         return;     
       case "rmdir":
-        print(await qdosRmDir(f));
+        print(await qdosRmDir(f)+"\n");
         return;     
       case "rd":
-        print(await qdosRmDir(f));
+        print(await qdosRmDir(f)+"\n");
         return;     
       case "exists":
-        print(await qdosExists(f));
+        print(await qdosExists(f)+"\n");
         return;
       case "fdisk":
         if (HOST) {
-          print(await dosfdisk());
+          print(await dosfdisk()+"\n");
         } else {
           print("Input \'sysop\' for access\n");
         }
@@ -3562,6 +3562,7 @@ function command_js() {
     while ((m = re.exec(String(cmd || ''))) !== null) { out.push(m[1] || m[2] || m[3]); }
     return out;
   }
+  
   
   function extractCmdParts(cmd) {
     var tokens=parseArgs(String(cmd || '').trim());
