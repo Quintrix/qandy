@@ -2477,39 +2477,81 @@ window.pokeBG = function(x, y, bg, count) {
   return count;
 };
 
-window.pokeAttr = function(x, y, attrValue, n) {
+window.pokeAttr = function(x, y, spec, n) {
   if (typeof x !== 'number' || typeof y !== 'number') return false;
-  if (typeof attrValue !== 'number') return false;
-  
-  n = (typeof n === 'number' && n > 0) ? Math.floor(n) : 1;
-  attrValue = attrValue | 0;
-  
-  var remaining = n;
-  var cx = x | 0;
-  var cy = y | 0;
-  var written = 0;
-  
-  while (remaining > 0 && cy < H) {
-    var space = W - cx;        // cells left in current row
-    var take = Math.min(remaining, space);  // how many to write this iteration
-    
-    // Fast fill for the current row
-    for (var i = 0; i < take; i++) {
-      ATTR[cy][cx + i] = attrValue;
+  // optional validator function if present in repo
+  if (typeof validateCoords === 'function' && !validateCoords(x, y)) return false;
+
+  var clampEndX = function(start, count) { var end = start + count; if (typeof W === 'number') { if (end > W) end = W; } return end; };
+
+  if (typeof spec === 'number') {
+    n = (typeof n === 'number' && n > 0) ? Math.floor(n) : 1;
+    if (n > 1) {
+      var endX = clampEndX(x, n);
+      for (var xi = x; xi < endX; xi++) {
+        ATTR[y][xi] = spec | 0;
+        if (typeof pokeRefresh === 'function') pokeRefresh(xi, y);
+      }
+      return endX - x;
+    } else {
+      ATTR[y][x] = spec | 0;
+      if (typeof pokeRefresh === 'function') pokeRefresh(x, y);
+      return true;
     }
-    
-    if (SYNC && typeof pokeRefresh === 'function') {
-      pokeRefresh(cx, cy, take);  // Refresh this row segment
-    }
-    
-    written += take;
-    remaining -= take;
-    cx = 0;
-    cy++;
   }
-  
-  return (n === 1) ? true : written;
+
+  var maskFromObject = 0;
+  if (typeof styleToAttr === 'function' && spec && typeof spec === 'object') {
+    try {
+      maskFromObject = styleToAttr(spec) | 0;
+    } catch (e) {
+      maskFromObject = 0;
+    }
+  }
+
+  // If spec is object: apply same logic as before, but support repeating n cells
+  if (spec && typeof spec === 'object') {
+    n = (typeof n === 'number' && n > 0) ? Math.floor(n) : 1;
+    var endX = clampEndX(x, n);
+
+    for (var xi = x; xi < endX; xi++) {
+      // current numeric attr value for this cell
+      var cur = (typeof ATTR[y][xi] !== 'undefined') ? ATTR[y][xi] | 0 : 0;
+      var clr = (typeof COLOR[y][xi] !== 'undefined' && COLOR[y][xi]) ? Object.assign({}, COLOR[y][xi]) : { color: (window.defaultColor||37), bgcolor: (window.defaultBg||40), bold:false, inverse:false, blink:false, dim:false, italic:false, underline:false, hidden:false, strike:false };
+
+      // If styleToAttr gave a full mask and you intend to overwrite, you can uncomment:
+      // cur = (maskFromObject !== 0) ? maskFromObject : cur;
+
+      if (spec.hasOwnProperty('inverse')) { cur = spec.inverse ? (cur | ATTR_INVERSE) : (cur & ~ATTR_INVERSE); clr.inverse = !!spec.inverse; }
+      if (spec.hasOwnProperty('bold')) { cur = spec.bold ? (cur | ATTR_BOLD) : (cur & ~ATTR_BOLD); clr.bold = !!spec.bold; }
+      if (spec.hasOwnProperty('dim')) { cur = spec.dim ? (cur | ATTR_DIM) : (cur & ~ATTR_DIM); clr.dim = !!spec.dim; }
+      if (spec.hasOwnProperty('italic')) { cur = spec.italic ? (cur | ATTR_ITALIC) : (cur & ~ATTR_ITALIC); clr.italic = !!spec.italic; }
+      if (spec.hasOwnProperty('underline')) { cur = spec.underline ? (cur | ATTR_UNDERLINE) : (cur & ~ATTR_UNDERLINE); clr.underline = !!spec.underline; }
+      if (spec.hasOwnProperty('blink')) { cur = spec.blink ? (cur | ATTR_BLINK) : (cur & ~ATTR_BLINK); clr.blink = !!spec.blink; }
+      if (spec.hasOwnProperty('hidden')) { cur = spec.hidden ? (cur | ATTR_HIDDEN) : (cur & ~ATTR_HIDDEN); clr.hidden = !!spec.hidden; }
+      if (spec.hasOwnProperty('strike')) { cur = spec.strike ? (cur | ATTR_STRIKE) : (cur & ~ATTR_STRIKE); clr.strike = !!spec.strike; }
+      if (spec.hasOwnProperty('overline')) { cur = spec.overline ? (cur | ATTR_OVERLINE) : (cur & ~ATTR_OVERLINE);
+        // no color property for overline in COLOR, it's purely visual
+      }
+      // update color fields only when specified
+      if (spec.hasOwnProperty('color'))   clr.color = spec.color;
+      if (spec.hasOwnProperty('bgcolor')) clr.bgcolor = spec.bgcolor;
+      // also keep COLOR.bold/inverse/blink in sync with ATTR booleans
+      clr.bold = !!clr.bold;
+      clr.inverse = !!clr.inverse;
+      clr.blink = !!clr.blink;
+      // apply merged values
+      ATTR[y][xi] = cur;
+      COLOR[y][xi] = clr;
+      if (typeof pokeRefresh === 'function') pokeRefresh(xi, y);
+    }
+
+    return (endX - x);
+  }
+
+  return false;
 };
+
 
 window.pokeAttrBit = function(x, y, bit, state) {
   if (typeof x !== 'number' || typeof y !== 'number') return false;
