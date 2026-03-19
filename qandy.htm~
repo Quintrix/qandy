@@ -3499,9 +3499,6 @@ function command_js() {
       case "mkdir":
         print(await qdosMkDir(f)+"\n");
         return;     
-      case "md":
-        print(await qdosMkDir(f)+"\n");
-        return;     
       case "chdir":
         print(await qdosChDir(f)+"\n");
         return;     
@@ -4145,31 +4142,22 @@ window.button=function(b, event) {
   } else if (k === "delete") {
     if (!virtualclick) { event && event.preventDefault(); }
     var str = String(LINE || "");
-    // If text is selected, delete the selection
-    if (SSTART >= 0 && SEND >= 0) {
-      var s = Math.max(0, Math.min(SSTART, SEND));
-      var e = Math.max(0, Math.min(Math.max(SSTART, SEND), str.length));
-      if (s < e) {
-        // copy to clipboard if shift-held and available
-        if (shift && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
-          navigator.clipboard.writeText(str.substring(s, e)).catch(function(err){
-            console.warn('clipboard write failed', err);
-          });
-        }
-        // Delete selection
-        LINE = str.substring(0, s) + str.substring(e);
-        CURP = s;
-        SSTART = -1;
-        SEND = -1;
+    var maxLen = str.length;
+    var s = Math.max(0, Math.min(SSTART, SEND));
+    var e = Math.max(0, Math.min(Math.max(SSTART, SEND), maxLen));
+    if (s < e) {
+      // copy to clipboard only when shift-requested and available
+      if (shift && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        navigator.clipboard.writeText(str.substring(s, e)).catch(function(err){
+          console.warn('clipboard write failed', err);
+        });
       }
-    } else {
-      // No selection: delete character at cursor position
-      if (CURP < str.length) {
-        LINE = str.substring(0, CURP) + str.substring(CURP + 1);
-        // CURP stays the same (cursor doesn't move)
-      }
-      // If CURP is at end of line, delete does nothing (correct behavior)
     }
+    pokeSelect(false);
+    LINE = str.substring(0, s) + str.substring(e);
+    CURP = s;
+    SSTART = -1;
+    SEND = -1;
     pokeInput();
   } else if (k === "left") {
     if (!virtualclick) { event && event.preventDefault(); }
