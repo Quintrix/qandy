@@ -3764,7 +3764,7 @@ async function qdosPaste(filename, timeoutMs) {
   var valid = qdosValidateFilename(filename);
   if (!valid) return Promise.reject(new Error('invalid filename'));
   if (HOST) {
-  
+    return 'Input \'user\' to paste scripts\n';
   } else {
     return qdosXmitDos('qdosPaste', { file: valid }, timeoutMs).then(function (res) {
       // host replies with success:true or success:false (handler will resolve / reject appropriately)
@@ -3772,7 +3772,7 @@ async function qdosPaste(filename, timeoutMs) {
       if (res === true || res === undefined) return 'OK: pasted to ' + valid + '\n';
       return String(res) + '\n';
     }).catch(function (err) {
-      throw new Error('paste failed: ' + (err && err.message ? err.message : String(err)));
+      return 'Error: '+(err && err.message ? err.message : String(err)));
     });
   }
 }
@@ -3810,7 +3810,6 @@ async function qdosMkDir(name, timeoutMs) {
 
 // this functions is correct, it returns the string results not an object 
 async function qdosChDir(name) {
-alert(name);
   var valid = (typeof qdosValidateFilename === 'function') ? qdosValidateFilename(name) : (typeof name === 'string' ? name.trim() : null);
   
   if (!valid) return Promise.reject(new Error('invalid name'));
@@ -3902,8 +3901,8 @@ window.qdosPaste = qdosPaste;
 window.qdosCopy = qdosCopy;
 window.qdosExists = qdosExists;
 window.qdosMkDir = window.qdosMkDir;
-window.qdosChDir = window.qdosMkDir;
-window.qdosRmDir = window.qdosMkDir;
+window.qdosChDir = window.qdosChDir;
+window.qdosRmDir = window.qdosRmDir;
 
 //
 // these functions transmit packets to and from the host
