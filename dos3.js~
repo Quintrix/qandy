@@ -1,4 +1,5 @@
 var DOS = true;
+var DOS = true;
 var DEVICE = 'none';
 
 (function (global) {
@@ -1127,101 +1128,75 @@ var DEVICE = 'none';
   };
 
   global.localChDir = async function (name) {
-    alert(name);
-    return new Promise(function (resolve, reject) {
-     	
-      try {
-        var cwd = getCwdSync();
-        if (!name || String(name).trim() === '' || name === '.' || name === './') {
-          setCwdSync(ROOT_SEG);
-          resolve('done');
-        }
-        var target = resolveDirPath(name, cwd);
-        if (!target) { resolve('Error: invalid dir name'); }
-        var man = _loadManifest(); 
-        if (!manifestHasDir(man, target)) { 
-          resolve('Error: '+target+' not found');
-        }
-        setCwdSync(target);
-        return resolve('done');  // ← resolve() instead of return
-      } catch (e) {
-        return reject(new Error('Error: ' + (e && e.message ? e.message : String(e))));  // ← reject()
-      }
-    });
-  };
-
-  // rmdir from localStorage
-  global.localRmDir = async function (name) {
     try {
-      if (typeof name !== 'string' || String(name).trim() === '') { 
-        return 'Error: invalid dir name'; 
-      }
       var cwd = getCwdSync();
+      // If no name provided, return the current working directory (per request)
+      if (!name || String(name).trim() === '' ) { return cwd; }
+      // normalize shorthand for "root"
+      if (name === '.' || name === './') { setCwdSync(ROOT_SEG); return 'done'; }
       var target = resolveDirPath(name, cwd);
-      if (!target) return 'Error: invalid dir name';
-      
-      // Normalize target (remove trailing separators beyond single root)
-      if (target.length > 1) {
-        while (target.length > 1 && target.slice(-SEP.length) === SEP) {
-          target = target.slice(0, -SEP.length);
-        }
-      }
-    
-      // Cannot remove root directory
-      if (target === ROOT_SEG) return 'Error: cannot remove root directory';
-    
-      var manifest = _loadManifest() || [];
-      var dirToken = '<' + target + '>';
-    
-      // Check if the directory exists
-      var dirExists = manifest.some(function (e) { return e && e.name === dirToken; });
-      if (!dirExists) return 'Error: dir not found';
-    
-      // Check if directory is empty by looking for any entries that start with target path
-      var isDirEmpty = !manifest.some(function (e) {
-        if (!e || !e.name) return false;
-        // Check if this entry is inside the target directory
-        // Both files and subdirectories will have names that start with target + SEP
-        // or are dir tokens like <target/subdir>
-        var entryPath = e.name;
-        // Remove flags to get the base path
-        var baseName = _baseName(entryPath);
-      
-        // Check if this is a file in the target directory
-        if (entryPath.indexOf(target + SEP) === 0) return true;
-      
-        // Check if this is a subdirectory in the target directory
-        if (entryPath.charAt(0) === '<' && entryPath.charAt(entryPath.length - 1) === '>') {
-          var subDirPath = entryPath.substring(1, entryPath.length - 1);
-          if (subDirPath.indexOf(target + SEP) === 0) return true;
-        }
-      
-        return false;
-      });
-    
-      if (!isDirEmpty) return 'Error: dir not empty';
-    
-      // Remove the directory token from manifest
-      var dirIndex = manifest.findIndex(function (e) { return e && e.name === dirToken; });
-      if (dirIndex !== -1) {
-        manifest.splice(dirIndex, 1);
-      }
-    
-      // Save the updated manifest
-      var saveRes = _saveManifest(manifest);
-      if (saveRes === 'Error: Disk Full') { return 'Error: Disk Full'; }
-    
-      // If we were in the removed directory, change to root
-      if (cwd === target || cwd.indexOf(target + SEP) === 0) {
-        setCwdSync(ROOT_SEG);
-      }
-    
+      if (!target) { return 'Error: invalid dir name'; }
+      var man = _loadManifest();
+      if (!manifestHasDir(man, target)) { return 'Error: ' + target + ' not found'; }
+      setCwdSync(target);
       return 'done';
     } catch (e) {
       return 'Error: ' + (e && e.message ? e.message : String(e));
     }
   };
 
+  // --- patched global.localRmDir ---
+  global.localRmDir = async function (name) {
+    try {
+      if (typeof name !== 'string' || String(name).trim() === '') { return 'Error: invalid dir name'; }
+      var cwd = getCwdSync();
+      var target = resolveDirPath(name, cwd);
+      if (!target) return 'Error: invalid dir name';
+      // Normalize target (remove trailing separators beyond single root)
+      if (target.length > 1) {
+        while (target.length > 1 && target.slice(-SEP.length) === SEP) {
+          target = target.slice(0, -SEP.length);
+        }
+      }
+      if (target === ROOT_SEG) return 'Error: cannot remove root directory';
+      var manifest = _loadManifest() || [];
+      var dirToken = '<' + target + '>';
+      var dirExists = manifest.some(function (e) { return e && e.name === dirToken; });
+      if (!dirExists) return 'Error: dir not found';
+      // Check if directory is empty by looking for any entries that start with target path
+      var isDirEmpty = !manifest.some(function (e) {
+        if (!e || !e.name) return false;
+        var entryName = e.name;
+        // Directory entries: "<path/...>"
+        if (entryName.charAt(0) === '<' && entryName.charAt(entryName.length - 1) === '>') {
+          var subDirPath = entryName.substring(1, entryName.length - 1);
+          // strip trailing separators (shouldn't normally be present)
+          if (subDirPath.indexOf(target + SEP) === 0) return true;
+          return false;
+        }
+        // File entries: strip leading "_" and trailing "!" to compute their actual path
+        var filePath = entryName;
+        if (filePath.charAt(0) === '_') filePath = filePath.substring(1);
+        if (filePath.charAt(filePath.length - 1) === '!') filePath = filePath.substring(0, filePath.length - 1);
+        if (filePath.indexOf(target + SEP) === 0) return true;
+        return false;
+      });
+      if (!isDirEmpty) return 'Error: dir not empty';
+      // Remove the directory token from manifest
+      var dirIndex = manifest.findIndex(function (e) { return e && e.name === dirToken; });
+      if (dirIndex !== -1) { manifest.splice(dirIndex, 1); }
+      // Save the updated manifest
+      var saveRes = _saveManifest(manifest);
+      if (saveRes === 'Error: Disk Full') { return 'Error: Disk Full'; }
+  
+      // If we were in the removed directory (or inside it), change to root
+      if (cwd === target || cwd.indexOf(target + SEP) === 0) { setCwdSync(ROOT_SEG); }
+      return 'done';
+    } catch (e) {
+      return 'Error: ' + (e && e.message ? e.message : String(e));
+    }
+  };
+  
   global.localSave = async function (file, text) {
     var fname = _normName(file);
     var append = false;
