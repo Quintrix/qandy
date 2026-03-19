@@ -1081,12 +1081,15 @@ var DEVICE = 'none';
     return _localLoad(found.entry.name);
   };
 
+  // mkdir on localStorage
   global.localMkDir = async function (name) {
     try {
-      if (typeof name !== 'string' || String(name).trim() === '') { return 'Error: invalid dir name'; }
+      //if (typeof name !== 'string' || String(name).trim() === '') { return 'Error: invalid dir name '+name; }
       var cwd = getCwdSync();
       var target = resolveDirPath(name, cwd);
-      if (!target) return 'Error: invalid dir name';
+      
+      if (!target) return 'Error: invalid dir name '+target;
+      // Normalize target (remove trailing separators beyond single root)
       if (target.length > 1) {
         while (target.length > 1 && target.slice(-SEP.length) === SEP) {
           target = target.slice(0, -SEP.length);
@@ -1094,27 +1097,25 @@ var DEVICE = 'none';
       }
       var manifest = _loadManifest() || [];
       var dirToken = '<'+target+'>';
-
+      // detect a file whose base (last segment) would conflict with this new dir
       var parts = target.split(SEP).filter(Boolean);
       var last = parts.length ? parts[parts.length - 1] : '';
       var fileConflict = manifest.some(function (e) {
         if (!e || !e.name) return false;
+        // compare base name (strip flags) against last segment
         return _baseName(e.name).toLowerCase() === last.toLowerCase();
       });
       if (fileConflict) return 'Error: dir exists';
-
       var dirExists = manifest.some(function (e) { return e && e.name === dirToken; });
       if (dirExists) return 'Error: dir already exists';
-
       if (target !== ROOT_SEG) {
         if (parts.length === 0) return 'Error: invalid dir name';
-        parts.pop();
+        parts.pop(); // parent path tokens
         var parent = parts.length ? SEP + parts.join(SEP) : ROOT_SEG;
         var parentToken = '<' + parent + '>';
         var parentExists = (parent === ROOT_SEG) || manifest.some(function (e) { return e && e.name === parentToken; });
         if (!parentExists) return 'Error: parent dir not found';
       }
-
       manifest.push({ name: dirToken, size: 0, timestamp: _timestamp() });
       var saveRes = _saveManifest(manifest);
       if (saveRes === 'Error: Disk Full') { return 'Error: Disk Full'; }
@@ -1126,20 +1127,20 @@ var DEVICE = 'none';
   };
 
   global.localChDir = async function (name) {
+    alert(name);
     return new Promise(function (resolve, reject) {
+     	
       try {
         var cwd = getCwdSync();
         if (!name || String(name).trim() === '' || name === '.' || name === './') {
           setCwdSync(ROOT_SEG);
-          return resolve('done');  // ← resolve() instead of return
+          resolve('done');
         }
         var target = resolveDirPath(name, cwd);
-        if (!target) { 
-          return resolve('Error: invalid dir name');  // ← resolve() instead of return
-        }
+        if (!target) { resolve('Error: invalid dir name'); }
         var man = _loadManifest(); 
         if (!manifestHasDir(man, target)) { 
-          return resolve('Error: dir not found');  // ← resolve() instead of return
+          resolve('Error: '+target+' not found');
         }
         setCwdSync(target);
         return resolve('done');  // ← resolve() instead of return
@@ -1149,6 +1150,7 @@ var DEVICE = 'none';
     });
   };
 
+  // rmdir from localStorage
   global.localRmDir = async function (name) {
     try {
       if (typeof name !== 'string' || String(name).trim() === '') { 
@@ -1158,48 +1160,62 @@ var DEVICE = 'none';
       var target = resolveDirPath(name, cwd);
       if (!target) return 'Error: invalid dir name';
       
+      // Normalize target (remove trailing separators beyond single root)
       if (target.length > 1) {
         while (target.length > 1 && target.slice(-SEP.length) === SEP) {
           target = target.slice(0, -SEP.length);
         }
       }
-      
+    
+      // Cannot remove root directory
       if (target === ROOT_SEG) return 'Error: cannot remove root directory';
-      
+    
       var manifest = _loadManifest() || [];
       var dirToken = '<' + target + '>';
-      
+    
+      // Check if the directory exists
       var dirExists = manifest.some(function (e) { return e && e.name === dirToken; });
       if (!dirExists) return 'Error: dir not found';
-      
+    
+      // Check if directory is empty by looking for any entries that start with target path
       var isDirEmpty = !manifest.some(function (e) {
         if (!e || !e.name) return false;
+        // Check if this entry is inside the target directory
+        // Both files and subdirectories will have names that start with target + SEP
+        // or are dir tokens like <target/subdir>
         var entryPath = e.name;
-        
+        // Remove flags to get the base path
+        var baseName = _baseName(entryPath);
+      
+        // Check if this is a file in the target directory
         if (entryPath.indexOf(target + SEP) === 0) return true;
-        
+      
+        // Check if this is a subdirectory in the target directory
         if (entryPath.charAt(0) === '<' && entryPath.charAt(entryPath.length - 1) === '>') {
           var subDirPath = entryPath.substring(1, entryPath.length - 1);
           if (subDirPath.indexOf(target + SEP) === 0) return true;
         }
-        
+      
         return false;
       });
-      
+    
       if (!isDirEmpty) return 'Error: dir not empty';
-      
+    
+      // Remove the directory token from manifest
       var dirIndex = manifest.findIndex(function (e) { return e && e.name === dirToken; });
       if (dirIndex !== -1) {
         manifest.splice(dirIndex, 1);
       }
-      
+    
+      // Save the updated manifest
       var saveRes = _saveManifest(manifest);
       if (saveRes === 'Error: Disk Full') { return 'Error: Disk Full'; }
-      
+    
+      // If we were in the removed directory, change to root
       if (cwd === target || cwd.indexOf(target + SEP) === 0) {
         setCwdSync(ROOT_SEG);
       }
-      
+    
       return 'done';
     } catch (e) {
       return 'Error: ' + (e && e.message ? e.message : String(e));
@@ -1285,9 +1301,16 @@ var DEVICE = 'none';
   };
 
 
-  global.localDir = async function (switchesStr) {
+  global.localDir = async function (patternStr, switchesStr) {
     var manifest = _loadManifest();
     if (!manifest || !Array.isArray(manifest)) manifest = [];
+
+    // ── Parse pattern ───────────────────────────────────────────────────────
+    var patternRegex = null;
+    if (patternStr && typeof patternStr === 'string') {
+      var pat = _baseName(_normName(patternStr.trim()));
+      if (pat) patternRegex = _patternToRegex(pat);
+    }
 
     // ── Parse switches ──────────────────────────────────────────────────────
     var switches = {
@@ -1322,6 +1345,7 @@ var DEVICE = 'none';
         dirs.push(e);
       } else {
         if (isHidden && !switches.hidden) continue;
+        if (patternRegex && !patternRegex.test(_baseName(e.name).toLowerCase())) continue;
         files.push(e);
       }
     }

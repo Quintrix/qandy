@@ -960,15 +960,15 @@ async function hostMessageHandler(ev) {
 
         case 'localDir': {
           var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
-          var fname = (typeof d.file === 'undefined' || d.file === null) ? '' : String(d.file);
-          var validName = validateGuestFilename(fname);
+          var pattern = validateGuestPattern((typeof d.pattern === 'undefined' || d.pattern === null) ? '' : String(d.pattern));
+          var switches = validateGuestSwitches((typeof d.switches === 'undefined' || d.switches === null) ? '' : String(d.switches));
           // call localDir() and handle both sync and Promise-returning implementations
-          Promise.resolve().then(function () { return localDir(validName); })
+          Promise.resolve().then(function () { return localDir(pattern, switches); })
             .then(function (result) {
-              dosXmitQdos(_dosIframe, d.id, 'localLoad', true, result);
+              dosXmitQdos(_dosIframe, d.id, 'localDir', true, result);
             })
             .catch(function (err) {
-              dosXmitQdos(_dosIframe, d.id, 'localLoad', false, err && err.message ? err.message : String(err));
+              dosXmitQdos(_dosIframe, d.id, 'localDir', false, err && err.message ? err.message : String(err));
             });
           break;
         }
@@ -979,11 +979,12 @@ async function hostMessageHandler(ev) {
           var validName = validateGuestFilename(fname);
           if (!validName) { dosXmitQdos(_dosIframe, d.id, 'localMkDir', false, 'invalid filename'); break; }
           // Use Promise.resolve() to handle both sync and async implementations
-          Promise.resolve().then(function () { return localMkDir(); })
+          Promise.resolve().then(function () { return localMkDir(validName); })
             .then(function(result) {
               dosXmitQdos(_dosIframe, d.id, 'localMkDir', true, result);
             })
             .catch(function(err) {
+              err=err+" [987]";
               dosXmitQdos(_dosIframe, d.id, 'localMkDir', false, err && err.message ? err.message : String(err));
             });
           break;
@@ -1011,7 +1012,7 @@ async function hostMessageHandler(ev) {
           var validName = validateGuestFilename(fname);
           if (!validName) { dosXmitQdos(_dosIframe, d.id, 'localRmDir', false, 'invalid filename'); break; }
           // Use Promise.resolve() to handle both sync and async implementations
-          Promise.resolve().then(function () { return localRmDir(); })
+          Promise.resolve().then(function () { return localRmDir(validName); })
             .then(function(result) {
               dosXmitQdos(_dosIframe, d.id, 'localRmDir', true, result);
             })
@@ -1249,6 +1250,29 @@ function validateGuestFilename(name) {
   if (!/^[A-Za-z0-9 _.\-!]+$/.test(s)) return null;
   // Optionally normalize repeated spaces
   s = s.replace(/\s+/g, ' ');
+  return s;
+}
+
+function validateGuestPattern(pattern) {
+  if (typeof pattern !== 'string') return '';
+  var s = String(pattern).trim();
+  if (!s) return '';
+  // Reject path separators and traversal
+  if (/[\/\\]/.test(s)) return '';
+  if (/\.\./.test(s)) return '';
+  // Like validateGuestFilename but also allow wildcards * and ?
+  if (s.length > 128) return '';
+  if (!/^[A-Za-z0-9 _.\-!*?]+$/.test(s)) return '';
+  return s;
+}
+
+function validateGuestSwitches(sw) {
+  if (typeof sw !== 'string') return '';
+  var s = String(sw).trim();
+  if (!s) return '';
+  // Only allow dash and lowercase letters (e.g. "-th", "-t", "th")
+  if (!/^-?[a-zA-Z]+$/.test(s)) return '';
+  if (s.length > 16) return '';
   return s;
 }
 
@@ -3456,7 +3480,7 @@ function command_js() {
     console.log("f="+f+" d="+d);
     switch (c) {
       case "dir":
-        print(await qdosDir(f));
+        print(await qdosDir(f, d));
         return;
       case "list":
         print(await qdosList()); 
@@ -3635,26 +3659,23 @@ var _pending = window.__qandy_pending;
     }
   }
 
-  async function qdosDir(filename) {
-    var valid = (typeof qdosValidateFilename === 'function') ? qdosValidateFilename() :
-                (typeof filename === 'string' ? filename.trim() : null);
+  async function qdosDir(pattern, switches) {
+    var validPattern = (typeof pattern === 'string') ? pattern.trim() : '';
+    var validSwitches = (typeof switches === 'string') ? switches.trim() : '';
     if (typeof HOST !== 'undefined' && HOST) {
       try {
-        var res = await Promise.resolve().then(function () { return dosDir(); });
+        var res = await Promise.resolve().then(function () { return localDir(validPattern, validSwitches); });
         res = _normalizeResult(res);
         return String(res) + '\n';
       } catch (e) {
         return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
       }
-      return 'Error: DOS not available\n';
     }
-
-    //return qdosXmitDos('localDir'),{ file: valid }, then(function (result) {
-    //  // result is already normalized to a string by the handler
-    //  return String(result) + '\n';
-    //}).catch(function (e) {
-    //  return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
-    //});
+    return qdosXmitDos('localDir', { pattern: validPattern, switches: validSwitches }).then(function (result) {
+      return String(result) + '\n';
+    }).catch(function (e) {
+      return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+    });
   }
 
   async function qdosList() {
@@ -3790,6 +3811,7 @@ async function qdosMkDir(name, timeoutMs) {
 // this functions is correct, it returns the string results not an object 
 async function qdosChDir(name) {
   var valid = (typeof qdosValidateFilename === 'function') ? qdosValidateFilename(name) : (typeof name === 'string' ? name.trim() : null);
+  
   if (!valid) return Promise.reject(new Error('invalid name'));
   if (typeof HOST !== 'undefined' && HOST) {
   
@@ -3879,8 +3901,8 @@ window.qdosPaste = qdosPaste;
 window.qdosCopy = qdosCopy;
 window.qdosExists = qdosExists;
 window.qdosMkDir = window.qdosMkDir;
-window.qdosChDir = window.qdosMkDir;
-window.qdosRmDir = window.qdosMkDir;
+window.qdosChDir = window.qdosChDir;
+window.qdosRmDir = window.qdosRmDir;
 
 //
 // these functions transmit packets to and from the host
