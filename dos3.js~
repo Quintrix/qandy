@@ -1313,6 +1313,13 @@ var DEVICE = 'none';
       if (!e || !e.name) continue;
       if (e.name === MANIFEST_KEY) continue;
 
+      // ── Filter by current working directory ─────────────────────────────
+      var fullPath = e.name;
+      var dirName = fullPath.substring(0, fullPath.lastIndexOf('/'));
+      
+      console.log(fullPath+" "+dirName);
+      if (dirName !== _cwd) continue;
+
       var isDir = (e.name.charAt(0) === '<' && e.name.charAt(e.name.length - 1) === '>');
       var isHidden = _isHidden(e.name);
 
