@@ -2308,14 +2308,10 @@ function styleToAttr(style) {
   return a;
 }
 
-function _ensureAttrRow(y) { if (!window.ATTR) ATTR = []; if (!ATTR[y]) ATTR[y] = new Array(W).fill(0); }
-function _ensureColorRow(y) { if (!window.COLOR) COLOR = COLOR || []; if (!COLOR[y]) COLOR[y] = new Array(W); }
-
 var defaultColor = (window.currentStyle && typeof window.currentStyle.color !== 'undefined') ? window.currentStyle.color : 37;
 var defaultBg    = (window.currentStyle && typeof window.currentStyle.bgcolor !== 'undefined') ? window.currentStyle.bgcolor : 40;
 
 // init the DOM
-for (var y = 0; y <= H; y++) { ATTR[y] = new Array(W); }
 var txtEl = document.getElementById('txt');
 txtEl.innerHTML = '';
 var frag = document.createDocumentFragment();
@@ -2326,7 +2322,8 @@ for (var y = 0; y <= H; y++) {
   var rowDiv = document.createElement('div');
   var frow = new Uint8Array(W); // foreground ANSI codes (30..97)
   var brow = new Uint8Array(W); // background ANSI codes (40..107)
-  var rowDiv = document.createElement('div');
+  var arow = new Uint16Array(W); // ATTR row - initialize like FCOLOR/BCOLOR
+  
   rowDiv.className = 'qandy-row';
   for (var x = 0; x < window.W; x++) {
     rowChars[x] = ' ';
@@ -2335,6 +2332,7 @@ for (var y = 0; y <= H; y++) {
     // populate numeric banks from the style object (initial sync)
     frow[x] = rowStyles[x].color | 0;
     brow[x] = rowStyles[x].bgcolor | 0;
+    arow[x] = 0; // Initialize ATTR to 0 (no attributes)
 
     var cell = document.createElement('span');
     cell.id = 'c' + y + '_' + x;
@@ -2354,7 +2352,8 @@ for (var y = 0; y <= H; y++) {
   window.COLOR[y]  = rowStyles; // ## old color (compat)
   window.FCOLOR[y] = frow;      // new numeric foreground bank (Uint8Array)
   window.BCOLOR[y] = brow;      // new numeric background bank (Uint8Array)
-  window.DOM[y]    = rowRefs;  frag.appendChild(rowDiv);
+  window.ATTR[y]   = arow;      // new numeric attribute bank (Uint16Array)
+  window.DOM[y]    = rowRefs;
 }
 txtEl.appendChild(frag);
 
@@ -2478,61 +2477,38 @@ window.pokeBG = function(x, y, bg, count) {
   return count;
 };
 
-window.pokeAttr = function(x, y, spec) {
+window.pokeAttr = function(x, y, attrValue, n) {
   if (typeof x !== 'number' || typeof y !== 'number') return false;
-  // optional validator function if present in repo
-  if (typeof validateCoords === 'function' && !validateCoords(x, y)) return false;
-  if (typeof spec === 'number') {
-    ATTR[y][x] = spec | 0;
-    if (typeof pokeRefresh === 'function') pokeRefresh(x, y);
-    return true;
-  }
-  var maskFromObject = 0;
-  if (typeof styleToAttr === 'function' && spec && typeof spec === 'object') {
-    try {
-      maskFromObject = styleToAttr(spec) | 0;
-    } catch (e) {
-      maskFromObject = 0;
+  if (typeof attrValue !== 'number') return false;
+  
+  n = (typeof n === 'number' && n > 0) ? Math.floor(n) : 1;
+  attrValue = attrValue | 0;
+  
+  var remaining = n;
+  var cx = x | 0;
+  var cy = y | 0;
+  var written = 0;
+  
+  while (remaining > 0 && cy < H) {
+    var space = W - cx;        // cells left in current row
+    var take = Math.min(remaining, space);  // how many to write this iteration
+    
+    // Fast fill for the current row
+    for (var i = 0; i < take; i++) {
+      ATTR[cy][cx + i] = attrValue;
     }
-  }
-  // current numeric attr value
-  var cur = (typeof ATTR[y][x] !== 'undefined') ? ATTR[y][x] | 0 : 0;
-  var clr = (typeof COLOR[y][x] !== 'undefined' && COLOR[y][x]) ? Object.assign({}, COLOR[y][x]) : { color: (window.defaultColor||37), bgcolor: (window.defaultBg||40), bold:false, inverse:false, blink:false, dim:false, italic:false, underline:false, hidden:false, strike:false };
-  if (spec && typeof spec === 'object') {
-    // If styleToAttr gave a full mask and you intend to overwrite, you can uncomment:
-    // cur = (maskFromObject !== 0) ? maskFromObject : cur;
-    if (spec.hasOwnProperty('inverse')) { cur = spec.inverse ? (cur | ATTR_INVERSE) : (cur & ~ATTR_INVERSE); clr.inverse = !!spec.inverse; }
-    if (spec.hasOwnProperty('bold')) { cur = spec.bold ? (cur | ATTR_BOLD) : (cur & ~ATTR_BOLD); clr.bold = !!spec.bold; }
-    if (spec.hasOwnProperty('dim')) { cur = spec.dim ? (cur | ATTR_DIM) : (cur & ~ATTR_DIM); clr.dim = !!spec.dim; }
-    if (spec.hasOwnProperty('italic')) { cur = spec.italic ? (cur | ATTR_ITALIC) : (cur & ~ATTR_ITALIC); clr.italic = !!spec.italic; }
-    if (spec.hasOwnProperty('underline')) { cur = spec.underline ? (cur | ATTR_UNDERLINE) : (cur & ~ATTR_UNDERLINE); clr.underline = !!spec.underline; }
-    if (spec.hasOwnProperty('blink')) { cur = spec.blink ? (cur | ATTR_BLINK) : (cur & ~ATTR_BLINK); clr.blink = !!spec.blink; }
-    if (spec.hasOwnProperty('hidden')) { cur = spec.hidden ? (cur | ATTR_HIDDEN) : (cur & ~ATTR_HIDDEN); clr.hidden = !!spec.hidden; }
-    if (spec.hasOwnProperty('strike')) { cur = spec.strike ? (cur | ATTR_STRIKE) : (cur & ~ATTR_STRIKE); clr.strike = !!spec.strike; }
-    if (spec.hasOwnProperty('overline')) { cur = spec.overline ? (cur | ATTR_OVERLINE) : (cur & ~ATTR_OVERLINE);
-      // no color property for overline in COLOR, it's purely visual
+    
+    if (SYNC && typeof pokeRefresh === 'function') {
+      pokeRefresh(cx, cy, take);  // Refresh this row segment
     }
-    // update color fields only when specified
-    if (spec.hasOwnProperty('color'))   clr.color = spec.color;
-    if (spec.hasOwnProperty('bgcolor')) clr.bgcolor = spec.bgcolor;
-    // also keep COLOR.bold/inverse/blink in sync with ATTR booleans
-    clr.bold = !!clr.bold;
-    clr.inverse = !!clr.inverse;
-    clr.blink = !!clr.blink;
-    // apply merged values
-    ATTR[y][x] = cur;
-    COLOR[y][x] = clr;
-    if (typeof pokeRefresh === 'function') pokeRefresh(x, y);
-    return true;
+    
+    written += take;
+    remaining -= take;
+    cx = 0;
+    cy++;
   }
-  return false;
-};
-
-window.pokeAttrBit = function(x, y, bit, state) {
-  var ok = pokeAttrBit(x, y, bit, !!state);
-  if (!ok) return false;
-  if (typeof pokeRefresh === 'function') pokeRefresh(x,y);
-  return true;
+  
+  return (n === 1) ? true : written;
 };
 
 window.pokeAttrBit = function(x, y, bit, state) {
@@ -3523,6 +3499,9 @@ function command_js() {
       case "mkdir":
         print(await qdosMkDir(f)+"\n");
         return;     
+      case "md":
+        print(await qdosMkDir(f)+"\n");
+        return;     
       case "chdir":
         print(await qdosChDir(f)+"\n");
         return;     
@@ -3571,10 +3550,15 @@ function command_js() {
     return { cmd: c, args: args, rawTokens: tokens };
   }  
 
-// qdos.js -> routes DOS calls to/from Qandy Core
-window.__qandy_pending = window.__qandy_pending || Object.create(null);
-window.__qandy_reqCounter = window.__qandy_reqCounter || 0;
-var _pending = window.__qandy_pending;
+//
+// qdos.js this is the bridge that lets the guest machine
+//         access dos.js via posting messages to the host.
+//         it translates simple user commands into dos.js
+//            
+
+  window.__qandy_pending = window.__qandy_pending || Object.create(null);
+  window.__qandy_reqCounter = window.__qandy_reqCounter || 0;
+  var _pending = window.__qandy_pending;
 
   async function qdosScript(name) {
     if (typeof HOST !== 'undefined' && HOST) { return "Error: input 'user' to run scripts"; }
@@ -3702,293 +3686,281 @@ var _pending = window.__qandy_pending;
     });
   }
 
-async function qdosRename(file, dest, timeoutMs) {
-  var validSrc = qdosValidateFilename(file); 
-  var validDest = qdosValidateFilename(dest); 
-  if (!validSrc || !validDest) return 'invalid filename(s)';
-  if(HOST) { return "Input \'user\' to rename files"; } 
-  return qdosXmitDos('localRename', { file: validSrc, dest: validDest }, timeoutMs)
-    .then(function (result) {
-      // resolution means host reported success; return true for convenience
-      return result;
-    })
-    .catch(function (err) {
-      // propagate error
-     return err;
-    });
-}
-
-async function qdosMount(device) {
-  var dev = (typeof device === 'undefined' || device === null) ? '' : String(device).trim();
-  if (dev === '') dev = 'localhost';
-  if (typeof HOST !== 'undefined' && HOST) {
-    if (typeof dosMount !== 'function') { return 'Error: dosMount not available\n'; }
-    try {
-      var res = await Promise.resolve().then(function () { return dosMount(dev); });
-      var out = (typeof _normalizeResult === 'function') ? _normalizeResult(res) : (res === null || res === undefined ? '' : String(res));
-      return String(out) + '\n';
-    } catch (e) {
-      return 'Error: ' + ((e && e.message) ? e.message : String(e)) + '\n';
-    }
-  }
-  return 'localhost\n';
-}
-
-
-async function qdosPaste(filename, timeoutMs) {
-  var valid = qdosValidateFilename(filename);
-  if (!valid) return Promise.reject(new Error('invalid filename'));
-  if (HOST) {
-    return 'Input \'user\' to paste scripts\n';
-  } else {
-    return qdosXmitDos('qdosPaste', { file: valid }, timeoutMs).then(function (res) {
-      // host replies with success:true or success:false (handler will resolve / reject appropriately)
-      // For success we may receive true or a message string; normalize to string.
-      if (res === true || res === undefined) return 'OK: pasted to ' + valid + '\n';
-      return String(res) + '\n';
-    }).catch(function (err) {
-      return 'Error: '+(err && err.message ? err.message : String(err));
-    });
-  }
-}
-
-
-
-
-
-async function qdosCopy(filename, timeoutMs) {
-  //
-  // this function doesn't work, need host/guest branch
-  // also need user interaction I thinks?
-  //
-  //var valid = qdosValidateFilename(filename);
-  //if (!valid) return Promise.reject(new Error('invalid filename'));
-  //return qdosXmitDos('qdosCopy', { file: valid }, timeoutMs).then(function (res) {
-  //  if (res === true || res === undefined) return 'OK: copied ' + valid + ' to clipboard\n';
-  //  return String(res) + '\n';
-  //}).catch(function (err) {
-  //  throw new Error('copy failed: ' + (err && err.message ? err.message : String(err)));
-  //});
-}
-
-async function qdosMkDir(name, timeoutMs) {
-  var valid = (typeof qdosValidateFilename === 'function') ? qdosValidateFilename(name) : (typeof name === 'string' ? name.trim() : null);
-  if (!valid) return Promise.reject(new Error('invalid name'));
-  if (typeof HOST !== 'undefined' && HOST) {
-  
-  } else {
-    var valid = qdosValidateFilename(name);
-    if (!valid) { return Promise.reject(new Error('invalid name')); }
-    return qdosXmitDos('localMkDir', { file: valid }, timeoutMs);
-  }
-}
-
-async function qdosChDir(name) {
-  //var valid = (typeof qdosValidateFilename === 'function') ? qdosValidateFilename(name) : (typeof name === 'string' ? name.trim() : null);
-  if (typeof HOST !== 'undefined' && HOST) {
-  
-  } else {
-    if (name) {
-      if (name=="..") {
-        valid=".."; 
-      } else {
-        var valid = qdosValidateFilename(name);
-        if (!valid) return 'Error: invalid name';
-      }
-    } else {
-      valid="";
-    }
-    return qdosXmitDos('localChDir', { file: valid })
+  async function qdosRename(file, dest, timeoutMs) {
+    var validSrc = qdosValidateFilename(file); 
+    var validDest = qdosValidateFilename(dest); 
+    if (!validSrc || !validDest) return 'invalid filename(s)';
+    if(HOST) { return "Input \'user\' to rename files"; } 
+    return qdosXmitDos('localRename', { file: validSrc, dest: validDest }, timeoutMs)
       .then(function (result) {
+        // resolution means host reported success; return true for convenience
         return result;
       })
       .catch(function (err) {
+        // propagate error
        return err;
       });
   }
-};
 
-async function qdosRmDir(name) {
-  var valid = (typeof qdosValidateFilename === 'function') ? qdosValidateFilename(name) : (typeof name === 'string' ? name.trim() : null);
-  if (!valid) return Promise.reject(new Error('invalid name'));
-  if (typeof HOST !== 'undefined' && HOST) {
-  
-  } else {
-    var valid = qdosValidateFilename(name);
-    return qdosXmitDos('localRmDir', { file: valid });
+  async function qdosMount(device) {
+    var dev = (typeof device === 'undefined' || device === null) ? '' : String(device).trim();
+    if (dev === '') dev = 'localhost';
+    if (typeof HOST !== 'undefined' && HOST) {
+      if (typeof dosMount !== 'function') { return 'Error: dosMount not available\n'; }
+      try {
+        var res = await Promise.resolve().then(function () { return dosMount(dev); });
+        var out = (typeof _normalizeResult === 'function') ? _normalizeResult(res) : (res === null || res === undefined ? '' : String(res));
+        return String(out) + '\n';
+      } catch (e) {
+        return 'Error: ' + ((e && e.message) ? e.message : String(e)) + '\n';
+      }
+    }
+    return 'localhost\n';
   }
-};
 
+  async function qdosPaste(filename, timeoutMs) {
+    var valid = qdosValidateFilename(filename);
+    if (!valid) return Promise.reject(new Error('invalid filename'));
+    if (HOST) {
+      return 'Input \'user\' to paste scripts\n';
+    } else {
+      return qdosXmitDos('qdosPaste', { file: valid }, timeoutMs).then(function (res) {
+        // host replies with success:true or success:false (handler will resolve / reject appropriately)
+        // For success we may receive true or a message string; normalize to string.
+        if (res === true || res === undefined) return 'OK: pasted to ' + valid + '\n';
+        return String(res) + '\n';
+      }).catch(function (err) {
+        return 'Error: '+(err && err.message ? err.message : String(err));
+      });
+    }
+  }
 
+  async function qdosCopy(filename, timeoutMs) {
+    //
+    // this function doesn't work, need host/guest branch
+    // also need user interaction I thinks?
+    //
+    //var valid = qdosValidateFilename(filename);
+    //if (!valid) return Promise.reject(new Error('invalid filename'));
+    //return qdosXmitDos('qdosCopy', { file: valid }, timeoutMs).then(function (res) {
+    //  if (res === true || res === undefined) return 'OK: copied ' + valid + ' to clipboard\n';
+    //  return String(res) + '\n';
+    //}).catch(function (err) {
+    //  throw new Error('copy failed: ' + (err && err.message ? err.message : String(err)));
+    //});
+  }
 
-async function qdosDelete(filename, timeoutMs) {
-  var valid=filename.trim()
-  valid=qdosValidateFilename(filename);
-  if (!valid) { return Promise.reject(new Error('invalid filename')); }
-  if (typeof HOST !== 'undefined' && HOST) {
-    if (typeof dosMount !== 'function') { return 'Error: dosMount not available\n'; }
+  async function qdosMkDir(name, timeoutMs) {
+    var valid = (typeof qdosValidateFilename === 'function') ? qdosValidateFilename(name) : (typeof name === 'string' ? name.trim() : null);
+    if (!valid) return Promise.reject(new Error('invalid name'));
+    if (typeof HOST !== 'undefined' && HOST) {
+      return 'Not implemented yet for HOST\n';
+    } else {
+      var valid = qdosValidateFilename(name);
+      if (!valid) { return Promise.reject(new Error('invalid name')); }
+      return qdosXmitDos('localMkDir', { file: valid }, timeoutMs);
+    }
+  }
+
+  async function qdosChDir(name) {
+    //var valid = (typeof qdosValidateFilename === 'function') ? qdosValidateFilename(name) : (typeof name === 'string' ? name.trim() : null);
+    if (typeof HOST !== 'undefined' && HOST) {
+      return 'Not implemented yet for HOST\n';
+    } else {
+      if (name) {
+        if (name=="..") {
+          valid=".."; 
+        } else {
+          var valid = qdosValidateFilename(name);
+          if (!valid) return 'Error: invalid name';
+        }
+      } else {
+        valid="";
+      }
+      return qdosXmitDos('localChDir', { file: valid })
+        .then(function (result) {
+          return result;
+        })
+        .catch(function (err) {
+         return err;
+        });
+    }
+  };
+
+  async function qdosRmDir(name) {
+    var valid = (typeof qdosValidateFilename === 'function') ? qdosValidateFilename(name) : (typeof name === 'string' ? name.trim() : null);
+    if (!valid) return Promise.reject(new Error('invalid name'));
+    if (typeof HOST !== 'undefined' && HOST) {
+      return 'Not implemented yet for HOST\n';  
+    } else {
+      var valid = qdosValidateFilename(name);
+      return qdosXmitDos('localRmDir', { file: valid });
+    }
+  };
+
+  async function qdosDelete(filename, timeoutMs) {
+    var valid=filename.trim()
+    valid=qdosValidateFilename(filename);
+    if (!valid) { return Promise.reject(new Error('invalid filename')); }
+    if (typeof HOST !== 'undefined' && HOST) {
+      if (typeof dosDelete !== 'function') { return 'Error: dosDelete()) not available\n'; }
+      try {
+        var res = await Promise.resolve().then(function () { return dosDelete(valid); });
+        var out = (typeof _normalizeResult === 'function') ? _normalizeResult(res) : (res === null || res === undefined ? '' : String(res));
+        return String(out) + '\n';
+      } catch (e) {
+        return 'Error: ' + ((e && e.message) ? e.message : String(e)) + '\n';
+      }
+    }
+    return qdosXmitDos('localDelete', { file: valid });
+  }
+
+  async function qdosExists(filename, timeoutMs) {
+    var name = (typeof filename === 'string') ? filename.trim() : filename;
+    var v = qdosValidateFilename(filename);
+    if (typeof v === 'string') name = v.trim();
+    else if (v === true) name = (typeof filename === 'string' ? filename.trim() : null);
+    else return false;
+    if (!name || typeof name !== 'string') return false;
     try {
-      var res = await Promise.resolve().then(function () { return dosDelete(valid); });
-      var out = (typeof _normalizeResult === 'function') ? _normalizeResult(res) : (res === null || res === undefined ? '' : String(res));
-      return String(out) + '\n';
+      var res = await qdosXmitDos('dosExists', { file: name }, timeoutMs);
+      if (typeof res === 'boolean') return res;
+      if (typeof res === 'number') return !!res;
+      if (typeof res === 'string') {
+        var s = res.trim().toLowerCase();
+        if (s === 'true' || s === '1') return true;
+        if (s === 'false' || s === '0' || s === '') return false;
+      }
+      return !!res;
     } catch (e) {
-      return 'Error: ' + ((e && e.message) ? e.message : String(e)) + '\n';
+      // Communication or host-side error: return false (avoid rejecting)
+      // If you want to surface errors instead, replace the next line with: throw e;
+      return false;
     }
   }
-  return qdosXmitDos('localDelete', { file: valid });
-}
 
-async function qdosExists(filename, timeoutMs) {
-  var name = (typeof filename === 'string') ? filename.trim() : filename;
-  var v = qdosValidateFilename(filename);
-  if (typeof v === 'string') name = v.trim();
-  else if (v === true) name = (typeof filename === 'string' ? filename.trim() : null);
-  else return false;
-  if (!name || typeof name !== 'string') return false;
-  try {
-    var res = await qdosXmitDos('dosExists', { file: name }, timeoutMs);
-    if (typeof res === 'boolean') return res;
-    if (typeof res === 'number') return !!res;
-    if (typeof res === 'string') {
-      var s = res.trim().toLowerCase();
-      if (s === 'true' || s === '1') return true;
-      if (s === 'false' || s === '0' || s === '') return false;
+  function qdosValidateFilename(name) {
+    if (typeof name !== 'string' && typeof name !== 'number') return null;
+    var s = String(name).trim();
+    if (!s) return null;
+    if (/[\/\\]/.test(s)) return null;
+    if (/\.\./.test(s)) return null;
+    if (s.length > 128) return null;
+    if (!/^[A-Za-z0-9 _.\-!]+$/.test(s)) return null;
+    return s;
+  }
+
+  // expose to global guest runtime
+  window.qdosXmitDos = qdosXmitDos;
+  window.qdosScript = qdosScript;
+  window.qdosDir = qdosDir;
+  window.qdosList = qdosList; 
+  window.qdosLoad = qdosLoad; 
+  window.qdosDelete = qdosDelete;
+  window.qdosRename = qdosRename; 
+  window.qdosMount = qdosMount;
+  window.qdosPaste = qdosPaste;
+  window.qdosCopy = qdosCopy;
+  window.qdosExists = qdosExists;
+  window.qdosMkDir = window.qdosMkDir;
+  window.qdosChDir = window.qdosChDir;
+  window.qdosRmDir = window.qdosRmDir;
+
+  //
+  // these functions transmit packets to and from the host
+  //
+
+  function qdosXmitDos(action, packet, timeoutMs) {
+    return new Promise(function (resolve, reject) {
+      if (!window.parent || window.parent === window) { return reject(new Error('Error: no <host>')); }
+      // compact id: timestamp + small counter (no separate helper function)
+      window.__qandy_reqCounter += 1;
+      var id = 'qdos_' + Date.now() + '_' + window.__qandy_reqCounter;
+      var msg = { type: 'guest-action', action: action, id: id };
+      if (packet) {
+        var keys = Object.keys(packet);
+        for (var i = 0; i < keys.length; i++) msg[keys[i]] = packet[keys[i]];
+      }
+      var timer = setTimeout(function () {
+        delete _pending[id];
+        reject(new Error('Error: timeout ' + action));
+      }, timeoutMs || 5000);
+      _pending[id] = { resolve: resolve, reject: reject, timer: timer };
+      try {
+        window.parent.postMessage(msg, '*');
+      } catch (e) {
+        clearTimeout(timer);
+        delete _pending[id];
+        return e;
+      }
+    });
+  }
+
+  // normalize host results into a primitive/string for qdosDir printing
+  function _normalizeResult(res) {
+    if (Array.isArray(res)) return res.join('\n');
+    if (res === null || res === undefined) return '';
+    if (typeof res === 'object') {
+      try { return JSON.stringify(res); } catch (e) { return String(res); }
     }
-    return !!res;
-  } catch (e) {
-    // Communication or host-side error: return false (avoid rejecting)
-    // If you want to surface errors instead, replace the next line with: throw e;
-    return false;
+    return String(res);
   }
-}
 
-function qdosValidateFilename(name) {
-  if (typeof name !== 'string' && typeof name !== 'number') return null;
-  var s = String(name).trim();
-  if (!s) return null;
-  if (/[\/\\]/.test(s)) return null;
-  if (/\.\./.test(s)) return null;
-  if (s.length > 128) return null;
-  if (!/^[A-Za-z0-9 _.\-!]+$/.test(s)) return null;
-  return s;
-}
-
-// expose to global guest runtime
-window.qdosXmitDos = qdosXmitDos;
-window.qdosScript = qdosScript;
-window.qdosDir = qdosDir;
-window.qdosList = qdosList; 
-window.qdosLoad = qdosLoad; 
-window.qdosDelete = qdosDelete;
-window.qdosRename = qdosRename; 
-window.qdosMount = qdosMount;
-window.qdosPaste = qdosPaste;
-window.qdosCopy = qdosCopy;
-window.qdosExists = qdosExists;
-window.qdosMkDir = window.qdosMkDir;
-window.qdosChDir = window.qdosChDir;
-window.qdosRmDir = window.qdosRmDir;
-
-//
-// these functions transmit packets to and from the host
-//
-
-function qdosXmitDos(action, packet, timeoutMs) {
-  return new Promise(function (resolve, reject) {
-    if (!window.parent || window.parent === window) { return reject(new Error('Error: no <host>')); }
-
-    // compact id: timestamp + small counter (no separate helper function)
-    window.__qandy_reqCounter += 1;
-    var id = 'qdos_' + Date.now() + '_' + window.__qandy_reqCounter;
-
-    var msg = { type: 'guest-action', action: action, id: id };
-    if (packet) {
-      var keys = Object.keys(packet);
-      for (var i = 0; i < keys.length; i++) msg[keys[i]] = packet[keys[i]];
+  // qdosAckDOS wrapper (small convenience). If you already define qdosAckDOS elsewhere, this will not override it.
+  window.qdosAckDOS = window.qdosAckDOS || function (type, handler, opts) {
+    type = String(type || 'message');
+    function wrapper(ev) {
+      if (ev.source !== window.parent) return; // only accept messages from parent
+      try { handler(ev); } catch (e) { console.error('qdosAckDOS handler error:', e && e.message ? e.message : e); }
     }
+    window.addEventListener(type, wrapper, opts || false);
+    return function remove() { window.removeEventListener(type, wrapper, opts || false); };
+  };
 
-    var timer = setTimeout(function () {
-      delete _pending[id];
-      reject(new Error('Error: timeout ' + action));
-    }, timeoutMs || 5000);
-
-    _pending[id] = { resolve: resolve, reject: reject, timer: timer };
-
-    try {
-      window.parent.postMessage(msg, '*');
-    } catch (e) {
-      clearTimeout(timer);
-      delete _pending[id];
-      return e;
+  // attach the ack handler using qdosAckDOS
+  qdosAckDOS('message', function (ev) {
+    var d = ev.data;
+    if (!d || typeof d !== 'object') return;
+    // accept legacy and new reply names
+    if (d.type !== 'action-result' && d.type !== 'ack') return;
+    var id = d.id;
+    if (!id || !_pending[id]) return;
+    var entry = _pending[id];
+    try { clearTimeout(entry.timer); } catch (e) {}
+    delete _pending[id];
+    var ok = (d.ok !== undefined) ? Boolean(d.ok) : (d.success !== undefined ? Boolean(d.success) : true);
+    if (!ok) {
+      entry.reject(new Error(d.error || 'DOS operation failed'));
+      return;
     }
-  });
-}
-
-// normalize host results into a primitive/string for qdosDir printing
-function _normalizeResult(res) {
-  if (Array.isArray(res)) return res.join('\n');
-  if (res === null || res === undefined) return '';
-  if (typeof res === 'object') {
-    try { return JSON.stringify(res); } catch (e) { return String(res); }
-  }
-  return String(res);
-}
-
-// qdosAckDOS wrapper (small convenience). If you already define qdosAckDOS elsewhere, this will not override it.
-window.qdosAckDOS = window.qdosAckDOS || function (type, handler, opts) {
-  type = String(type || 'message');
-  function wrapper(ev) {
-    if (ev.source !== window.parent) return; // only accept messages from parent
-    try { handler(ev); } catch (e) { console.error('qdosAckDOS handler error:', e && e.message ? e.message : e); }
-  }
-  window.addEventListener(type, wrapper, opts || false);
-  return function remove() { window.removeEventListener(type, wrapper, opts || false); };
-};
-
-// attach the ack handler using qdosAckDOS
-qdosAckDOS('message', function (ev) {
-  var d = ev.data;
-  if (!d || typeof d !== 'object') return;
-  // accept legacy and new reply names
-  if (d.type !== 'action-result' && d.type !== 'ack') return;
-  var id = d.id;
-  if (!id || !_pending[id]) return;
-  var entry = _pending[id];
-  try { clearTimeout(entry.timer); } catch (e) {}
-  delete _pending[id];
-
-  var ok = (d.ok !== undefined) ? Boolean(d.ok) : (d.success !== undefined ? Boolean(d.success) : true);
-  if (!ok) {
-    entry.reject(new Error(d.error || 'DOS operation failed'));
-    return;
-  }
-
-  var res = d.result !== undefined ? d.result : true;
-  res = _normalizeResult(res);
-  entry.resolve(res);
-}, false);
+    var res = d.result !== undefined ? d.result : true;
+    res = _normalizeResult(res);
+    entry.resolve(res);
+  }, false);
  
- // evalCode: always-evaluates user input inside an async IIFE so top-level await is valid.
-// Programs / REPL must use `await` for blocking calls (e.g., await print(...); await input(...);).
-window.evalCode = async function(code) {
-  var src = String(code || '');
-  if (!src.trim()) return true;
-  // Wrap the user input in an async IIFE so top-level await is valid everywhere.
-  var wrapped = "(async function __qandy_repl_wrapper() {\n" + src + "\n})();";
-  try {
-    // Use indirect eval to run in global scope
-    var promise = (0, eval)(wrapped);
-    // Await the async IIFE result; print returned value if any
-    var result = await promise;
-    if (typeof result !== 'undefined') {
-      try { await print(String(result) + "\n\n"); } catch (e) { /* best-effort */ }
+ 
+  // evalCode: always-evaluates user input inside an async IIFE so top-level await is valid.
+  // Programs / REPL must use `await` for blocking calls (e.g., await print(...); await input(...);).
+  window.evalCode = async function(code) {
+    if (HOST) { print("Input \'user\' to execute code"); }
+    var src = String(code || '');
+    if (!src.trim()) return true;
+    // Wrap the user input in an async IIFE so top-level await is valid everywhere.
+    var wrapped = "(async function __qandy_repl_wrapper() {\n" + src + "\n})();";
+    try {
+      // Use indirect eval to run in global scope
+      var promise = (0, eval)(wrapped);
+      // Await the async IIFE result; print returned value if any
+      var result = await promise;
+      if (typeof result !== 'undefined') {
+        try { await print(String(result) + "\n\n"); } catch (e) { /* best-effort */ }
+      }
+      return true;
+    } catch (err) {
+      try { await print("Error: " + ((err && err.message) ? err.message : String(err)) + "\n\n"); } catch (e) {}
+      return false;
     }
-    return true;
-  } catch (err) {
-    try { await print("Error: " + ((err && err.message) ? err.message : String(err)) + "\n\n"); } catch (e) {}
-    return false;
-  }
-};
+  };
 
 // Signal that command.js is ready
 if (typeof window.qandySignalReady === 'function') {
@@ -4173,22 +4145,31 @@ window.button=function(b, event) {
   } else if (k === "delete") {
     if (!virtualclick) { event && event.preventDefault(); }
     var str = String(LINE || "");
-    var maxLen = str.length;
-    var s = Math.max(0, Math.min(SSTART, SEND));
-    var e = Math.max(0, Math.min(Math.max(SSTART, SEND), maxLen));
-    if (s < e) {
-      // copy to clipboard only when shift-requested and available
-      if (shift && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
-        navigator.clipboard.writeText(str.substring(s, e)).catch(function(err){
-          console.warn('clipboard write failed', err);
-        });
+    // If text is selected, delete the selection
+    if (SSTART >= 0 && SEND >= 0) {
+      var s = Math.max(0, Math.min(SSTART, SEND));
+      var e = Math.max(0, Math.min(Math.max(SSTART, SEND), str.length));
+      if (s < e) {
+        // copy to clipboard if shift-held and available
+        if (shift && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+          navigator.clipboard.writeText(str.substring(s, e)).catch(function(err){
+            console.warn('clipboard write failed', err);
+          });
+        }
+        // Delete selection
+        LINE = str.substring(0, s) + str.substring(e);
+        CURP = s;
+        SSTART = -1;
+        SEND = -1;
       }
+    } else {
+      // No selection: delete character at cursor position
+      if (CURP < str.length) {
+        LINE = str.substring(0, CURP) + str.substring(CURP + 1);
+        // CURP stays the same (cursor doesn't move)
+      }
+      // If CURP is at end of line, delete does nothing (correct behavior)
     }
-    pokeSelect(false);
-    LINE = str.substring(0, s) + str.substring(e);
-    CURP = s;
-    SSTART = -1;
-    SEND = -1;
     pokeInput();
   } else if (k === "left") {
     if (!virtualclick) { event && event.preventDefault(); }
@@ -4757,7 +4738,7 @@ pokeCursorOn(); pokeRefresh();
 if (HOST) {
   var s=document.createElement('script');
   s.id='dos.js';
-  s.src='dos3.js';
+  s.src='dos.js';
   s.onload=function() { try { dosMount("local"); } catch (e) { print("Error: "+e+"\n"); }};
   document.head.appendChild(s);  
   systemReady();
