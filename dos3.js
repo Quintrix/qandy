@@ -30,13 +30,17 @@ var DEVICE = 'none';
 
   function _baseName(name) {
     var n = _normName(name);
+    var lastSlash = n.lastIndexOf('/');
+    if (lastSlash >= 0) n = n.substring(lastSlash + 1);
     if (n.charAt(0) === '_') n = n.substring(1);
     if (n.length > 0 && n.charAt(n.length - 1) === '!') n = n.substring(0, n.length - 1);
     return n;
   }
 
   function _isHidden(canonicalName) {
-    return typeof canonicalName === 'string' && canonicalName.charAt(0) === '_';
+    if (typeof canonicalName !== 'string') return false;
+    var base = canonicalName.substring(canonicalName.lastIndexOf('/') + 1);
+    return base.charAt(0) === '_';
   }
 
   function _isProtected(canonicalName) {
@@ -65,6 +69,10 @@ var DEVICE = 'none';
   function getCwdSync() { return _cwd || ROOT_SEG; }
   function setCwdSync(p) {
     _cwd = (typeof p === 'string' && p.length) ? String(p) : ROOT_SEG;
+  }
+  function _buildLocalCanonical(base) {
+    var cwd = getCwdSync();
+    return (cwd === ROOT_SEG ? '' : cwd) + SEP + base;
   }
   function resolveDirPath(name, cwd) {
     if (typeof name !== 'string') return null;
@@ -164,9 +172,17 @@ var DEVICE = 'none';
 
   function _findEntry(manifest, userInput) {
     var base = _baseName(_normName(userInput)).toLowerCase();
+    var cwd = getCwdSync();
     for (var i = 0; i < manifest.length; i++) {
-      if (_baseName(manifest[i].name).toLowerCase() === base) {
-        return { index: i, entry: manifest[i] };
+      var entry = manifest[i];
+      if (!entry || typeof entry.name !== 'string') continue;
+      var entryName = entry.name;
+      var lastSlash = entryName.lastIndexOf('/');
+      var entryDir = lastSlash >= 0 ? entryName.substring(0, lastSlash) : '';
+      if (entryDir === '') entryDir = ROOT_SEG;
+      if (entryDir !== cwd) continue;
+      if (_baseName(entryName).toLowerCase() === base) {
+        return { index: i, entry: entry };
       }
     }
     return null;
@@ -174,10 +190,18 @@ var DEVICE = 'none';
 
   function _findEntryFlexible(manifest, userInput) {
     var base = _baseName(_normName(userInput)).toLowerCase();
+    var cwd = getCwdSync();
     for (var i = 0; i < manifest.length; i++) {
-      var entryBase = _baseName(manifest[i].name).toLowerCase();
+      var entry = manifest[i];
+      if (!entry || typeof entry.name !== 'string') continue;
+      var entryName = entry.name;
+      var lastSlash = entryName.lastIndexOf('/');
+      var entryDir = lastSlash >= 0 ? entryName.substring(0, lastSlash) : '';
+      if (entryDir === '') entryDir = ROOT_SEG;
+      if (entryDir !== cwd) continue;
+      var entryBase = _baseName(entryName).toLowerCase();
       if (entryBase === base) {
-        return { index: i, entry: manifest[i] };
+        return { index: i, entry: entry };
       }
     }
     return null;
@@ -207,24 +231,37 @@ var DEVICE = 'none';
   function _findEntries(manifest, userInput) {
     if (!Array.isArray(manifest)) return [];
     var base = _baseName(_normName(userInput)).toLowerCase();
-    
+    var cwd = getCwdSync();
+
     if (!_hasWildcards(base)) {
       for (var i = 0; i < manifest.length; i++) {
-        if (_baseName(manifest[i].name).toLowerCase() === base) {
-          return [{ index: i, entry: manifest[i] }];
+        var entry = manifest[i];
+        if (!entry || typeof entry.name !== 'string') continue;
+        var lastSlash = entry.name.lastIndexOf('/');
+        var entryDir = lastSlash >= 0 ? entry.name.substring(0, lastSlash) : '';
+        if (entryDir === '') entryDir = ROOT_SEG;
+        if (entryDir !== cwd) continue;
+        if (_baseName(entry.name).toLowerCase() === base) {
+          return [{ index: i, entry: entry }];
         }
       }
       return [];
     }
-    
+
     var regex = _patternToRegex(base);
     if (!regex) return [];
-    
+
     var results = [];
     for (var i = 0; i < manifest.length; i++) {
-      var entryBase = _baseName(manifest[i].name).toLowerCase();
+      var entry = manifest[i];
+      if (!entry || typeof entry.name !== 'string') continue;
+      var lastSlash = entry.name.lastIndexOf('/');
+      var entryDir = lastSlash >= 0 ? entry.name.substring(0, lastSlash) : '';
+      if (entryDir === '') entryDir = ROOT_SEG;
+      if (entryDir !== cwd) continue;
+      var entryBase = _baseName(entry.name).toLowerCase();
       if (regex.test(entryBase)) {
-        results.push({ index: i, entry: manifest[i] });
+        results.push({ index: i, entry: entry });
       }
     }
     return results;
@@ -571,7 +608,8 @@ var DEVICE = 'none';
       if (!dv.ok) return 'Error: invalid destination: ' + dv.reason;
       var destFound = _findEntry(manifest, dname);
       if (destFound) return 'Error: destination file already exists';
-      var destCanonical = (_isHidden(dname) ? '_' : '') + dbase + (_isProtected(dname) ? '!' : '');
+      var base = (_isHidden(dname) ? '_' : '') + dbase + (_isProtected(dname) ? '!' : '');
+      var destCanonical = (dev === 'local') ? _buildLocalCanonical(base) : base;
       var res = await _save(dev, destCanonical, content);
       if (res === 'Error: Disk Full') return 'Error: Disk Full';
       manifest.push({ name: destCanonical, size: _utf8len(content), timestamp: _timestamp() });
@@ -614,7 +652,8 @@ var DEVICE = 'none';
     if (destFound) {
       destCanonical = destFound.entry.name;
     } else {
-      destCanonical = (_isHidden(dname) ? '_' : '') + dbase + (_isProtected(dname) ? '!' : '');
+      var base = (_isHidden(dname) ? '_' : '') + dbase + (_isProtected(dname) ? '!' : '');
+      destCanonical = (dev === 'local') ? _buildLocalCanonical(base) : base;
     }
 
     if (append && destFound) {
@@ -804,7 +843,8 @@ var DEVICE = 'none';
     if (found) {
       destCanonical = found.entry.name;
     } else {
-      destCanonical = (_isHidden(dname) ? '_' : '') + dbase + (_isProtected(dname) ? '!' : '');
+      var base = (_isHidden(dname) ? '_' : '') + dbase + (_isProtected(dname) ? '!' : '');
+      destCanonical = (dev === 'local') ? _buildLocalCanonical(base) : base;
     }
 
     var content = String(picked.text);
@@ -1120,7 +1160,7 @@ var DEVICE = 'none';
       manifest.push({ name: dirToken, size: 0, timestamp: _timestamp() });
       var saveRes = _saveManifest(manifest);
       if (saveRes === 'Error: Disk Full') { return 'Error: Disk Full'; }
-      setCwdSync(target);
+      //setCwdSync(target);
       return "done";
     } catch (e) {
       return 'Error: ' + (e && e.message ? e.message : String(e));
@@ -1130,16 +1170,16 @@ var DEVICE = 'none';
   global.localChDir = async function (name) {
     try {
       var cwd = getCwdSync();
-      // If no name provided, return the current working directory (per request)
-      if (!name || String(name).trim() === '' ) { return cwd; }
-      // normalize shorthand for "root"
-      if (name === '.' || name === './') { setCwdSync(ROOT_SEG); return 'done'; }
+      
+      if (!name || String(name).trim() === '') { return cwd; }
+      
+      if (!name || String(name).trim() === '') { return cwd; }
       var target = resolveDirPath(name, cwd);
       if (!target) { return 'Error: invalid dir name'; }
       var man = _loadManifest();
-      if (!manifestHasDir(man, target)) { return 'Error: ' + target + ' not found'; }
+      if (target !== ROOT_SEG && !manifestHasDir(man, target)) { return 'Error: ' + target + ' not found'; }
       setCwdSync(target);
-      return 'done';
+      return target;
     } catch (e) {
       return 'Error: ' + (e && e.message ? e.message : String(e));
     }
@@ -1217,7 +1257,8 @@ var DEVICE = 'none';
     if (found) {
       canonical = found.entry.name;
     } else {
-      canonical = (_isHidden(fname) ? '_' : '') + fbase + (_isProtected(fname) ? '!' : '');
+      var base = (_isHidden(fname) ? '_' : '') + fbase + (_isProtected(fname) ? '!' : '');
+      canonical = _buildLocalCanonical(base);
     }
 
     var content = String(text == null ? '' : text);
@@ -1314,13 +1355,13 @@ var DEVICE = 'none';
       if (e.name === MANIFEST_KEY) continue;
 
       // ── Filter by current working directory ─────────────────────────────
-      var fullPath = e.name;
-      var dirName = fullPath.substring(0, fullPath.lastIndexOf('/'));
-      
-      console.log(fullPath+" - "+dirName);
-      if (dirName !== _cwd) continue;
-
       var isDir = (e.name.charAt(0) === '<' && e.name.charAt(e.name.length - 1) === '>');
+      var entryPath = isDir ? e.name.substring(1, e.name.length - 1) : e.name;
+      var lastSlash = entryPath.lastIndexOf('/');
+      var entryDir = lastSlash >= 0 ? entryPath.substring(0, lastSlash) : '';
+      if (entryDir === '') entryDir = ROOT_SEG;
+      if (entryDir !== _cwd) continue;
+
       var isHidden = _isHidden(e.name);
 
       if (isDir) {
