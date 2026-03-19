@@ -993,9 +993,16 @@ async function hostMessageHandler(ev) {
         case 'localChDir': {
           var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
           var fname = (typeof d.file === 'undefined' || d.file === null) ? '' : String(d.file);
-          var validName = validateGuestFilename(fname);
-          if (!validName) { dosXmitQdos(_dosIframe, d.id, 'localChDir', false, 'invalid filename'); break; }
-          // Use Promise.resolve() to handle both sync and async implementations
+          if (fname) {
+            if (fname=="..") {
+              validName="..";
+            } else {
+              var validName = validateGuestFilename(fname);
+              if (!validName) { dosXmitQdos(_dosIframe, d.id, 'localChDir', false, 'invalid filename'); break; }
+            }
+          } else {
+            validName="";
+          }
           Promise.resolve().then(function () { return localChDir(validName); })
             .then(function(result) {
               dosXmitQdos(_dosIframe, d.id, 'localChDir', true, result);
@@ -1248,8 +1255,6 @@ function validateGuestFilename(name) {
   // Limit length to reasonable size to avoid DOS attacks
   if (s.length > 128) return null;
   if (!/^[A-Za-z0-9 _.\-!]+$/.test(s)) return null;
-  // Optionally normalize repeated spaces
-  s = s.replace(/\s+/g, ' ');
   return s;
 }
 
@@ -3480,7 +3485,7 @@ function command_js() {
     console.log("f="+f+" d="+d);
     switch (c) {
       case "dir":
-        print(await qdosDir(f, d));
+        print(await qdosDir(f, d)+"\n");
         return;
       case "list":
         print(await qdosList()); 
@@ -3492,75 +3497,46 @@ function command_js() {
         print(await qdosLoad(f));
         return;
       case "delete":
-        if (f) { print(await qdosDelete(f)); } else { return('Error: invalid filename\n'); }
+        print(await qdosDelete(f)); 
         return;
       case "del":
-        if (f) { print(await qdosDelete(f)); } else { return('Error: invalid filename\n'); }
+        print(await qdosDelete(f));
         return;
       case "rm":
-        if (f) { print(await qdosDelete(f)); } else { return('Error: invalid filename\n'); }
+        print(await qdosDelete(f));
         return;
       case "rename":
-        if (f && d) { print(await qdosRename(f,d)); } else { return('Error: invalid filename\n'); }
+        print(await qdosRename(f,d));
         return; 
       case "ren":
-        if (f && d) { print(await qdosRename(f,d)); } else { return('Error: invalid filename\n'); }
+        print(await qdosRename(f,d));
         return; 
       case "mount":
-        if (f) {
-          print(await qdosMount(f));
-        } else {
-          return('Error: invalid filename\n');
-        }
+        print(await qdosMount(f));
         return;
       case "qpaste":
-        if (f) {
-          print(await qdosPaste(f));
-        } else {
-          return('Error: invalid filename\n');
-        }
+        print(await qdosPaste(f));
         return;
       case "qcopy":
-        if (f) {
-          print(await qdosCopy(f));
-        } else {
-          return('Error: invalid filename\n');
-        }
+        print(await qdosCopy(f));
         return;
       case "mkdir":
-        if (f) {
-          print(await qdosMkDir(f));
-        } else {
-          return('Error: invalid dir name\n');
-        }
+        print(await qdosMkDir(f));
         return;     
       case "chdir":
-        if (f) {
-          print(await qdosChDir(f));
-        } else {
-          return('Error: invalid dir name\n');
-        }
+        print(await qdosChDir(f));
         return;     
       case "cd":
-        if (f) {
-          print(await qdosChDir(f));
-        } else {
-          return('Error: invalid dir name\n');
-        }
+        print(await qdosChDir(f));
         return;     
       case "rmdir":
-        if (f) {
-          print(await qdosRmDir(f));
-        } else {
-          return('Error: invalid dir name\n');
-        }
+        print(await qdosRmDir(f));
+        return;     
+      case "rd":
+        print(await qdosRmDir(f));
         return;     
       case "exists":
-        if (f) {
-          print(await qdosExists(f));
-        } else {
-          return('Error: invalid filename\n');
-        }
+        print(await qdosExists(f));
         return;
       case "fdisk":
         if (HOST) {
@@ -3732,12 +3708,10 @@ async function qdosRename(file, dest, timeoutMs) {
   if(HOST) { return "Input \'user\' to rename files"; } 
   return qdosXmitDos('localRename', { file: validSrc, dest: validDest }, timeoutMs)
     .then(function (result) {
-      console.log("3734");
       // resolution means host reported success; return true for convenience
       return result;
     })
     .catch(function (err) {
-      console.log("3739");
       // propagate error
      return err;
     });
@@ -3772,7 +3746,7 @@ async function qdosPaste(filename, timeoutMs) {
       if (res === true || res === undefined) return 'OK: pasted to ' + valid + '\n';
       return String(res) + '\n';
     }).catch(function (err) {
-      return 'Error: '+(err && err.message ? err.message : String(err)));
+      return 'Error: '+(err && err.message ? err.message : String(err));
     });
   }
 }
@@ -3808,17 +3782,28 @@ async function qdosMkDir(name, timeoutMs) {
   }
 }
 
-// this functions is correct, it returns the string results not an object 
 async function qdosChDir(name) {
-  var valid = (typeof qdosValidateFilename === 'function') ? qdosValidateFilename(name) : (typeof name === 'string' ? name.trim() : null);
-  
-  if (!valid) return Promise.reject(new Error('invalid name'));
+  //var valid = (typeof qdosValidateFilename === 'function') ? qdosValidateFilename(name) : (typeof name === 'string' ? name.trim() : null);
   if (typeof HOST !== 'undefined' && HOST) {
   
   } else {
-    var valid = qdosValidateFilename(name);
-    if (!valid) { return Promise.reject(new Error('invalid name')); }
-    return qdosXmitDos('localChDir', { file: valid });
+    if (name) {
+      if (name=="..") {
+        valid=".."; 
+      } else {
+        var valid = qdosValidateFilename(name);
+        if (!valid) return 'Error: invalid name';
+      }
+    } else {
+      valid="";
+    }
+    return qdosXmitDos('localChDir', { file: valid })
+      .then(function (result) {
+        return result;
+      })
+      .catch(function (err) {
+       return err;
+      });
   }
 };
 
@@ -3829,7 +3814,6 @@ async function qdosRmDir(name) {
   
   } else {
     var valid = qdosValidateFilename(name);
-    if (!valid) { return Promise.reject(new Error('invalid name')); }
     return qdosXmitDos('localRmDir', { file: valid });
   }
 };

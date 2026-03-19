@@ -1160,7 +1160,7 @@ var DEVICE = 'none';
       manifest.push({ name: dirToken, size: 0, timestamp: _timestamp() });
       var saveRes = _saveManifest(manifest);
       if (saveRes === 'Error: Disk Full') { return 'Error: Disk Full'; }
-      setCwdSync(target);
+      //setCwdSync(target);
       return "done";
     } catch (e) {
       return 'Error: ' + (e && e.message ? e.message : String(e));
@@ -1170,16 +1170,16 @@ var DEVICE = 'none';
   global.localChDir = async function (name) {
     try {
       var cwd = getCwdSync();
-      // If no name provided, return the current working directory (per request)
-      if (!name || String(name).trim() === '' ) { return cwd; }
-      // normalize shorthand for "root"
-      if (name === '.' || name === './') { setCwdSync(ROOT_SEG); return 'done'; }
+      
+      if (!name || String(name).trim() === '') { return cwd; }
+      
+      if (!name || String(name).trim() === '') { return cwd; }
       var target = resolveDirPath(name, cwd);
       if (!target) { return 'Error: invalid dir name'; }
       var man = _loadManifest();
-      if (!manifestHasDir(man, target)) { return 'Error: ' + target + ' not found'; }
+      if (target !== ROOT_SEG && !manifestHasDir(man, target)) { return 'Error: ' + target + ' not found'; }
       setCwdSync(target);
-      return 'done';
+      return target;
     } catch (e) {
       return 'Error: ' + (e && e.message ? e.message : String(e));
     }
