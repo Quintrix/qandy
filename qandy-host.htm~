@@ -2017,9 +2017,10 @@ window.pokeCursor = async function(t) {
       if (typeof CURMORE === 'number' && CURMORE >= 0) {
         CURMORE++;
         if (CURMORE >= H-1) {
-          pokeMore(1);
+          pokeMenu("  Press ENTER to continue: ");
           let morePrompt= await input(1);
-          pokeMore(0)
+          CURMORE=0;
+          pokeMenu("");
         }
       }
       idx++; continue;
@@ -2033,9 +2034,10 @@ window.pokeCursor = async function(t) {
       if (typeof CURMORE === 'number' && CURMORE >= 0) {
         CURMORE++;
         if (CURMORE >= H-1) {
-          pokeMore(1);
+          pokeMenu("  Press ENTER to continue: ");
           let morePrompt= await input(1);
-          pokeMore(0);
+          pokeMenu("");
+          CURMORE=0;
         }
       }
     }
@@ -2047,21 +2049,14 @@ window.pokeCursor = async function(t) {
   return true;
 };
 
-function pokeMore(s) {
-  if (s) { 
-    for (var x=0; x<W; x++) {
-      var promptText="  Press ENTER to continue: ";
-      var ch=x<promptText.length ? promptText[x] : ' ';
-      pokeCell(x, CURY, ch, MENUFG, MENUBG, 0);
-    }
-  } else {
-    for (var x=0; x<W; x++) {
-      var promptText="  Press ENTER to continue: ";
-      var ch=x<promptText.length ? promptText[x] : ' ';
-      pokeCell(x, CURY, ch, MENUFG, MENUBG, 0);
-    }
-  }
-  CURMORE=0;
+window.pokeMenu = function(t) {
+  if (t) {
+    console.log("pokeMenu t="+t);
+    for (var x=0; x<W; x++) { var ch=x<t.length ? t[x] : ' '; pokeCell(x, H, ch, MENUFG, MENUBG, 0); }
+    return;
+  } 
+  console.log("pokeMenu t=null, erase menu");
+  for (var x=0; x<W; x++) { pokeCell(x, H, ' ', CURFG, CURBG, 0); }
   return;
 }
 
