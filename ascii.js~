@@ -8,8 +8,6 @@ var controlCharNames = {
   30: "RS", 31: "US"
 };
 
-// CP437 to Unicode mapping for extended ASCII (128-255)
-// Maps IBM PC (DOS) box-drawing and special characters to Unicode equivalents
 var cp437ToUnicode = {
   // 128-159: Various symbols and accented characters
   128: "\u00C7", 129: "\u00FC", 130: "\u00E9", 131: "\u00E2", 132: "\u00E4", 133: "\u00E0", 134: "\u00E5", 135: "\u00E7",
@@ -47,74 +45,90 @@ var cp437ToUnicode = {
   248: "\u00B0", 249: "\u2219", 250: "\u00B7", 251: "\u221A", 252: "\u207F", 253: "\u00B2", 254: "\u25A0", 255: "\u00A0"
 };
 
-print("\x1b[1;36m\n");
-print("ASCII Character Table:\n\n");
+CURMORE=0;
+print("\n");
+print("ASCII Character Chart:\n");
+print("\n");
+ascii();
+dosExit();
+
+
+//print("ascii() to display all ASCII Characters\n\n");
+//print("ansi() to display graphic characters\n\n");
+//print("alpha() to display alpha-numeric characers\n\n");
+
+keyon = 1;
+
+function ascii() {
+  CURMORE=0;
+  print("\x1b[1;36m\n");
+  print("ASCII Character Table:\n\n");
     
-print("\x1b[1;33mControl Characters (0-31):\x1b[0m\n");
-
-var rows = 11;  // 32 items / 3 columns = 10.67, round up to 11
-for (var row = 0; row < rows; row++) {
-  for (var col = 0; col < 3; col++) {
-    var i = row + (col * rows);
-    if (i < 32) {
-      var name = controlCharNames[i] || "?";
-      var hex = i.toString(16);
-      if (hex.length === 1) hex = "0" + hex;
-      // Pad name to 3 characters for alignment
-      print(String(i).padStart(3) + " " + name.padEnd(3));
-      if (col < 2) print("  ");  // Add spacing between columns
+  // Control characters (0-31)
+  // Display in columns (top to bottom): 11 rows × 3 columns
+  print("\x1b[1;33mControl Characters (0-31):\x1b[0m\n");
+  var rows = 11;  // 32 items / 3 columns = 10.67, round up to 11
+  for (var row = 0; row < rows; row++) {
+    for (var col = 0; col < 3; col++) {
+      var i = row + (col * rows);
+      if (i < 32) {
+        var name = controlCharNames[i] || "?";
+        var hex = i.toString(16);
+        if (hex.length === 1) hex = "0" + hex;
+        // Pad name to 3 characters for alignment
+        print(String(i).padStart(3) + " " + name.padEnd(3));
+        if (col < 2) print("  ");  // Add spacing between columns
+      }
     }
+    print("\n");
   }
-  print("\n");
-}
-print("\n\f\n");
-
-print("\x1b[1;33mPrintable ASCII (32-126):\x1b[0m\n");
-var printableCount = 95;  // 32 to 126 inclusive
-var printableCols = 5;
-var printableRows = Math.ceil(printableCount / printableCols);  // 19 rows
-for (var row = 0; row < printableRows; row++) {
-  for (var col = 0; col < printableCols; col++) {
-    var i = 32 + row + (col * printableRows);
-    if (i <= 126) {  // Stop at 126, not 127
-      var char = String.fromCharCode(i);
-      var hex = i.toString(16);
-      if (hex.length === 1) hex = "0" + hex;
-      print(String(i).padStart(3) + " " + char);
-      var nextI = 32 + row + ((col + 1) * printableRows);
-      if (col < printableCols - 1 && nextI <= 126) print(" ");  // Add spacing between columns
+  print("\n\f\n");
+  // Printable ASCII (32-126) - excluding 127 (DEL)
+  // Display in columns (top to bottom): 19 rows × 5 columns
+  print("\x1b[1;33mPrintable ASCII (32-126):\x1b[0m\n");
+  var printableCount = 95;  // 32 to 126 inclusive
+  var printableCols = 5;
+  var printableRows = Math.ceil(printableCount / printableCols);  // 19 rows
+  for (var row = 0; row < printableRows; row++) {
+    for (var col = 0; col < printableCols; col++) {
+      var i = 32 + row + (col * printableRows);
+      if (i <= 126) {  // Stop at 126, not 127
+        var char = String.fromCharCode(i);
+        var hex = i.toString(16);
+        if (hex.length === 1) hex = "0" + hex;
+        print(String(i).padStart(3) + " " + char);
+        var nextI = 32 + row + ((col + 1) * printableRows);
+        if (col < printableCols - 1 && nextI <= 126) print(" ");  // Add spacing between columns
+      }
     }
+    print("\n");
   }
-  print("\n");
-}
-print("\n\n\n");
+  print("\n\f\n");
   
-// Extended ASCII (128-255)
-print("\x1b[1;33mExtended ASCII (128-255):\x1b[0m\n");
-print("\x1b[0;37m(CP437 characters mapped to Unicode equivalents)\x1b[0m\n");
-var extendedCount = 128;  // 128 to 255 inclusive
-var extendedCols = 5;
-var extendedRows = Math.ceil(extendedCount / extendedCols);  // 26 rows
-
-for (var row = 0; row < extendedRows; row++) {
-  for (var col = 0; col < extendedCols; col++) {
-    var i = 128 + row + (col * extendedRows);
-    if (i <= 255) {
-      // Use CP437 to Unicode mapping if available, otherwise use the character directly
-      var char = cp437ToUnicode[i] || String.fromCharCode(i);
-      var hex = i.toString(16);
-      if (hex.length === 1) hex = "0" + hex;
-      print(String(i).padStart(3) + " " + char);
-      var nextI = 128 + row + ((col + 1) * extendedRows);
-      if (col < extendedCols - 1 && nextI <= 255) print(" ");  // Add spacing between columns
+  // Extended ASCII (128-255)
+  // Display in columns (top to bottom): 26 rows × 5 columns
+  // Using CP437 to Unicode mapping for proper display of box-drawing characters
+  print("\x1b[1;33mExtended ASCII (128-255):\x1b[0m\n");
+  print("\x1b[0;37m(CP437 characters mapped to Unicode equivalents)\x1b[0m\n");
+  var extendedCount = 128;  // 128 to 255 inclusive
+  var extendedCols = 5;
+  var extendedRows = Math.ceil(extendedCount / extendedCols);  // 26 rows
+  for (var row = 0; row < extendedRows; row++) {
+    for (var col = 0; col < extendedCols; col++) {
+      var i = 128 + row + (col * extendedRows);
+      if (i <= 255) {
+        // Use CP437 to Unicode mapping if available, otherwise use the character directly
+        var char = cp437ToUnicode[i] || String.fromCharCode(i);
+        var hex = i.toString(16);
+        if (hex.length === 1) hex = "0" + hex;
+        print(String(i).padStart(3) + " " + char);
+        var nextI = 128 + row + ((col + 1) * extendedRows);
+        if (col < extendedCols - 1 && nextI <= 255) print(" ");  // Add spacing between columns
+      }
     }
+    print("\n");
   }
-  print("\n\n");
 }
-
-
-
-
 
 function ansi() {
   //cls();
@@ -139,7 +153,7 @@ function ansi() {
   print("● (filled circle)  ○ (empty circle)  ★ (filled star)  ☆ (empty star)\n");
   print("✓ (checkmark)  ✗ (x mark)\n\n");
   
-  print("\x1b[1;33mMath Symbols:\x1b[0m\n");
+  print("\x1b[1t be;33mMath Symbols:\x1b[0m\n");
   print("+ (plus)  × (multiply)  ÷ (divide)  = (equals)  ≠ (not equal)\n");
   print("± (plus-minus)  ≤ (less-equal)  ≥ (greater-equal)\n\n");
   
@@ -151,4 +165,3 @@ function ansi() {
   keyon = 1;
 }
 
-window.dosExit();
