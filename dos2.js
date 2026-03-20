@@ -1632,22 +1632,45 @@ var DEVICE = 'none';
   function isHttpProtocol() {var p = getLoadProtocol(); return p === 'http' || p === 'https'; }
   function getBaseURL() { try { return new URL('.', location.href).href; } catch (e) { return location.href; }}
  
+  // Fetch a file from the server and return { text, serverTs } or null on failure.
+  // serverTs is in yyyymmddhhmmss format, sourced from the HTTP Last-Modified header.
   async function dosInstallFetch(file) {
     try {
-      if (dosExists(file)) { print("exists\n"); return true; }
       const url = new URL(file, location.href).href;
       const resp = await fetch(url, { cache: 'no-store' });
-      if (!resp.ok) { print("error (" + resp.status + ")\n"); return false; }
+      if (!resp.ok) return null;
       const text = await resp.text();
-      const saveRes = await dosSave(file, text);
-      if (saveRes === true) {
-        print("installed\n"); return true;
-      } else {
-        print("save failed\n"); return false;
-      }
+      var lastMod = resp.headers.get('Last-Modified');
+      var serverTs = lastMod ? _tsFromDate(new Date(lastMod)) : _timestamp();
+      return { text: text, serverTs: serverTs };
     } catch (err) {
-      print("error: " + String(err) + "\n"); return false;
+      return null;
     }
+  }
+
+  // Save a file to localStorage with a specific timestamp (used to preserve server timestamps).
+  async function _installFile(file, text, ts) {
+    var fname = _normName(file);
+    var fbase = _baseName(fname);
+    if (_hasWildcards(fbase)) return false;
+    var fv = _validateBase(fbase);
+    if (!fv.ok) return false;
+    var canonical = fbase;
+    var dev = global.DEVICE;
+    var res = await _save(dev, canonical, text);
+    if (res === 'Error: Disk Full' || res === false) return false;
+    var size = _utf8len(text);
+    var manifest = _loadManifest();
+    var found = _findEntryFlexible(manifest, fname);
+    if (found) {
+      found.entry.size = size;
+      found.entry.timestamp = ts;
+    } else {
+      manifest.push({ name: canonical, size: size, timestamp: ts });
+    }
+    var mres = _saveManifest(manifest);
+    if (mres === 'Error: Disk Full') return false;
+    return true;
   }
 
   window.dosInstall = async function() {
@@ -1658,29 +1681,72 @@ var DEVICE = 'none';
       } catch (e) {
         print("Error: Disk Full\n\n");
         return false;
-     }
-    } 
-  
-    if (isHttpProtocol()) {
-      print("Installing Qandy:\n\n");
-      print("  ansi.js: ");
-      await dosInstallFetch("ansi.js");
-      print("  ascii.js: ");
-      await dosInstallFetch("ascii.js");
-      print("  keydown.js: ");
-      await dosInstallFetch("keydown.js");
-      print("  piano.js: ");
-      await dosInstallFetch("piano.js");
-      print("  svga.js: ");
-      await dosInstallFetch("svga.js");
-      print("\nInstallation Complete.\n\n");
-      return true;
-    } else if (isFileProtocol()) {
-      print("\nCannot install from file://\n");
-      print("Use DOS to copy .js files to\n");
-      print("localStorage.\n\n");
+      }
+    }
+
+    if (!isHttpProtocol()) {
+      if (isFileProtocol()) {
+        print("\nCannot install from file://\n");
+        print("Use DOS to copy .js files to\n");
+        print("localStorage.\n\n");
+      }
       return false;
     }
+
+    var files = ['ansi.js', 'ascii.js', 'keydown.js', 'piano.js', 'svga.js'];
+
+    // Fetch all files from the server and collect their timestamps
+    var fileData = [];
+    for (var i = 0; i < files.length; i++) {
+      var result = await dosInstallFetch(files[i]);
+      fileData.push({
+        file: files[i],
+        text: result ? result.text : null,
+        serverTs: result ? result.serverTs : null
+      });
+    }
+
+    // Load the localStorage manifest to get existing file timestamps
+    var manifest = _loadManifest();
+
+    // Display the comparison list
+    print("\n");
+    for (var i = 0; i < fileData.length; i++) {
+      var fd = fileData[i];
+      var localEntry = _findEntryFlexible(manifest, fd.file);
+      var localTs = localEntry ? localEntry.entry.timestamp : null;
+      var isNew = !localEntry;
+      var serverDisp = fd.serverTs ? _formatTimestamp(fd.serverTs) : '     ';
+      var localDisp = localTs ? _formatTimestamp(localTs) : '     ';
+      if (isNew) {
+        print(serverDisp + ' ' + localDisp + ' [bred]*[white]' + fd.file + '\n');
+      } else {
+        print(serverDisp + ' ' + localDisp + '  ' + fd.file + '\n');
+      }
+    }
+
+    // Ask for confirmation via the menu bar
+    print('\n');
+    pokeMenu("  Install new files, (Y)es? ");
+    var answer = await input(false);
+    pokeMenu();
+
+    if (answer !== 'Y' && answer !== 'y') {
+      return false;
+    }
+
+    // Install each file, preserving the server timestamp in the manifest
+    print('\n');
+    for (var i = 0; i < fileData.length; i++) {
+      var fd = fileData[i];
+      if (fd.text === null) continue;
+      if (dosExists(fd.file)) { await dosDelete(fd.file); }
+      var ts = fd.serverTs || _timestamp();
+      await _installFile(fd.file, fd.text, ts);
+      print(_formatTimestamp(ts) + '  ' + fd.file + '\n');
+    }
+    print('\ndone\n\n');
+    return true;
   };
 
   if (dosExists("dir.sys")) {} else {  
