@@ -1727,13 +1727,11 @@ var DEVICE = 'none';
 
     // Ask for confirmation via the menu bar
     print('\n');
-    pokeMenu("  Install new files, (Y)es? ");
+    pokeMenu("  Install new files, (Y)es? here ");
     var answer = await input(false);
     pokeMenu();
 
-    if (answer !== 'Y' && answer !== 'y') {
-      return false;
-    }
+    if (answer !== 'Y' && answer !== 'y') { return false; }
 
     // Install each file, preserving the server timestamp in the manifest
     print('\n');
