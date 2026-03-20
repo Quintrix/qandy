@@ -1931,20 +1931,29 @@ window.pokeModem = function(t) {
 };
 
 // pokeCursor — synchronous full-speed print with full ANSI support.
-// morePrompt() — display "Press ENTER to continue: " on the bottom row using
-// pokeCell() directly (avoids interfering with the current print job), then
-// return a Promise that resolves when the user presses ENTER.
+// morePrompt() — clear the bottom row, then after a 1-second timeout display
+// "Press ENTER to continue: " only if output is still paused.  Returns a
+// Promise that resolves when the user presses ENTER.
 window.morePrompt = function() {
   return new Promise(function(resolve) {
-    var promptText = "Press ENTER to continue: ";
     var row = H - 1;
-    // Fill the entire bottom row with menu colors
+    // Clear the bottom row immediately (no prompt yet)
     for (var x = 0; x < W; x++) {
-      var ch = x < promptText.length ? promptText[x] : ' ';
-      pokeCell(x, row, ch, MENUFG, MENUBG, 0);
+      pokeCell(x, row, ' ', CURFG, CURBG, CURATTR);
     }
     window._morePromptActive = true;
     window._morePromptResolve = resolve;
+    // After 1 second, show the prompt only if we are still waiting for ENTER
+    window._morePromptTimer = setTimeout(function() {
+      window._morePromptTimer = null;
+      if (window._morePromptActive) {
+        var promptText = "Press ENTER to continue: ";
+        for (var x = 0; x < W; x++) {
+          var ch = x < promptText.length ? promptText[x] : ' ';
+          pokeCell(x, row, ch, MENUFG, MENUBG, 0);
+        }
+      }
+    }, 1000);
   });
 };
 
@@ -4285,6 +4294,7 @@ window.button=function(b, event) {
     // Handle morePrompt() pause: clear the prompt row and resume pokeCursor
     if (window._morePromptActive) {
       window._morePromptActive = false;
+      if (window._morePromptTimer) { clearTimeout(window._morePromptTimer); window._morePromptTimer = null; }
       var _row = H - 1;
       for (var _x = 0; _x < W; _x++) {
         pokeCell(_x, _row, ' ', CURFG, CURBG, CURATTR);
