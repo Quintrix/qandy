@@ -2018,7 +2018,7 @@ window.pokeCursor = async function(t) {
         CURMORE++;
         if (CURMORE >= H-1) {
           pokeMenu("  Press ENTER to continue: ");
-          let morePrompt= await input(1);
+          let morePrompt= await input(false);
           CURMORE=0;
           pokeMenu();
         }
@@ -2035,7 +2035,7 @@ window.pokeCursor = async function(t) {
         CURMORE++;
         if (CURMORE >= H-1) {
           pokeMenu("  Press ENTER to continue: ");
-          let morePrompt= await input(1);
+          let morePrompt= await input(false);
           pokeMenu();
           CURMORE=0;
         }

@@ -1,3 +1,4 @@
+RUN="ascii2.js";
 
   function pad(num, width) { return String(num).padStart(width, '0'); }
 
@@ -55,7 +56,7 @@
       // join columns with separator and push: chars line, codes line, blank spacer line
       lines.push(charsCells.join(sep));
       lines.push(codesCells.join(sep));
-      lines.push(''); // blank line between groups
+      lines.push('\n'); // blank line between groups
     }
 
     var out = lines.join('\n');
@@ -65,3 +66,5 @@
 
   window._ascii_rendered = true;
   renderAscii(32, 126, 8, { showSpaceSymbol: false });
+
+dosExit();
