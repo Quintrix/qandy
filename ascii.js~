@@ -1,3 +1,5 @@
+// QANDY ASCII CHARACTER DISPLAY UTILITY
+// Displays all 256 ASCII characters or curated "nice" drawing characters
 
 var controlCharNames = {
   0: "NUL", 1: "SOH", 2: "STX", 3: "ETX", 4: "EOT", 5: "ENQ",
@@ -128,6 +130,8 @@ function ascii() {
     }
     print("\n");
   }
+
+
 }
 
 function ansi() {
