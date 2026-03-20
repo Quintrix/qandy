@@ -419,6 +419,9 @@ var CURFG=37;       // cursor text fg color white
 var CURBG=40;       // cursor text bg color black
 var CURATTR=0;      // cursor text attr 
 var CURBAUD=0;      // baud rate to display text
+var CURMORE=0;      // more prompt line counter: <0=disabled; >=0=enabled (counts lines, pauses at H-1)
+var MENUFG=37;      // more prompt foreground color (white)
+var MENUBG=44;      // more prompt background color (blue)
 
 // video.js
 var W=32; // screen width
@@ -1928,7 +1931,24 @@ window.pokeModem = function(t) {
 };
 
 // pokeCursor — synchronous full-speed print with full ANSI support.
-window.pokeCursor = function(t) {
+// morePrompt() — display "Press ENTER to continue: " on the bottom row using
+// pokeCell() directly (avoids interfering with the current print job), then
+// return a Promise that resolves when the user presses ENTER.
+window.morePrompt = function() {
+  return new Promise(function(resolve) {
+    var promptText = "Press ENTER to continue: ";
+    var row = H - 1;
+    // Fill the entire bottom row with menu colors
+    for (var x = 0; x < W; x++) {
+      var ch = x < promptText.length ? promptText[x] : ' ';
+      pokeCell(x, row, ch, MENUFG, MENUBG, 0);
+    }
+    window._morePromptActive = true;
+    window._morePromptResolve = resolve;
+  });
+};
+
+window.pokeCursor = async function(t) {
   if (typeof t === 'undefined' || t === null) return false;
   var str = String(t);
 
@@ -1994,6 +2014,16 @@ window.pokeCursor = function(t) {
       CURX = 0; CURY++;
       if (CURY >= H) { pokeScroll(); CURY = H - 1; }
       LINEX = CURX; LINEY = CURY;
+      // CURMORE pagination: count lines when enabled (CURMORE >= 0)
+      if (typeof CURMORE === 'number' && CURMORE >= 0) {
+        CURMORE++;
+        if (CURMORE >= H - 1) {
+          pokeCursorOn();
+          await morePrompt();
+          CURMORE = 0;
+          pokeCursorOff();
+        }
+      }
       idx++;
       continue;
     }
@@ -4252,6 +4282,18 @@ window.button=function(b, event) {
   } else if (k === "enter") {
     if (!virtualclick) { event && event.preventDefault(); }
     if (SSTART>-1) { pokeSelect(false); SSTART = -1; SEND = -1; }
+    // Handle morePrompt() pause: clear the prompt row and resume pokeCursor
+    if (window._morePromptActive) {
+      window._morePromptActive = false;
+      var _row = H - 1;
+      for (var _x = 0; _x < W; _x++) {
+        pokeCell(_x, _row, ' ', CURFG, CURBG, CURATTR);
+      }
+      var _res = window._morePromptResolve;
+      window._morePromptResolve = null;
+      if (_res) _res();
+      return;
+    }
     if (LINE !== undefined) {
       // Check if there's a pending input() awaiting a response
       if (window.QandyKeyboard) {
@@ -4618,13 +4660,14 @@ async function _processPrintQueue() {
       var job = q.items.shift();
       // wait for any current paced output to finish
       await waitForCursorIdle();
-      // invoke pokeCursor to print this job.text
+      // invoke pokeCursor to print this job.text (pokeCursor is async — await it so
+      // morePrompt() pauses are respected before resolving the print job)
       try {
-        pokeCursor(job.text);
+        await pokeCursor(job.text);
       } catch (e) {
         // If pokeCursor thrown, still resolve so callers don't hang
       }
-      // wait for this pokeCursor output to finish
+      // wait for any residual paced output to finish
       await waitForCursorIdle();
       // resolve the enqueue promise if present
       try { job.resolve(); } catch (e) {}
