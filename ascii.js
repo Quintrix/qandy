@@ -8,8 +8,6 @@ var controlCharNames = {
   30: "RS", 31: "US"
 };
 
-// CP437 to Unicode mapping for extended ASCII (128-255)
-// Maps IBM PC (DOS) box-drawing and special characters to Unicode equivalents
 var cp437ToUnicode = {
   // 128-159: Various symbols and accented characters
   128: "\u00C7", 129: "\u00FC", 130: "\u00E9", 131: "\u00E2", 132: "\u00E4", 133: "\u00E0", 134: "\u00E5", 135: "\u00E7",
@@ -47,12 +45,13 @@ var cp437ToUnicode = {
   248: "\u00B0", 249: "\u2219", 250: "\u00B7", 251: "\u221A", 252: "\u207F", 253: "\u00B2", 254: "\u25A0", 255: "\u00A0"
 };
 
-//cls();
+CURMORE=0;
 print("\n");
 print("ASCII Character Chart:\n");
 print("\n");
-
 ascii();
+dosExit();
+
 
 //print("ascii() to display all ASCII Characters\n\n");
 //print("ansi() to display graphic characters\n\n");
@@ -61,6 +60,7 @@ ascii();
 keyon = 1;
 
 function ascii() {
+  CURMORE=0;
   print("\x1b[1;36m\n");
   print("ASCII Character Table:\n\n");
     
@@ -153,7 +153,7 @@ function ansi() {
   print("● (filled circle)  ○ (empty circle)  ★ (filled star)  ☆ (empty star)\n");
   print("✓ (checkmark)  ✗ (x mark)\n\n");
   
-  print("\x1b[1;33mMath Symbols:\x1b[0m\n");
+  print("\x1b[1t be;33mMath Symbols:\x1b[0m\n");
   print("+ (plus)  × (multiply)  ÷ (divide)  = (equals)  ≠ (not equal)\n");
   print("± (plus-minus)  ≤ (less-equal)  ≥ (greater-equal)\n\n");
   

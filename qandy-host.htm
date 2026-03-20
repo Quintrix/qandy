@@ -419,7 +419,7 @@ var CURFG=37;       // cursor text fg color white
 var CURBG=40;       // cursor text bg color black
 var CURATTR=0;      // cursor text attr 
 var CURBAUD=0;      // baud rate to display text
-var CURMORE=0;      // more prompt line counter: <0=disabled; >=0=enabled (counts lines, pauses at H-1)
+var CURMORE=-1;     // more prompt line counter: <0=disabled; >=0=enabled (counts lines, pauses at H-1)
 var MENUFG=37;      // more prompt foreground color (white)
 var MENUBG=44;      // more prompt background color (blue)
 
@@ -1930,24 +1930,6 @@ window.pokeModem = function(t) {
   return true;
 };
 
-// pokeCursor — synchronous full-speed print with full ANSI support.
-// morePrompt() — display "Press ENTER to continue: " on the bottom row using
-// pokeCell() directly (avoids interfering with the current print job), then
-// return a Promise that resolves when the user presses ENTER.
-window.morePrompt = function() {
-  return new Promise(function(resolve) {
-    var promptText = "Press ENTER to continue: ";
-    var row = H - 1;
-    // Fill the entire bottom row with menu colors
-    for (var x = 0; x < W; x++) {
-      var ch = x < promptText.length ? promptText[x] : ' ';
-      pokeCell(x, row, ch, MENUFG, MENUBG, 0);
-    }
-    window._morePromptActive = true;
-    window._morePromptResolve = resolve;
-  });
-};
-
 window.pokeCursor = async function(t) {
   if (typeof t === 'undefined' || t === null) return false;
   var str = String(t);
@@ -2018,10 +2000,24 @@ window.pokeCursor = async function(t) {
       if (typeof CURMORE === 'number' && CURMORE >= 0) {
         CURMORE++;
         if (CURMORE >= H - 1) {
-          pokeCursorOn();
-          await morePrompt();
-          CURMORE = 0;
-          pokeCursorOff();
+          let morePromise = input();
+          var row=H-1; for (var x=0; x<W; x++) { pokeCell(x, row, ' ', CURFG, CURBG, CURATTR); }
+          
+          promptText=" Press ENTER to continue: ";
+          setTimeout(function() {
+            if (CURMORE==H-1) {
+              for (var x = 0; x < W; x++) {
+                var ch = x < promptText.length ? promptText[x] : ' ';
+                pokeCell(x, row, ch, MENUFG, MENUBG, 0);
+              }
+              CURX = W;
+              CURY = H;
+              pokeCursorOn();
+            }
+          }, 250); // 250 milliseconds delay
+          await morePromise;
+          for (var x = 0; x < W; x++) { pokeCell(x, row, ' ', CURFG, CURBG, CURATTR); }
+          CURMORE=0; CURX=0; CURY=H; pokeCursorOff();
         }
       }
       idx++;
@@ -3218,7 +3214,7 @@ window.updateKeyLabels = updateKeyLabels;
   }
 
   // Public input API: input(0) = normal, input(1) = password (masked)
-  function input(isPassword) {
+  async function input(isPassword) {
     if (pending) return Promise.reject(new Error('input already pending'));
 
     var p = {};
@@ -4282,18 +4278,6 @@ window.button=function(b, event) {
   } else if (k === "enter") {
     if (!virtualclick) { event && event.preventDefault(); }
     if (SSTART>-1) { pokeSelect(false); SSTART = -1; SEND = -1; }
-    // Handle morePrompt() pause: clear the prompt row and resume pokeCursor
-    if (window._morePromptActive) {
-      window._morePromptActive = false;
-      var _row = H - 1;
-      for (var _x = 0; _x < W; _x++) {
-        pokeCell(_x, _row, ' ', CURFG, CURBG, CURATTR);
-      }
-      var _res = window._morePromptResolve;
-      window._morePromptResolve = null;
-      if (_res) _res();
-      return;
-    }
     if (LINE !== undefined) {
       // Check if there's a pending input() awaiting a response
       if (window.QandyKeyboard) {
@@ -4324,7 +4308,8 @@ window.button=function(b, event) {
       }
       historyIndex = -1;
       tempCommand = "";
-      cmd=LINE; LINE=""; CURP=0; LINEX=CURX; LINEY=CURY; pokeRefresh();
+      cmd=LINE; LINE=""; CURP=0; LINEX=CURX; LINEY=CURY; if (CURMORE>-1) { CURMORE=0; } 
+      pokeRefresh();
       command(cmd);
       pokeCursorOn();
       return;
@@ -4687,6 +4672,7 @@ window.dosExit=function() {
   // guest scripts use this to exit back to qandy.js
   print("\n[white]Exit to Qandy\n");
   RUN="qandy.js"
+  CURMORE=-1;
 }
 	
 function clearScreen() { cls(); }

@@ -1391,7 +1391,7 @@ var DEVICE = 'none';
 
     // ── Format output ───────────────────────────────────────────────────────
     var lines = [];
-    var title="qandy:/"+_cwd;
+    var title="local:/"+_cwd;
     title=title.substring(0, 28);
     title=title.padEnd(28);
     lines.push(" \x1B[7m "+title+" \x1B[27m");
