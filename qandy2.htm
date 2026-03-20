@@ -3162,13 +3162,13 @@ window.updateKeyLabels = updateKeyLabels;
 
 // Qandy keyboard input glue
 // Exposes: window.QandyKeyboard and global input(...) for guest scripts.
-// Use: name = await input(); password = await input(1);
-//   input(0) = normal input, input(1) = password input (mask characters with *)
+// Use: name = await input(); password = await input(false);
+//   input() or input(true) = echo mode (input displayed), input(false) = silent mode (nothing displayed)
 
 (function(global) {
   if (global.QandyKeyboard) return; // don't re-install
 
-  var pending = null; // { resolve, reject, maskPassword, buffer, savedLINE, savedCURP }
+  var pending = null; // { resolve, reject, echo, buffer, savedLINE, savedCURP }
 
   // Accept the pending input value and resolve the Promise
   function acceptPending(value) {
@@ -3213,8 +3213,9 @@ window.updateKeyLabels = updateKeyLabels;
     });
   }
 
-  // Public input API: input(0) = normal, input(1) = password (masked)
-  async function input(isPassword) {
+  // Public input API: input() = normal, input(false) = silent (no echo)
+  // p.echo is true when echo is enabled (default), false when echo is disabled.
+  async function input(isEcho) {
     if (pending) return Promise.reject(new Error('input already pending'));
 
     var p = {};
@@ -3222,7 +3223,8 @@ window.updateKeyLabels = updateKeyLabels;
       p.resolve = resolve;
       p.reject = reject;
     });
-    p.maskPassword = !!isPassword;
+    // isEcho defaults to true (echo on); only input(false) disables echo
+    p.echo = (isEcho !== false);
     p.buffer = "";
     p.savedLINE = LINE;
     p.savedCURP = CURP;
@@ -4111,9 +4113,11 @@ window.button=function(b, event) {
     if (!virtualclick) { event && event.preventDefault(); }
     if (window.QandyKeyboard) {
       var _bp = QandyKeyboard._pendingState();
-      if (_bp && _bp.maskPassword) {
-        if (!_bp.buffer || _bp.buffer.length === 0) { pokeCursorOn(); return; }
-        _bp.buffer = _bp.buffer.slice(0, -1);
+      if (_bp && !_bp.echo) {
+        if (_bp.buffer && _bp.buffer.length > 0) {
+          _bp.buffer = _bp.buffer.slice(0, -1);
+        }
+        pokeCursorOn(); return;
       }
     }
     if (SSTART !== -1 && SEND !== -1) {
@@ -4283,7 +4287,7 @@ window.button=function(b, event) {
       if (window.QandyKeyboard) {
         var _ep = QandyKeyboard._pendingState();
         if (_ep) {
-          var _val = _ep.maskPassword ? (_ep.buffer || "") : (LINE || "");
+          var _val = !_ep.echo ? (_ep.buffer || "") : (LINE || "");
           try { lastin = ""; } catch(e) {}
           CURX = 0;
           CURY = (typeof CURY === 'number' && typeof H === 'number') ? Math.min(H - 1, CURY + 1) : ((typeof CURY === 'number') ? CURY + 1 : 0);
@@ -4381,12 +4385,12 @@ window.button=function(b, event) {
     }
     if (SSTART>-1) { pokeSelect(false); SSTART = -1; SEND = -1; }
 
-    // Password mask: store actual char in buffer, display '*' instead
+    // Silent input (echo disabled): store char in buffer, don't display
     if (window.QandyKeyboard) {
       var _cp = QandyKeyboard._pendingState();
-      if (_cp && _cp.maskPassword) {
+      if (_cp && !_cp.echo) {
         _cp.buffer = (_cp.buffer || "") + finalChar;
-        finalChar = '*';
+        pokeCursorOn(); return;
       }
     }
 

@@ -1,6 +1,7 @@
 // Qandy keyboard input glue
 // Exposes: window.QandyKeyboard and global input(...) for guest scripts.
-// Use: name = await input("Name: "); password = await input({ prompt: "Password: ", mask: true });
+// Use: name = await input(); password = await input(false);
+//   input() or input(true) = echo mode (input displayed), input(false) = silent mode (nothing displayed)
 
 (function(global) {
   if (global.QandyKeyboard) return; // don't re-install
@@ -35,46 +36,34 @@
   // Called by key handler for printable character; return true if consumed
   function handleTypedChar(ch) {
     if (!pending) return false;
-    var o = pending.options || {};
-    if (o.mask) {
-      // Append to internal buffer and show '*' in LINE at CURP
+    if (pending.options && pending.options.echo === false) {
+      // Echo disabled: capture char in buffer, show nothing on screen
       pending.buffer = (pending.buffer || "") + ch;
-      LINE = (LINE || "");
-      LINE = LINE.substring(0, CURP) + '*' + LINE.substring(CURP);
-      CURP = CURP + 1;
-      pokeInput();
       return true;
     }
-    // Not masked -> let normal insertion happen (not consumed)
+    // Echo enabled -> let normal insertion happen (not consumed)
     return false;
   }
 
   // Called by key handler for backspace; return true if consumed
   function handleBackspace() {
     if (!pending) return false;
-    var o = pending.options || {};
-    if (o.mask) {
-      if (!pending.buffer || pending.buffer.length === 0) return true; // nothing to delete
-      // remove last char from buffer
-      pending.buffer = pending.buffer.slice(0, -1);
-      // remove last '*' from LINE before CURP
-      if (CURP > 0) {
-        LINE = LINE.substring(0, CURP-1) + LINE.substring(CURP);
-        CURP = Math.max(0, CURP - 1);
-        pokeInput();
+    if (pending.options && pending.options.echo === false) {
+      // Echo disabled: silently remove last char from buffer, nothing to erase from screen
+      if (pending.buffer && pending.buffer.length > 0) {
+        pending.buffer = pending.buffer.slice(0, -1);
       }
       return true;
     }
-    // not masked -> don't consume (let normal backspace handler run)
+    // Echo enabled -> don't consume (let normal backspace handler run)
     return false;
   }
 
   // Called by key handler for Enter; return true if consumed
   function handleEnter() {
     if (!pending) return false;
-    var o = pending.options || {};
     var val;
-    if (o.mask) {
+    if (pending.options && pending.options.echo === false) {
       val = pending.buffer || "";
     } else {
       val = _ensureString(LINE || "");
@@ -144,7 +133,10 @@
   function input(opts) {
     if (pending) return Promise.reject(new Error('input already pending'));
     var options = {};
-    if (typeof opts === 'string') options.prompt = opts;
+    if (typeof opts === 'boolean') options.echo = opts;
+    // When opts is omitted or not a boolean, options.echo is unset (undefined),
+    // which is treated as echo-enabled by the handlers (they check echo === false).
+    else if (typeof opts === 'string') options.prompt = opts;
     else if (typeof opts === 'object' && opts !== null) options = Object.assign({}, opts);
 
     // create the pending promise object early so we can return it immediately
