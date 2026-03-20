@@ -1930,12 +1930,6 @@ window.pokeModem = function(t) {
   return true;
 };
 
-window.morePrompt = async function() {
-  return new Promise(function(resolve) {
-    
-  });
-};
-
 window.pokeCursor = async function(t) {
   if (typeof t === 'undefined' || t === null) return false;
   var str = String(t);
@@ -2021,7 +2015,6 @@ window.pokeCursor = async function(t) {
               pokeCursorOn();
             }
           }, 250); // 250 milliseconds delay
-          
           await morePromise;
           for (var x = 0; x < W; x++) { pokeCell(x, row, ' ', CURFG, CURBG, CURATTR); }
           CURMORE=0; CURX=0; CURY=H; pokeCursorOff();
