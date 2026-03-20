@@ -1980,6 +1980,27 @@ window.pokeCursor = async function(t) {
     }
   }
 
+  // advance to next line and handle CURMORE pagination if enabled
+  async function advanceLine() {
+    CURX = 0; CURY++;
+    if (CURY >= H) { pokeScroll(); CURY = H - 1; }
+    LINEX = CURX; LINEY = CURY;
+    if (typeof CURMORE === 'number' && CURMORE >= 0) {
+      CURMORE++;
+      if (CURMORE >= H - 1) {
+        setTimeout(function() {
+          var promptText=" Press ENTER to continue: ";
+          for (var x=0; x<W; x++) {
+            var ch=x<promptText.length ? promptText[x] : ' ';
+            pokeCell(x, CURY, ch, MENUFG, MENUBG, 0);
+          }
+        }, 200);
+        await input();
+        CURMORE=0;
+      }
+    }
+  }
+
   pokeCursorOff();
 
   var idx = 0;
@@ -1993,32 +2014,14 @@ window.pokeCursor = async function(t) {
       continue;
     }
     if (ch === '\n') {
-      CURX = 0; CURY++;
-      if (CURY >= H) { pokeScroll(); CURY = H-1; }
-      LINEX = CURX; LINEY = CURY;
-      // CURMORE pagination: count lines when enabled (CURMORE >= 0)
-      if (typeof CURMORE === 'number' && CURMORE >= 0) {
-        CURMORE++;
-        if (CURMORE >= H - 1) {
-          setTimeout(function() {
-            var promptText=" Press ENTER to continue: ";
-            for (var x=0; x<W; x++) {
-              var ch=x<promptText.length ? promptText[x] : ' ';
-              pokeCell(x, CURY, ch, MENUFG, MENUBG, 0);
-            }
-          }, 200);
-          let morePrompt= await input();
-          CURMORE=0;
-        }
-      }
+      await advanceLine();
       idx++;
       continue;
     }
     pokeCell(CURX, CURY, ch, CURFG, CURBG, CURATTR);
     CURX++;
     if (CURX >= W) {
-      CURX = 0; CURY++;
-      if (CURY >= H) { pokeScroll(); CURY = H - 1; }
+      await advanceLine();
     }
     LINEX = CURX; LINEY = CURY;
     idx++;
