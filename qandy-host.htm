@@ -1927,23 +1927,17 @@ window.pokeModem = function(t) {
   return true;
 };
 
-// pokeCursor — full-speed print (no baud rate delay, no sound effects).
-// Processes all characters synchronously, then schedules async state cleanup
-// so that waitForCursorIdle() and abort mechanisms continue to work.
+// pokeCursor — synchronous full-speed print with full ANSI support.
 window.pokeCursor = function(t) {
   if (typeof t === 'undefined' || t === null) return false;
-  // Cancel any existing paced output and start fresh
-  if (window._pokeCursor_state && window._pokeCursor_state.timer) {
-    clearTimeout(window._pokeCursor_state.timer);
-  }
-  window._pokeCursor_state = null;
-
   var str = String(t);
 
   // parse numeric params into array of numbers (empty => [])
-  function parseParams(paramStr) {
-    if (!paramStr || paramStr.length === 0) return [];
-    return paramStr.split(';').map(function(p){ var v = parseInt(p,10); return isNaN(v) ? 0 : v; });
+  function parseParams(s) {
+    if (!s || !s.length) return [];
+    var out = [], parts = s.split(';');
+    for (var i = 0; i < parts.length; i++) { var v = parseInt(parts[i], 10); out.push(isNaN(v) ? 0 : v); }
+    return out;
   }
 
   // handle CSI sequences: paramsStr (string), cmd (final byte)
@@ -1954,151 +1948,68 @@ window.pokeCursor = function(t) {
         if (!params.length) params = [0];
         for (var pi = 0; pi < params.length; pi++) {
           var p = params[pi] | 0;
-          switch (p) {
-            case 0: // reset
-              CURFG = 37; CURBG = 40; CURATTR = 0; break;
-            case 1: // bold
-              CURATTR = (CURATTR | (window.ATTR_BOLD || 0x0002)); break;
-            case 2: // dim
-              CURATTR = (CURATTR | (window.ATTR_DIM || 0x0004)); break;
-            case 3: // italic
-              CURATTR = (CURATTR | (window.ATTR_ITALIC || 0x0008)); break;
-            case 4: // underline
-              CURATTR = (CURATTR | (window.ATTR_UNDERLINE || 0x0010)); break;
-            case 22: // normal intensity (clear bold & dim)
-              CURATTR &= ~(window.ATTR_BOLD || 0x0002);
-              CURATTR &= ~(window.ATTR_DIM  || 0x0004); break;
-            case 23: // clear italic
-              CURATTR &= ~(window.ATTR_ITALIC || 0x0008); break;
-            case 24: // clear underline
-              CURATTR &= ~(window.ATTR_UNDERLINE || 0x0010); break;
-            case 7: // inverse
-              CURATTR = (CURATTR | (window.ATTR_INVERSE || 0x0001)); break;
-            case 27: // clear inverse
-              CURATTR &= ~(window.ATTR_INVERSE || 0x0001); break;
-            default:
-              if (p >= 30 && p <= 37) { CURFG = p; break; }
-              if (p >= 90 && p <= 97) { CURFG = p; break; }
-              if (p >= 40 && p <= 47) { CURBG = p; break; }
-              if (p >= 100 && p <= 107) { CURBG = p; break; }
-              // Note: extended colors (38;5;.., 38;2;.. ) not implemented here
-              break;
-          }
+          if (p === 0) { CURFG = 37; CURBG = 40; CURATTR = 0; }
+          else if (p === 1)  { CURATTR |= (window.ATTR_BOLD    || 0x0002); }
+          else if (p === 2)  { CURATTR |= (window.ATTR_DIM     || 0x0004); }
+          else if (p === 3)  { CURATTR |= (window.ATTR_ITALIC  || 0x0008); }
+          else if (p === 4)  { CURATTR |= (window.ATTR_UNDERLINE || 0x0010); }
+          else if (p === 5)  { CURATTR |= (window.ATTR_BLINK   || 0x0020); }
+          else if (p === 7)  { CURATTR |= (window.ATTR_INVERSE || 0x0001); }
+          else if (p === 22) { CURATTR &= ~(window.ATTR_BOLD || 0x0002); CURATTR &= ~(window.ATTR_DIM || 0x0004); }
+          else if (p === 23) { CURATTR &= ~(window.ATTR_ITALIC   || 0x0008); }
+          else if (p === 24) { CURATTR &= ~(window.ATTR_UNDERLINE || 0x0010); }
+          else if (p === 25) { CURATTR &= ~(window.ATTR_BLINK    || 0x0020); }
+          else if (p === 27) { CURATTR &= ~(window.ATTR_INVERSE  || 0x0001); }
+          else if (p >= 30 && p <= 37)   { CURFG = p; }
+          else if (p >= 90 && p <= 97)   { CURFG = p; }
+          else if (p >= 40 && p <= 47)   { CURBG = p; }
+          else if (p >= 100 && p <= 107) { CURBG = p; }
         }
         break;
-
-      case 'H': // Cursor position (row;col) — 1-based
-      case 'f':
-        var row = (params.length >= 1 && params[0] > 0) ? (params[0] - 1) : 0;
-        var col = (params.length >= 2 && params[1] > 0) ? (params[1] - 1) : 0;
-        if (typeof row === 'number') CURY = Math.max(0, Math.min(H - 1, row));
-        if (typeof col === 'number') CURX = Math.max(0, Math.min(W - 1, col));
+      case 'H': case 'f': // Cursor position (row;col) — 1-based
+        CURY = Math.max(0, Math.min(H - 1, (params.length >= 1 && params[0] > 0) ? params[0] - 1 : 0));
+        CURX = Math.max(0, Math.min(W - 1, (params.length >= 2 && params[1] > 0) ? params[1] - 1 : 0));
         break;
-      case 'A': // Cursor up
-        var nA = (params.length >= 1 && params[0] > 0) ? params[0] : 1;
-        CURY = Math.max(0, CURY - nA);
-        break;
-      case 'B': // Cursor down
-        var nB = (params.length >= 1 && params[0] > 0) ? params[0] : 1;
-        CURY = Math.min(H - 1, CURY + nB);
-        break;
-      case 'C': // Cursor forward
-        var nC = (params.length >= 1 && params[0] > 0) ? params[0] : 1;
-        CURX = Math.min(W - 1, CURX + nC);
-        break;
-      case 'D': // Cursor backward
-        var nD = (params.length >= 1 && params[0] > 0) ? params[0] : 1;
-        CURX = Math.max(0, CURX - nD);
-        break;
-      case 'J': // Erase in Display
-        if (params.length === 0 || params[0] === 0) {
-          // not implemented (cursor to end)
-        } else if (params[0] === 1) {
-          // not implemented (start to cursor)
-        } else {
-          if (params[0] === 2) {
-          // clear entire screen
-          // this needs to be updated to use its own internal function
-          cls();
-        }
-       }
-        break;
-      default:
-        // unsupported CSI — ignore
-        break;
+      case 'A': CURY = Math.max(0,     CURY - ((params.length >= 1 && params[0] > 0) ? params[0] : 1)); break; // up
+      case 'B': CURY = Math.min(H - 1, CURY + ((params.length >= 1 && params[0] > 0) ? params[0] : 1)); break; // down
+      case 'C': CURX = Math.min(W - 1, CURX + ((params.length >= 1 && params[0] > 0) ? params[0] : 1)); break; // forward
+      case 'D': CURX = Math.max(0,     CURX - ((params.length >= 1 && params[0] > 0) ? params[0] : 1)); break; // backward
+      case 'J': if (params.length >= 1 && params[0] === 2) cls(); break; // clear screen (2J)
     }
   }
 
-  // Mark as active so waitForCursorIdle() will wait for this render to finish
-  var state = {
-    str: str,
-    idx: 0,
-    timer: null,
-    stopped: false
-  };
-  window._pokeCursor_state = state;
+  pokeCursorOff();
 
-  function render() {
-    if (!state || state.stopped) return;
-
-    pokeCursorOff();
-
-    var idx = 0;
-    while (idx < str.length) {
-      var ch = str.charAt(idx);
-
-      // handle CSI atomically
-      if (CURANSI && ch === '\x1b') {
-        var rest = str.slice(idx);
-        var m = /^\x1b\[([0-9;]*)?([@A-Za-z])/.exec(rest);
-        if (m) {
-          handleCSI(m[1] || '', m[2]);
-          idx += m[0].length;
-        } else {
-          // unknown escape — skip it
-          idx++;
-        }
-        continue;
-      }
-
-      if (ch === '\n') {
-        CURX = 0;
-        CURY = CURY + 1;
-        if (CURY >= H) { pokeScroll(); CURY = H - 1; CURX = Math.min(CURX, W - 1); }
-        LINEX = CURX; LINEY = CURY;
-        idx++;
-        continue;
-      }
-
-      pokeCell(CURX, CURY, ch, CURFG, CURBG, CURATTR);
-
-      CURX = CURX + 1;
-      if (CURX >= W) {
-        CURX = 0; CURY = CURY + 1;
-        if (CURY >= H) {
-          pokeScroll();
-          CURY = H - 1; CURX = Math.min(CURX, W - 1);
-        }
-      }
+  var idx = 0;
+  while (idx < str.length) {
+    var ch = str.charAt(idx);
+    if (CURANSI && ch === '\x1b') {
+      var rest = str.slice(idx);
+      var m = /^\x1b\[([0-9;]*)?([@A-Za-z])/.exec(rest);
+      if (m) { handleCSI(m[1] || '', m[2]); idx += m[0].length; }
+      else { idx++; }
+      continue;
+    }
+    if (ch === '\n') {
+      CURX = 0; CURY++;
+      if (CURY >= H) { pokeScroll(); CURY = H - 1; }
       LINEX = CURX; LINEY = CURY;
-
       idx++;
+      continue;
     }
-
-    pokeCursorOn();
-
-    // Clear state asynchronously so waitForCursorIdle() resolves on the next tick
-    state.timer = setTimeout(function() {
-      window._pokeCursor_state = null;
-    }, 0);
+    pokeCell(CURX, CURY, ch, CURFG, CURBG, CURATTR);
+    CURX++;
+    if (CURX >= W) {
+      CURX = 0; CURY++;
+      if (CURY >= H) { pokeScroll(); CURY = H - 1; }
+    }
+    LINEX = CURX; LINEY = CURY;
+    idx++;
   }
 
-  // Schedule render asynchronously for compatibility with abort mechanisms
-  state.timer = setTimeout(render, 0);
+  pokeCursorOn();
   return true;
 };
-
-window._pokeCursor_state = window._pokeCursor_state || null;
 
 var FALLBACK_FG = {
   black:30, red:31, green:32, yellow:33, blue:34, magenta:35, cyan:36, white:37,
