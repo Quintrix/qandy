@@ -2000,6 +2000,7 @@ window.pokeCursor = async function(t) {
       if (typeof CURMORE === 'number' && CURMORE >= 0) {
         CURMORE++;
         if (CURMORE >= H - 1) {
+          pokeCursorOn();
           setTimeout(function() {
             var promptText=" Press ENTER to continue: ";
             for (var x=0; x<W; x++) {
@@ -2009,6 +2010,7 @@ window.pokeCursor = async function(t) {
           }, 200);
           let morePrompt= await input();
           CURMORE=0;
+          pokeCursorOff();
         }
       }
       idx++;
