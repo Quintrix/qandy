@@ -1930,6 +1930,24 @@ window.pokeModem = function(t) {
   return true;
 };
 
+// pokeCursor — synchronous full-speed print with full ANSI support.
+// morePrompt() — display "Press ENTER to continue: " on the bottom row using
+// pokeCell() directly (avoids interfering with the current print job), then
+// return a Promise that resolves when the user presses ENTER.
+window.morePrompt = function() {
+  return new Promise(function(resolve) {
+    var promptText = "Press ENTER to continue: ";
+    var row = H - 1;
+    // Fill the entire bottom row with menu colors
+    for (var x = 0; x < W; x++) {
+      var ch = x < promptText.length ? promptText[x] : ' ';
+      pokeCell(x, row, ch, MENUFG, MENUBG, 0);
+    }
+    window._morePromptActive = true;
+    window._morePromptResolve = resolve;
+  });
+};
+
 window.pokeCursor = async function(t) {
   if (typeof t === 'undefined' || t === null) return false;
   var str = String(t);
@@ -1995,30 +2013,31 @@ window.pokeCursor = async function(t) {
     if (ch === '\n') {
       CURX = 0; CURY++;
       if (CURY >= H) { pokeScroll(); CURY = H-1; }
-      LINEX = CURX; LINEY = CURY;
-      // CURMORE pagination: count lines when enabled (CURMORE >= 0)
+      LINEX=CURX; LINEY=CURY;
       if (typeof CURMORE === 'number' && CURMORE >= 0) {
         CURMORE++;
-        if (CURMORE >= H - 1) {
-          setTimeout(function() {
-            var promptText=" Press ENTER to continue: ";
-            for (var x=0; x<W; x++) {
-              var ch=x<promptText.length ? promptText[x] : ' ';
-              pokeCell(x, CURY, ch, MENUFG, MENUBG, 0);
-            }
-          }, 200);
-          let morePrompt= await input();
-          CURMORE=0;
+        if (CURMORE >= H-1) {
+          pokeMore(1);
+          let morePrompt= await input(1);
+          pokeMore(0)
         }
       }
-      idx++;
-      continue;
+      idx++; continue;
     }
     pokeCell(CURX, CURY, ch, CURFG, CURBG, CURATTR);
     CURX++;
     if (CURX >= W) {
       CURX = 0; CURY++;
-      if (CURY >= H) { pokeScroll(); CURY = H - 1; }
+      if (CURY >= H) { pokeScroll(); CURY = H-1; }
+      LINEX=CURX; LINEY=CURY;
+      if (typeof CURMORE === 'number' && CURMORE >= 0) {
+        CURMORE++;
+        if (CURMORE >= H-1) {
+          pokeMore(1);
+          let morePrompt= await input(1);
+          pokeMore(0);
+        }
+      }
     }
     LINEX = CURX; LINEY = CURY;
     idx++;
@@ -2027,6 +2046,24 @@ window.pokeCursor = async function(t) {
   pokeCursorOn();
   return true;
 };
+
+function pokeMore(s) {
+  if (s) { 
+    for (var x=0; x<W; x++) {
+      var promptText="  Press ENTER to continue: ";
+      var ch=x<promptText.length ? promptText[x] : ' ';
+      pokeCell(x, CURY, ch, MENUFG, MENUBG, 0);
+    }
+  } else {
+    for (var x=0; x<W; x++) {
+      var promptText="  Press ENTER to continue: ";
+      var ch=x<promptText.length ? promptText[x] : ' ';
+      pokeCell(x, CURY, ch, MENUFG, MENUBG, 0);
+    }
+  }
+  CURMORE=0;
+  return;
+}
 
 var FALLBACK_FG = {
   black:30, red:31, green:32, yellow:33, blue:34, magenta:35, cyan:36, white:37,
@@ -4272,7 +4309,8 @@ window.button=function(b, event) {
     if (LINE !== undefined) {
       // Check if there's a pending input() awaiting a response
       if (window.QandyKeyboard) {
-        if (QandyKeyboard._pendingState()) {
+        var _ep = QandyKeyboard._pendingState();
+        if (_ep) {
           var _val = _ep.maskPassword ? (_ep.buffer || "") : (LINE || "");
           try { lastin = ""; } catch(e) {}
           CURX = 0;
@@ -4780,4 +4818,4 @@ if (typeof qandySignalReady === 'function') { qandySignalReady('qandy.js'); }}
 
 </script>
 </body>
-</html>
+</html></html>
