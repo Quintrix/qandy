@@ -1931,10 +1931,13 @@ window.pokeModem = function(t) {
 };
 
 // pokeCursor — synchronous full-speed print with full ANSI support.
-// morePrompt() — display "Press ENTER to continue: " on the bottom row using
-// pokeCell() directly (avoids interfering with the current print job), then
-// return a Promise that resolves when the user presses ENTER.
-window.morePrompt = function() {
+// morePrompt(delayMs) — display "Press ENTER to continue: " on the bottom row
+// using pokeCell() directly (avoids interfering with the current print job),
+// then return a Promise that resolves when the user presses ENTER.
+// Optional delayMs (default: 0): after ENTER, clears the row and waits that
+// many milliseconds before resolving, creating a brief visual pause.
+window.morePrompt = function(delayMs) {
+  var delay = (typeof delayMs === 'number' && delayMs > 0) ? delayMs : 0;
   return new Promise(function(resolve) {
     var promptText = "Press ENTER to continue: ";
     var row = H - 1;
@@ -1944,7 +1947,17 @@ window.morePrompt = function() {
       pokeCell(x, row, ch, MENUFG, MENUBG, 0);
     }
     window._morePromptActive = true;
-    window._morePromptResolve = resolve;
+    // _morePromptResolve clears the row, then waits delayMs before resolving
+    window._morePromptResolve = function() {
+      for (var _x = 0; _x < W; _x++) {
+        pokeCell(_x, row, ' ', CURFG, CURBG, CURATTR);
+      }
+      if (delay > 0) {
+        setTimeout(resolve, delay);
+      } else {
+        resolve();
+      }
+    };
   });
 };
 
@@ -2019,7 +2032,7 @@ window.pokeCursor = async function(t) {
         CURMORE++;
         if (CURMORE >= H - 1) {
           pokeCursorOn();
-          await morePrompt();
+          await morePrompt(1000);
           CURMORE = 0;
           pokeCursorOff();
         }
@@ -4282,13 +4295,10 @@ window.button=function(b, event) {
   } else if (k === "enter") {
     if (!virtualclick) { event && event.preventDefault(); }
     if (SSTART>-1) { pokeSelect(false); SSTART = -1; SEND = -1; }
-    // Handle morePrompt() pause: clear the prompt row and resume pokeCursor
+    // Handle morePrompt() pause: _morePromptResolve clears the row and applies
+    // any configured delay before resuming pokeCursor.
     if (window._morePromptActive) {
       window._morePromptActive = false;
-      var _row = H - 1;
-      for (var _x = 0; _x < W; _x++) {
-        pokeCell(_x, _row, ' ', CURFG, CURBG, CURATTR);
-      }
       var _res = window._morePromptResolve;
       window._morePromptResolve = null;
       if (_res) _res();
