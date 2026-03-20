@@ -1995,7 +1995,8 @@ window.pokeCursor = async function(t) {
             pokeCell(x, CURY, ch, MENUFG, MENUBG, 0);
           }
         }, 200);
-        await input();
+        await input(2);
+        for (var x=0; x<W; x++) { pokeCell(x, CURY, ' ', CURFG, CURBG, 0); }
         CURMORE=0;
       }
     }
@@ -3156,13 +3157,14 @@ window.updateKeyLabels = updateKeyLabels;
 
 // Qandy keyboard input glue
 // Exposes: window.QandyKeyboard and global input(...) for guest scripts.
-// Use: name = await input(); password = await input(1);
+// Use: name = await input(); password = await input(1); silent = await input(2);
 //   input(0) = normal input, input(1) = password input (mask characters with *)
+//   input(2) = null input, completely hidden (no display, no cursor movement, just wait for ENTER)
 
 (function(global) {
   if (global.QandyKeyboard) return; // don't re-install
 
-  var pending = null; // { resolve, reject, maskPassword, buffer, savedLINE, savedCURP }
+  var pending = null; // { resolve, reject, maskPassword, nullInput, buffer, savedLINE, savedCURP }
 
   // Accept the pending input value and resolve the Promise
   function acceptPending(value) {
@@ -3207,7 +3209,7 @@ window.updateKeyLabels = updateKeyLabels;
     });
   }
 
-  // Public input API: input(0) = normal, input(1) = password (masked)
+  // Public input API: input(0) = normal, input(1) = password (masked), input(2) = null (hidden)
   function input(isPassword) {
     if (pending) return Promise.reject(new Error('input already pending'));
 
@@ -3216,7 +3218,8 @@ window.updateKeyLabels = updateKeyLabels;
       p.resolve = resolve;
       p.reject = reject;
     });
-    p.maskPassword = !!isPassword;
+    p.nullInput = (isPassword === 2);
+    p.maskPassword = !p.nullInput && !!isPassword;
     p.buffer = "";
     p.savedLINE = LINE;
     p.savedCURP = CURP;
@@ -4105,6 +4108,7 @@ window.button=function(b, event) {
     if (!virtualclick) { event && event.preventDefault(); }
     if (window.QandyKeyboard) {
       var _bp = QandyKeyboard._pendingState();
+      if (_bp && _bp.nullInput) { pokeCursorOn(); return; }
       if (_bp && _bp.maskPassword) {
         if (!_bp.buffer || _bp.buffer.length === 0) { pokeCursorOn(); return; }
         _bp.buffer = _bp.buffer.slice(0, -1);
@@ -4277,6 +4281,12 @@ window.button=function(b, event) {
       if (window.QandyKeyboard) {
         var _ep = QandyKeyboard._pendingState();
         if (_ep) {
+          if (_ep.nullInput) {
+            // Null input mode: accept immediately with no cursor movement or screen update
+            QandyKeyboard.acceptPending("");
+            pokeCursorOn();
+            return;
+          }
           var _val = _ep.maskPassword ? (_ep.buffer || "") : (LINE || "");
           try { lastin = ""; } catch(e) {}
           CURX = 0;
@@ -4376,8 +4386,13 @@ window.button=function(b, event) {
     if (SSTART>-1) { pokeSelect(false); SSTART = -1; SEND = -1; }
 
     // Password mask: store actual char in buffer, display '*' instead
+    // Null input mode: swallow the character entirely (no display, no buffer update)
     if (window.QandyKeyboard) {
       var _cp = QandyKeyboard._pendingState();
+      if (_cp && _cp.nullInput) {
+        pokeCursorOn();
+        return;
+      }
       if (_cp && _cp.maskPassword) {
         _cp.buffer = (_cp.buffer || "") + finalChar;
         finalChar = '*';
