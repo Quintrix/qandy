@@ -3136,21 +3136,19 @@ window.updateKeyLabels = updateKeyLabels;
 
 // Qandy keyboard input glue
 // Exposes: window.QandyKeyboard and global input(...) for guest scripts.
-// Use: name = await input("Name: "); password = await input({ prompt: "Password: ", mask: true });
+// Use: name = await input(); password = await input(1);
+//   input(0) = normal input, input(1) = password input (mask characters with *)
 
 (function(global) {
   if (global.QandyKeyboard) return; // don't re-install
 
-  var pending = null; // { resolve, reject, options, buffer, timeoutId, savedLINE, savedCURP }
-
-  function _ensureString(s) { return (typeof s === 'string') ? s : String(s || ""); }
+  var pending = null; // { resolve, reject, maskPassword, buffer, savedLINE, savedCURP }
 
   // Accept the pending input value and resolve the Promise
   function acceptPending(value) {
     if (!pending) return false;
     var p = pending;
     pending = null;
-    try { if (p.timeoutId) clearTimeout(p.timeoutId); } catch(e) {}
     // resolve asynchronously to avoid reentrancy with key handlers
     setTimeout(function() {
       try { p.resolve(value); } catch (e) { p.reject(e); }
@@ -3163,87 +3161,10 @@ window.updateKeyLabels = updateKeyLabels;
     if (!pending) return false;
     var p = pending;
     pending = null;
-    try { if (p.timeoutId) clearTimeout(p.timeoutId); } catch(e) {}
-    p.reject(reason || new Error('input cancelled'));
-    return true;
-  }
-
-  // Called by key handler for printable character; return true if consumed
-  function handleTypedChar(ch) {
-    if (!pending) return false;
-    var o = pending.options || {};
-    if (o.mask) {
-      // Append to internal buffer and show '*' in LINE at CURP
-      pending.buffer = (pending.buffer || "") + ch;
-      LINE = (LINE || "");
-      LINE = LINE.substring(0, CURP) + '*' + LINE.substring(CURP);
-      CURP = CURP + 1;
-      pokeInput();
-      return true;
-    }
-    // Not masked -> let normal insertion happen (not consumed)
-    return false;
-  }
-
-  // Called by key handler for backspace; return true if consumed
-  function handleBackspace() {
-    if (!pending) return false;
-    var o = pending.options || {};
-    if (o.mask) {
-      if (!pending.buffer || pending.buffer.length === 0) return true; // nothing to delete
-      // remove last char from buffer
-      pending.buffer = pending.buffer.slice(0, -1);
-      // remove last '*' from LINE before CURP
-      if (CURP > 0) {
-        LINE = LINE.substring(0, CURP-1) + LINE.substring(CURP);
-        CURP = Math.max(0, CURP - 1);
-        pokeInput();
-      }
-      return true;
-    }
-    // not masked -> don't consume (let normal backspace handler run)
-    return false;
-  }
-
-  // Called by key handler for Enter; return true if consumed
-  function handleEnter() {
-    if (!pending) return false;
-    var o = pending.options || {};
-    var val;
-    if (o.mask) {
-      val = pending.buffer || "";
-    } else {
-      val = _ensureString(LINE || "");
-    }
-    // Optionally trim final newline/CR
-    // val = val.replace(/\r?\n$/, "");
-    // Prevent pokeInput / eraseInput from erasing what was just typed.
-    // pokeInput/eraseInput uses `lastin` to remove previous input; clear it.
-    try { lastin = ""; } catch (e) { /* ignore if not defined */ }
-
-    // Move the logical cursor to the start of the next line BEFORE resolving
-    try {
-      // Advance to column 0, next row
-      CURX = 0;
-      CURY = (typeof CURY === 'number' && typeof H === 'number') ? Math.min(H - 1, CURY + 1) :
-             ((typeof CURY === 'number') ? CURY + 1 : 0);
-
-      // Sync the LINE insertion coordinates to the new cursor position
-      LINEX = (typeof CURX === 'number') ? CURX : 0;
-      LINEY = (typeof CURY === 'number') ? CURY : 0;
-
-      // Reset visible edit buffer and cursor-in-line, but DO NOT call pokeInput()
-      // (calling pokeInput might call eraseInput and remove visible characters).
-      LINE = "";
-      CURP = 0;
-
-      // Refresh UI cursor/viewport — avoid calling pokeInput which may erase;
-      // a lightweight refresh is safer.
-      pokeRefresh(); pokeCursorOn();
-    } catch (e) {
-      // ignore UI errors and still resolve the input
-    }
-    acceptPending(val);
+    // reject asynchronously to match acceptPending and avoid reentrancy
+    setTimeout(function() {
+      p.reject(reason || new Error('input cancelled'));
+    }, 0);
     return true;
   }
 
@@ -3266,66 +3187,32 @@ window.updateKeyLabels = updateKeyLabels;
     });
   }
 
-  // Public input API (replaces the previous implementation)
-  function input(opts) {
+  // Public input API: input(0) = normal, input(1) = password (masked)
+  function input(isPassword) {
     if (pending) return Promise.reject(new Error('input already pending'));
-    var options = {};
-    if (typeof opts === 'string') options.prompt = opts;
-    else if (typeof opts === 'object' && opts !== null) options = Object.assign({}, opts);
 
-    // create the pending promise object early so we can return it immediately
     var p = {};
     var promise = new Promise(function(resolve, reject) {
       p.resolve = resolve;
       p.reject = reject;
     });
-    // attach common fields now (pending will be set only after prompt printing finishes)
-    p.options = options;
+    p.maskPassword = !!isPassword;
     p.buffer = "";
     p.savedLINE = LINE;
     p.savedCURP = CURP;
 
-    // async setup: wait for any current printing to finish, then print prompt and wait for that,
-    // then enable interactive pending state (so prompt doesn't cancel earlier output).
+    // async setup: wait for any current printing to finish, then enable input
     (async function() {
       try {
-        // 1) wait for any existing paced output (e.g., previous print()) to finish
         await waitForCursorIdle();
-
-        // 2) print the prompt (if any)
-        if (options.prompt) {
-          print(options.prompt);
-        }
-
-        // 3) wait for the prompt's paced printing to finish
-        await waitForCursorIdle();
-
-        // 4) now it's safe to enable pending input without cancelling the printed prompt
         pending = p;
-
-        // timeout handling
-        if (typeof options.timeout === 'number' && options.timeout > 0) {
-          p.timeoutId = setTimeout(function() {
-            if (pending === p) {
-              pending = null;
-              p.reject(new Error('input timeout'));
-            }
-          }, options.timeout);
-        }
-
-        // Ensure the cursor is visible for user input
         try { pokeCursorOn(); } catch (e) {}
-
       } catch (err) {
-        // If any error during setup, reject the promise
         try { p.reject(err); } catch (e) {}
       }
     })();
 
-    // ensure finalizers clear timeout if any
-    return promise.finally(function() {
-      if (p.timeoutId) try { clearTimeout(p.timeoutId); } catch (e) {}
-    });
+    return promise;
   }
 
   // Read-only access to pending state (debug)
@@ -3336,9 +3223,6 @@ window.updateKeyLabels = updateKeyLabels;
     input: input,
     acceptPending: acceptPending,
     cancelPending: cancelPending,
-    handleTypedChar: handleTypedChar,
-    handleBackspace: handleBackspace,
-    handleEnter: handleEnter,
     _pendingState: _pendingState
   };
 
@@ -4199,8 +4083,12 @@ window.button=function(b, event) {
   // Host editing / navigation / input handling
   if (k === "back") {
     if (!virtualclick) { event && event.preventDefault(); }
-    if (window.QandyKeyboard && QandyKeyboard.handleBackspace()) {
-      pokeCursorOn(); return;
+    if (window.QandyKeyboard) {
+      var _bp = QandyKeyboard._pendingState();
+      if (_bp && _bp.maskPassword) {
+        if (!_bp.buffer || _bp.buffer.length === 0) { pokeCursorOn(); return; }
+        _bp.buffer = _bp.buffer.slice(0, -1);
+      }
     }
     if (SSTART !== -1 && SEND !== -1) {
       if (SSTART>SEND) { [SSTART, SEND] = [SEND, SSTART];}
@@ -4363,9 +4251,26 @@ window.button=function(b, event) {
     }
   } else if (k === "enter") {
     if (!virtualclick) { event && event.preventDefault(); }
-    if (window.QandyKeyboard && QandyKeyboard.handleEnter()) { pokeCursorOn(); return; }
     if (SSTART>-1) { pokeSelect(false); SSTART = -1; SEND = -1; }
     if (LINE !== undefined) {
+      // Check if there's a pending input() awaiting a response
+      if (window.QandyKeyboard) {
+        var _ep = QandyKeyboard._pendingState();
+        if (_ep) {
+          var _val = _ep.maskPassword ? (_ep.buffer || "") : (LINE || "");
+          try { lastin = ""; } catch(e) {}
+          CURX = 0;
+          CURY = (typeof CURY === 'number' && typeof H === 'number') ? Math.min(H - 1, CURY + 1) : ((typeof CURY === 'number') ? CURY + 1 : 0);
+          LINEX = CURX;
+          LINEY = CURY;
+          LINE = "";
+          CURP = 0;
+          pokeRefresh();
+          QandyKeyboard.acceptPending(_val);
+          pokeCursorOn();
+          return;
+        }
+      }
       // Save to history
       if (typeof commandHistory !== 'undefined' && LINE.trim().length > 0) {
         if (commandHistory.length === 0 || commandHistory[commandHistory.length - 1] !== LINE) {
@@ -4378,15 +4283,7 @@ window.button=function(b, event) {
       historyIndex = -1;
       tempCommand = "";
       cmd=LINE; LINE=""; CURP=0; LINEX=CURX; LINEY=CURY; pokeRefresh();
-      if (typeof RUN !== 'undefined' && RUN !== "qandy.js" && typeof input === 'function') {
-        try {
-          input(cmd);
-        } catch (err) {
-          console.error("script input() threw:", err);
-        }
-      } else {
-        command(cmd);
-      }
+      command(cmd);
       pokeCursorOn();
       return;
     }
@@ -4456,6 +4353,15 @@ window.button=function(b, event) {
       // deleteSelection();  // keep your existing deletion routine if needed
     }
     if (SSTART>-1) { pokeSelect(false); SSTART = -1; SEND = -1; }
+
+    // Password mask: store actual char in buffer, display '*' instead
+    if (window.QandyKeyboard) {
+      var _cp = QandyKeyboard._pendingState();
+      if (_cp && _cp.maskPassword) {
+        _cp.buffer = (_cp.buffer || "") + finalChar;
+        finalChar = '*';
+      }
+    }
 
     LINE = (LINE || "").substring(0, CURP) + finalChar + (LINE || "").substring(CURP);
     CURP += finalChar.length;
@@ -4730,6 +4636,7 @@ async function _processPrintQueue() {
 
 function exit() {
   // guest scripts use this to exit back to qandy.js
+  print("\n[white]Exit to Qandy\n");
   RUN="qandy.js"
 }
 
