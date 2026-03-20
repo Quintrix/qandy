@@ -6,7 +6,7 @@ var DEVICE = 'none';
   'use strict';
 
   // ── Constants ────────────────────────────────────────────────────────────
-  var LOCAL_PREFIX = 'qandy:file:';
+  var LOCAL_PREFIX = 'local:file:';
   var MANIFEST_KEY = '_dir.sys!';
   var MAX_NAME_BYTES = 255;
   var VALID_NAME_RE = /^(?!\\.)[A-Za-z0-9 \\-_.()+=!]+$/;
