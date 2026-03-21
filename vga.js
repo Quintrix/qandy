@@ -1,12 +1,3 @@
-// Dirty-region rendering to skip unchanged cells
-// Incremental canvas clears instead of full-screen clears
-// Mobile frame-rate detection (30fps on mobile, 60fps on desktop)
-// Batched canvas operations for better performance
-
-//
-// known issue: screen gets ereased while typing, no idea how to fix 
-//
-
 /* Canvas-backed renderer for Qandy
 /* Canvas-backed renderer for Qandy
    - Non-invasive: keeps VIDEO/FCOLOR/BCOLOR/ATTR as source-of-truth.
@@ -111,185 +102,135 @@
   // Render scheduling
   var pending = false;
   var pendingFull = true;
-  // Bounding box of dirty cells; empty when x2 < x1
-  var pendingRegion = { x1: 0, y1: 0, x2: -1, y2: -1 };
-
-  // Mobile detection: throttle to ~30fps to prevent jank on slower devices.
-  // Prefer maxTouchPoints (reliable feature detection) and fall back to UA sniffing.
-  var isMobile = (typeof navigator !== 'undefined') && (
-    navigator.maxTouchPoints > 0 ||
-    /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
-  );
-  var RAF = isMobile
-    ? function (cb) { setTimeout(cb, 33); }
-    : (typeof requestAnimationFrame === 'function' ? requestAnimationFrame : function (cb) { setTimeout(cb, 16); });
+  var pendingRegion = { x: 0, y: 0, n: 0 };
 
   function scheduleRefresh(x, y, n) {
     if (typeof x === 'undefined' && typeof y === 'undefined') {
       pendingFull = true;
-      // Full refresh supersedes any pending partial region
-      pendingRegion.x1 = 0; pendingRegion.y1 = 0;
-      pendingRegion.x2 = -1; pendingRegion.y2 = -1;
     } else {
-      var xi = x | 0, yi = y | 0, ni = (n | 0) || 1;
-      if (pendingRegion.x2 < pendingRegion.x1) {
-        // empty region - initialize bounding box
-        pendingRegion.x1 = xi;
-        pendingRegion.y1 = yi;
-        pendingRegion.x2 = xi + ni - 1;
-        pendingRegion.y2 = yi;
-      } else {
-        pendingRegion.x1 = Math.min(pendingRegion.x1, xi);
-        pendingRegion.y1 = Math.min(pendingRegion.y1, yi);
-        pendingRegion.x2 = Math.max(pendingRegion.x2, xi + ni - 1);
-        pendingRegion.y2 = Math.max(pendingRegion.y2, yi);
-      }
+      pendingRegion.x = Math.min(pendingRegion.x, x | 0);
+      pendingRegion.y = Math.min(pendingRegion.y, y | 0);
+      pendingRegion.n = Math.max(pendingRegion.n, (n | 0) || 1);
     }
     if (!pending) {
       pending = true;
-      RAF(doRefresh);
+      requestAnimationFrame(doRefresh);
     }
   }
 
   function scheduleRefreshFull() {
     pendingFull = true;
-    // Full refresh supersedes any pending partial region
-    pendingRegion.x1 = 0; pendingRegion.y1 = 0;
-    pendingRegion.x2 = -1; pendingRegion.y2 = -1;
     if (!pending) {
       pending = true;
-      RAF(doRefresh);
+      requestAnimationFrame(doRefresh);
     }
   }
 
-  // Draw a single cell at column rx, row ry using the current VIDEO/FCOLOR/BCOLOR state
-  function drawCell(rx, ry, blinkPhase) {
-    var charW = CHAR_W, charH = CHAR_H;
-    var xpix = rx * charW;
+function doRefresh() {
+  pending = false;
+  if (typeof VIDEO === 'undefined' || !Array.isArray(VIDEO)) return;
+
+  var rows = (typeof H === 'number') ? H : 25;
+  var cols = (typeof W === 'number') ? W : 32;
+
+  // clear entire canvas (we render full-screen for simplicity)
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  var V = VIDEO || [], F = FCOLOR || [], B = BCOLOR || [], A = ATTR || [];
+  var charW = CHAR_W, charH = CHAR_H;
+
+  // simple time-based blink phase (true = visible); matches the DOM blink rhythm
+  var blinkPhase = (Math.floor(Date.now() / 500) & 1) === 0;
+
+  for (var ry = 0; ry < rows; ry++) {
     var ypix = ry * charH;
-    var V = VIDEO || [], F = FCOLOR || [], B = BCOLOR || [];
-    var ch = (V[ry] && typeof V[ry][rx] !== 'undefined') ? V[ry][rx] : ' ';
-    var fgCode = (F[ry] && typeof F[ry][rx] !== 'undefined') ? F[ry][rx] : 37;
-    var bgCode = (B[ry] && typeof B[ry][rx] !== 'undefined') ? B[ry][rx] : 40;
+    for (var rx = 0; rx < cols; rx++) {
+      var xpix = rx * charW;
+      var ch = (V[ry] && typeof V[ry][rx] !== 'undefined') ? V[ry][rx] : ' ';
+      var fgCode = (F[ry] && typeof F[ry][rx] !== 'undefined') ? F[ry][rx] : 37;
+      var bgCode = (B[ry] && typeof B[ry][rx] !== 'undefined') ? B[ry][rx] : 40;
 
-    var fgIdx = mapAnsiToIndex(fgCode);
-    var bgColor = mapAnsiToCss(bgCode);
+      var fgIdx = mapAnsiToIndex(fgCode);
+      var bgColor = mapAnsiToCss(bgCode);
 
-    // default background
-    ctx.fillStyle = bgColor;
-    ctx.fillRect(xpix, ypix, charW, charH);
-
-    // detect printable char
-    var printable = true;
-    if (!ch || ch === ' ' || ch === '\u00A0') printable = false;
-
-    // cursor detection
-    var isCursor = false;
-    try {
-      isCursor = (typeof CURX === 'number' && typeof CURY === 'number' &&
-                  rx === (CURX | 0) && ry === (CURY | 0) && typeof CURSOR !== 'undefined' && (CURSOR | 0) !== 0);
-    } catch (e) { isCursor = false; }
-
-    // determine cursor visible state
-    var cursorVisible = true;
-    var cursorType = (typeof CURSOR === 'number') ? (CURSOR | 0) : 0;
-    if (isCursor && (cursorType === 3 || cursorType === 5)) {
-      cursorVisible = blinkPhase;
-    }
-
-    // Handle block cursor (inverse block)
-    if (isCursor && cursorVisible && (cursorType === 4 || cursorType === 5)) {
-      // Use CURFG as the block background (swap colors)
-      var curFgCode = (typeof CURFG === 'number') ? CURFG : 37;
-      var curBgCode = (typeof CURBG === 'number') ? CURBG : 40;
-      var curFgCss = mapAnsiToCss(curFgCode);
-      var curBgIdx = mapAnsiToIndex(curBgCode);
-
-      // draw block background (cursor foreground)
-      ctx.fillStyle = curFgCss;
+      // default background
+      ctx.fillStyle = bgColor;
       ctx.fillRect(xpix, ypix, charW, charH);
 
-      // draw glyph using cursor background color (so text appears inverted)
+      // detect printable char
+      var printable = true;
+      if (!ch || ch === ' ' || ch === '\u00A0') printable = false;
+
+      // cursor detection
+      var isCursor = false;
+      try {
+        isCursor = (typeof CURX === 'number' && typeof CURY === 'number' &&
+                    rx === (CURX | 0) && ry === (CURY | 0) && typeof CURSOR !== 'undefined' && (CURSOR | 0) !== 0);
+      } catch (e) { isCursor = false; }
+
+      // determine cursor visible state
+      var cursorVisible = true;
+      var cursorType = (typeof CURSOR === 'number') ? (CURSOR | 0) : 0;
+      if (isCursor && (cursorType === 3 || cursorType === 5)) {
+        cursorVisible = blinkPhase;
+      }
+
+      // Handle block cursor (inverse block)
+      if (isCursor && cursorVisible && (cursorType === 4 || cursorType === 5)) {
+        // Use CURFG as the block background (swap colors)
+        var curFgCode = (typeof CURFG === 'number') ? CURFG : 37;
+        var curBgCode = (typeof CURBG === 'number') ? CURBG : 40;
+        var curFgCss = mapAnsiToCss(curFgCode);
+        var curBgIdx = mapAnsiToIndex(curBgCode);
+
+        // draw block background (cursor foreground)
+        ctx.fillStyle = curFgCss;
+        ctx.fillRect(xpix, ypix, charW, charH);
+
+        // draw glyph using cursor background color (so text appears inverted)
+        if (printable) {
+          var chCode = ch.charCodeAt(0);
+          if (chCode >= FIRST_CHAR && chCode <= LAST_CHAR) {
+            var ci = chCode - FIRST_CHAR;
+            var sx = ci * charW;
+            var sy = curBgIdx * charH;
+            ctx.drawImage(atlas, sx, sy, charW, charH, xpix, ypix, charW, charH);
+          } else {
+            // fallback for out-of-atlas glyphs: draw using CURBG color as fillText
+            ctx.fillStyle = mapAnsiToCss(curBgCode);
+            ctx.fillText(ch, xpix, ypix);
+          }
+        }
+        // done with this cell
+        continue;
+      }
+
+      // Normal glyph drawing (for non-cursor or underline cursor)
       if (printable) {
-        var chCode = ch.charCodeAt(0);
-        if (chCode >= FIRST_CHAR && chCode <= LAST_CHAR) {
-          var ci = chCode - FIRST_CHAR;
-          var sx = ci * charW;
-          var sy = curBgIdx * charH;
-          ctx.drawImage(atlas, sx, sy, charW, charH, xpix, ypix, charW, charH);
-        } else {
-          // fallback for out-of-atlas glyphs: draw using CURBG color as fillText
-          ctx.fillStyle = mapAnsiToCss(curBgCode);
+        var charCode = ch.charCodeAt(0);
+        if (charCode < FIRST_CHAR || charCode > LAST_CHAR) {
+          ctx.fillStyle = mapAnsiToCss(fgCode);
           ctx.fillText(ch, xpix, ypix);
+        } else {
+          var ci = charCode - FIRST_CHAR;
+          var sx = ci * charW;
+          var sy = fgIdx * charH;
+          ctx.drawImage(atlas, sx, sy, charW, charH, xpix, ypix, charW, charH);
         }
       }
-      // done with this cell
-      return;
-    }
 
-    // Normal glyph drawing (for non-cursor or underline cursor)
-    if (printable) {
-      var charCode = ch.charCodeAt(0);
-      if (charCode < FIRST_CHAR || charCode > LAST_CHAR) {
-        ctx.fillStyle = mapAnsiToCss(fgCode);
-        ctx.fillText(ch, xpix, ypix);
-      } else {
-        var ci = charCode - FIRST_CHAR;
-        var sx = ci * charW;
-        var sy = fgIdx * charH;
-        ctx.drawImage(atlas, sx, sy, charW, charH, xpix, ypix, charW, charH);
+      // Underline cursor: draw an underline over the cell using CURFG
+      if (isCursor && cursorVisible && (cursorType === 1 || cursorType === 3)) {
+        var underlineColor = (typeof CURFG === 'number') ? mapAnsiToCss(CURFG) : mapAnsiToCss(fgCode);
+        ctx.fillStyle = underlineColor;
+        // 2-pixel tall underline; adjust if you want thicker/thinner
+        ctx.fillRect(xpix, ypix + charH - 2, charW, 2);
       }
-    }
 
-    // Underline cursor: draw an underline over the cell using CURFG
-    if (isCursor && cursorVisible && (cursorType === 1 || cursorType === 3)) {
-      var underlineColor = (typeof CURFG === 'number') ? mapAnsiToCss(CURFG) : mapAnsiToCss(fgCode);
-      ctx.fillStyle = underlineColor;
-      // 2-pixel tall underline; adjust if you want thicker/thinner
-      ctx.fillRect(xpix, ypix + charH - 2, charW, 2);
+      // finished cell
     }
   }
-
-  function doRefresh() {
-    pending = false;
-    if (typeof VIDEO === 'undefined' || !Array.isArray(VIDEO)) return;
-
-    var rows = (typeof H === 'number') ? H : 25;
-    var cols = (typeof W === 'number') ? W : 32;
-
-    // simple time-based blink phase (true = visible); matches the DOM blink rhythm
-    var blinkPhase = (Math.floor(Date.now() / 500) & 1) === 0;
-
-    if (pendingFull) {
-      // Full canvas clear and redraw all cells
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      for (var ry = 0; ry < rows; ry++) {
-        for (var rx = 0; rx < cols; rx++) {
-          drawCell(rx, ry, blinkPhase);
-        }
-      }
-      pendingFull = false;
-    } else if (pendingRegion.x2 >= pendingRegion.x1) {
-      // Incremental render: only clear and redraw the dirty bounding box
-      var charW = CHAR_W, charH = CHAR_H;
-      var x1 = Math.max(0, pendingRegion.x1);
-      var y1 = Math.max(0, pendingRegion.y1);
-      var x2 = Math.min(cols - 1, pendingRegion.x2);
-      var y2 = Math.min(rows - 1, pendingRegion.y2);
-      ctx.clearRect(x1 * charW, y1 * charH, (x2 - x1 + 1) * charW, (y2 - y1 + 1) * charH);
-      for (var ry = y1; ry <= y2; ry++) {
-        for (var rx = x1; rx <= x2; rx++) {
-          drawCell(rx, ry, blinkPhase);
-        }
-      }
-    }
-
-    // Reset dirty region to empty
-    pendingRegion.x1 = 0;
-    pendingRegion.y1 = 0;
-    pendingRegion.x2 = -1;
-    pendingRegion.y2 = -1;
-  }
+}
 
 
   function mapAnsiToIndex(code) {

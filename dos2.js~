@@ -1641,7 +1641,9 @@ var DEVICE = 'none';
       if (!resp.ok) return null;
       const text = await resp.text();
       var lastMod = resp.headers.get('Last-Modified');
-      var serverTs = lastMod ? _tsFromDate(new Date(lastMod)) : _timestamp();
+      if (!lastMod) return null;
+      var serverTs = _tsFromDate(new Date(lastMod));
+      if (!serverTs || serverTs.length !== 14) return null;
       return { text: text, serverTs: serverTs };
     } catch (err) {
       return null;
@@ -1699,10 +1701,11 @@ var DEVICE = 'none';
     var fileData = [];
     for (var i = 0; i < files.length; i++) {
       var result = await dosInstallFetch(files[i]);
+      if (!result || !result.serverTs) continue;
       fileData.push({
         file: files[i],
-        text: result ? result.text : null,
-        serverTs: result ? result.serverTs : null
+        text: result.text,
+        serverTs: result.serverTs
       });
     }
 
@@ -1716,10 +1719,13 @@ var DEVICE = 'none';
       var localEntry = _findEntryFlexible(manifest, fd.file);
       var localTs = localEntry ? localEntry.entry.timestamp : null;
       var isNew = !localEntry;
-      var serverDisp = fd.serverTs ? _formatTimestamp(fd.serverTs) : '     ';
+      var isUpToDate = localTs && fd.serverTs === localTs;
+      var serverDisp = _formatTimestamp(fd.serverTs);
       var localDisp = localTs ? _formatTimestamp(localTs) : '     ';
       if (isNew) {
         print(serverDisp + ' ' + localDisp + ' [bred]*[white]' + fd.file + '\n');
+      } else if (isUpToDate) {
+        print(serverDisp + ' ' + localDisp + ' [green]*[white]' + fd.file + '\n');
       } else {
         print(serverDisp + ' ' + localDisp + '  ' + fd.file + '\n');
       }
@@ -1728,10 +1734,10 @@ var DEVICE = 'none';
     // Ask for confirmation via the menu bar
     print('\n');
     pokeMenu("  Install new files, (Y)es? ");
-    var answer = await input(false);
+    var answer = await inkey();
     pokeMenu();
 
-    if (answer !== 'Y' && answer !== 'y') { return false; }
+    if (answer !== 'Y') { return false; }
 
     // Install each file, preserving the server timestamp in the manifest
     print('\n');
