@@ -1059,6 +1059,36 @@ window.pokeCursorOff = function() {
   return true;
 }
 
+function cursorVarsToAttr(vars) {
+  // prefer window-defined ATTR_* constants if present, otherwise use defaults
+  const ATTR_INVERSE   = (window.ATTR_INVERSE   !== undefined) ? window.ATTR_INVERSE   : 0x0001;
+  const ATTR_BOLD      = (window.ATTR_BOLD      !== undefined) ? window.ATTR_BOLD      : 0x0002;
+  const ATTR_ITALIC    = (window.ATTR_ITALIC    !== undefined) ? window.ATTR_ITALIC    : 0x0008;
+  const ATTR_UNDERLINE = (window.ATTR_UNDERLINE !== undefined) ? window.ATTR_UNDERLINE : 0x0010; // "line"
+  const ATTR_BLINK     = (window.ATTR_BLINK     !== undefined) ? window.ATTR_BLINK     : 0x0020;
+  const ATTR_DIM       = (window.ATTR_DIM       !== undefined) ? window.ATTR_DIM       : 0x0040;
+
+  // vars may be an object with the fields, otherwise fall back to globals
+  const v = (vars && typeof vars === 'object') ? vars : {};
+
+  const inverse = (typeof v.cursorInverse !== 'undefined') ? v.cursorInverse : (typeof cursorInverse !== 'undefined' ? cursorInverse : 0);
+  const bold    = (typeof v.cursorBold    !== 'undefined') ? v.cursorBold    : (typeof cursorBold    !== 'undefined' ? cursorBold    : 0);
+  const dim     = (typeof v.cursorDim     !== 'undefined') ? v.cursorDim     : (typeof cursorDim     !== 'undefined' ? cursorDim     : 0);
+  const italic  = (typeof v.cursorItalic  !== 'undefined') ? v.cursorItalic  : (typeof cursorItalic  !== 'undefined' ? cursorItalic  : 0);
+  const line    = (typeof v.cursorLine    !== 'undefined') ? v.cursorLine    : (typeof cursorLine    !== 'undefined' ? cursorLine    : 0);
+  const blink   = (typeof v.cursorBlink   !== 'undefined') ? v.cursorBlink   : (typeof cursorBlink   !== 'undefined' ? cursorBlink   : 0);
+
+  let mask = 0;
+  if (inverse) mask |= ATTR_INVERSE;
+  if (bold)    mask |= ATTR_BOLD;
+  if (dim)     mask |= ATTR_DIM;
+  if (italic)  mask |= ATTR_ITALIC;
+  if (line)    mask |= ATTR_UNDERLINE;
+  if (blink)   mask |= ATTR_BLINK;
+
+  return mask;
+}
+
 window.pokeScroll = function() {
   var VRow=new Array(W);
   var FRow=new Array(W);

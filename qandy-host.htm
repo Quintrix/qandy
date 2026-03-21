@@ -2786,11 +2786,28 @@ window.getCellStyle = function(x, y) {
 
   // Visual inverse: swap fg/bg for rendering only (do not modify banks)
   if (s.inverse) {
-    var t = s.color; s.color = s.bgcolor; s.bgcolor = t;
+    var fgCode = ansiCodeToEquivalent(s.color, 'bg');     // Convert FG to BG code
+    var bgCode = ansiCodeToEquivalent(s.bgcolor, 'fg');   // Convert BG to FG code
+    s.color = bgCode;
+    s.bgcolor = fgCode;
   }
 
   return s;
 };
+
+function ansiCodeToEquivalent(code, targetType) {
+  // If code is a background code (40-47, 100-107), return equivalent foreground
+  // If code is a foreground code (30-37, 90-97), return equivalent background
+  
+  if (targetType === 'fg') {
+    if (code >= 40 && code <= 47) return code - 10;    // 41 → 31
+    if (code >= 100 && code <= 107) return code - 60;  // 101 → 41
+  } else if (targetType === 'bg') {
+    if (code >= 30 && code <= 37) return code + 10;    // 31 → 41
+    if (code >= 90 && code <= 97) return code + 10;    // 91 → 101
+  }
+  return code;
+}
 
 function validateCoords(x, y) { return (typeof x === 'number' && typeof y === 'number' && x >= 0 && y >= 0 && x < W && y < H); }
 function safeGet(arr, y, x) { return (arr && arr[y]) ? arr[y][x] : undefined; }

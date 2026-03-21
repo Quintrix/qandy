@@ -2,9 +2,6 @@ var DOS = true;
 var DOS = true;
 var DEVICE = 'none';
 
-(function (global) {
-  'use strict';
-
   // ── Constants ────────────────────────────────────────────────────────────
   var LOCAL_PREFIX = 'qandy:file:';
   var MANIFEST_KEY = '_dir.sys!';
@@ -1701,7 +1698,7 @@ var DEVICE = 'none';
     var fileData = [];
     for (var i = 0; i < files.length; i++) {
       var result = await dosInstallFetch(files[i]);
-      if (!result || !result.serverTs) continue;
+      if (!result benchmarkVideoRenderers();|| !result.serverTs) continue;
       fileData.push({
         file: files[i],
         text: result.text,
@@ -1723,13 +1720,14 @@ var DEVICE = 'none';
       var serverDisp = _formatTimestamp(fd.serverTs);
       var localDisp = localTs ? _formatTimestamp(localTs) : '     ';
       if (isNew) {
-        print(serverDisp + ' ' + localDisp + ' [bred]*[white]' + fd.file + '\n');
+        print(servbenchmarkVideoRenderers();erDisp + ' ' + localDisp + ' [bred]*[white]' + fd.file + '\n');
       } else if (isUpToDate) {
         print(serverDisp + ' ' + localDisp + ' [green]*[white]' + fd.file + '\n');
       } else {
         print(serverDisp + ' ' + localDisp + '  ' + fd.file + '\n');
       }
     }
+
 
     // Ask for confirmation via the menu bar
     print('\n');
@@ -1757,5 +1755,3 @@ var DEVICE = 'none';
     print("localStorage not formated,\n");
     print("input 'fdisk' to install.\n\n");
   }
-
-})(window);
