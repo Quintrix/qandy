@@ -1,8 +1,4 @@
 
-(function () {
-  if (typeof document === 'undefined') return;
-  if (window.__qandy_dom_renderer_initialized) return;
-  window.__qandy_dom_renderer_initialized = true;
 
   // ── grid state ──────────────────────────────────────────────────────────────
   // cellGrid[row][col] → <span> element
@@ -168,73 +164,23 @@
     domCursorHome();
   }
 
-  // ── saved originals (for disable path) ───────────────────────────────────────
-  var origPokeCell    = null;
-  var origPeek        = null;
-  var origPokeRefresh = null;
-  var origPokeRefreshRow = null;
-  var origCursorHome  = null;
-  var origCursorMoveTo = null;
-  var origClearScreen = null;
 
-  // ── public API ───────────────────────────────────────────────────────────────
-  window.enableDOMRenderer = function () {
-    try {
-      if (!initGrid()) {
-        console.warn('enableDOMRenderer: could not find #txt container');
-        return false;
-      }
 
-      // Snapshot originals before we overwrite them
-      origPokeCell       = (typeof window.pokeCell        === 'function') ? window.pokeCell        : null;
-      origPeek           = (typeof window.peek            === 'function') ? window.peek            : null;
-      origPokeRefresh    = (typeof window.pokeRefresh     === 'function') ? window.pokeRefresh     : null;
-      origPokeRefreshRow = (typeof window.pokeRefreshRow  === 'function') ? window.pokeRefreshRow  : null;
-      origCursorHome     = (typeof window.cursorHome      === 'function') ? window.cursorHome      : null;
-      origCursorMoveTo   = (typeof window.cursorMoveTo    === 'function') ? window.cursorMoveTo    : null;
-      origClearScreen    = (typeof window.clearScreen     === 'function') ? window.clearScreen     : null;
 
-      // Install DOM renderer implementations
-      window.pokeCell       = domPokeCell;
-      window.peek           = domPeek;
-      window.pokeRefresh    = domPokeRefresh;
-      window.pokeRefreshRow = domPokeRefresh; // row-level refresh is also a no-op
-      window.cursorHome     = domCursorHome;
-      window.cursorMoveTo   = domCursorMoveTo;
-      window.clearScreen    = domClearScreen;
 
-      window.__qandy_use_dom_renderer = true;
-      return true;
-    } catch (e) {
-      console.warn('enableDOMRenderer failed', e);
-      return false;
-    }
-  };
+initGrid()
 
-  window.disableDOMRenderer = function () {
-    try {
-      if (origPokeCell)       window.pokeCell       = origPokeCell;
-      if (origPeek)           window.peek           = origPeek;
-      if (origPokeRefresh)    window.pokeRefresh    = origPokeRefresh;
-      if (origPokeRefreshRow) window.pokeRefreshRow = origPokeRefreshRow;
-      if (origCursorHome)     window.cursorHome     = origCursorHome;
-      if (origCursorMoveTo)   window.cursorMoveTo   = origCursorMoveTo;
-      if (origClearScreen)    window.clearScreen    = origClearScreen;
+// Install DOM renderer implementations
+// window.pokeCell       = domPokeCell;
+// window.peek           = domPeek;
+// window.pokeRefresh    = domPokeRefresh;
+// window.pokeRefreshRow = domPokeRefresh; // row-level refresh is also a no-op
+// window.cursorHome     = domCursorHome;
+// window.cursorMoveTo   = domCursorMoveTo;
+// window.clearScreen    = domClearScreen;
 
-      window.__qandy_use_dom_renderer = false;
-      return true;
-    } catch (e) {
-      console.warn('disableDOMRenderer failed', e);
-      return false;
-    }
-  };
 
-  // Helper: rebuild the grid (e.g. after a screen-resize)
-  window.__qandy_dom_rebuild = function () {
-    try { return initGrid(); } catch (e) { console.warn('__qandy_dom_rebuild failed', e); return false; }
-  };
-  
-})();
-
-window.enableDOMRenderer();
-
+// Helper: rebuild the grid (e.g. after a screen-resize)
+window.__qandy_dom_rebuild = function () {
+  try { return initGrid(); } catch (e) { console.warn('__qandy_dom_rebuild failed', e); return false; }
+};

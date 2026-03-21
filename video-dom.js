@@ -1,21 +1,4 @@
-// video-dom.js
-// DOM-based character grid renderer for Qandy
-//
-// Renders each character cell as a <span> element updated via direct
-// textContent manipulation — no memory-array-to-DOM synchronisation step.
-//
-// Design goals
-//   • No VIDEO / FCOLOR / BCOLOR / ATTR arrays — the DOM is the source of truth
-//   • pokeCell()    — writes straight to a span (textContent + className)
-//   • peek()        — reads straight from a span's textContent
-//   • pokeRefresh() — no-op; the DOM is always current
-//   • cursorHome(), cursorMoveTo(), clearScreen() — cursor helpers
-//   • enableDOMRenderer() / disableDOMRenderer()  — opt-in switch
 
-(function () {
-  if (typeof document === 'undefined') return;
-  if (window.__qandy_dom_renderer_initialized) return;
-  window.__qandy_dom_renderer_initialized = true;
 
   // ── grid state ──────────────────────────────────────────────────────────────
   // cellGrid[row][col] → <span> element
@@ -81,41 +64,6 @@
     return true;
   }
 
-  // ── pokeCell ─────────────────────────────────────────────────────────────────
-  // Direct write to a single span — no array sync needed.
-  function domPokeCell(x, y, ch, fg, bg, attr) {
-    var cols = getW();
-    var rows = getH();
-
-    if (typeof x !== 'number' || typeof y !== 'number') return false;
-    if (x < 0 || x >= cols || y < 0 || y >= rows) return false;
-
-    // Normalise character
-    if (typeof ch === 'undefined' || ch === null) ch = ' ';
-    ch = String(ch).charAt(0) || ' ';
-
-    // Resolve color / attribute values, falling back to current cursor state
-    var fgCode  = (typeof fg   === 'number') ? (fg   | 0) : ((typeof CURFG   === 'number') ? CURFG   : 37);
-    var bgCode  = (typeof bg   === 'number') ? (bg   | 0) : ((typeof CURBG   === 'number') ? CURBG   : 40);
-    var attrVal = (typeof attr === 'number') ? (attr | 0) : ((typeof CURATTR === 'number') ? CURATTR : 0);
-
-    var span = cellGrid[y] && cellGrid[y][x];
-    if (!span) return false;
-
-    // Update text — use EMPTY_CELL so the cell retains its visual width
-    var newText = (ch === ' ') ? EMPTY_CELL : ch;
-    if (span.textContent !== newText) span.textContent = newText;
-
-    // Update class only when it has changed (avoids style recalculation)
-    var cls = buildCellClass(fgCode, bgCode, attrVal);
-    if (span._lastClass !== cls) {
-      span.className = cls;
-      span._lastClass = cls;
-    }
-
-    return true;
-  }
-
   // ── peek ─────────────────────────────────────────────────────────────────────
   // Read character directly from the span — no VIDEO array required.
   function domPeek(x, y) {
@@ -133,11 +81,6 @@
     return (txt === EMPTY_CELL || txt === '') ? ' ' : txt;
   }
 
-  // ── pokeRefresh ──────────────────────────────────────────────────────────────
-  // The DOM is always up-to-date, so there is nothing to flush.
-  function domPokeRefresh(/* x, y, n */) {
-    return true;
-  }
 
   // ── cursor helpers ───────────────────────────────────────────────────────────
   function domCursorHome() {
@@ -156,94 +99,9 @@
     if (typeof CURY !== 'undefined') CURY = cy;
   }
 
-  // ── clearScreen ──────────────────────────────────────────────────────────────
-  // Reset every cell to a blank space using the current cursor colors.
-  function domClearScreen() {
-    var cols = getW();
-    var rows = getH();
-    var fgCode = (typeof CURFG === 'number') ? CURFG : 37;
-    var bgCode = (typeof CURBG === 'number') ? CURBG : 40;
-    var cls    = buildCellClass(fgCode, bgCode, 0);
+initGrid()
 
-    for (var y = 0; y < rows; y++) {
-      for (var x = 0; x < cols; x++) {
-        var span = cellGrid[y] && cellGrid[y][x];
-        if (!span) continue;
-        span.textContent = EMPTY_CELL;
-        if (span._lastClass !== cls) {
-          span.className = cls;
-          span._lastClass = cls;
-        }
-      }
-    }
-
-    // Reset cursor to home
-    domCursorHome();
-  }
-
-  // ── saved originals (for disable path) ───────────────────────────────────────
-  var origPokeCell    = null;
-  var origPeek        = null;
-  var origPokeRefresh = null;
-  var origPokeRefreshRow = null;
-  var origCursorHome  = null;
-  var origCursorMoveTo = null;
-  var origClearScreen = null;
-
-  // ── public API ───────────────────────────────────────────────────────────────
-  window.enableDOMRenderer = function () {
-    try {
-      if (!initGrid()) {
-        console.warn('enableDOMRenderer: could not find #txt container');
-        return false;
-      }
-
-      // Snapshot originals before we overwrite them
-      origPokeCell       = (typeof window.pokeCell        === 'function') ? window.pokeCell        : null;
-      origPeek           = (typeof window.peek            === 'function') ? window.peek            : null;
-      origPokeRefresh    = (typeof window.pokeRefresh     === 'function') ? window.pokeRefresh     : null;
-      origPokeRefreshRow = (typeof window.pokeRefreshRow  === 'function') ? window.pokeRefreshRow  : null;
-      origCursorHome     = (typeof window.cursorHome      === 'function') ? window.cursorHome      : null;
-      origCursorMoveTo   = (typeof window.cursorMoveTo    === 'function') ? window.cursorMoveTo    : null;
-      origClearScreen    = (typeof window.clearScreen     === 'function') ? window.clearScreen     : null;
-
-      // Install DOM renderer implementations
-      window.pokeCell       = domPokeCell;
-      window.peek           = domPeek;
-      window.pokeRefresh    = domPokeRefresh;
-      window.pokeRefreshRow = domPokeRefresh; // row-level refresh is also a no-op
-      window.cursorHome     = domCursorHome;
-      window.cursorMoveTo   = domCursorMoveTo;
-      window.clearScreen    = domClearScreen;
-
-      window.__qandy_use_dom_renderer = true;
-      return true;
-    } catch (e) {
-      console.warn('enableDOMRenderer failed', e);
-      return false;
-    }
-  };
-
-  window.disableDOMRenderer = function () {
-    try {
-      if (origPokeCell)       window.pokeCell       = origPokeCell;
-      if (origPeek)           window.peek           = origPeek;
-      if (origPokeRefresh)    window.pokeRefresh    = origPokeRefresh;
-      if (origPokeRefreshRow) window.pokeRefreshRow = origPokeRefreshRow;
-      if (origCursorHome)     window.cursorHome     = origCursorHome;
-      if (origCursorMoveTo)   window.cursorMoveTo   = origCursorMoveTo;
-      if (origClearScreen)    window.clearScreen    = origClearScreen;
-
-      window.__qandy_use_dom_renderer = false;
-      return true;
-    } catch (e) {
-      console.warn('disableDOMRenderer failed', e);
-      return false;
-    }
-  };
-
-  // Helper: rebuild the grid (e.g. after a screen-resize)
-  window.__qandy_dom_rebuild = function () {
-    try { return initGrid(); } catch (e) { console.warn('__qandy_dom_rebuild failed', e); return false; }
-  };
-})();
+// Helper: rebuild the grid (e.g. after a screen-resize)
+window.__qandy_dom_rebuild = function () {
+  try { return initGrid(); } catch (e) { console.warn('__qandy_dom_rebuild failed', e); return false; }
+};
