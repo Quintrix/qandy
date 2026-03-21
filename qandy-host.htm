@@ -2052,11 +2052,11 @@ window.pokeCursor = async function(t) {
 window.pokeMenu = function(t) {
   if (t) {
     console.log("pokeMenu t="+t);
-    for (var x=0; x<W; x++) { var ch=x<t.length ? t[x] : ' '; pokeCell(x, H, ch, MENUFG, MENUBG, 0); }
+    for (var x=0; x<W; x++) { var ch=x<t.length ? t[x] : ' '; pokeCell(x, H - 1, ch, MENUFG, MENUBG, 0); }
     return;
   } 
   console.log("pokeMenu t=null, erase menu");
-  for (var x=0; x<W; x++) { pokeCell(x, H, ' ', CURFG, CURBG, 0); }
+  for (var x=0; x<W; x++) { pokeCell(x, H - 1, ' ', CURFG, CURBG, 0); }
   return;
 }
 
