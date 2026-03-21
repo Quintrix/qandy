@@ -2060,18 +2060,6 @@ window.pokeMenu = function(t) {
   return;
 }
 
-window.inkey = function() {
-  return new Promise(function(resolve) {
-    var handler = function(e) {
-      e.preventDefault();
-      document.removeEventListener('keydown', handler);
-      var ch = String.fromCharCode(e.which || e.keyCode).toUpperCase();
-      resolve(ch);
-    };
-    document.addEventListener('keydown', handler);
-  });
-};
-
 var FALLBACK_FG = {
   black:30, red:31, green:32, yellow:33, blue:34, magenta:35, cyan:36, white:37,
   bright_black:90, bright_red:91, bright_green:92, bright_yellow:93, bright_blue:94, bright_magenta:95, bright_cyan:96, bright_white:97
@@ -3202,9 +3190,7 @@ window.updateKeyLabels = updateKeyLabels;
 
 (function(global) {
   if (global.QandyKeyboard) return; // don't re-install
-
   var pending = null; // { resolve, reject, echo, buffer, savedLINE, savedCURP }
-
   // Accept the pending input value and resolve the Promise
   function acceptPending(value) {
     if (!pending) return false;
@@ -3294,6 +3280,8 @@ window.updateKeyLabels = updateKeyLabels;
   global.input = input;
 
 })(window);
+
+
 
  if (typeof updateKeyLabels === 'function') {
   // Replace local references inside updateKeyLabels with window.* as needed.

@@ -2052,13 +2052,25 @@ window.pokeCursor = async function(t) {
 window.pokeMenu = function(t) {
   if (t) {
     console.log("pokeMenu t="+t);
-    for (var x=0; x<W; x++) { var ch=x<t.length ? t[x] : ' '; pokeCell(x, CURY, ch, MENUFG, MENUBG, 0); }
+    for (var x=0; x<W; x++) { var ch=x<t.length ? t[x] : ' '; pokeCell(x, H - 1, ch, MENUFG, MENUBG, 0); }
     return;
   } 
   console.log("pokeMenu t=null, erase menu");
-  for (var x=0; x<W; x++) { pokeCell(x, CURY, ' ', CURFG, CURBG, 0); }
+  for (var x=0; x<W; x++) { pokeCell(x, H - 1, ' ', CURFG, CURBG, 0); }
   return;
 }
+
+window.inkey = function() {
+  return new Promise(function(resolve) {
+    var handler = function(e) {
+      e.preventDefault();
+      document.removeEventListener('keydown', handler);
+      var ch = String.fromCharCode(e.which || e.keyCode).toUpperCase();
+      resolve(ch);
+    };
+    document.addEventListener('keydown', handler);
+  });
+};
 
 var FALLBACK_FG = {
   black:30, red:31, green:32, yellow:33, blue:34, magenta:35, cyan:36, white:37,

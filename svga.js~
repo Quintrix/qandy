@@ -4,7 +4,7 @@
 // Batched canvas operations for better performance
 
 //
-// known issue: screen gets ereased while typing, no idea how to fix 
+// known issue: screen gets ereased while typing 
 //
 
 /* Canvas-backed renderer for Qandy
