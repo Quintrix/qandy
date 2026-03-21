@@ -1631,21 +1631,41 @@ var DEVICE = 'none';
   function isFileProtocol() { return getLoadProtocol() === 'file'; }
   function isHttpProtocol() {var p = getLoadProtocol(); return p === 'http' || p === 'https'; }
   function getBaseURL() { try { return new URL('.', location.href).href; } catch (e) { return location.href; }}
+  function _getInstallRepos() {
+    return (typeof global.INSTALL_REPOS !== 'undefined' && Array.isArray(global.INSTALL_REPOS)) ? global.INSTALL_REPOS : [];
+  }
  
-  // Fetch a file from the server and return { text, serverTs } or null on failure.
+  // Fetch a file and return { text, serverTs } or null on failure/missing timestamp.
   // serverTs is in yyyymmddhhmmss format, sourced from the HTTP Last-Modified header.
+  // When on file:// protocol, tries each URL in global.INSTALL_REPOS in order.
+  // Files without a valid Last-Modified header are skipped (returns null).
   async function dosInstallFetch(file) {
-    try {
-      const url = new URL(file, location.href).href;
-      const resp = await fetch(url, { cache: 'no-store' });
-      if (!resp.ok) return null;
-      const text = await resp.text();
-      var lastMod = resp.headers.get('Last-Modified');
-      var serverTs = lastMod ? _tsFromDate(new Date(lastMod)) : _timestamp();
-      return { text: text, serverTs: serverTs };
-    } catch (err) {
-      return null;
+    var urls = [];
+    if (isFileProtocol()) {
+      var repos = _getInstallRepos();
+      for (var r = 0; r < repos.length; r++) {
+        var base = repos[r];
+        if (base.charAt(base.length - 1) !== '/') base += '/';
+        urls.push(base + file);
+      }
+    } else {
+      try { urls.push(new URL(file, location.href).href); } catch (e) { /* invalid URL, urls stays empty */ }
     }
+    for (var u = 0; u < urls.length; u++) {
+      try {
+        var resp = await fetch(urls[u], { cache: 'no-store' });
+        if (!resp.ok) continue;
+        var text = await resp.text();
+        var lastMod = resp.headers.get('Last-Modified');
+        if (!lastMod) continue;
+        var d = new Date(lastMod);
+        if (isNaN(d.getTime())) continue;
+        return { text: text, serverTs: _tsFromDate(d) };
+      } catch (err) {
+        continue;
+      }
+    }
+    return null;
   }
 
   // Save a file to localStorage with a specific timestamp (used to preserve server timestamps).
@@ -1684,26 +1704,36 @@ var DEVICE = 'none';
       }
     }
 
-    if (!isHttpProtocol()) {
-      if (isFileProtocol()) {
-        print("\nCannot install from file://\n");
-        print("Use DOS to copy .js files to\n");
-        print("localStorage.\n\n");
-      }
+    if (!isHttpProtocol() && !isFileProtocol()) {
       return false;
+    }
+
+    if (isFileProtocol()) {
+      var repos = _getInstallRepos();
+      if (repos.length === 0) {
+        print("\nNo install repos configured.\n\n");
+        return false;
+      }
     }
 
     var files = ['ansi.js', 'ascii.js', 'keydown.js', 'piano.js', 'svga.js'];
 
-    // Fetch all files from the server and collect their timestamps
+    // Fetch all files; skip any that are not found or have no valid timestamp
     var fileData = [];
     for (var i = 0; i < files.length; i++) {
       var result = await dosInstallFetch(files[i]);
-      fileData.push({
-        file: files[i],
-        text: result ? result.text : null,
-        serverTs: result ? result.serverTs : null
-      });
+      if (result !== null) {
+        fileData.push({
+          file: files[i],
+          text: result.text,
+          serverTs: result.serverTs
+        });
+      }
+    }
+
+    if (fileData.length === 0) {
+      print("\nNo files available to install.\n\n");
+      return false;
     }
 
     // Load the localStorage manifest to get existing file timestamps
