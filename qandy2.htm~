@@ -29,12 +29,14 @@ body { margin: 0; background-color: #333; }
   width: 256px; 
   height: 384px; 
   z-index: 250; 
+  /* Font stack optimized for readability with extended character support */
+  /* Priority: Courier (readable) -> System monospace with Unicode -> Generic fallback */
   font-family: 'Courier New', Courier, 'Consolas', 'DejaVu Sans Mono', 'Liberation Mono', 'Menlo', Monaco, monospace;
   font-size: 12px;
   font-weight: normal;
   color: #fff;
   background-color: #000;
-  overflow-y: auto;
+  overflow-y: hidden;
   overflow-x: hidden;
   padding: 4px;
   line-height: 1.2;
@@ -45,12 +47,6 @@ body { margin: 0; background-color: #333; }
   scrollbar-width: thin;
   scrollbar-color: #0f0 #000;
 }
-
-.txt::-webkit-scrollbar { width: 12px; }
-.txt::-webkit-scrollbar-track { background: #000; border-left: 1px solid #222; }
-.txt::-webkit-scrollbar-thumb { background: #0f0; border-radius: 6px; border: 2px solid #000; }
-.txt::-webkit-scrollbar-thumb:hover { background: #0f0; box-shadow: inset 0 0 6px rgba(0, 255, 0, 0.3); }
-.txt::-webkit-scrollbar-thumb:active { background: #0f0; }
 
 #cursor {
   display: inline-block;
@@ -64,6 +60,11 @@ body { margin: 0; background-color: #333; }
   0%, 49% { opacity: 1; }
   50%, 100% { opacity: 0; }
 }
+
+.txt::-webkit-scrollbar { width: 14px; }
+.txt::-webkit-scrollbar-track { background: #000; }
+.txt::-webkit-scrollbar-thumb { background: #0f0; border-radius: 7px; }
+.txt::-webkit-scrollbar-thumb:hover { background: #0f0; }
 
 .ansi-black { color: #000; }
 .ansi-red { color: #f00; }
@@ -426,12 +427,12 @@ var MENUBG=44;      // more prompt background color (blue)
 var W=32; // screen width
 var H=25; // screen height
 
-//var VIDEO = [];  // video memory
-//var COLOR = [];  // color memory
-//var FCOLOR = []; // foreground color memory
-//var BCOLOR = []; // background color memory
-//var ATTR = [];   // attribute memory
-//var DOM = [];    // DOM memory
+var VIDEO = [];  // video memory
+var COLOR = [];  // color memory
+var FCOLOR = []; // foreground color memory
+var BCOLOR = []; // background color memory
+var ATTR = [];   // attribute memory
+var DOM = [];    // DOM memory
 
 var SYNC=true; // keeps DOM in sync with video
 
@@ -1724,916 +1725,1175 @@ if (typeof window.qandySignalReady === 'function') {
 }
 }
 
-
-
 //
-// ──── Qandy Video Graphics Adaptor ──────────────────────────────────────────────────
+// video.js
 //
 
-//
-// ──── Qandy Video Graphics Adaptor (DOM-based) ──────────────────────────────────────
-//
 function video_js() {
-  var cellGrid = [];
-  var EMPTY_CELL = '\u00A0';
-  
-  function getW() { return (typeof W === 'number') ? W : 32; }
-  function getH() { return (typeof H === 'number') ? H : 25; }
-  
-  function buildCellClass(fgCode, bgCode, attr) {
-    var cls = 'qandy-cell ansi-fg-' + (fgCode | 0) + ' ansi-bg-' + (bgCode | 0);
-    var a = attr | 0;
-    if (a & 0x0001) cls += ' ansi-inverse';
-    if (a & 0x0002) cls += ' ansi-bold';
-    if (a & 0x0004) cls += ' ansi-dim';
-    if (a & 0x0008) cls += ' ansi-italic';
-    if (a & 0x0010) cls += ' ansi-underline';
-    if (a & 0x0020) cls += ' ansi-blink';
-    return cls;
+//
+// Qandy Video Graphics Adaptor
+// 
+
+let lastx=0; let lasty=0;
+
+window.pokeModem = function(t) {
+  if (typeof t === 'undefined' || t === null) return false;
+  // Cancel any existing paced output and start fresh
+  if (window._pokeCursor_state && window._pokeCursor_state.timer) {
+    clearTimeout(window._pokeCursor_state.timer);
+  } 
+  window._pokeCursor_state = null;
+
+  var str = String(t);
+
+  // parse numeric params into array of numbers (empty => [])
+  function parseParams(paramStr) {
+    if (!paramStr || paramStr.length === 0) return [];
+    return paramStr.split(';').map(function(p){ var v = parseInt(p,10); return isNaN(v) ? 0 : v; });
   }
-  
-  function validateCoords(x, y) { 
-    return (typeof x === 'number' && typeof y === 'number' && x >= 0 && y >= 0 && x < getW() && y < getH()); 
-  }
-  
-  function clampRow(r) { 
-    if (typeof r !== 'number' || isNaN(r)) return 0; 
-    if (r < 0) return 0; 
-    if (r >= getH()) return getH() - 1; 
-    return r; 
-  }
-  
-  // ──── Initalization ────────────────────────
-  
-  function initGrid() {
-    var cols = getW(); 
-    var rows = getH();
-    var container = document.getElementById('txt');
-    if (!container) return false;
-    container.innerHTML = ''; 
-    cellGrid = [];
 
-    var frag = document.createDocumentFragment();
-    var defaultFg = (typeof CURFG === 'number') ? CURFG : 37;
-    var defaultBg = (typeof CURBG === 'number') ? CURBG : 40;
-    var defaultCls = buildCellClass(defaultFg, defaultBg, 0);
-
-    for (var y = 0; y < rows; y++) {
-      var rowDiv = document.createElement('div');
-      rowDiv.className = 'qandy-row';
-      cellGrid[y] = new Array(cols);
-
-      for (var x = 0; x < cols; x++) {
-        var span = document.createElement('span');
-        span.className = defaultCls;
-        span._lastClass = defaultCls;
-        span.textContent = EMPTY_CELL;
-        rowDiv.appendChild(span);
-        cellGrid[y][x] = span;
-      }
-      frag.appendChild(rowDiv);
-    }
-    container.appendChild(frag);
-    return true;
-  }
-  
-  initGrid();
-  
-  // ──── the pokes ────────────────────────────
-  
-  window.pokeCell=function(x, y, ch, fg, bg, attr) {
-    var cols = getW();
-    var rows = getH();
-
-    if (typeof x !== 'number' || typeof y !== 'number') return false;
-    if (x < 0 || x >= cols || y < 0 || y >= rows) return false;
-
-    // Normalize character
-    if (typeof ch === 'undefined' || ch === null) ch = ' ';
-    ch = String(ch).charAt(0) || ' ';
-
-    // Resolve color / attribute values, falling back to current cursor state
-    var fgCode  = (typeof fg   === 'number') ? (fg   | 0) : ((typeof CURFG   === 'number') ? CURFG   : 37);
-    var bgCode  = (typeof bg   === 'number') ? (bg   | 0) : ((typeof CURBG   === 'number') ? CURBG   : 40);
-    var attrVal = (typeof attr === 'number') ? (attr | 0) : ((typeof CURATTR === 'number') ? CURATTR : 0);
-
-    var span = cellGrid[y] && cellGrid[y][x];
-    if (!span) return false;
-
-    // Update text
-    var newText = (ch === ' ') ? EMPTY_CELL : ch;
-    if (span.textContent !== newText) span.textContent = newText;
-
-    // Update class only when it has changed
-    var cls = buildCellClass(fgCode, bgCode, attrVal);
-    if (span._lastClass !== cls) {
-      span.className = cls;
-      span._lastClass = cls;
-    }
-
-    return true;
-  }
-  
-  window.pokeText = function(x, y, t, n) {
-    if (typeof x !== 'number' || typeof y !== 'number') return false;
-    if (typeof t === 'undefined' || t === null) return false;
-    n = (typeof n === 'undefined' || n === null) ? 1 : parseInt(n, 10);
-    if (isNaN(n) || n < 1) n = 1;
-    
-    var str = String(t);
-    var cx = x, cy = y;
-    var cols = getW();
-    var rows = getH();
-    
-    for (var repeat = 0; repeat < n; repeat++) {
-      for (var i = 0; i < str.length; i++) {
-        var c = str[i];
-        if (c === '\n') {
-          cx = 0; 
-          cy++;
-          if (cy >= rows) return false;
-          continue;
-        }
-        if (cx >= cols) {
-          cx = 0; 
-          cy++;
-          if (cy >= rows) return false;
-        }
-        pokeCell(cx, cy, c, CURFG, CURBG, CURATTR);
-        cx++;
-      }
-    }
-    return true;
-  };
-  
-  window.pokeColor = function(x, y, f, b, n) {
-    if (!validateCoords(x, y)) return false;
-    if (typeof f === 'undefined') { f = CURFG; }
-    if (typeof b === 'undefined') { b = CURBG; }
-    
-    var count = (typeof n === 'number' && n > 0) ? Math.floor(n) : 1;
-    var cols = getW();
-    var rows = getH();
-    var offset = 0;
-    
-    while (count > 0) {
-      var abs = x + offset;
-      var row = y + Math.floor(abs / cols);
-      var col = abs % cols;
-      if (row >= rows) break;
-      
-      var span = cellGrid[row] && cellGrid[row][col];
-      if (span) {
-        var ch = span.textContent === EMPTY_CELL ? ' ' : span.textContent;
-        var currentAttr = (ATTR && ATTR[row] && ATTR[row][col]) ? ATTR[row][col] : 0;
-        pokeCell(col, row, ch, f, b, currentAttr);
-      }
-      offset++;
-      count--;
-    }
-    return true;
-  };
-  
-  window.pokeChar = function(x, y, a, n) {
-    if (typeof a === 'undefined') return false;
-    if (!validateCoords(x, y)) return false;
-    
-    var ch = (typeof a === 'string') ? a : String(a)[0] || ' ';
-    n = (typeof n === 'number' && !isNaN(n) && n > 0) ? (n|0) : 1;
-    
-    var cols = getW();
-    var rows = getH();
-    var remaining = n;
-    var cx = x | 0;
-    var cy = y | 0;
-    var written = 0;
-    
-    while (remaining > 0 && cy < rows) {
-      var space = cols - cx;
-      if (space <= 0) { cx = 0; cy++; continue; }
-      var take = Math.min(remaining, space);
-      for (var i = 0; i < take; i++) { 
-        pokeCell(cx + i, cy, ch, CURFG, CURBG, CURATTR);
-      }
-      written += take;
-      remaining -= take;
-      cx = 0;
-      cy++;
-    }
-    return (n === 1) ? true : written;
-  };
-  
-  window.pokeFG = function(x, y, fg, count) {
-    // Getter: if fg is undefined, return current fg value
-    if (typeof fg === 'undefined') {
-      if (!validateCoords(x, y)) return undefined;
-      var span = cellGrid[y] && cellGrid[y][x];
-      if (!span) return undefined;
-      // Extract fg code from class name
-      var match = span.className.match(/ansi-fg-(\d+)/);
-      return match ? parseInt(match[1], 10) : 37;
-    }
-
-    // Setter: validate coords
-    if (!validateCoords(x, y)) return false;
-    count = (typeof count === 'number' && count > 0) ? Math.floor(count) : 1;
-    
-    var cols = getW();
-    var rows = getH();
-    var maxRemaining = Math.max(0, cols * rows - (y * cols + x));
-    if (count > maxRemaining) count = maxRemaining;
-    if (count <= 0) return false;
-
-    var fgCode = (typeof fg === 'number') ? (fg | 0) : 37;
-    var offset = 0;
-    
-    while (count > 0) {
-      var abs = x + offset;
-      var row = y + Math.floor(abs / cols);
-      var col = abs % cols;
-      if (row >= rows) break;
-      
-      var span = cellGrid[row] && cellGrid[row][col];
-      if (span) {
-        var ch = span.textContent === EMPTY_CELL ? ' ' : span.textContent;
-        var currentBg = (ATTR && ATTR[row] && ATTR[row][col]) ? ATTR[row][col] : CURBG;
-        var currentAttr = (ATTR && ATTR[row] && ATTR[row][col]) ? ATTR[row][col] : 0;
-        pokeCell(col, row, ch, fgCode, currentBg, currentAttr);
-      }
-      offset++;
-      count--;
-    }
-    return count;
-  };
-  
-  window.pokeBG = function(x, y, bg, count) {
-    // Getter: if bg is undefined, return current bg value
-    if (typeof bg === 'undefined') {
-      if (!validateCoords(x, y)) return undefined;
-      var span = cellGrid[y] && cellGrid[y][x];
-      if (!span) return undefined;
-      // Extract bg code from class name
-      var match = span.className.match(/ansi-bg-(\d+)/);
-      return match ? parseInt(match[1], 10) : 40;
-    }
-
-    // Setter: validate coords
-    if (!validateCoords(x, y)) return false;
-    count = (typeof count === 'number' && count > 0) ? Math.floor(count) : 1;
-    
-    var cols = getW();
-    var rows = getH();
-    var maxRemaining = Math.max(0, cols * rows - (y * cols + x));
-    if (count > maxRemaining) count = maxRemaining;
-    if (count <= 0) return false;
-
-    var bgCode = (typeof bg === 'number') ? (bg | 0) : 40;
-    var offset = 0;
-    
-    while (count > 0) {
-      var abs = x + offset;
-      var row = y + Math.floor(abs / cols);
-      var col = abs % cols;
-      if (row >= rows) break;
-      
-      var span = cellGrid[row] && cellGrid[row][col];
-      if (span) {
-        var ch = span.textContent === EMPTY_CELL ? ' ' : span.textContent;
-        var currentFg = 37; // fallback
-        var match = span.className.match(/ansi-fg-(\d+)/);
-        if (match) currentFg = parseInt(match[1], 10);
-        var currentAttr = (ATTR && ATTR[row] && ATTR[row][col]) ? ATTR[row][col] : 0;
-        pokeCell(col, row, ch, currentFg, bgCode, currentAttr);
-      }
-      offset++;
-      count--;
-    }
-    return count;
-  };
-  
-  window.pokeAttr = function(x, y, attrValue, n) {
-    if (typeof x !== 'number' || typeof y !== 'number') return false;
-    if (typeof attrValue !== 'number') return false;
-    
-    n = (typeof n === 'number' && n > 0) ? Math.floor(n) : 1;
-    attrValue = attrValue | 0;
-    
-    var cols = getW();
-    var rows = getH();
-    var remaining = n;
-    var cx = x | 0;
-    var cy = y | 0;
-    var written = 0;
-    
-    while (remaining > 0 && cy < rows) {
-      var space = cols - cx;
-      var take = Math.min(remaining, space);
-      
-      for (var i = 0; i < take; i++) {
-        var span = cellGrid[cy] && cellGrid[cy][cx + i];
-        if (span) {
-          // Update ATTR array
-          if (!ATTR[cy]) ATTR[cy] = new Uint16Array(cols);
-          ATTR[cy][cx + i] = attrValue;
-          // Rebuild class with new attr
-          var ch = span.textContent === EMPTY_CELL ? ' ' : span.textContent;
-          var match_fg = span.className.match(/ansi-fg-(\d+)/);
-          var match_bg = span.className.match(/ansi-bg-(\d+)/);
-          var fg = match_fg ? parseInt(match_fg[1], 10) : CURFG;
-          var bg = match_bg ? parseInt(match_bg[1], 10) : CURBG;
-          pokeCell(cx + i, cy, ch, fg, bg, attrValue);
-        }
-      }
-      
-      written += take;
-      remaining -= take;
-      cx = 0;
-      cy++;
-    }
-    
-    return (n === 1) ? true : written;
-  };
-
-  window.pokeAttrBit = function(x, y, bit, state) {
-    if (typeof x !== 'number' || typeof y !== 'number') return false;
-    if (!validateCoords(x, y)) return false;
-    var span = cellGrid[y] && cellGrid[y][x];
-    if (!span) return false;
-    // Extract current attributes from DOM
-    var currentAttr = extractAttrFromDOM(span);
-    var newAttr = state ? (currentAttr | bit) : (currentAttr & ~bit);
-    // Get current cell content and colors
-    var ch = span.textContent === EMPTY_CELL ? ' ' : span.textContent;
-    var match_fg = span.className.match(/ansi-fg-(\d+)/);
-    var match_bg = span.className.match(/ansi-bg-(\d+)/);
-    var fg = match_fg ? parseInt(match_fg[1], 10) : CURFG;
-    var bg = match_bg ? parseInt(match_bg[1], 10) : CURBG;
-    pokeCell(x, y, ch, fg, bg, newAttr);
-    return true;
-  };
-
-  window.pokeInverse = function(x, y, state, n) {
-    if (typeof x !== 'number' || typeof y !== 'number') return false;
-    if (typeof n === 'number' && n > 1) {
-      var endX = x + n;
-      var cols = getW();
-      for (var xi = x; xi < endX; xi++) {
-        if (xi >= cols) break;
-        pokeAttrBit(xi, y, window.ATTR_INVERSE || 0x0001, !!state);
-      }
-      return n;
-    }
-    pokeAttrBit(x, y, window.ATTR_INVERSE || 0x0001, !!state);
-    return true;
-  };
-  
-  window.pokeBold = function(x, y, state, n) {
-    if (typeof x !== 'number' || typeof y !== 'number') return false;
-    if (typeof n === 'number' && n > 1) {
-      var endX = x + n;
-      var cols = getW();
-      for (var xi = x; xi < endX; xi++) {
-        if (xi >= cols) break;
-        pokeAttrBit(xi, y, window.ATTR_BOLD || 0x0002, !!state);
-      }
-      return n;
-    }
-    pokeAttrBit(x, y, window.ATTR_BOLD || 0x0002, !!state);
-    return true;
-  };
-  
-  window.pokeItalic = function(x, y, state, n) {
-    if (typeof x !== 'number' || typeof y !== 'number') return false;
-    if (typeof n === 'number' && n > 1) {
-      var endX = x + n;
-      var cols = getW();
-      for (var xi = x; xi < endX; xi++) {
-        if (xi >= cols) break;
-        pokeAttrBit(xi, y, window.ATTR_ITALIC || 0x0008, !!state);
-      }
-      return n;
-    }
-    pokeAttrBit(x, y, window.ATTR_ITALIC || 0x0008, !!state);
-    return true;
-  };
-  
-  window.pokeLine = function(x, y, state, n) {
-    if (typeof x !== 'number' || typeof y !== 'number') return false;
-    if (typeof n === 'number' && n > 1) {
-      var endX = x + n;
-      var cols = getW();
-      for (var xi = x; xi < endX; xi++) {
-        if (xi >= cols) break;
-        pokeAttrBit(xi, y, window.ATTR_UNDERLINE || 0x0010, !!state);
-      }
-      return n;
-    }
-    pokeAttrBit(x, y, window.ATTR_UNDERLINE || 0x0010, !!state);
-    return true;
-  };
-  
-  window.pokeBlink = function(x, y, state, n) {
-    if (typeof x !== 'number' || typeof y !== 'number') return false;
-    if (typeof n === 'number' && n > 1) {
-      var endX = x + n;
-      var cols = getW();
-      for (var xi = x; xi < endX; xi++) {
-        if (xi >= cols) break;
-        pokeAttrBit(xi, y, window.ATTR_BLINK || 0x0020, !!state);
-      }
-      return n;
-    }
-    pokeAttrBit(x, y, window.ATTR_BLINK || 0x0020, !!state);
-    return true;
-  };
-  
-  window.pokeSelect = function(state) {
-    if (typeof SSTART !== 'number' || typeof SEND !== 'number') return false;
-    if (SSTART < 0 || SEND < 0) return false;
-    var s = Math.min(SSTART, SEND);
-    var e = Math.max(SSTART, SEND);
-    var count = e - s;
-    if (count <= 0) return false;
-    var cols = getW();
-    var absCol = (typeof LINEX === 'number' ? LINEX : 0) + s;
-    var startY = (typeof LINEY === 'number' ? LINEY : 0) + Math.floor(absCol / cols);
-    var startX = absCol % cols;
-    return pokeInverse(startX, startY, !!state, count);
-  };
-  
-  window.pokeScroll = function() {
-    var cols = getW(); var rows = getH();
-    // Shift DOM rows up
-    var container = document.getElementById('txt');
-    if (!container || !container.firstChild) return false;
-    var firstRow = container.firstChild;
-    if (firstRow) firstRow.parentNode.removeChild(firstRow);
-    // Shift cellGrid up
-    cellGrid.shift();
-    // Create new blank row at bottom
-    var newRowDiv = document.createElement('div');
-    newRowDiv.className = 'qandy-row';
-    var newRowCells = new Array(cols);
-    var defaultFg = (typeof CURFG === 'number') ? CURFG : 37;
-    var defaultBg = (typeof CURBG === 'number') ? CURBG : 40;
-    var defaultCls = buildCellClass(defaultFg, defaultBg, 0);
-    for (var x = 0; x < cols; x++) {
-      var span = document.createElement('span');
-      span.className = defaultCls;
-      span._lastClass = defaultCls;
-      span.textContent = EMPTY_CELL;
-      newRowDiv.appendChild(span);
-      newRowCells[x] = span;
-    }
-    container.appendChild(newRowDiv);
-    cellGrid.push(newRowCells);
-    // Update cursor position
-    CURY = clampRow((typeof CURY === 'number' ? CURY : 0) - 1);
-    LINEY = clampRow((typeof LINEY === 'number' ? LINEY : 0) - 1);
-    CURX = Math.max(0, Math.min(cols - 1, (typeof CURX === 'number' ? CURX : 0)));
-    LINEX = Math.max(0, Math.min(cols - 1, (typeof LINEX === 'number' ? LINEX : 0)));
-    return true;
-  };
-  
-  window.pokeCursorOn = function() {
-    if (typeof CURSOR === 'undefined' || typeof CURX === 'undefined' || typeof CURY === 'undefined') return;
-    if (CURSOR === 0) return; // cursor off
-    var sx = Math.max(0, Math.min(getW()-1, CURX|0));
-    var sy = Math.max(0, Math.min(getH()-1, CURY|0));
-    
-    if (CURSOR === 1 || CURSOR === 3) { // line cursor: underline
-      pokeAttrBit(sx, sy, window.ATTR_UNDERLINE || 0x0010, true);
-      if (CURSOR === 3) pokeAttrBit(sx, sy, window.ATTR_BLINK || 0x0020, true);
-    }
-    if (CURSOR === 4 || CURSOR === 5) { // block cursor: inverse
-      pokeAttrBit(sx, sy, window.ATTR_INVERSE || 0x0001, true);
-      if (CURSOR === 5) pokeAttrBit(sx, sy, window.ATTR_BLINK || 0x0020, true);
-    }
-  };
-  
-  var prevCursorAttr = 0;
-  window.pokeCursorOff = function() {
-    if (typeof CURX === 'undefined' || typeof CURY === 'undefined') return false;
-    var sx = Math.max(0, Math.min(getW()-1, CURX|0));
-    var sy = Math.max(0, Math.min(getH()-1, CURY|0));
-    
-    // Clear cursor attributes while preserving others
-    pokeAttrBit(sx, sy, window.ATTR_UNDERLINE || 0x0010, false);
-    pokeAttrBit(sx, sy, window.ATTR_INVERSE || 0x0001, false);
-    pokeAttrBit(sx, sy, window.ATTR_BLINK || 0x0020, false);
-    
-    return true;
-  };
-  
-  // ──── the menu bar ─────────────────────────  
-
-  window.pokeMenu = function(t) {
-    var cols = getW();
-    var rows = getH();
-    if (t) {
-      for (var x=0; x<cols; x++) { 
-        var ch = x<t.length ? t[x] : ' '; 
-        pokeCell(x, H-1, ch, MENUFG || 37, MENUBG || 44, 0); 
-      }
-      return;
-    } 
-    for (var x=0; x<cols; x++) { 
-      pokeCell(x, H-1, ' ', CURFG, CURBG, 0); 
-    }
-    return;
-  };
-  
-  window.pokeCursor = async function(t) {
-    if (typeof t === 'undefined' || t === null) return false;
-    var str = String(t);
-
-    function parseParams(s) {
-      if (!s || !s.length) return [];
-      var out = [], parts = s.split(';');
-      for (var i = 0; i < parts.length; i++) { var v = parseInt(parts[i], 10); out.push(isNaN(v) ? 0 : v); }
-      return out;
-    }
-
-    function handleCSI(paramsStr, cmd) {
-      var params = parseParams(paramsStr);
-      switch (cmd) {
-        case 'm': // SGR - set graphics rendition
-          if (!params.length) params = [0];
-          for (var pi = 0; pi < params.length; pi++) {
-            var p = params[pi] | 0;
-            if (p === 0) { CURFG = 37; CURBG = 40; CURATTR = 0; }
-            else if (p === 1)  { CURATTR |= (window.ATTR_BOLD    || 0x0002); }
-            else if (p === 2)  { CURATTR |= (window.ATTR_DIM     || 0x0004); }
-            else if (p === 3)  { CURATTR |= (window.ATTR_ITALIC  || 0x0008); }
-            else if (p === 4)  { CURATTR |= (window.ATTR_UNDERLINE || 0x0010); }
-            else if (p === 5)  { CURATTR |= (window.ATTR_BLINK   || 0x0020); }
-            else if (p === 7)  { CURATTR |= (window.ATTR_INVERSE || 0x0001); }
-            else if (p === 22) { CURATTR &= ~(window.ATTR_BOLD || 0x0002); CURATTR &= ~(window.ATTR_DIM || 0x0004); }
-            else if (p === 23) { CURATTR &= ~(window.ATTR_ITALIC   || 0x0008); }
-            else if (p === 24) { CURATTR &= ~(window.ATTR_UNDERLINE || 0x0010); }
-            else if (p === 25) { CURATTR &= ~(window.ATTR_BLINK    || 0x0020); }
-            else if (p === 27) { CURATTR &= ~(window.ATTR_INVERSE  || 0x0001); }
-            else if (p >= 30 && p <= 37)   { CURFG = p; }
-            else if (p >= 90 && p <= 97)   { CURFG = p; }
-            else if (p >= 40 && p <= 47)   { CURBG = p; }
-            else if (p >= 100 && p <= 107) { CURBG = p; }
+  // handle CSI sequences: paramsStr (string), cmd (final byte)
+  function handleCSI(paramsStr, cmd) {
+    var params = parseParams(paramsStr);
+    switch (cmd) {
+      case 'm': // SGR - set graphics rendition (colors/attributes)
+        if (!params.length) params = [0];
+        for (var pi = 0; pi < params.length; pi++) {
+          var p = params[pi] | 0;
+          switch (p) {
+            case 0: // reset
+              CURFG = 37; CURBG = 40; CURATTR = 0; break;
+            case 1: // bold
+              CURATTR = (CURATTR | (window.ATTR_BOLD || 0x0002)); break;
+            case 2: // dim
+              CURATTR = (CURATTR | (window.ATTR_DIM || 0x0004)); break;
+            case 3: // italic
+              CURATTR = (CURATTR | (window.ATTR_ITALIC || 0x0008)); break;
+            case 4: // underline
+              CURATTR = (CURATTR | (window.ATTR_UNDERLINE || 0x0010)); break;
+            case 22: // normal intensity (clear bold & dim)
+              CURATTR &= ~(window.ATTR_BOLD || 0x0002);
+              CURATTR &= ~(window.ATTR_DIM  || 0x0004); break;
+            case 23: // clear italic
+              CURATTR &= ~(window.ATTR_ITALIC || 0x0008); break;
+            case 24: // clear underline
+              CURATTR &= ~(window.ATTR_UNDERLINE || 0x0010); break;
+            case 7: // inverse
+              CURATTR = (CURATTR | (window.ATTR_INVERSE || 0x0001)); break;
+            case 27: // clear inverse
+              CURATTR &= ~(window.ATTR_INVERSE || 0x0001); break;
+            default:
+              if (p >= 30 && p <= 37) { CURFG = p; break; }
+              if (p >= 90 && p <= 97) { CURFG = p; break; }
+              if (p >= 40 && p <= 47) { CURBG = p; break; }
+              if (p >= 100 && p <= 107) { CURBG = p; break; }
+              // Note: extended colors (38;5;.., 38;2;.. ) not implemented here
+              break;
           }
-          break;
-        case 'H': case 'f': // Cursor position (1-based)
-          CURY = Math.max(0, Math.min(getH() - 1, (params.length >= 1 && params[0] > 0) ? params[0] - 1 : 0));
-          CURX = Math.max(0, Math.min(getW() - 1, (params.length >= 2 && params[1] > 0) ? params[1] - 1 : 0));
-          break;
-        case 'A': CURY = Math.max(0, CURY - ((params.length >= 1 && params[0] > 0) ? params[0] : 1)); break;
-        case 'B': CURY = Math.min(getH() - 1, CURY + ((params.length >= 1 && params[0] > 0) ? params[0] : 1)); break;
-        case 'C': CURX = Math.min(getW() - 1, CURX + ((params.length >= 1 && params[0] > 0) ? params[0] : 1)); break;
-        case 'D': CURX = Math.max(0, CURX - ((params.length >= 1 && params[0] > 0) ? params[0] : 1)); break;
-        case 'J': if (params.length >= 1 && params[0] === 2) { pokeCursorOff(); initGrid(); pokeCursorOn(); } break;
-      }
+        }
+        break;
+
+      case 'H': // Cursor position (row;col) — 1-based
+      case 'f':
+        var row = (params.length >= 1 && params[0] > 0) ? (params[0] - 1) : 0;
+        var col = (params.length >= 2 && params[1] > 0) ? (params[1] - 1) : 0;
+        if (typeof row === 'number') CURY = Math.max(0, Math.min(H - 1, row));
+        if (typeof col === 'number') CURX = Math.max(0, Math.min(W - 1, col));
+        break;
+      case 'A': // Cursor up
+        var nA = (params.length >= 1 && params[0] > 0) ? params[0] : 1;
+        CURY = Math.max(0, CURY - nA);
+        break;
+      case 'B': // Cursor down
+        var nB = (params.length >= 1 && params[0] > 0) ? params[0] : 1;
+        CURY = Math.min(H - 1, CURY + nB);
+        break;
+      case 'C': // Cursor forward
+        var nC = (params.length >= 1 && params[0] > 0) ? params[0] : 1;
+        CURX = Math.min(W - 1, CURX + nC);
+        break;
+      case 'D': // Cursor backward
+        var nD = (params.length >= 1 && params[0] > 0) ? params[0] : 1;
+        CURX = Math.max(0, CURX - nD);
+        break;
+      case 'J': // Erase in Display
+        if (params.length === 0 || params[0] === 0) {
+          // not implemented (cursor to end)
+        } else if (params[0] === 1) {
+          // not implemented (start to cursor)
+        } else { 
+          if (params[0] === 2) {
+          // clear entire screen
+          // this needs to be updated to use its own internal function
+          cls();
+        }            
+       }
+        break;
+      default:
+        // unsupported CSI — ignore
+        break;
     }
+  }
+
+  // characters per millisecond based on CURBAUD (10 bits per character)
+  var charsPerMs = (typeof CURBAUD === 'number' && CURBAUD > 0) ? CURBAUD / 10000 : 0;
+
+  // paced/asynchronous processing using performance.now() token-bucket accumulator
+  var state = {
+    str: str,
+    idx: 0,
+    timer: null,
+    stopped: false,
+    startTime: performance.now(),
+    charsEmitted: 0
+  };
+  window._pokeCursor_state = state;
+
+  function scheduleNext() {
+    if (!state || state.stopped) return;
+    var delay = 0;
+    if (charsPerMs) {
+      // schedule for when the next character is due
+      var nextMs = state.startTime + (state.charsEmitted + 1) / charsPerMs;
+      delay = Math.max(0, nextMs - performance.now());
+    }
+    state.timer = setTimeout(processStep, delay);
+  }
+
+  function processStep() {
+    if (!state || state.stopped) return;
+
+    // how many characters may be emitted on this tick
+    var charsAllowed = charsPerMs
+      ? Math.floor((performance.now() - state.startTime) * charsPerMs)
+      : state.str.length + 1;
 
     pokeCursorOff();
-    var idx = 0;
-    var cols = getW();
-    var rows = getH();
-    
-    while (idx < str.length) {
-      var ch = str.charAt(idx);
+
+    while (state.idx < state.str.length && state.charsEmitted < charsAllowed) {
+      var ch = state.str.charAt(state.idx);
+
+      // handle CSI atomically (no intra-sequence delay)
       if (CURANSI && ch === '\x1b') {
-        var rest = str.slice(idx);
+        var rest = state.str.slice(state.idx);
         var m = /^\x1b\[([0-9;]*)?([@A-Za-z])/.exec(rest);
-        if (m) { handleCSI(m[1] || '', m[2]); idx += m[0].length; }
-        else { idx++; }
+        if (m) {
+          handleCSI(m[1] || '', m[2]);
+          state.idx += m[0].length;
+        } else {
+          // unknown escape — skip it
+          state.idx++;
+        }
+        state.charsEmitted++;
         continue;
       }
+
       if (ch === '\n') {
-        CURX = 0; 
-        CURY++;
-        if (CURY >= rows) { pokeScroll(); CURY = rows - 1; }
-        LINEX = CURX; 
-        LINEY = CURY;
-        if (typeof CURMORE === 'number' && CURMORE >= 0) {
-          CURMORE++;
-          if (CURMORE >= rows - 1) {
-            pokeMenu("  Press any key for more: ");
-            let morePrompt = await inkey();
-            pokeMenu();
-            CURMORE = 0;
-          }
-        }
-        idx++; 
+        CURX = 0;
+        CURY = CURY + 1;
+        if (CURY >= H) { pokeScroll(); CURY = H - 1; CURX = Math.min(CURX, W - 1); }
+        LINEX = CURX; LINEY = CURY;
+        state.idx++;
+        state.charsEmitted++;
         continue;
       }
+
       pokeCell(CURX, CURY, ch, CURFG, CURBG, CURATTR);
-      CURX++;
-      if (CURX >= cols) {
-        CURX = 0; 
-        CURY++;
-        if (CURY >= rows) { pokeScroll(); CURY = rows - 1; }
-        LINEX = CURX; 
-        LINEY = CURY;
-        if (typeof CURMORE === 'number' && CURMORE >= 0) {
-          CURMORE++;
-          if (CURMORE >= rows - 1) {
-            pokeMenu("  Press ENTER to continue: ");
-            let morePrompt = await input(false);
-            pokeMenu();
-            CURMORE = 0;
-          }
+      if (SOUND && typeof beep === 'function') { try { beep(900, 25, 0.01); } catch (e) {}}
+
+      CURX = CURX + 1;
+      if (CURX >= W) {
+        CURX = 0; CURY = CURY + 1;
+        if (CURY >= H) {
+          pokeScroll();
+          CURY = H - 1; CURX = Math.min(CURX, W - 1);
         }
       }
-      LINEX = CURX; 
-      LINEY = CURY;
-      idx++;
+      LINEX = CURX; LINEY = CURY;
+
+      state.idx++;
+      state.charsEmitted++;
     }
+
     pokeCursorOn();
-    return true;
-  };
-  
-  window.pokeModem = function(t) {
-    // paced/asynchronous rendering with baud rate simulation
-    if (typeof t === 'undefined' || t === null) return false;
-    if (window._pokeCursor_state && window._pokeCursor_state.timer) {
-      clearTimeout(window._pokeCursor_state.timer);
-    } 
-    window._pokeCursor_state = null;
-    var str = String(t);
 
-    function parseParams(paramStr) {
-      if (!paramStr || paramStr.length === 0) return [];
-      return paramStr.split(';').map(function(p){ var v = parseInt(p,10); return isNaN(v) ? 0 : v; });
-    }
-
-    function handleCSI(paramsStr, cmd) {
-      var params = parseParams(paramsStr);
-      switch (cmd) {
-        case 'm': // SGR
-          if (!params.length) params = [0];
-          for (var pi = 0; pi < params.length; pi++) {
-            var p = params[pi] | 0;
-            switch (p) {
-              case 0: CURFG = 37; CURBG = 40; CURATTR = 0; break;
-              case 1: CURATTR = (CURATTR | (window.ATTR_BOLD || 0x0002)); break;
-              case 2: CURATTR = (CURATTR | (window.ATTR_DIM || 0x0004)); break;
-              case 3: CURATTR = (CURATTR | (window.ATTR_ITALIC || 0x0008)); break;
-              case 4: CURATTR = (CURATTR | (window.ATTR_UNDERLINE || 0x0010)); break;
-              case 22: CURATTR &= ~(window.ATTR_BOLD || 0x0002); CURATTR &= ~(window.ATTR_DIM  || 0x0004); break;
-              case 23: CURATTR &= ~(window.ATTR_ITALIC || 0x0008); break;
-              case 24: CURATTR &= ~(window.ATTR_UNDERLINE || 0x0010); break;
-              case 7: CURATTR = (CURATTR | (window.ATTR_INVERSE || 0x0001)); break;
-              case 27: CURATTR &= ~(window.ATTR_INVERSE || 0x0001); break;
-              default:
-                if (p >= 30 && p <= 37) { CURFG = p; break; }
-                if (p >= 90 && p <= 97) { CURFG = p; break; }
-                if (p >= 40 && p <= 47) { CURBG = p; break; }
-                if (p >= 100 && p <= 107) { CURBG = p; break; }
-                break;
-            }
-          }
-          break;
-        case 'H': case 'f':
-          var row = (params.length >= 1 && params[0] > 0) ? (params[0] - 1) : 0;
-          var col = (params.length >= 2 && params[1] > 0) ? (params[1] - 1) : 0;
-          if (typeof row === 'number') CURY = Math.max(0, Math.min(getH() - 1, row));
-          if (typeof col === 'number') CURX = Math.max(0, Math.min(getW() - 1, col));
-          break;
-        case 'A': var nA = (params.length >= 1 && params[0] > 0) ? params[0] : 1; CURY = Math.max(0, CURY - nA); break;
-        case 'B': var nB = (params.length >= 1 && params[0] > 0) ? params[0] : 1; CURY = Math.min(getH() - 1, CURY + nB); break;
-        case 'C': var nC = (params.length >= 1 && params[0] > 0) ? params[0] : 1; CURX = Math.min(getW() - 1, CURX + nC); break;
-        case 'D': var nD = (params.length >= 1 && params[0] > 0) ? params[0] : 1; CURX = Math.max(0, CURX - nD); break;
-        case 'J': if (params.length === 0 || params[0] === 2) { pokeCursorOff(); initGrid(); pokeCursorOn(); } break;
-      }
-    }
-
-    var charsPerMs = (typeof CURBAUD === 'number' && CURBAUD > 0) ? CURBAUD / 10000 : 0;
-    var state = {
-      str: str, idx: 0, timer: null, stopped: false,
-      startTime: performance.now(), charsEmitted: 0
-    };
-    window._pokeCursor_state = state;
-
-    function scheduleNext() {
-      if (!state || state.stopped) return;
-      var delay = 0;
-      if (charsPerMs) {
-        var nextMs = state.startTime + (state.charsEmitted + 1) / charsPerMs;
-        delay = Math.max(0, nextMs - performance.now());
-      }
-      state.timer = setTimeout(processStep, delay);
-    }
-
-    function processStep() {
-      if (!state || state.stopped) return;
-      var charsAllowed = charsPerMs
-        ? Math.floor((performance.now() - state.startTime) * charsPerMs)
-        : state.str.length + 1;
-
-      pokeCursorOff();
-      var cols = getW();
-      var rows = getH();
-
-      while (state.idx < state.str.length && state.charsEmitted < charsAllowed) {
-        var ch = state.str.charAt(state.idx);
-        if (CURANSI && ch === '\x1b') {
-          var rest = state.str.slice(state.idx);
-          var m = /^\x1b\[([0-9;]*)?([@A-Za-z])/.exec(rest);
-          if (m) { handleCSI(m[1] || '', m[2]); state.idx += m[0].length; } 
-          else { state.idx++; }
-          state.charsEmitted++;
-          continue;
-        }
-        if (ch === '\n') {
-          CURX = 0; CURY = CURY + 1;
-          if (CURY >= rows) { pokeScroll(); CURY = rows - 1; }
-          LINEX = CURX; LINEY = CURY;
-          state.idx++; state.charsEmitted++;
-          continue;
-        }
-        pokeCell(CURX, CURY, ch, CURFG, CURBG, CURATTR);
-        if (SOUND && typeof beep === 'function') { try { beep(900, 25, 0.01); } catch (e) {}}
-        CURX = CURX + 1;
-        if (CURX >= cols) { CURX = 0; CURY = CURY + 1; if (CURY >= rows) { pokeScroll(); CURY = rows - 1; } }
-        LINEX = CURX; LINEY = CURY;
-        state.idx++; state.charsEmitted++;
-      }
-
-      pokeCursorOn();
-      if (state.idx >= state.str.length) { window._pokeCursor_state = null; return; }
-      scheduleNext();
+    if (state.idx >= state.str.length) {
+      window._pokeCursor_state = null;
+      return;
     }
 
     scheduleNext();
-    return true;
-  };
-  
-  window.pokeRefresh = function() { return true; }  
+  }
 
-  window.pokeInput = function() {
-    if (typeof lastin === 'undefined') { lastin="";  }
-    if (lastin != "") {
-      var str = String(lastin); var curx = LINEX; var cury = LINEY;
-      for (var i = 0; i < str.length; i++) {
-        var char = str[i];
-        if (char === '\n') { 
-          curx = 0; cury++; if (cury >= H) { return false; } continue;
-          if (curx >= W) { curx = 0; cury++; if (cury >= H) { return false; } }
+  // start paced output
+  scheduleNext();
+  return true;
+};
+
+// pokeCursor — synchronous full-speed print with full ANSI support.
+// morePrompt() — display "Press ENTER to continue: " on the bottom row using
+// pokeCell() directly (avoids interfering with the current print job), then
+// return a Promise that resolves when the user presses ENTER.
+window.morePrompt = function() {
+  return new Promise(function(resolve) {
+    var promptText = "Press ENTER to continue: ";
+    var row = H - 1;
+    // Fill the entire bottom row with menu colors
+    for (var x = 0; x < W; x++) {
+      var ch = x < promptText.length ? promptText[x] : ' ';
+      pokeCell(x, row, ch, MENUFG, MENUBG, 0);
+    }
+    window._morePromptActive = true;
+    window._morePromptResolve = resolve;
+  });
+};
+
+window.pokeCursor = async function(t) {
+  if (typeof t === 'undefined' || t === null) return false;
+  var str = String(t);
+
+  // parse numeric params into array of numbers (empty => [])
+  function parseParams(s) {
+    if (!s || !s.length) return [];
+    var out = [], parts = s.split(';');
+    for (var i = 0; i < parts.length; i++) { var v = parseInt(parts[i], 10); out.push(isNaN(v) ? 0 : v); }
+    return out;
+  }
+
+  // handle CSI sequences: paramsStr (string), cmd (final byte)
+  function handleCSI(paramsStr, cmd) {
+    var params = parseParams(paramsStr);
+    switch (cmd) {
+      case 'm': // SGR - set graphics rendition (colors/attributes)
+        if (!params.length) params = [0];
+        for (var pi = 0; pi < params.length; pi++) {
+          var p = params[pi] | 0;
+          if (p === 0) { CURFG = 37; CURBG = 40; CURATTR = 0; }
+          else if (p === 1)  { CURATTR |= (window.ATTR_BOLD    || 0x0002); }
+          else if (p === 2)  { CURATTR |= (window.ATTR_DIM     || 0x0004); }
+          else if (p === 3)  { CURATTR |= (window.ATTR_ITALIC  || 0x0008); }
+          else if (p === 4)  { CURATTR |= (window.ATTR_UNDERLINE || 0x0010); }
+          else if (p === 5)  { CURATTR |= (window.ATTR_BLINK   || 0x0020); }
+          else if (p === 7)  { CURATTR |= (window.ATTR_INVERSE || 0x0001); }
+          else if (p === 22) { CURATTR &= ~(window.ATTR_BOLD || 0x0002); CURATTR &= ~(window.ATTR_DIM || 0x0004); }
+          else if (p === 23) { CURATTR &= ~(window.ATTR_ITALIC   || 0x0008); }
+          else if (p === 24) { CURATTR &= ~(window.ATTR_UNDERLINE || 0x0010); }
+          else if (p === 25) { CURATTR &= ~(window.ATTR_BLINK    || 0x0020); }
+          else if (p === 27) { CURATTR &= ~(window.ATTR_INVERSE  || 0x0001); }
+          else if (p >= 30 && p <= 37)   { CURFG = p; }
+          else if (p >= 90 && p <= 97)   { CURFG = p; }
+          else if (p >= 40 && p <= 47)   { CURBG = p; }
+          else if (p >= 100 && p <= 107) { CURBG = p; }
         }
-        pokeCell(curx, cury, " "); curx++;
+        break;
+      case 'H': case 'f': // Cursor position (row;col) — 1-based
+        CURY = Math.max(0, Math.min(H - 1, (params.length >= 1 && params[0] > 0) ? params[0] - 1 : 0));
+        CURX = Math.max(0, Math.min(W - 1, (params.length >= 2 && params[1] > 0) ? params[1] - 1 : 0));
+        break;
+      case 'A': CURY = Math.max(0,     CURY - ((params.length >= 1 && params[0] > 0) ? params[0] : 1)); break; // up
+      case 'B': CURY = Math.min(H - 1, CURY + ((params.length >= 1 && params[0] > 0) ? params[0] : 1)); break; // down
+      case 'C': CURX = Math.min(W - 1, CURX + ((params.length >= 1 && params[0] > 0) ? params[0] : 1)); break; // forward
+      case 'D': CURX = Math.max(0,     CURX - ((params.length >= 1 && params[0] > 0) ? params[0] : 1)); break; // backward
+      case 'J': if (params.length >= 1 && params[0] === 2) cls(); break; // clear screen (2J)
+    }
+  }
+
+  pokeCursorOff();
+
+  var idx = 0;
+  while (idx < str.length) {
+    var ch = str.charAt(idx);
+    if (CURANSI && ch === '\x1b') {
+      var rest = str.slice(idx);
+      var m = /^\x1b\[([0-9;]*)?([@A-Za-z])/.exec(rest);
+      if (m) { handleCSI(m[1] || '', m[2]); idx += m[0].length; }
+      else { idx++; }
+      continue;
+    }
+    if (ch === '\n') {
+      CURX = 0; CURY++;
+      if (CURY >= H) { pokeScroll(); CURY = H-1; }
+      LINEX=CURX; LINEY=CURY;
+      if (typeof CURMORE === 'number' && CURMORE >= 0) {
+        CURMORE++;
+        if (CURMORE >= H-1) {
+          pokeMenu("  Press ENTER to continue: ");
+          let morePrompt= await input(false);
+          CURMORE=0;
+          pokeMenu();
+        }
+      }
+      idx++; continue;
+    }
+    pokeCell(CURX, CURY, ch, CURFG, CURBG, CURATTR);
+    CURX++;
+    if (CURX >= W) {
+      CURX = 0; CURY++;
+      if (CURY >= H) { pokeScroll(); CURY = H-1; }
+      LINEX=CURX; LINEY=CURY;
+      if (typeof CURMORE === 'number' && CURMORE >= 0) {
+        CURMORE++;
+        if (CURMORE >= H-1) {
+          pokeMenu("  Press ENTER to continue: ");
+          let morePrompt= await input(false);
+          pokeMenu();
+          CURMORE=0;
+        }
       }
     }
-    var curx = LINEX; var cury = LINEY;
-    for (var i = 0; i < LINE.length; i++) {
-      var char = LINE[i];
+    LINEX = CURX; LINEY = CURY;
+    idx++;
+  }
+
+  pokeCursorOn();
+  return true;
+};
+
+window.pokeMenu = function(t) {
+  if (t) {
+    console.log("pokeMenu t="+t);
+    for (var x=0; x<W; x++) { var ch=x<t.length ? t[x] : ' '; pokeCell(x, CURY, ch, MENUFG, MENUBG, 0); }
+    return;
+  } 
+  console.log("pokeMenu t=null, erase menu");
+  for (var x=0; x<W; x++) { pokeCell(x, CURY, ' ', CURFG, CURBG, 0); }
+  return;
+}
+
+var FALLBACK_FG = {
+  black:30, red:31, green:32, yellow:33, blue:34, magenta:35, cyan:36, white:37,
+  bright_black:90, bright_red:91, bright_green:92, bright_yellow:93, bright_blue:94, bright_magenta:95, bright_cyan:96, bright_white:97
+};
+	var FALLBACK_BG = {
+  black:40, red:41, green:42, yellow:43, blue:44, magenta:45, cyan:46, white:47,
+  bright_black:100, bright_red:101, bright_green:102, bright_yellow:103, bright_blue:104, bright_magenta:105, bright_cyan:106, bright_white:107
+};
+function _lookupFg(name) {
+  if (!name) return undefined;
+  var key = String(name).toLowerCase();
+  if (window && window.ANSI_NAME_TO_FG && typeof window.ANSI_NAME_TO_FG[key] !== 'undefined') return window.ANSI_NAME_TO_FG[key];
+  if (FALLBACK_FG[key]) return FALLBACK_FG[key];
+  return undefined;
+}
+function _lookupBg(name) {
+  if (!name) return undefined;
+  var key = String(name).toLowerCase();
+  if (window && window.ANSI_NAME_TO_BG && typeof window.ANSI_NAME_TO_BG[key] !== 'undefined') return window.ANSI_NAME_TO_BG[key];
+  if (FALLBACK_BG[key]) return FALLBACK_BG[key];
+  return undefined;
+}
+var ATTR_MAP = {
+  reset: 0, default:0, 0:0,
+  bold: 1, dim: 2, italic: 3, underline: 4, inverse: 7
+};
+
+// okay to delete these lines??
+//window.ansi = window.ansi || {};
+//window.ansi.fg = function(name) { var c = _lookupFg(name); return (typeof c !== 'undefined') ? '\x1b['+c+'m' : ''; };
+//window.ansi.bg = function(name) { var c = _lookupBg(name); return (typeof c !== 'undefined') ? '\x1b['+c+'m' : ''; };
+//window.ansi.attr = function(name) { var a = ATTR_MAP[name] || ( /^\d+$/.test(String(name)) ? parseInt(name,10): undefined ); return (typeof a !== 'undefined') ? '\x1b['+a+'m' : ''; };
+
+window.pokeText = function(x, y, t, n) {
+  if (typeof x !== 'number' || typeof y !== 'number') return false;
+  if (typeof t === 'undefined' || t === null) return false;
+  n = (typeof n === 'undefined' || n === null) ? 1 : parseInt(n, 10);
+  if (isNaN(n) || n < 1) n = 1;
+  var str = String(t);
+  var cx = x, cy = y;
+  for (var repeat = 0; repeat < n; repeat++) {
+    for (var i = 0; i < str.length; i++) {
+      var c = str[i];
+      if (c === '\n') {
+        cx = 0;
+        cy++;
+        if (typeof H === 'number' && cy >= H) { // reached bottom of screen
+          if (SYNC) { pokeRefresh(); } 
+          return false;
+        }
+        continue;
+      }
+      if (typeof W === 'number' && cx >= W) {
+        cx = 0;
+        cy++;
+        if (typeof H === 'number' && cy >= H) {
+          if (SYNC) { pokeRefresh(); } 
+          return false;
+        }
+      }
+      VIDEO[cy][cx]=c;
+      cx++;
+    }
+  }
+  if (SYNC) { pokeRefresh(); } 
+  return true;
+};
+
+window.pokeCell = function(x,y,a,f,b,h) {
+  if (typeof a === 'undefined') { a=" "; } 
+  if (!validateCoords(x, y)) return false;
+  VIDEO[y][x] = (a === null) ? ' ' : (typeof a === 'string' ? (a.length ? a.charAt(0) : ' ') : String(a).charAt(0));
+
+  var fgCode;
+  if (typeof f === 'number') {
+    fgCode = f | 0;
+  } else if (typeof f === 'string' && f.length) {
+    var name = f.toLowerCase();
+    fgCode = (window.ANSI_NAME_TO_FG && typeof window.ANSI_NAME_TO_FG[name] !== 'undefined')
+      ? (window.ANSI_NAME_TO_FG[name] | 0)
+      : CURFG;
+  } else {
+    // fallback: try existing FCOLOR bank for this cell, otherwise default
+    fgCode = CURFG;
+  }
+
+  var bgCode;
+  if (typeof b === 'number') {
+    bgCode = b | 0;
+  } else if (typeof b === 'string' && b.length) {
+    var name = b.toLowerCase();
+    bgCode = (window.ANSI_NAME_TO_BG && typeof window.ANSI_NAME_TO_BG[name] !== 'undefined')
+      ? (window.ANSI_NAME_TO_BG[name] | 0)
+      : CURBG;
+  } else {
+    // fallback: try existing FCOLOR bank for this cell, otherwise default
+    bgCode = CURBG;
+  }
+  
+  FCOLOR[y][x]=fgCode;
+  BCOLOR[y][x]=bgCode; 
+
+  if (typeof h !== 'undefined' && h !== null) {
+    try { ATTR[y][x] = (h | 0); } catch (e) { ATTR[y][x] = h; }
+  }
+
+  if (SYNC) { pokeRefresh(x, y); }
+  return true;
+};
+
+window.pokeColor = function(x, y, f, b, n) {
+  if (!validateCoords(x, y)) return false;
+  if (typeof f === 'undefined') { f = CURFG; }
+  if (typeof b === 'undefined') { b = CURBG; }
+  var count = (typeof n === 'number' && n > 0) ? Math.floor(n) : 1;
+  var offset = 0;
+  while (count > 0) {
+    var abs=x+offset;
+    var row=y+Math.floor(abs/W);
+    var col=abs % W;
+    if (row >= H) break;
+    FCOLOR[row][col]=f;
+    BCOLOR[row][col]=b;
+    if (SYNC) { pokeRefresh(col,row); }
+    offset++;
+    count--;
+  }
+  return true;
+};
+
+// there should be a poke function that already does this??
+window.eraseInput = function(text) {
+}
+
+window.peek = function(x, y) { 
+  return validateCoords(x, y) ? VIDEO[y][x] : undefined;
+};
+
+window.pokeInput = function() {
+  if (typeof lastin === 'undefined') { lastin="";  }
+  if (lastin != "") {
+    var str = String(lastin); var curx = LINEX; var cury = LINEY;
+    for (var i = 0; i < str.length; i++) {
+      var char = str[i];
       if (char === '\n') { 
-       curx = 0; cury++; 
-       if (cury >= H) { return false; }
-       continue;
+        curx = 0; cury++; if (cury >= H) { return false; } continue;
+        if (curx >= W) {
+    	    curx = 0; cury++; if (cury >= H) { return false; }
+        }
       }
-      if (curx >= W) { 
-       curx = 0; cury++; 
-       if (cury >= H) { return false; }
-      }
-      pokeCell(curx, cury, char); curx++;
-      if (SYNC) { pokeRefresh(curx, cury); }
+      pokeCell(curx, cury, " "); curx++;
     }
-    var str = (typeof LINE === 'string') ? LINE : String(LINE || "");
-    var targetP = (typeof CURP === 'number') ? CURP : str.length;
-    if (targetP < 0) targetP = 0;
-    if (targetP > str.length) targetP = str.length;
-    var newX, newY;
-    var absCol = (typeof LINEX === 'number' ? LINEX : 0) + targetP;
-    newY = (typeof LINEY === 'number' ? LINEY : 0) + Math.floor(absCol / W);
-    newX = absCol % W;
-    if (newY < 0) newY = 0;
-    if (newY >= H) newY = H - 1;
-    if (newX < 0) newX = 0;
-    if (newX >= W) newX = W - 1;
-    CURX = newX;
-    CURY = newY;
-  
-    lastin = str;
-    return true;
-  };
-  
-  // ──── the peeks ────────────────────────────
-  
-  window.peekChar = function(x, y) { 
-    if (!validateCoords(x, y)) return undefined;
-    var span = cellGrid[y] && cellGrid[y][x];
-    if (!span) return undefined;
-    return (span.textContent === EMPTY_CELL) ? ' ' : span.textContent;
-  };
-  
-  window.peekFG = function(x, y) { 
-    if (!validateCoords(x, y)) return undefined;
-    var span = cellGrid[y] && cellGrid[y][x];
-    if (!span) return undefined;
-    var match = span.className.match(/ansi-fg-(\d+)/);
-    return match ? parseInt(match[1], 10) : 37;
-  };
-  
-  window.peekBG = function(x, y) { 
-    if (!validateCoords(x, y)) return undefined;
-    var span = cellGrid[y] && cellGrid[y][x];
-    if (!span) return undefined;
-    var match = span.className.match(/ansi-bg-(\d+)/);
-    return match ? parseInt(match[1], 10) : 40;
-  };
-  
-  window.peekAttr = function(x, y) { 
-    if (!validateCoords(x, y)) return undefined;
-    if (ATTR && ATTR[y] && typeof ATTR[y][x] !== 'undefined') return ATTR[y][x];
-    return 0;
-  };
-  
-  window.peekBold = function(x, y) { 
-    if (!validateCoords(x, y)) return undefined;
-    if (ATTR && ATTR[y] && typeof ATTR[y][x] !== 'undefined') {
-      return !!(ATTR[y][x] & (window.ATTR_BOLD || 0x0002));
+  }
+  var curx = LINEX; var cury = LINEY;
+  for (var i = 0; i < LINE.length; i++) {
+    var char = LINE[i];
+    if (char === '\n') { 
+     curx = 0; cury++; 
+     if (cury >= H) { return false; }
+     continue;
     }
-    return false;
-  };
-  
-  window.peekItalic = function(x, y) { 
-    if (!validateCoords(x, y)) return undefined;
-    if (ATTR && ATTR[y] && typeof ATTR[y][x] !== 'undefined') {
-      return !!(ATTR[y][x] & (window.ATTR_ITALIC || 0x0008));
+    if (curx >= W) { 
+     curx = 0; cury++; 
+     if (cury >= H) { return false; }
     }
-    return false;
-  };
+    pokeCell(curx, cury, char); curx++;
+    if (SYNC) { pokeRefresh(curx, cury); }
+  }
+  var str = (typeof LINE === 'string') ? LINE : String(LINE || "");
+  var targetP = (typeof CURP === 'number') ? CURP : str.length;
+  if (targetP < 0) targetP = 0;
+  if (targetP > str.length) targetP = str.length;
+  var newX, newY;
+  var absCol = (typeof LINEX === 'number' ? LINEX : 0) + targetP;
+  newY = (typeof LINEY === 'number' ? LINEY : 0) + Math.floor(absCol / W);
+  newX = absCol % W;
+  if (newY < 0) newY = 0;
+  if (newY >= H) newY = H - 1;
+  if (newX < 0) newX = 0;
+  if (newX >= W) newX = W - 1;
+  CURX = newX;
+  CURY = newY;
   
-  window.peekBlink = function(x, y) { 
-    if (!validateCoords(x, y)) return undefined;
-    if (ATTR && ATTR[y] && typeof ATTR[y][x] !== 'undefined') {
-      return !!(ATTR[y][x] & (window.ATTR_BLINK || 0x0020));
-    }
-    return false;
-  };
-  
-  window.peekLine = function(x, y) { 
-    if (!validateCoords(x, y)) return undefined;
-    if (ATTR && ATTR[y] && typeof ATTR[y][x] !== 'undefined') {
-      return !!(ATTR[y][x] & (window.ATTR_UNDERLINE || 0x0010));
-    }
-    return false;
-  };
-  
-  window.peekInverse = function(x, y) {
-    if (!validateCoords(x, y)) return undefined;
-    if (ATTR && ATTR[y] && typeof ATTR[y][x] !== 'undefined') {
-      return !!(ATTR[y][x] & (window.ATTR_INVERSE || 0x0001));
-    }
-    return false;
-  };
-  
-  // ──── video helpers ────────────────────────
+  lastin = str;
+  return true;
+};
 
-  function extractAttrFromDOM(span) {
-    var attr = 0;
-    if (!span) return attr;
-    if (span.className.includes('ansi-inverse'))   attr |= 0x0001;
-    if (span.className.includes('ansi-bold'))      attr |= 0x0002;
-    if (span.className.includes('ansi-dim'))       attr |= 0x0004;
-    if (span.className.includes('ansi-italic'))    attr |= 0x0008;
-    if (span.className.includes('ansi-underline')) attr |= 0x0010;
-    if (span.className.includes('ansi-blink'))     attr |= 0x0020;
-    return attr;
+window.pokeChar = function(x, y, a, n) {
+  if (typeof a === 'undefined') { return false; }
+  if (!validateCoords(x, y)) return false;
+  var ch = (typeof a === 'string') ? a : String(a)[0] || ' ';
+  n = (typeof n === 'number' && !isNaN(n) && n > 0) ? (n|0) : 1;
+  var remaining = n;
+  var cx = x|0;
+  var cy = y|0;
+  var written = 0;
+  while (remaining > 0 && cy < H) {
+    var space = W - cx;
+    if (space <= 0) { cx = 0; cy++; continue; }
+    var take = Math.min(remaining, space);
+    var row = VIDEO[cy] || (VIDEO[cy] = new Array(W).fill(' '));
+    for (var i = 0; i < take; i++) { row[cx + i] = ch; }
+    pokeRefresh(cx, cy, take);
+    written += take;
+    remaining -= take;
+    cx = 0;
+    cy++;
+  }
+  return (n === 1) ? true : written;
+};
+
+window.peekChar = function(x, y) { 
+  return validateCoords(x, y) ? VIDEO[y][x] : undefined;
+};
+
+
+window.ANSI = {
+  colors: {
+    30: '#000000', 31: '#aa0000', 32: '#00aa00', 33: '#aa5500', 34: '#0000aa', 35: '#aa00aa', 36: '#00aaaa', 37: '#aaaaaa',
+    90: '#555555', 91: '#ff5555', 92: '#55ff55', 93: '#ffff55', 94: '#5555ff', 95: '#ff55ff', 96: '#55ffff', 97: '#ffffff'
+  },
+  bgColors: {
+    40: '#000000', 41: '#aa0000', 42: '#00aa00', 43: '#aa5500', 44: '#0000aa', 45: '#aa00aa', 46: '#00aaaa', 47: '#aaaaaa',
+    100: '#555555', 101: '#ff5555', 102: '#55ff55', 103: '#ffff55', 104: '#5555ff', 105: '#ff55ff', 106: '#55ffff', 107: '#ffffff'
+  },
+  render: function(text) {
+    let html = ''; let currentColor = 'white'; let currentBgColor = 'black'; let bold = false; let inverse = false; let cX = 0; let cY = 0;
+    const ansiRegex = /\x1b\[([\d;]*)([A-Za-z])/g; let lastIndex = 0; let match;
+    while ((match = ansiRegex.exec(text)) !== null) {
+      html += this.escapeHtml(text.substring(lastIndex, match.index));
+      const params = match[1] ? match[1].split(';').map(Number) : [0];
+      const command = match[2];
+      if (command === 'm') {
+        params.forEach(param => {
+          if (param === 0) {
+            currentColor = 'white';
+            currentBgColor = 'black';
+            bold = false;
+            inverse = false;
+          } else if (param === 1) {
+            bold = true;
+          } else if (param === 7) {
+            inverse = true;
+          } else if (param === 27) {
+            inverse = false;
+          } else if (param >= 30 && param <= 37) {
+            currentColor = this.colors[param];
+          } else if (param >= 40 && param <= 47) {
+            currentBgColor = this.bgColors[param];
+          }
+        });
+      } else if (command === 'H' || command === 'f') {
+        cY = params[0] || 0;
+        cX = params[1] || 0;
+      } else if (command === 'A') {
+        cY = Math.max(0, cY - (params[0] || 1));
+      } else if (command === 'B') {
+        cY += (params[0] || 1);
+      } else if (command === 'C') {
+        cX += (params[0] || 1);
+      } else if (command === 'D') {
+        cX = Math.max(0, cX - (params[0] || 1));
+      } else if (command === 'J') {
+        if (params[0] === 2) {
+          html = ''; // Clear screen 
+        }
+      } else if (command === 'K') {
+      }
+      lastIndex = match.index + match[0].length;
+    }
+    html += this.escapeHtml(text.substring(lastIndex));
+    let classes = [];
+    if (bold) classes.push('ansi-bold');
+    if (inverse) classes.push('ansi-inverse');
+    classes.push(`ansi-${currentColor}`);
+    classes.push(`ansi-bg-${currentBgColor}`);
+    if (classes.length > 0) { html = `<span class="${classes.join(' ')}">${html}</span>`; }
+    return html;
+  },
+
+  escapeHtml: function(text) {
+    const map = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#039;'
+    };
+    return text.replace(/[&<>"']/g, m => map[m]);
+  },
+
+  codes: {
+    reset: '\x1b[0m',
+    bold: '\x1b[1m',
+    inverse: '\x1b[7m',
+    black: '\x1b[30m',
+    red: '\x1b[31m',
+    green: '\x1b[32m',
+    yellow: '\x1b[33m',
+    blue: '\x1b[34m',
+    magenta: '\x1b[35m',
+    cyan: '\x1b[36m',
+    white: '\x1b[37m',
+    bgBlack: '\x1b[40m',
+    bgRed: '\x1b[41m',
+    bgGreen: '\x1b[42m',
+    bgYellow: '\x1b[43m',
+    bgBlue: '\x1b[44m',
+    bgMagenta: '\x1b[45m',
+    bgCyan: '\x1b[46m',
+    bgWhite: '\x1b[47m',
+    cursorHome: '\x1b[H',
+    cursorPos: (row, col) => `\x1b[${row};${col}H`,
+    cursorUp: (n = 1) => `\x1b[${n}A`,
+    cursorDown: (n = 1) => `\x1b[${n}B`,
+    cursorForward: (n = 1) => `\x1b[${n}C`,
+    cursorBack: (n = 1) => `\x1b[${n}D`,
+    clearScreen: '\x1b[2J',
+    clearLine: '\x1b[K',
+    pageBreak: '\f'  // Form Feed (ASCII 12, 0x0C) - explicit page break for pagination
+  }
+};
+
+window.ANSI=ANSI;
+
+window.COLOR = {
+  // Foreground colors (30-37)
+  BLACK: 30,
+  RED: 31,
+  GREEN: 32,
+  YELLOW: 33,
+  BLUE: 34,
+  MAGENTA: 35,
+  CYAN: 36,
+  WHITE: 37,
+  
+  // Bright foreground colors (90-97)
+  BRIGHT_BLACK: 90,
+  BRIGHT_RED: 91,
+  BRIGHT_GREEN: 92,
+  BRIGHT_YELLOW: 93,
+  BRIGHT_BLUE: 94,
+  BRIGHT_MAGENTA: 95,
+  BRIGHT_CYAN: 96,
+  BRIGHT_WHITE: 97,
+  
+  // Background colors (40-47)
+  BG_BLACK: 40,
+  BG_RED: 41,
+  BG_GREEN: 42,
+  BG_YELLOW: 43,
+  BG_BLUE: 44,
+  BG_MAGENTA: 45,
+  BG_CYAN: 46,
+  BG_WHITE: 47,
+  
+  // Bright background colors (100-107)
+  BG_BRIGHT_BLACK: 100,
+  BG_BRIGHT_RED: 101,
+  BG_BRIGHT_GREEN: 102,
+  BG_BRIGHT_YELLOW: 103,
+  BG_BRIGHT_BLUE: 104,
+  BG_BRIGHT_MAGENTA: 105,
+  BG_BRIGHT_CYAN: 106,
+  BG_BRIGHT_WHITE: 107
+};
+
+// convert DOM to ATTR
+function styleToAttr(style) {
+  var a = 0;
+  if (!style) return a;
+  if (style.inverse)   a |= (window.ATTR_INVERSE || 0x0001);
+  if (style.bold)      a |= (window.ATTR_BOLD    || 0x0002);
+  if (style.dim)       a |= (window.ATTR_DIM     || 0x0004);
+  if (style.italic)    a |= (window.ATTR_ITALIC  || 0x0008);
+  if (style.underline) a |= (window.ATTR_UNDERLINE || 0x0010);
+  if (style.blink)     a |= (window.ATTR_BLINK   || 0x0020);
+  return a;
+}
+
+var defaultColor = (window.currentStyle && typeof window.currentStyle.color !== 'undefined') ? window.currentStyle.color : 37;
+var defaultBg    = (window.currentStyle && typeof window.currentStyle.bgcolor !== 'undefined') ? window.currentStyle.bgcolor : 40;
+
+// init the DOM
+var txtEl = document.getElementById('txt');
+txtEl.innerHTML = '';
+var frag = document.createDocumentFragment();
+for (var y = 0; y <= H; y++) {
+  var rowChars = new Array(W);
+  var rowStyles = new Array(W);
+  var rowRefs   = new Array(W);
+  var rowDiv = document.createElement('div');
+  var frow = new Uint8Array(W); // foreground ANSI codes (30..97)
+  var brow = new Uint8Array(W); // background ANSI codes (40..107)
+  var arow = new Uint16Array(W); // ATTR row - initialize like FCOLOR/BCOLOR
+  
+  rowDiv.className = 'qandy-row';
+  for (var x = 0; x < window.W; x++) {
+    rowChars[x] = ' ';
+    rowStyles[x] = { color: defaultColor, bgcolor: defaultBg, bold: false, inverse: false };
+
+    // populate numeric banks from the style object (initial sync)
+    frow[x] = rowStyles[x].color | 0;
+    brow[x] = rowStyles[x].bgcolor | 0;
+    arow[x] = 0; // Initialize ATTR to 0 (no attributes)
+
+    var cell = document.createElement('span');
+    cell.id = 'c' + y + '_' + x;
+    // set class names for default colors so CSS can style them immediately
+    cell.className = 'qandy-cell ansi-fg-' + rowStyles[x].color + ' ansi-bg-' + rowStyles[x].bgcolor;
+    cell.textContent = '\u00A0';
+    // small snapshot to avoid costly classList scans in hot path
+    cell._qandyStyle = { color: rowStyles[x].color, bgcolor: rowStyles[x].bgcolor, bold: false, inverse: false };
+    rowDiv.appendChild(cell);
+    rowRefs[x] = cell;
+  }
+  frag.appendChild(rowDiv);
+  // i think these settings are a bug, the values might get
+  // rewritten if a screen clear is issued so it's not being
+  // detected. These should be set to numeric data, not css styles
+  window.VIDEO[y] = rowChars;
+  window.COLOR[y]  = rowStyles; // ## old color (compat)
+  window.FCOLOR[y] = frow;      // new numeric foreground bank (Uint8Array)
+  window.BCOLOR[y] = brow;      // new numeric background bank (Uint8Array)
+  window.ATTR[y]   = arow;      // new numeric attribute bank (Uint16Array)
+  window.DOM[y]    = rowRefs;
+}
+txtEl.appendChild(frag);
+
+function buildClass(s) {
+  var cls = 'qandy-cell ansi-fg-' + s.color + ' ansi-bg-' + s.bgcolor;
+  if (s.bold) cls += ' ansi-bold';
+  if (s.inverse) cls += ' ansi-inverse';
+  return cls;
+}
+
+window.hasATTR = function(x, y, attrBit) { return !!(ATTR[y][x] & attrBit); };
+window.peekATTR = function(x, y) { return ATTR[y][x]; };
+
+// set/get foreground for a cell or horizontal span
+window.pokeFG = function(x, y, fg, count) {
+  // Getter: if fg is undefined, return current fg value or undefined if out-of-bounds
+  if (typeof fg === 'undefined') {
+    if (typeof validateCoords === 'function') {
+      if (!validateCoords(x, y)) return undefined;
+    } else {
+      if (typeof x !== 'number' || typeof y !== 'number' || x < 0 || y < 0 || y >= H || x >= W) return undefined;
+    }
+    if (window.FCOLOR && FCOLOR[y] && typeof FCOLOR[y][x] !== 'undefined') return FCOLOR[y][x] | 0;
+    if (window.COLOR && COLOR[y] && COLOR[y][x] && typeof COLOR[y][x].color !== 'undefined') return COLOR[y][x].color | 0;
+    return (typeof window.defaultColor !== 'undefined') ? window.defaultColor : 37;
+  }
+
+  // Validate coords
+  if (typeof validateCoords === 'function') {
+    if (!validateCoords(x, y)) return false;
+  } else {
+    if (typeof x !== 'number' || typeof y !== 'number') return false;
+    if (x < 0 || y < 0 || y >= H || x >= W) return false;
+  }
+
+  // normalize count default=1 and clamp to remaining cells on screen
+  count = (typeof count === 'number' && count > 0) ? Math.floor(count) : 1;
+  var maxRemaining = Math.max(0, W * H - (y * W + x));
+  if (count > maxRemaining) count = maxRemaining;
+  if (count <= 0) return false;
+
+  // ensure banks exist
+  if (!window.FCOLOR) FCOLOR = [];
+  if (!FCOLOR[y]) FCOLOR[y] = new Uint8Array(W);
+
+  // resolve numeric code from name or number
+  var fgCode;
+  if (typeof fg === 'number') {
+    fgCode = fg | 0;
+  } else if (typeof fg === 'string' && fg.length) {
+    var name = fg.toLowerCase();
+    fgCode = (window.ANSI_NAME_TO_FG && typeof window.ANSI_NAME_TO_FG[name] !== 'undefined')
+      ? (window.ANSI_NAME_TO_FG[name] | 0)
+      : ((typeof window.defaultColor !== 'undefined') ? window.defaultColor : 37);
+  } else {
+    fgCode = (typeof window.defaultColor !== 'undefined') ? window.defaultColor : 37;
+  }
+
+  // write span
+  for (var i = 0; i < count; i++) {
+    var cx = x + i;
+    FCOLOR[y][cx] = fgCode;
+    if (window.COLOR && COLOR[y] && COLOR[y][cx]) COLOR[y][cx].color = fgCode;
+  }
+
+  // refresh
+  if (typeof pokeRefreshRow === 'function') {
+    try { pokeRefreshRow(x, y, count); } catch (e) { for (var r = 0; r < count; r++) try { pokeRefresh(x + r, y); } catch(e){} }
+  } else {
+    for (var j = 0; j < count; j++) try { pokeRefresh(x + j, y); } catch(e){}
+  }
+
+  return count;
+};
+
+// set/get background for a cell or horizontal span
+window.pokeBG = function(x, y, bg, count) {
+  // Getter: if bg is undefined, return current bg value or undefined if out-of-bounds
+  if (typeof bg === 'undefined') {
+    if (typeof validateCoords === 'function') {
+      if (!validateCoords(x, y)) return undefined;
+    } else {
+      if (typeof x !== 'number' || typeof y !== 'number' || x < 0 || y < 0 || y >= H || x >= W) return undefined;
+    }
+    if (window.BCOLOR && BCOLOR[y] && typeof BCOLOR[y][x] !== 'undefined') return BCOLOR[y][x] | 0;
+    if (window.COLOR && COLOR[y] && COLOR[y][x] && typeof COLOR[y][x].bgcolor !== 'undefined') return COLOR[y][x].bgcolor | 0;
+    return (typeof window.defaultBg !== 'undefined') ? window.defaultBg : 40;
+  }
+
+  if (typeof validateCoords === 'function') {
+    if (!validateCoords(x, y)) return false;
+  } else {
+    if (typeof x !== 'number' || typeof y !== 'number') return false;
+    if (x < 0 || y < 0 || y >= H || x >= W) return false;
+  }
+
+  // normalize count default=1 and clamp to remaining cells on screen
+  count = (typeof count === 'number' && count > 0) ? Math.floor(count) : 1;
+  var maxRemaining = Math.max(0, W * H - (y * W + x));
+  if (count > maxRemaining) count = maxRemaining;
+  if (count <= 0) return false;
+
+  // resolve numeric code from name or number
+  var bgCode;
+  if (typeof bg === 'number') {
+    bgCode = bg | 0;
+  } else if (typeof bg === 'string' && bg.length) {
+    var name = bg.toLowerCase();
+    bgCode = (window.ANSI_NAME_TO_BG && typeof window.ANSI_NAME_TO_BG[name] !== 'undefined')
+      ? (window.ANSI_NAME_TO_BG[name] | 0)
+      : ((typeof window.defaultBg !== 'undefined') ? window.defaultBg : 40);
+  } else {
+    bgCode = (typeof window.defaultBg !== 'undefined') ? window.defaultBg : 40;
+  }
+
+  // this does not advance cursor to next line!!
+  for (var i = 0; i < count; i++) {
+    var cx = x + i; BCOLOR[y][cx] = bgCode;
+  }
+  if (SYNC) { pokeRefresh(x, y, count); } 
+  return count;
+};
+
+window.pokeAttr = function(x, y, attrValue, n) {
+  if (typeof x !== 'number' || typeof y !== 'number') return false;
+  if (typeof attrValue !== 'number') return false;
+  
+  n = (typeof n === 'number' && n > 0) ? Math.floor(n) : 1;
+  attrValue = attrValue | 0;
+  
+  var remaining = n;
+  var cx = x | 0;
+  var cy = y | 0;
+  var written = 0;
+  
+  while (remaining > 0 && cy < H) {
+    var space = W - cx;        // cells left in current row
+    var take = Math.min(remaining, space);  // how many to write this iteration
+    
+    // Fast fill for the current row
+    for (var i = 0; i < take; i++) {
+      ATTR[cy][cx + i] = attrValue;
+    }
+    
+    if (SYNC && typeof pokeRefresh === 'function') {
+      pokeRefresh(cx, cy, take);  // Refresh this row segment
+    }
+    
+    written += take;
+    remaining -= take;
+    cx = 0;
+    cy++;
   }
   
-  window.ANSI = {
-    colors: {
-      30: '#000000', 31: '#aa0000', 32: '#00aa00', 33: '#aa5500', 34: '#0000aa', 35: '#aa00aa', 36: '#00aaaa', 37: '#aaaaaa',
-      90: '#555555', 91: '#ff5555', 92: '#55ff55', 93: '#ffff55', 94: '#5555ff', 95: '#ff55ff', 96: '#55ffff', 97: '#ffffff'
-    },
-    bgColors: {
-      40: '#000000', 41: '#aa0000', 42: '#00aa00', 43: '#aa5500', 44: '#0000aa', 45: '#aa00aa', 46: '#00aaaa', 47: '#aaaaaa',
-      100: '#555555', 101: '#ff5555', 102: '#55ff55', 103: '#ffff55', 104: '#5555ff', 105: '#ff55ff', 106: '#55ffff', 107: '#ffffff'
-    },
-    codes: {
-      reset: '\x1b[0m', bold: '\x1b[1m', inverse: '\x1b[7m',
-      black: '\x1b[30m', red: '\x1b[31m', green: '\x1b[32m', yellow: '\x1b[33m', blue: '\x1b[34m', magenta: '\x1b[35m', cyan: '\x1b[36m', white: '\x1b[37m',
-      bgBlack: '\x1b[40m', bgRed: '\x1b[41m', bgGreen: '\x1b[42m', bgYellow: '\x1b[43m', bgBlue: '\x1b[44m', bgMagenta: '\x1b[45m', bgCyan: '\x1b[46m', bgWhite: '\x1b[47m',
-      cursorHome: '\x1b[H',
-      cursorPos: (row, col) => `\x1b[${row};${col}H`,
-      cursorUp: (n = 1) => `\x1b[${n}A`,
-      cursorDown: (n = 1) => `\x1b[${n}B`,
-      cursorForward: (n = 1) => `\x1b[${n}C`,
-      cursorBack: (n = 1) => `\x1b[${n}D`,
-      clearScreen: '\x1b[2J',
-      clearLine: '\x1b[K'
+  return (n === 1) ? true : written;
+};
+
+window.pokeAttrBit = function(x, y, bit, state) {
+  if (typeof x !== 'number' || typeof y !== 'number') return false;
+  if (typeof validateCoords === 'function' && !validateCoords(x, y)) return false;
+
+  // Set or clear the bit
+  if (state) ATTR[y][x] |= bit;
+  else       ATTR[y][x] &= ~bit;
+
+  if (SYNC) { pokeRefresh(x, y); }
+  return true;
+};
+
+window.pokeInverse = function(x, y, state, n) {
+  if (typeof x !== 'number' || typeof y !== 'number') return false;
+  if (typeof n === 'number' && n > 1) {
+    var endX = x + n;
+    for (var xi = x; xi < endX; xi++) {
+    	pokeAttrBit(xi, y, window.ATTR_INVERSE, !!state);
     }
-  };
+    return n;
+  }
+  pokeAttrBit(x, y, window.ATTR_INVERSE, !!state);
+  pokeRefresh(x,y);
+  return true;
+};
+
+window.pokeRefresh = function(x, y, n) {
+  if (typeof x === 'undefined' && typeof y === 'undefined') { x=0; y=0; n=W*H; }
+  if (typeof validateCoords === 'function') {
+    if (!validateCoords(x, y)) return false;
+  } else {
+    if (typeof x !== 'number' || typeof y !== 'number') return false;
+    if (x < 0 || x >= W || y < 0 || y >= H) return false;
+  }
+  n = (typeof n === 'number' && n > 0) ? Math.floor(n) : 1;
+  var m = Math.max(0, W * H - (y * W + x));
+  if (n > m) n = m;
+  if (n < 1) return false;  
+  var remaining = n; var cx = x | 0; var cy = y | 0;
+  while (remaining > 0 && cy < H) {
+    var avail = Math.min(remaining, W - cx);
+    // Per-cell refresh
+    for (var rx = cx; rx < cx + avail; rx++) {
+      var el = DOM[cy] && DOM[cy][rx];
+      if (!el) continue;
+      var ch = (VIDEO[cy] && typeof VIDEO[cy][rx] !== 'undefined') ? VIDEO[cy][rx] : ' ';
+      var newText = (ch === ' ' || ch === '\u00A0') ? '\u00A0' : ch;
+      if (el.textContent !== newText) el.textContent = newText;
+
+      fg = FCOLOR[cy][rx] | 0; 
+      bg = BCOLOR[cy][rx] | 0;
+
+      var s2 = getCellStyle(rx, cy);
+      var classStr2 = 'qandy-cell ansi-fg-' + s2.color + ' ansi-bg-' + s2.bgcolor;
+      if (s2.bold) classStr2 += ' ansi-bold';
+      if (s2.inverse) classStr2 += ' ansi-inverse';
+      if (s2.italic) classStr2 += ' ansi-italic';
+      if (s2.underline) classStr2 += ' ansi-underline';
+      if (s2.dim) classStr2 += ' ansi-dim';
+      if (s2.blink) classStr2 += ' ansi-blink';
+      if (el._lastClass !== classStr2) {
+        el.className = classStr2;
+        el._lastClass = classStr2;
+      }
+    }
+    remaining -= avail;
+    cx = 0; 
+    cy++;
+  }
+  return true;
+};
+
+window.pokeSelect = function(state) {
+  if (typeof SSTART !== 'number' || typeof SEND !== 'number') return false;
+  if (SSTART < 0 || SEND < 0) return false;
+  var s = Math.min(SSTART, SEND);
+  var e = Math.max(SSTART, SEND);
+  var count = e - s;
+  if (count <= 0) return false;
+  var absCol = (typeof LINEX === 'number' ? LINEX : 0) + s;
+  var startY = (typeof LINEY === 'number' ? LINEY : 0) + Math.floor(absCol / W);
+  var startX = absCol % W;
+  // pokeInverse expects (x, y, state, count)
+  return pokeInverse(startX, startY, !!state, count);
+}
   
-  window.COLOR = {
-    BLACK: 30, RED: 31, GREEN: 32, YELLOW: 33, BLUE: 34, MAGENTA: 35, CYAN: 36, WHITE: 37,
-    BRIGHT_BLACK: 90, BRIGHT_RED: 91, BRIGHT_GREEN: 92, BRIGHT_YELLOW: 93, BRIGHT_BLUE: 94, BRIGHT_MAGENTA: 95, BRIGHT_CYAN: 96, BRIGHT_WHITE: 97,
-    BG_BLACK: 40, BG_RED: 41, BG_GREEN: 42, BG_YELLOW: 43, BG_BLUE: 44, BG_MAGENTA: 45, BG_CYAN: 46, BG_WHITE: 47,
-    BG_BRIGHT_BLACK: 100, BG_BRIGHT_RED: 101, BG_BRIGHT_GREEN: 102, BG_BRIGHT_YELLOW: 103, BG_BRIGHT_BLUE: 104, BG_BRIGHT_MAGENTA: 105, BG_BRIGHT_CYAN: 106, BG_BRIGHT_WHITE: 107
+window.peekAttr = function(x,y) { return (ATTR && ATTR[y]) ? ATTR[y][x] : undefined; };
+
+window.peekInverse = function(x, y) {
+  if (typeof x !== 'number' || typeof y !== 'number') return undefined;
+  if (!validateCoords(x, y)) return undefined;
+  if (window.ATTR && ATTR[y] && typeof ATTR[y][x] !== 'undefined') {
+    return !!(ATTR[y][x] & (window.ATTR_INVERSE || 0x0001));
+  }
+  return undefined;
+};
+
+// getCellStyle(x,y) - prefer numeric banks (FCOLOR/BCOLOR), fallback to COLOR objects and ATTR bits
+window.getCellStyle = function(x, y) {
+  var defaultFG = (typeof window.defaultColor !== 'undefined') ? window.defaultColor : 37;
+  var defaultBG = (typeof window.defaultBg !== 'undefined') ? window.defaultBg : 40;
+
+  // validate coords: return safe defaults if out-of-range
+  if (typeof x !== 'number' || typeof y !== 'number' || x < 0 || y < 0 || y >= H || x >= W) {
+    return { color: defaultFG, bgcolor: defaultBG, bold:false, inverse:false, italic:false, underline:false, dim:false, blink:false };
+  }
+
+  // read numeric banks first (preferred)
+  var fg = defaultFG;
+  var bg = defaultBG;
+
+  if (window.FCOLOR && FCOLOR[y] && typeof FCOLOR[y][x] !== 'undefined') {
+    fg = FCOLOR[y][x] | 0;
+  } else if (window.COLOR && COLOR[y] && COLOR[y][x] && typeof COLOR[y][x].color !== 'undefined') {
+    fg = COLOR[y][x].color | 0;
+  }
+
+  if (window.BCOLOR && BCOLOR[y] && typeof BCOLOR[y][x] !== 'undefined') {
+    bg = BCOLOR[y][x] | 0;
+  } else if (window.COLOR && COLOR[y] && COLOR[y][x] && typeof COLOR[y][x].bgcolor !== 'undefined') {
+    bg = COLOR[y][x].bgcolor | 0;
+  }
+
+  // read ATTR bitmask (if present)
+  var attr = 0;
+  if (window.ATTR && ATTR[y] && typeof ATTR[y][x] !== 'undefined') {
+    attr = ATTR[y][x] | 0;
+  }
+
+  var s = {
+    color: fg,
+    bgcolor: bg,
+    bold:     !!(attr & (window.ATTR_BOLD      || 0x0002)),
+    dim:      !!(attr & (window.ATTR_DIM       || 0x0004)),
+    italic:   !!(attr & (window.ATTR_ITALIC    || 0x0008)),
+    underline:!!(attr & (window.ATTR_UNDERLINE || 0x0010)),
+    blink:    !!(attr & (window.ATTR_BLINK     || 0x0020)),
+    inverse:  !!(attr & (window.ATTR_INVERSE   || 0x0001)),
+    hidden:   !!(attr & (window.ATTR_HIDDEN    || 0x0080))
   };
 
-  // Signal that video.js is ready
-  if (typeof window.qandySignalReady === 'function') {
-    window.qandySignalReady('video.js');
+  // Visual inverse: swap fg/bg for rendering only (do not modify banks)
+  if (s.inverse) {
+    var t = s.color; s.color = s.bgcolor; s.bgcolor = t;
   }
+
+  return s;
+};
+
+function validateCoords(x, y) { return (typeof x === 'number' && typeof y === 'number' && x >= 0 && y >= 0 && x < W && y < H); }
+function safeGet(arr, y, x) { return (arr && arr[y]) ? arr[y][x] : undefined; }
+
+var prevX = -1;
+var prevY = -1;
+var prevCode = CURSOR;
+
+var prevAttr=0;
+
+var _ansiCssMap = {30:'#000',31:'#c00',32:'#0c0',33:'#cc0',34:'#00c',35:'#c0c',36:'#0cc',37:'#ccc',
+                   90:'#555',91:'#f55',92:'#5f5',93:'#ff5',94:'#55f',95:'#f5f',96:'#5ff',97:'#fff',
+                   40:'#000',41:'#c00',42:'#0c0',43:'#cc0',44:'#00c',45:'#c0c',46:'#0cc',47:'#ccc'};
+
+window.pokeCursorOn = function() {
+  if (typeof CURSOR === 'undefined' || typeof CURX === 'undefined' || typeof CURY === 'undefined') return;
+  if (CURSOR === 0) return; // cursor off
+  var sx = Math.max(0, Math.min(W-1, CURX|0));
+  var sy = Math.max(0, Math.min(H-1, CURY|0));
+  var prevAttr = (typeof peekATTR === 'function') ? peekATTR(sx, sy) : (ATTR && ATTR[sy] ? ATTR[sy][sx] : 0);  
+  if (CURSOR === 1 || CURSOR === 3) { // line cursor: underline
+    if (typeof window.ATTR_UNDERLINE !== 'undefined') pokeAttrBit(sx, sy, window.ATTR_UNDERLINE, true);
+    if (CURSOR === 3 && typeof window.ATTR_BLINK !== 'undefined') pokeAttrBit(sx, sy, window.ATTR_BLINK, true);
+  }
+  if (CURSOR === 4 || CURSOR === 5) { // block cursor: inverse
+    if (typeof window.ATTR_INVERSE !== 'undefined') pokeAttrBit(sx, sy, window.ATTR_INVERSE, true);
+    if (CURSOR === 5 && typeof window.ATTR_BLINK !== 'undefined') pokeAttrBit(sx, sy, window.ATTR_BLINK, true);
+  }
+}
+
+window.pokeCursorOff = function() {
+  if (typeof prevAttr === 'undefined' || prevAttr === null) return false;
+  ATTR[CURY][CURX] = prevAttr;
+  pokeRefresh(CURX,CURY);
+  prevAttr="";
+  return true;
+}
+
+function cursorVarsToAttr(vars) {
+  // prefer window-defined ATTR_* constants if present, otherwise use defaults
+  const ATTR_INVERSE   = (window.ATTR_INVERSE   !== undefined) ? window.ATTR_INVERSE   : 0x0001;
+  const ATTR_BOLD      = (window.ATTR_BOLD      !== undefined) ? window.ATTR_BOLD      : 0x0002;
+  const ATTR_ITALIC    = (window.ATTR_ITALIC    !== undefined) ? window.ATTR_ITALIC    : 0x0008;
+  const ATTR_UNDERLINE = (window.ATTR_UNDERLINE !== undefined) ? window.ATTR_UNDERLINE : 0x0010; // "line"
+  const ATTR_BLINK     = (window.ATTR_BLINK     !== undefined) ? window.ATTR_BLINK     : 0x0020;
+  const ATTR_DIM       = (window.ATTR_DIM       !== undefined) ? window.ATTR_DIM       : 0x0040;
+
+  // vars may be an object with the fields, otherwise fall back to globals
+  const v = (vars && typeof vars === 'object') ? vars : {};
+
+  const inverse = (typeof v.cursorInverse !== 'undefined') ? v.cursorInverse : (typeof cursorInverse !== 'undefined' ? cursorInverse : 0);
+  const bold    = (typeof v.cursorBold    !== 'undefined') ? v.cursorBold    : (typeof cursorBold    !== 'undefined' ? cursorBold    : 0);
+  const dim     = (typeof v.cursorDim     !== 'undefined') ? v.cursorDim     : (typeof cursorDim     !== 'undefined' ? cursorDim     : 0);
+  const italic  = (typeof v.cursorItalic  !== 'undefined') ? v.cursorItalic  : (typeof cursorItalic  !== 'undefined' ? cursorItalic  : 0);
+  const line    = (typeof v.cursorLine    !== 'undefined') ? v.cursorLine    : (typeof cursorLine    !== 'undefined' ? cursorLine    : 0);
+  const blink   = (typeof v.cursorBlink   !== 'undefined') ? v.cursorBlink   : (typeof cursorBlink   !== 'undefined' ? cursorBlink   : 0);
+
+  let mask = 0;
+  if (inverse) mask |= ATTR_INVERSE;
+  if (bold)    mask |= ATTR_BOLD;
+  if (dim)     mask |= ATTR_DIM;
+  if (italic)  mask |= ATTR_ITALIC;
+  if (line)    mask |= ATTR_UNDERLINE;
+  if (blink)   mask |= ATTR_BLINK;
+
+  return mask;
+}
+
+window.pokeScroll = function() {
+  var VRow=new Array(W);
+  var FRow=new Array(W);
+  var BRow=new Array(W);
+  var ARow=new Array(W);
+  for (var i=0; i<W; i++) {
+    VRow[i] = ' ';
+    FRow[i] = CURFG;
+    BRow[i] = CURBG;
+    ARow[i] = CURATTR;
+  }
+  VIDEO.shift(); VIDEO.push(VRow.slice());
+  FCOLOR.shift(); FCOLOR.push(FRow.slice());
+  BCOLOR.shift(); BCOLOR.push(BRow.slice());
+  ATTR.shift(); ATTR.push(ARow.slice());
+  CURY  = clampRow((typeof CURY === 'number' ? CURY : 0) - 1);
+  LINEY = clampRow((typeof LINEY === 'number' ? LINEY : 0) - 1);
+  CURX  = Math.max(0, Math.min(W - 1, (typeof CURX === 'number' ? CURX : 0)));
+  LINEX = Math.max(0, Math.min(W - 1, (typeof LINEX === 'number' ? LINEX : 0)));
+  if (SYNC) { pokeRefresh(); }
+  return true;
+};
+
+function clampRow(r) {
+  if (typeof r !== 'number' || isNaN(r)) return 0;
+  if (r < 0) return 0;
+  if (r >= H) return H - 1;
+  return r;
+}
+
+
+// Signal that video.js is ready
+if (typeof window.qandySignalReady === 'function') {
+  window.qandySignalReady('video.js');
+}
 }
 
 //
@@ -2930,7 +3190,9 @@ window.updateKeyLabels = updateKeyLabels;
 
 (function(global) {
   if (global.QandyKeyboard) return; // don't re-install
+
   var pending = null; // { resolve, reject, echo, buffer, savedLINE, savedCURP }
+
   // Accept the pending input value and resolve the Promise
   function acceptPending(value) {
     if (!pending) return false;
@@ -4192,52 +4454,9 @@ document.addEventListener('paste', function (event) {
  }
 });
 
-function keyToChar(event) {
-  // Special keys
-  if (event.key === 'Enter') return '\n';
-  if (event.key === 'Tab') return '\t';
-  if (event.key === 'Backspace') return '\b';
-  if (event.key === 'Escape') return '\x1b';
-  
-  // Regular character
-  if (event.key && event.key.length === 1) return event.key;
-  
-  // Fallback
-  var code = event.charCode || event.keyCode;
-  return code ? String.fromCharCode(code) : '';
-}
-
-var _inkey_waiting = false;
-var _inkey_resolve = null;
-
-window.inkey = function() {
-  return new Promise(function(resolve) {
-    _inkey_waiting = true;
-    _inkey_resolve = resolve;
-  });
-};
-
 window.press=function(event) { 
   key=""; k=event.keyCode; shift=event.shiftKey;
   if (HOST) { kid="host-"; } else { kid="guest-"; }
-
-  if (_inkey_waiting && _inkey_resolve) {
-    if (k === 16 || k === 17 || k === 18 || k === 20) return;
-    // Don't process function keys (F1-F12: keyCode 112-123)
-    if (k >= 112 && k <= 123) return;
-
-    _inkey_waiting = false;
-    var char = keyToChar(event);
-    var resolve = _inkey_resolve;
-    _inkey_resolve = null;
-  
-    if (char) {
-      event.preventDefault && event.preventDefault();
-      highlightKey(k);
-      resolve(char);
-      return;
-    }
-  }
 
   // Handle physical CapsLock keypress (keyCode 20)
   if (event.keyCode === 20) {
@@ -4564,7 +4783,7 @@ pokeCursorOn(); pokeRefresh();
 if (HOST) {
   var s=document.createElement('script');
   s.id='dos.js';
-  s.src='dos2.js';
+  s.src='dos.js';
   s.onload=function() { try { dosMount("local"); } catch (e) { print("Error: "+e+"\n"); }};
   document.head.appendChild(s);  
   systemReady();
