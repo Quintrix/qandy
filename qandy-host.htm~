@@ -525,6 +525,12 @@ var altPhysical=false;   // track if alt was activated by physical keyboard
 var ctrlVirtual = false; // virtual ctrl key lock 
 var altVirtual = false;  // virtual alt key lock 
 
+var modifierFlagBgColor = '#fff';          // active modifier key background
+var modifierFlagFgColor = '#000';          // active modifier key foreground
+var modifierFlagBgColorOff = '#222';       // inactive modifier key background
+var modifierFlagFgColorOff = '#fff';       // inactive modifier key foreground
+var modifierFlagBgColorPhysical = '#bbb';  // physical-hold modifier key background
+
 var keyboard=1; // turn keyboard input on/off
 
 var LINE ="";  // input line
@@ -538,10 +544,12 @@ var SEND=-1;    // selection end
 var selectionBgColor = '#ffffff';   // old Selection background color
 var selectionFgColor = '#000000';   // old Selection text color
 
+//
 // keyboard.js
+//
 
 var normalKeys = {
-           "`":"`","\\":"\\","[":"[", "]":"]", "-":"-", "=":"=", 
+           "`":"`","[":"[", "]":"]", "\\":"\\","-":"-", "=":"=", 
   "1":"1", "2":"2", "3":"3", "4":"4", "5":"5", "6":"6", "7":"7", "8":"8", "9":"9", "0":"0",
   "q":"q", "w":"w", "e":"e", "r":"r", "t":"t", "y":"y", "u":"u", "i":"i", "o":"o", "p":"p",
   "a":"a", "s":"s", "d":"d", "f":"f", "g":"g", "h":"h", "j":"j", "k":"k", "l":"l", "'":"'",
@@ -559,29 +567,30 @@ var shiftedKeys = {
 };
 
 var altKeys = {
-           "`":"°","\\":"¦", "[":"«", "]":"»", "-":"─", "=":"═",
-  "1":"☺", "2":"☻", "3":"♥", "4":"♦", "5":"♣", "6":"♠", "7":"•", "8":"◘", "9":"○", "0":"◙",
-  "q":"┌", "w":"─", "e":"┐", "r":"├", "t":"┤", "y":"└", "u":"┴", "i":"┘", "o":"│", "p":"┼",
-  "a":"╔", "s":"═", "d":"╗", "f":"╠", "g":"╣", "h":"╚", "j":"╩", "k":"╝", "l":"║", "'":"″",
-  "z":"▀", "x":"▄", "c":"█", "v":"▌", "b":"▐", "n":"░", "m":"▒", ";":"╬",
-                    " ":"·",                   ",":"▓", ".":"■", "/":"□"
+           "`":"↑", "[":"↓", "]":"→", "\\":"←","-":"↕", "=":"↨",
+  "1":"1", "2":"2", "3":"3", "4":"4", "5":"5", "6":"6", "7":"7", "8":"8", "9":"9", "0":"0",
+  "q":"Hm","w":"U", "e":"Ed","r":"Pu","t":"•", "y":"◘", "u":"4", "i":"5", "o":"6", "p":"¶",
+  "a":"L", "s":"D", "d":"R", "f":"Pd","g":"○", "h":"◙", "j":"1", "k":"2", "l":"3", "'":"§",
+  "z":"♪", "x":"♫", "c":"♀", "v":"♂", "b":"¿", "n":"‼", "m":".", ";":"0",
+                                       " ":" ", ",":"«", ".":"»", "/":"☼"
 };
 
 var altShiftKeys = {
-  "`":"¬","\\":"¦", "[":"‹", "]":"›", "-":"―", "=":"≡",
-  "1":"↑", "2":"↓", "3":"←", "4":"→", "5":"↔", "6":"↕", "7":"★", "8":"☆", "9":"◆", "0":"◇",
-  "q":"╭", "w":"╌", "e":"╮", "r":"╞", "t":"╡", "y":"╰", "u":"╴", "i":"╯", "o":"╎", "p":"╪",
-  "a":"┏", "s":"━", "d":"┓", "f":"┣", "g":"┫", "h":"┗", "j":"┻", "k":"┛", "l":"┃", "'":"′",
-  "z":"▔", "x":"▁", "c":"▪", "v":"▸", "b":"◂", "n":"▴", "m":"▾", ";":"╋",
-  " ":"·", ",":"◊", ".":"●", "/":"○"
+           "`":"█", "[":"▌", "]":"▄","\\":"▀", "-":"▐", "=":"▬",
+  "1":"▲", "2":"▼", "3":"◄", "4":"►", "5":"↑", "6":"↓", "7":"←", "8":"→", "9":"↔", "0":"↕ ",
+  "q":"┌", "w":"┬", "e":"┐", "r":"│", "t":"╔", "y":"╦", "u":"╗", "i":"║", "o":"♥", "p":"♣",
+  "a":"├", "s":"┼", "d":"┤", "f":"─", "g":"╠", "h":"╬", "j":"╣", "k":"═", "l":"♦", "'":"♠",
+  "z":"└", "x":"┴", "c":"┘", "v":"☺", "b":"╚", "n":"╩", "m":"╝", ";":"☻",
+  " ":" ", ",":"▓", ".":"▒", "/":"░"
 };
+
 var keyboardData = [
   // Row 0: ESC, BACKTICK, BACKSLASH, OPEN, CLOSE, DASH, EQUAL, BACK (y=446)
   {id:"esc", label:"ESC", keyCode:27, x:47, y:446, width:52},
   {id:"backtick", label:"`", keyCode:192, x:103, y:446, width:28},
-  {id:"backslash", label:"\\", keyCode:220, x:132, y:446, width:28},
-  {id:"open", label:"[", keyCode:219, x:160, y:446, width:28},
-  {id:"close", label:"]", keyCode:221, x:189, y:446, width:28},
+  {id:"open", label:"[", keyCode:219, x:132, y:446, width:28},
+  {id:"close", label:"]", keyCode:221, x:160, y:446, width:28},
+  {id:"backslash", label:"\\", keyCode:220, x:189, y:446, width:28},
   {id:"dash", label:"-", keyCode:173, x:218, y:446, width:28},
   {id:"equal", label:"=", keyCode:61, x:247, y:446, width:28},
   {id:"back", label:"BACK", keyCode:8, x:275, y:446, width:52},
@@ -2824,8 +2833,8 @@ function updateKeyLabels() {
       if (key.id === 'ctrl') {
         try {
           if (ctrl || ctrlPhysical) {
-            el.style.backgroundColor = ctrlPhysical ? '#bbb' : '#fff';
-            el.style.color = '#000';
+            el.style.backgroundColor = ctrlPhysical ? modifierFlagBgColorPhysical : modifierFlagBgColor;
+            el.style.color = modifierFlagFgColor;
           } else {
             el.style.backgroundColor = '';
             el.style.color = '';
@@ -2837,8 +2846,8 @@ function updateKeyLabels() {
       if (key.id === 'alt') {
         try {
           if (alt || altPhysical) {
-            el.style.backgroundColor = altPhysical ? '#444' : '#fff';
-            el.style.color = '#000';
+            el.style.backgroundColor = altPhysical ? '#444' : modifierFlagBgColor;
+            el.style.color = modifierFlagFgColor;
           } else {
             el.style.backgroundColor = '';
             el.style.color = '';
@@ -2884,13 +2893,13 @@ window.updateKeyLabels = updateKeyLabels;
       return;
     }
     if (elementId === 'ctrl' && (ctrl || ctrlPhysical)) {
-      element.style.backgroundColor = ctrlPhysical ? '#bbb' : '#fff';
-      element.style.color = '#000';
+      element.style.backgroundColor = ctrlPhysical ? modifierFlagBgColorPhysical : modifierFlagBgColor;
+      element.style.color = modifierFlagFgColor;
       return;
     }
     if (elementId === 'alt' && (alt || altPhysical)) {
-      element.style.backgroundColor = altPhysical ? '#444' : '#fff';
-      element.style.color = '#000';
+      element.style.backgroundColor = altPhysical ? '#444' : modifierFlagBgColor;
+      element.style.color = modifierFlagFgColor;
       return;
     }
     // Not locked -> clear inline styles
@@ -3842,7 +3851,7 @@ window.button=function(b, event) {
   if (k === "ctrl") {
     ctrl = !ctrl;
     var el = document.getElementById("ctrl");
-    if (el) { el.style.backgroundColor = ctrl ? "#fff" : "#222"; el.style.color = ctrl ? "#000" : "#fff"; }
+    if (el) { el.style.backgroundColor = ctrl ? modifierFlagBgColor : modifierFlagBgColorOff; el.style.color = ctrl ? modifierFlagFgColor : modifierFlagFgColorOff; }
     pokeCursorOn(); return;
   }
   if (k === "alt") {
@@ -3850,9 +3859,9 @@ window.button=function(b, event) {
     var el2 = document.getElementById("alt");
     if (el2) {
       if (alt) {
-       el2.style.backgroundColor = "#fff"; el2.style.color = "#000";
+       el2.style.backgroundColor = modifierFlagBgColor; el2.style.color = modifierFlagFgColor;
       } else {
-       el2.style.backgroundColor = "#000"; el2.style.color = "#fff";
+       el2.style.backgroundColor = modifierFlagBgColorOff; el2.style.color = modifierFlagFgColorOff;
       }
     }
     updateKeyLabels();
@@ -4098,7 +4107,7 @@ window.button=function(b, event) {
       // Handle ctrl shortcuts
       ctrl = 0;
       var cel = document.getElementById("ctrl");
-      if (cel) { cel.style.backgroundColor = "#222"; cel.style.color = "#fff"; }
+      if (cel) { cel.style.backgroundColor = modifierFlagBgColorOff; cel.style.color = modifierFlagFgColorOff; }
       var lc = finalChar.toLowerCase();
       if (lc === 'c') {
         var copyText = "";
@@ -4294,7 +4303,6 @@ window.press=function(event) {
     return;
   }
 
-  if (event.keyCode === 18 || event.altKey) { event.preventDefault(); }
   if (event.keyCode === 27) { event.preventDefault(); }
   if (event.keyCode === 16) {
     var capsBtn = document.getElementById(kid+"caps");
@@ -4303,15 +4311,16 @@ window.press=function(event) {
   }
   if (event.keyCode === 17 && !ctrl) {
    ctrl=1; ctrlPhysical=true;
-   document.getElementById(kid+"ctrl").style.backgroundColor = "#ddd";
-   document.getElementById(kid+"ctrl").style.color = "#000";
+   document.getElementById(kid+"ctrl").style.backgroundColor = modifierFlagBgColorPhysical;
+   document.getElementById(kid+"ctrl").style.color = modifierFlagFgColor;
    return;
   }
   if (event.keyCode === 18 && !alt) {
+    event.preventDefault();
     highlightKey(k);
     alt = 1; altPhysical = true;
-    document.getElementById(kid+"alt").style.backgroundColor = "#fff";
-    document.getElementById(kid+"alt").style.color = "#000";
+    document.getElementById(kid+"alt").style.backgroundColor = modifierFlagBgColor;
+    document.getElementById(kid+"alt").style.color = modifierFlagFgColor;
     updateKeyLabels();
   }
 
@@ -4323,6 +4332,11 @@ window.press=function(event) {
       event.preventDefault();
       highlightKey(k);
       button(k, event); 
+    } else if (ctrl && !ctrlPhysical) {
+      // Virtual CTRL was active but no recognized combo: auto-reset it
+      ctrl = 0;
+      var cel = document.getElementById("ctrl");
+      if (cel) { cel.style.backgroundColor = modifierFlagBgColorOff; cel.style.color = modifierFlagFgColorOff; }
     }
     // All other ctrl combos: let browser handle
     return;
@@ -4360,8 +4374,8 @@ window.pressup=function(event) {
   if (event.keyCode === 17 && ctrlPhysical) {
     ctrl = 0;
     ctrlPhysical = false;
-    document.getElementById(kid+"ctrl").style.backgroundColor = "#222";
-    document.getElementById(kid+"ctrl").style.color = "#fff";
+    document.getElementById(kid+"ctrl").style.backgroundColor = modifierFlagBgColorOff;
+    document.getElementById(kid+"ctrl").style.color = modifierFlagFgColorOff;
     return;
   }
   // Handle physical SHIFT key release (unhighlight CAPS unless caps mode is active)
@@ -4375,8 +4389,8 @@ window.pressup=function(event) {
   if (event.keyCode === 18 && altPhysical) {
     alt = 0;
     altPhysical = false;
-    document.getElementById(kid+"alt").style.backgroundColor = "#fff";
-    document.getElementById(kid+"alt").style.color = "#000";
+    document.getElementById(kid+"alt").style.backgroundColor = modifierFlagBgColorOff;
+    document.getElementById(kid+"alt").style.color = modifierFlagFgColorOff;
     updateKeyLabels();
     return;
   }
