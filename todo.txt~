@@ -1,0 +1,15 @@
+
+fdisk installer
+add total size and number of files to localDir())
+fix cursor blink and add insert/delete underline/block mode
+svga.js driver not displaying ANSI inverse code
+jsdom.js driver for display in browser's dom??
+fix alt-bug
+enable keyboard sounds
+
+implement gfx.js tileset engine
+
+cpanel.js config script, instead of autoexec.js?
+mouse.js driver
+keyboard.js keyboard editor
+format ascii.js/ascii2.js chart
