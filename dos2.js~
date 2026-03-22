@@ -1623,7 +1623,6 @@ var DEVICE = 'none';
       print(" size: unknown\n");
       print(" used: " + formatFileSize(used) + "\n");
     }
-    
     await dosInstall();
     return "done";    
   };

@@ -1651,10 +1651,6 @@ var DEVICE = 'none';
     }
   }
 
-  async function dosInstallFake(file) {
-    return { text: "// blank file", serverTs: "20260312030303"};
-  }
-
   // Save a file to localStorage with a specific timestamp (used to preserve server timestamps).
   async function _installFile(file, text, ts) {
     var fname = _normName(file);
@@ -1692,14 +1688,14 @@ var DEVICE = 'none';
       }
     }
 
-    //if (!isHttpProtocol()) {                     // <-------------- re-enable when done testing
-    //  if (isFileProtocol()) {
-    //    print("\nCannot install from file://\n");
-    //    print("Use DOS to copy .js files to\n");
-    //    print("localStorage.\n\n");
-    //  }
-    //  return false;
-    //}
+    if (!isHttpProtocol()) {
+      if (isFileProtocol()) {
+        print("\nCannot install from file://\n");
+        print("Use DOS to copy .js files to\n");
+        print("localStorage.\n\n");
+      }
+      return false;
+    }
 
     print("\nChecking system files:\n\n");
     var files = ['ansi.js', 'ascii.js', 'keydown.js', 'piano.js', 'svga.js'];
@@ -1708,7 +1704,7 @@ var DEVICE = 'none';
     var manifest = _loadManifest();
 
     for (var i = 0; i < files.length; i++) {
-      var result = await dosInstallFake(files[i]);
+      var result = await dosInstallFetch(files[i]);
       if (!result || !result.serverTs) { print("  " + files[i] + " \x1b[91m» failed\x1b[0m\n"); continue; }
       var localEntry = _findEntryFlexible(manifest, files[i]);
       var localTs = localEntry ? localEntry.entry.timestamp : null;
