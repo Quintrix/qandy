@@ -4303,7 +4303,6 @@ window.press=function(event) {
     return;
   }
 
-  if (event.keyCode === 18 || event.altKey) { event.preventDefault(); }
   if (event.keyCode === 27) { event.preventDefault(); }
   if (event.keyCode === 16) {
     var capsBtn = document.getElementById(kid+"caps");
@@ -4317,6 +4316,7 @@ window.press=function(event) {
    return;
   }
   if (event.keyCode === 18 && !alt) {
+    event.preventDefault();
     highlightKey(k);
     alt = 1; altPhysical = true;
     document.getElementById(kid+"alt").style.backgroundColor = modifierFlagBgColor;
