@@ -2730,7 +2730,7 @@ function keyboard_js() {
 // Replace existing updateKeyLabels() with this version
 function updateKeyLabels() {
   // Normalize modifier state from globals (same logic as before)
-  window.altActive = !!window.alt || !!window.altPhysical;
+  window.altActive = !!window.alt || !!window.altPhysical || !!window.altVirtual;
   window.shiftActive = !!window.shift;
   window.capsActive = !!window.caps;
 
@@ -2832,8 +2832,8 @@ function updateKeyLabels() {
       // ctrl
       if (key.id === 'ctrl') {
         try {
-          if (ctrl || ctrlPhysical) {
-            el.style.backgroundColor = ctrlPhysical ? modifierFlagBgColorPhysical : modifierFlagBgColor;
+          if (ctrlVirtual || ctrlPhysical) {
+            el.style.backgroundColor = modifierFlagBgColor;
             el.style.color = modifierFlagFgColor;
           } else {
             el.style.backgroundColor = '';
@@ -2845,8 +2845,8 @@ function updateKeyLabels() {
       // alt
       if (key.id === 'alt') {
         try {
-          if (alt || altPhysical) {
-            el.style.backgroundColor = altPhysical ? '#444' : modifierFlagBgColor;
+          if (altVirtual || altPhysical) {
+            el.style.backgroundColor = modifierFlagBgColor;
             el.style.color = modifierFlagFgColor;
           } else {
             el.style.backgroundColor = '';
@@ -2892,13 +2892,13 @@ window.updateKeyLabels = updateKeyLabels;
       element.style.color = '#000';
       return;
     }
-    if (elementId === 'ctrl' && (ctrl || ctrlPhysical)) {
-      element.style.backgroundColor = ctrlPhysical ? modifierFlagBgColorPhysical : modifierFlagBgColor;
+    if (elementId === 'ctrl' && (ctrlVirtual || ctrlPhysical)) {
+      element.style.backgroundColor = modifierFlagBgColor;
       element.style.color = modifierFlagFgColor;
       return;
     }
-    if (elementId === 'alt' && (alt || altPhysical)) {
-      element.style.backgroundColor = altPhysical ? '#444' : modifierFlagBgColor;
+    if (elementId === 'alt' && (altVirtual || altPhysical)) {
+      element.style.backgroundColor = modifierFlagBgColor;
       element.style.color = modifierFlagFgColor;
       return;
     }
@@ -3036,7 +3036,7 @@ window.updateKeyLabels = updateKeyLabels;
   var _updateKeyLabels = updateKeyLabels;
   window.updateKeyLabels = function() {
     // Normalize modifier values from window (avoid referencing undeclared locals)
-    window.altActive = !!window.alt || !!window.altPhysical;
+    window.altActive = !!window.alt || !!window.altPhysical || !!window.altVirtual;
     window.shiftActive = !!window.shift;
     window.capsActive = !!window.caps;
     // Call the original implementation (which will now see window.* variables)
@@ -3849,21 +3849,17 @@ window.button=function(b, event) {
   if (!k && b < 32) { pokeCursorOn(); return; }
 
   if (k === "ctrl") {
-    ctrl = !ctrl;
+    ctrlVirtual = !ctrlVirtual;
+    ctrl = ctrlVirtual ? 1 : 0;
     var el = document.getElementById("ctrl");
-    if (el) { el.style.backgroundColor = ctrl ? modifierFlagBgColor : modifierFlagBgColorOff; el.style.color = ctrl ? modifierFlagFgColor : modifierFlagFgColorOff; }
+    if (el) { el.style.backgroundColor = ctrlVirtual ? modifierFlagBgColor : modifierFlagBgColorOff; el.style.color = ctrlVirtual ? modifierFlagFgColor : modifierFlagFgColorOff; }
     pokeCursorOn(); return;
   }
   if (k === "alt") {
-    alt = !alt;
+    altVirtual = !altVirtual;
+    alt = altVirtual ? 1 : 0;
     var el2 = document.getElementById("alt");
-    if (el2) {
-      if (alt) {
-       el2.style.backgroundColor = modifierFlagBgColor; el2.style.color = modifierFlagFgColor;
-      } else {
-       el2.style.backgroundColor = modifierFlagBgColorOff; el2.style.color = modifierFlagFgColorOff;
-      }
-    }
+    if (el2) { el2.style.backgroundColor = altVirtual ? modifierFlagBgColor : modifierFlagBgColorOff; el2.style.color = altVirtual ? modifierFlagFgColor : modifierFlagFgColorOff; }
     updateKeyLabels();
     pokeCursorOn(); return;
   }
@@ -4106,6 +4102,7 @@ window.button=function(b, event) {
     if (hasCtrlFlag) {
       // Handle ctrl shortcuts
       ctrl = 0;
+      ctrlVirtual = false;
       var cel = document.getElementById("ctrl");
       if (cel) { cel.style.backgroundColor = modifierFlagBgColorOff; cel.style.color = modifierFlagFgColorOff; }
       var lc = finalChar.toLowerCase();
@@ -4309,24 +4306,35 @@ window.press=function(event) {
     if (capsBtn) { capsBtn.style.backgroundColor = "#444"; capsBtn.style.color = "#fff"; }
     updateKeyLabels();
   }
-  if (event.keyCode === 17 && !ctrl) {
-   ctrl=1; ctrlPhysical=true;
-   document.getElementById(kid+"ctrl").style.backgroundColor = modifierFlagBgColorPhysical;
-   document.getElementById(kid+"ctrl").style.color = modifierFlagFgColor;
-   return;
+  if (event.keyCode === 17) {
+   if (event.source !== 'virtual') {
+    if (!ctrl) {
+     ctrl=1; ctrlPhysical=true;
+     document.getElementById(kid+"ctrl").style.backgroundColor = modifierFlagBgColorPhysical;
+     document.getElementById(kid+"ctrl").style.color = modifierFlagFgColor;
+    }
+    return;
+   }
+   // Virtual CTRL: fall through to button() for toggle handling
   }
-  if (event.keyCode === 18 && !alt) {
+  if (event.keyCode === 18) {
+   if (event.source !== 'virtual') {
     event.preventDefault();
-    highlightKey(k);
-    alt = 1; altPhysical = true;
-    document.getElementById(kid+"alt").style.backgroundColor = modifierFlagBgColor;
-    document.getElementById(kid+"alt").style.color = modifierFlagFgColor;
-    updateKeyLabels();
+    if (!alt) {
+     highlightKey(k);
+     alt = 1; altPhysical = true;
+     document.getElementById(kid+"alt").style.backgroundColor = modifierFlagBgColor;
+     document.getElementById(kid+"alt").style.color = modifierFlagFgColor;
+     updateKeyLabels();
+    }
+    return; // Physical ALT: don't call button()
+   }
+   // Virtual ALT: fall through to button() for toggle handling
   }
 
   // For Ctrl+key combos, pass specific ones through to button() (Ctrl+C, Ctrl+A)
   // Ctrl+V is handled via the native paste event listener instead
-  if (event.ctrlKey) {
+  if (event.ctrlKey && event.source !== 'virtual') {
     var ctrlKey = event.key ? event.key.toLowerCase() : '';
     if (ctrlKey === 'c' || ctrlKey === 'a') {
       event.preventDefault();
@@ -4335,6 +4343,7 @@ window.press=function(event) {
     } else if (ctrl && !ctrlPhysical) {
       // Virtual CTRL was active but no recognized combo: auto-reset it
       ctrl = 0;
+      ctrlVirtual = false;
       var cel = document.getElementById("ctrl");
       if (cel) { cel.style.backgroundColor = modifierFlagBgColorOff; cel.style.color = modifierFlagFgColorOff; }
     }
