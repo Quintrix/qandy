@@ -1,6 +1,9 @@
 
 RUN="qandy.js";
 
+var altVirtual = false;  // virtual alt key lock (sticky toggle like CAPS)
+var ctrlVirtual = false; // virtual ctrl key lock (auto-resets after key press)
+
 function button(b, event) {
   pokeCursorOff();
   if (event && typeof event.shiftKey !== 'undefined') shift = !!event.shiftKey;
@@ -88,15 +91,17 @@ function button(b, event) {
 
   // Modifier key toggles (virtual keyboard)
   if (k === "ctrl") {
-    ctrl = !ctrl;
+    ctrlVirtual = !ctrlVirtual;
+    ctrl = ctrlVirtual ? 1 : 0;
     var el = document.getElementById("ctrl");
-    if (el) { el.style.backgroundColor = ctrl ? "#fff" : "#222"; el.style.color = ctrl ? "#000" : "#fff"; }
+    if (el) { el.style.backgroundColor = ctrlVirtual ? "#fff" : "#222"; el.style.color = ctrlVirtual ? "#000" : "#fff"; }
     pokeCursorOn(); return;
   }
   if (k === "alt") {
-    alt = !alt;
+    altVirtual = !altVirtual;
+    alt = altVirtual ? 1 : 0;
     var el2 = document.getElementById("alt");
-    if (el2) { el2.style.backgroundColor = alt ? "#fff" : "#222"; el2.style.color = alt ? "#000" : "#fff"; }
+    if (el2) { el2.style.backgroundColor = altVirtual ? "#fff" : "#222"; el2.style.color = altVirtual ? "#000" : "#fff"; }
     updateKeyLabels();
     pokeCursorOn(); return;
   }
@@ -324,6 +329,7 @@ function button(b, event) {
           }
           if (hasCtrl) {
             ctrl = 0;
+            ctrlVirtual = false;
             var cel = document.getElementById("ctrl");
             if (cel) { cel.style.backgroundColor = "#222"; cel.style.color = "#fff"; }
             var lc = finalChar.toLowerCase();
@@ -485,29 +491,40 @@ function press(event) {
     return;
   }
 
- if (event.keyCode === 18 || event.altKey) { event.preventDefault(); }
- if (event.keyCode === 27) { event.preventDefault(); }
+ if ((event.keyCode === 18 || event.altKey) && event.source !== 'virtual') { event.preventDefault(); }
+ if (event.keyCode === 27 && event.source !== 'virtual') { event.preventDefault(); }
  if (event.keyCode === 16) {
   var capsBtn = document.getElementById("caps");
   if (capsBtn) { capsBtn.style.backgroundColor = "#444"; capsBtn.style.color = "#fff"; }
   updateKeyLabels();
  }
- if (event.keyCode === 17 && !ctrl) {
-  ctrl=1; ctrlPhysical=true;
-  document.getElementById("ctrl").style.backgroundColor = "#0a0";
-  document.getElementById("ctrl").style.color = "#000";
-  return;
+ if (event.keyCode === 17) {
+  if (event.source !== 'virtual') {
+   if (!ctrl) {
+    ctrl=1; ctrlPhysical=true;
+    document.getElementById("ctrl").style.backgroundColor = "#0a0";
+    document.getElementById("ctrl").style.color = "#000";
+   }
+   return;
+  }
+  // Virtual CTRL: fall through to button() for toggle handling
  }
- if (event.keyCode === 18 && !alt) {
-  highlightKey(k);
-  alt = 1; altPhysical = true;
-  document.getElementById("alt").style.backgroundColor = "#0a0";
-  document.getElementById("alt").style.color = "#000";
-  updateKeyLabels();
+ if (event.keyCode === 18) {
+  if (event.source !== 'virtual') {
+   if (!alt) {
+    highlightKey(k);
+    alt = 1; altPhysical = true;
+    document.getElementById("alt").style.backgroundColor = "#0a0";
+    document.getElementById("alt").style.color = "#000";
+    updateKeyLabels();
+   }
+   return; // Physical ALT: don't call button()
+  }
+  // Virtual ALT: fall through to button() for toggle handling
  }
  // For Ctrl+key combos, pass specific ones through to button() (Ctrl+C, Ctrl+A)
  // Ctrl+V is handled via the native paste event listener instead
- if (event.ctrlKey) {
+ if (event.ctrlKey && event.source !== 'virtual') {
   var ctrlKey = event.key ? event.key.toLowerCase() : '';
   if (ctrlKey === 'c' || ctrlKey === 'a') {
    event.preventDefault();
