@@ -1600,16 +1600,16 @@ var DEVICE = 'none';
   }
 
   global.dosfdisk = async function () {
-    print("\n[-bwhite][black]     localStorage:     [-black][white]\n");
+    print("\n [-bwhite][black] local://                     [-black][white]\n\n");
     try {
       if (typeof navigator !== 'undefined' && navigator.storage && typeof navigator.storage.estimate === 'function') {
         var est = await navigator.storage.estimate();
         var used = (est && est.usage) ? est.usage : 0;
         var quota = (est && est.quota) ? est.quota : 0;
         var free = Math.max(0, quota - used);
-        print(" size: " + formatFileSize(quota) + "\n");
-        print(" used: " + formatFileSize(used) + "\n");
-        print(" free: " + formatFileSize(free) + "\n");
+        print("  size: " + formatFileSize(quota) + "\n");
+        print("  used: " + formatFileSize(used) + "\n");
+        print("  free: " + formatFileSize(free) + "\n");
       } else if (hasLocalStorage) {
         var used = _calcLocalStorage();
         print(" size: unknown\n");
@@ -1623,8 +1623,8 @@ var DEVICE = 'none';
       print(" size: unknown\n");
       print(" used: " + formatFileSize(used) + "\n");
     }
-  
     await dosInstall();
+    return "done";    
   };
 
   function getLoadProtocol() { try {  var p = (location && location.protocol) ? String(location.protocol) : ''; return p.replace(':', '') || 'unknown'; } catch (e) { return 'unknown'; }}
@@ -1634,6 +1634,7 @@ var DEVICE = 'none';
  
   // Fetch a file from the server and return { text, serverTs } or null on failure.
   // serverTs is in yyyymmddhhmmss format, sourced from the HTTP Last-Modified header.
+    
   async function dosInstallFetch(file) {
     try {
       const url = new URL(file, location.href).href;
@@ -1680,6 +1681,7 @@ var DEVICE = 'none';
       try {
         localStorage.setItem(LOCAL_PREFIX + MANIFEST_KEY, MANIFEST_KEY + '|27|' + _timestamp() + "\n");
         print("\nlocalStorage has been formatted\n\n");
+        return true;
       } catch (e) {
         print("Error: Disk Full\n\n");
         return false;
@@ -1695,63 +1697,79 @@ var DEVICE = 'none';
       return false;
     }
 
+    print("\nChecking system files:\n\n");
     var files = ['ansi.js', 'ascii.js', 'keydown.js', 'piano.js', 'svga.js'];
-
-    // Fetch all files from the server and collect their timestamps
     var fileData = [];
+    var filesToUpdate = [];
+    var manifest = _loadManifest();
+
     for (var i = 0; i < files.length; i++) {
       var result = await dosInstallFetch(files[i]);
-      if (!result || !result.serverTs) continue;
+      if (!result || !result.serverTs) { print("  " + files[i] + " \x1b[91m» failed\x1b[0m\n"); continue; }
+      var localEntry = _findEntryFlexible(manifest, files[i]);
+      var localTs = localEntry ? localEntry.entry.timestamp : null;
+      var isNew = !localEntry;
+      var isUpToDate = localTs && result.serverTs === localTs;
       fileData.push({
         file: files[i],
         text: result.text,
-        serverTs: result.serverTs
+        serverTs: result.serverTs,
+        isNew: isNew,
+        isUpToDate: isUpToDate
       });
-    }
 
-    // Load the localStorage manifest to get existing file timestamps
-    var manifest = _loadManifest();
-
-    // Display the comparison list
-    print("\n");
-    for (var i = 0; i < fileData.length; i++) {
-      var fd = fileData[i];
-      var localEntry = _findEntryFlexible(manifest, fd.file);
-      var localTs = localEntry ? localEntry.entry.timestamp : null;
-      var isNew = !localEntry;
-      var isUpToDate = localTs && fd.serverTs === localTs;
-      var serverDisp = _formatTimestamp(fd.serverTs);
-      var localDisp = localTs ? _formatTimestamp(localTs) : '     ';
-      if (isNew) {
-        print(serverDisp + ' ' + localDisp + ' [bred]*[white]' + fd.file + '\n');
-      } else if (isUpToDate) {
-        print(serverDisp + ' ' + localDisp + ' [green]*[white]' + fd.file + '\n');
+      if (isUpToDate) {
+        print("  " + files[i] + " \x1b[97m» ok\x1b[0m\n");
       } else {
-        print(serverDisp + ' ' + localDisp + '  ' + fd.file + '\n');
+        print("  " + files[i] + " \x1b[92m» new\x1b[0m\n");
+        filesToUpdate.push(fileData[fileData.length - 1]);
       }
     }
 
-    // Ask for confirmation via the menu bar
-    print('\n');
-    pokeMenu("  Install new files, (Y)es? ");
-    var answer = await inkey();
-    pokeMenu();
-
-    if (answer !== 'Y') { return false; }
-
-    // Install each file, preserving the server timestamp in the manifest
-    print('\n');
-    for (var i = 0; i < fileData.length; i++) {
-      var fd = fileData[i];
-      if (fd.text === null) continue;
-      if (dosExists(fd.file)) { await dosDelete(fd.file); }
-      var ts = fd.serverTs || _timestamp();
-      await _installFile(fd.file, fd.text, ts);
-      print(_formatTimestamp(ts) + '  ' + fd.file + '\n');
+    // If all files are up-to-date, exit
+    if (filesToUpdate.length === 0) {
+      print("\n\nSystem files up-to-date.\n\n");
+      return true;
     }
-    print('\ndone\n\n');
-    return true;
-  };
+
+    print("\n" + filesToUpdate.length + " file" + (filesToUpdate.length === 1 ? "" : "s") + " need updating.\n");
+    print("Update files now? "); CURMORE=0;
+    var answer = await inkey();
+    if (answer.toUpperCase() !== 'Y') { print("\n\nInput 'fdisk' to update\n\n"); return false; }
+    
+    print("\n\n");
+    var successCount = 0;
+    var failCount = 0;
+    for (var i = 0; i < filesToUpdate.length; i++) {
+      var fd = filesToUpdate[i];
+      try {
+        if (dosExists(fd.file)) { await dosDelete(fd.file); }
+        var ts = fd.serverTs || _timestamp();
+        var installed = await _installFile(fd.file, fd.text, ts);
+        if (installed) {
+          print("  " + fd.file + " \x1b[92m» updated\x1b[0m\n");
+          successCount++;
+        } else {
+          print("  " + fd.file + " \x1b[91m» failed\x1b[0m\n");
+          failCount++;
+        }
+      } catch (err) {
+        print("  " + fd.file + " \x1b[91m» failed\x1b[0m\n");
+        failCount++;
+      }
+    }
+
+    // Summary
+    print("\n");
+    if (successCount > 0) {
+      print(successCount + " file" + (successCount === 1 ? "" : "s") + " updated");
+      if (failCount > 0) { print(", " + failCount + " failed"); }
+      print(".\n\n");
+    } else if (failCount > 0) {
+      print("\n" + failCount + " file" + (failCount === 1 ? "" : "s") + " failed.\n\n");
+    }
+    return;
+  }
 
   if (dosExists("dir.sys")) {} else {  
     print("localStorage not formated,\n");
