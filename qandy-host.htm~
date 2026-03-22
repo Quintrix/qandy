@@ -2231,14 +2231,14 @@ function video_js() {
     var cols = getW();
     var rows = getH();
     if (t) {
-      for (var x = 0; x < cols; x++) { 
-        var ch = x < t.length ? t[x] : ' '; 
-        pokeCell(x, rows - 1, ch, MENUFG || 37, MENUBG || 44, 0); 
+      for (var x=0; x<cols; x++) { 
+        var ch = x<t.length ? t[x] : ' '; 
+        pokeCell(x, H-1, ch, MENUFG || 37, MENUBG || 44, 0); 
       }
       return;
     } 
-    for (var x = 0; x < cols; x++) { 
-      pokeCell(x, rows - 1, ' ', CURFG, CURBG, 0); 
+    for (var x=0; x<cols; x++) { 
+      pokeCell(x, H-1, ' ', CURFG, CURBG, 0); 
     }
     return;
   };
@@ -2314,10 +2314,10 @@ function video_js() {
         if (typeof CURMORE === 'number' && CURMORE >= 0) {
           CURMORE++;
           if (CURMORE >= rows - 1) {
-            pokeMenu("  Press ENTER to continue: ");
-            let morePrompt = await input(false);
-            CURMORE = 0;
+            pokeMenu("  Press any key for more: ");
+            let morePrompt = await inkey();
             pokeMenu();
+            CURMORE = 0;
           }
         }
         idx++; 
@@ -3020,8 +3020,6 @@ window.updateKeyLabels = updateKeyLabels;
   global.input = input;
 
 })(window);
-
-
 
  if (typeof updateKeyLabels === 'function') {
   // Replace local references inside updateKeyLabels with window.* as needed.
@@ -4194,9 +4192,52 @@ document.addEventListener('paste', function (event) {
  }
 });
 
+function keyToChar(event) {
+  // Special keys
+  if (event.key === 'Enter') return '\n';
+  if (event.key === 'Tab') return '\t';
+  if (event.key === 'Backspace') return '\b';
+  if (event.key === 'Escape') return '\x1b';
+  
+  // Regular character
+  if (event.key && event.key.length === 1) return event.key;
+  
+  // Fallback
+  var code = event.charCode || event.keyCode;
+  return code ? String.fromCharCode(code) : '';
+}
+
+var _inkey_waiting = false;
+var _inkey_resolve = null;
+
+window.inkey = function() {
+  return new Promise(function(resolve) {
+    _inkey_waiting = true;
+    _inkey_resolve = resolve;
+  });
+};
+
 window.press=function(event) { 
   key=""; k=event.keyCode; shift=event.shiftKey;
   if (HOST) { kid="host-"; } else { kid="guest-"; }
+
+  if (_inkey_waiting && _inkey_resolve) {
+    if (k === 16 || k === 17 || k === 18 || k === 20) return;
+    // Don't process function keys (F1-F12: keyCode 112-123)
+    if (k >= 112 && k <= 123) return;
+
+    _inkey_waiting = false;
+    var char = keyToChar(event);
+    var resolve = _inkey_resolve;
+    _inkey_resolve = null;
+  
+    if (char) {
+      event.preventDefault && event.preventDefault();
+      highlightKey(k);
+      resolve(char);
+      return;
+    }
+  }
 
   // Handle physical CapsLock keypress (keyCode 20)
   if (event.keyCode === 20) {
@@ -4508,13 +4549,8 @@ window.print=function(t) {
   text = text.replace(/\[home\]/g, "\x1b[H");
   text = text.replace(/\[cls\]/g, "\033[2J");
 
-  // pokeCursor(text);
+  pokeCursor(text);
   
-  var q = window._qandy_print_queue;
-  return new Promise(function(resolve) {
-    q.items.push({ text: text, resolve: resolve });
-    _processPrintQueue();
-  });
 }
 
 
