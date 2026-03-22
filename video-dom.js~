@@ -64,41 +64,6 @@
     return true;
   }
 
-  // ── pokeCell ─────────────────────────────────────────────────────────────────
-  // Direct write to a single span — no array sync needed.
-  function domPokeCell(x, y, ch, fg, bg, attr) {
-    var cols = getW();
-    var rows = getH();
-
-    if (typeof x !== 'number' || typeof y !== 'number') return false;
-    if (x < 0 || x >= cols || y < 0 || y >= rows) return false;
-
-    // Normalise character
-    if (typeof ch === 'undefined' || ch === null) ch = ' ';
-    ch = String(ch).charAt(0) || ' ';
-
-    // Resolve color / attribute values, falling back to current cursor state
-    var fgCode  = (typeof fg   === 'number') ? (fg   | 0) : ((typeof CURFG   === 'number') ? CURFG   : 37);
-    var bgCode  = (typeof bg   === 'number') ? (bg   | 0) : ((typeof CURBG   === 'number') ? CURBG   : 40);
-    var attrVal = (typeof attr === 'number') ? (attr | 0) : ((typeof CURATTR === 'number') ? CURATTR : 0);
-
-    var span = cellGrid[y] && cellGrid[y][x];
-    if (!span) return false;
-
-    // Update text — use EMPTY_CELL so the cell retains its visual width
-    var newText = (ch === ' ') ? EMPTY_CELL : ch;
-    if (span.textContent !== newText) span.textContent = newText;
-
-    // Update class only when it has changed (avoids style recalculation)
-    var cls = buildCellClass(fgCode, bgCode, attrVal);
-    if (span._lastClass !== cls) {
-      span.className = cls;
-      span._lastClass = cls;
-    }
-
-    return true;
-  }
-
   // ── peek ─────────────────────────────────────────────────────────────────────
   // Read character directly from the span — no VIDEO array required.
   function domPeek(x, y) {
@@ -116,11 +81,6 @@
     return (txt === EMPTY_CELL || txt === '') ? ' ' : txt;
   }
 
-  // ── pokeRefresh ──────────────────────────────────────────────────────────────
-  // The DOM is always up-to-date, so there is nothing to flush.
-  function domPokeRefresh(/* x, y, n */) {
-    return true;
-  }
 
   // ── cursor helpers ───────────────────────────────────────────────────────────
   function domCursorHome() {
@@ -139,46 +99,7 @@
     if (typeof CURY !== 'undefined') CURY = cy;
   }
 
-  // ── clearScreen ──────────────────────────────────────────────────────────────
-  // Reset every cell to a blank space using the current cursor colors.
-  function domClearScreen() {
-    var cols = getW();
-    var rows = getH();
-    var fgCode = (typeof CURFG === 'number') ? CURFG : 37;
-    var bgCode = (typeof CURBG === 'number') ? CURBG : 40;
-    var cls    = buildCellClass(fgCode, bgCode, 0);
-
-    for (var y = 0; y < rows; y++) {
-      for (var x = 0; x < cols; x++) {
-        var span = cellGrid[y] && cellGrid[y][x];
-        if (!span) continue;
-        span.textContent = EMPTY_CELL;
-        if (span._lastClass !== cls) {
-          span.className = cls;
-          span._lastClass = cls;
-        }
-      }
-    }
-
-    // Reset cursor to home
-    domCursorHome();
-  }
-
-
-
-
-
 initGrid()
-
-// Install DOM renderer implementations
-// window.pokeCell       = domPokeCell;
-// window.peek           = domPeek;
-// window.pokeRefresh    = domPokeRefresh;
-// window.pokeRefreshRow = domPokeRefresh; // row-level refresh is also a no-op
-// window.cursorHome     = domCursorHome;
-// window.cursorMoveTo   = domCursorMoveTo;
-// window.clearScreen    = domClearScreen;
-
 
 // Helper: rebuild the grid (e.g. after a screen-resize)
 window.__qandy_dom_rebuild = function () {

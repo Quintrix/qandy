@@ -1600,7 +1600,7 @@ var DEVICE = 'none';
   }
 
   global.dosfdisk = async function () {
-    print("\n[-bwhite][black]     localStorage:     [-black][white]\n");
+    print("\n [-bwhite][black] local://                     [-black][white]\n\n");
     try {
       if (typeof navigator !== 'undefined' && navigator.storage && typeof navigator.storage.estimate === 'function') {
         var est = await navigator.storage.estimate();
@@ -1634,6 +1634,8 @@ var DEVICE = 'none';
  
   // Fetch a file from the server and return { text, serverTs } or null on failure.
   // serverTs is in yyyymmddhhmmss format, sourced from the HTTP Last-Modified header.
+  
+  
   async function dosInstallFetch(file) {
     try {
       const url = new URL(file, location.href).href;
@@ -1648,6 +1650,10 @@ var DEVICE = 'none';
     } catch (err) {
       return null;
     }
+  }
+
+  async function dosInstallFake(file) {
+    return { text: "// blank file", serverTs: "20260312030303"};
   }
 
   // Save a file to localStorage with a specific timestamp (used to preserve server timestamps).
@@ -1686,21 +1692,21 @@ var DEVICE = 'none';
       }
     }
 
-    if (!isHttpProtocol()) {
-      if (isFileProtocol()) {
-        print("\nCannot install from file://\n");
-        print("Use DOS to copy .js files to\n");
-        print("localStorage.\n\n");
-      }
-      return false;
-    }
+    //if (!isHttpProtocol()) {                     // <-------------- re-enable when done testing
+    //  if (isFileProtocol()) {
+    //    print("\nCannot install from file://\n");
+    //    print("Use DOS to copy .js files to\n");
+    //    print("localStorage.\n\n");
+    //  }
+    //  return false;
+    //}
 
     var files = ['ansi.js', 'ascii.js', 'keydown.js', 'piano.js', 'svga.js'];
 
     // Fetch all files from the server and collect their timestamps
     var fileData = [];
     for (var i = 0; i < files.length; i++) {
-      var result = await dosInstallFetch(files[i]);
+      var result = await dosInstallFake(files[i]);  // <------------ fake function for testing
       if (!result || !result.serverTs) continue;
       fileData.push({
         file: files[i],

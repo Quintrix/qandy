@@ -526,7 +526,7 @@ function video_js() {
   };
 
   // no pokeRefresh needed with DOM engine
-  function domPokeRefresh(/* x, y, n */) { return true; }
+  window.pokeRefresh = function(/* x, y, n */) { return true; }
 
   window.ANSI = {
     colors: {
@@ -980,8 +980,14 @@ function video_js() {
     return (txt === EMPTY_CELL || txt === '') ? ' ' : txt;
   }
 
+  window.peekChar = function(x, y) { return validateCoords(x, y) ? VIDEO[y][x] : undefined; };
+  window.peekFG = function(x, y) { } 
+  window.peekBG = function(x, y) { }
   window.peekAttr = function(x,y) { return (ATTR && ATTR[y]) ? ATTR[y][x] : undefined; };
-  window.peekChar = function(x, y) { return validateCoords(x, y) ? VIDEO[y][x] : undefined; };  
+  window.peekBold = function(x, y) { }
+  window.peekItalic = function(x, y) { }
+  window.peekBlink = function(x, y) { }
+  window.peekLine = function(x, y) { }  // as in underline
   window.peekInverse = function(x, y) {
     if (typeof x !== 'number' || typeof y !== 'number') return undefined;
     if (!validateCoords(x, y)) return undefined;
