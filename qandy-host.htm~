@@ -577,7 +577,6 @@ var altShiftKeys = {
   "z":"└", "x":"┴", "c":"┘", "v":"☺", "b":"╚", "n":"╩", "m":"╝", ";":"☻",
   " ":" ", ",":"▓", ".":"▒", "/":"░"
 };
-
 var keyboardData = [
   // Row 0: ESC, BACKTICK, BACKSLASH, OPEN, CLOSE, DASH, EQUAL, BACK (y=446)
   {id:"esc", label:"ESC", keyCode:27, x:47, y:446, width:52},
