@@ -195,11 +195,11 @@ body { margin: 0; background-color: #333; }
       max-width: 24px; max-height: 24px; margin: 0; padding: 4; 
       display: flex; justify-content: center;  align-items: center;       
 	      color: white; background-color: #222; text-align: center;
-      font-family: Arial; font-size: 14px; weight: bold;
+      font-family: Arial; font-size: 13px; weight: bold;
       cursor: pointer; z-index: 99; 
       border: 1px solid #555; border-radius: 3px;
       user-select: none; font-weight: bold; }
-      
+
 .k2 { position: absolute; top: 0px; left: 0px; width: 52px; height: 30px;
       padding-left: 0px; padding-right: 0px; align-items: center;
       max-width: 52px; max-height: 24px; margin: 0; padding: 4;        
@@ -224,7 +224,13 @@ body { margin: 0; background-color: #333; }
 .k4:hover { background-color: #aaa; }
 .k4:active { background-color: #666; }
 
+
+
 /* New key classes for full keyboard */
+
+.k-arrow { font-family: Arial; font-size: 24px; weight: bold; }
+.k-cursor { font-family: Arial; font-size: 10px; weight: bold; }
+
 .k-ctrl { position: absolute; top: 0px; left: 0px; width: 40px; height: 30px;
       padding-left: 0px; padding-right: 0px; align-items: center;
       max-width: 40px; max-height: 30px; margin: 0; padding: 4px;        
@@ -567,10 +573,10 @@ var shiftedKeys = {
 };
 
 var altKeys = {
-           "`":"↑", "[":"↓", "]":"→", "\\":"←","-":"↕", "=":"↨",
+           "`":"¶", "[":"§", "]":"¼", "\\":"½","-":"*", "=":"/",
   "1":"1", "2":"2", "3":"3", "4":"4", "5":"5", "6":"6", "7":"7", "8":"8", "9":"9", "0":"0",
-  "q":"Hm","w":"U", "e":"Ed","r":"Pu","t":"•", "y":"◘", "u":"4", "i":"5", "o":"6", "p":"¶",
-  "a":"L", "s":"D", "d":"R", "f":"Pd","g":"○", "h":"◙", "j":"1", "k":"2", "l":"3", "'":"§",
+  "q":"Hm","w":"↑", "e":"Ed","r":"Pu","t":"•", "y":"◘", "u":"4", "i":"5", "o":"6", "p":"-",
+  "a":"←", "s":"↓", "d":"→", "f":"Pd","g":"○", "h":"◙", "j":"1", "k":"2", "l":"3", "'":"+",
   "z":"♪", "x":"♫", "c":"♀", "v":"♂", "b":"¿", "n":"‼", "m":".", ";":"0",
                                        " ":" ", ",":"«", ".":"»", "/":"☼"
 };

@@ -65,8 +65,6 @@ RUN="ascii2.js";
   }
 
   window._ascii_rendered = true;
-
-  print("\n");  
-  renderAscii(0, 255, 8, { showSpaceSymbol: false });
+  renderAscii(32, 126, 8, { showSpaceSymbol: false });
 
 dosExit();
