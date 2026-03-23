@@ -4236,8 +4236,8 @@ window.press=function(event) {
   if (HOST) { kid="host-"; } else { kid="guest-"; }
 
   var altActive = !!(alt || altPhysical || altVirtual);
-  // Only convert if ALT is pressed WITHOUT SHIFT or CAPS
-  if (altActive && !shift && !caps) {
+  // Only convert if ALT is pressed WITHOUT SHIFT
+  if (altActive && !shift) {
     // WASD → Arrow keys
     if (k === 87) { k = 38; }  // ALT-W → Up (38)
     if (k === 65) { k = 37; }  // ALT-A → Left (37)
