@@ -3849,21 +3849,6 @@ window.button=function(b, event) {
   if (!k && keyMap[b]) { l = shift ? keyMap[b][1] : keyMap[b][0]; k = l; }
   if (!k && b < 32) { pokeCursorOn(); return; }
 
-  if (k === "ctrl") {
-    ctrlVirtual = !ctrlVirtual;
-    ctrl = ctrlVirtual ? 1 : 0;
-    var el = document.getElementById(kid+"ctrl");  // Also add kid prefix
-    if (el) { el.style.backgroundColor = ctrlVirtual ? modifierFlagBgColor : modifierFlagBgColorOff; el.style.color = ctrlVirtual ? modifierFlagFgColor : modifierFlagFgColorOff; }
-    updateKeyLabels(); 
-    pokeCursorOn(); return;
-  }  if (k === "alt") {
-    altVirtual = !altVirtual;
-    alt = altVirtual ? 1 : 0;
-    var el2 = document.getElementById("alt");
-    if (el2) { el2.style.backgroundColor = altVirtual ? modifierFlagBgColor : modifierFlagBgColorOff; el2.style.color = altVirtual ? modifierFlagFgColor : modifierFlagFgColorOff; }
-    updateKeyLabels();
-    pokeCursorOn(); return;
-  }
   if (k === "caps") {
     caps = !caps;
     var capsEl = document.getElementById("kcaps") || document.getElementById("caps");
@@ -4307,7 +4292,13 @@ window.press=function(event) {
     } 
     return;
    }
-   // Virtual CTRL: fall through to button() for toggle handling 
+   // Virtual CTRL: toggle lock and return early
+   ctrlVirtual = !ctrlVirtual;
+   ctrl = ctrlVirtual ? 1 : 0;
+   var elCtrl = document.getElementById(kid+"ctrl");
+   if (elCtrl) { elCtrl.style.backgroundColor = ctrlVirtual ? modifierFlagBgColor : modifierFlagBgColorOff; elCtrl.style.color = ctrlVirtual ? modifierFlagFgColor : modifierFlagFgColorOff; }
+   if (typeof updateKeyLabels === 'function') updateKeyLabels();
+   return;
   }
   if (event.keyCode === 18) {
    if (event.source !== 'virtual') {
@@ -4321,14 +4312,20 @@ window.press=function(event) {
     }
     return; // Physical ALT: don't call button()
    }
-   // Virtual ALT: fall through to button() for toggle handling
+   // Virtual ALT: toggle lock and return early
+   altVirtual = !altVirtual;
+   alt = altVirtual ? 1 : 0;
+   var elAlt = document.getElementById(kid+"alt");
+   if (elAlt) { elAlt.style.backgroundColor = altVirtual ? modifierFlagBgColor : modifierFlagBgColorOff; elAlt.style.color = altVirtual ? modifierFlagFgColor : modifierFlagFgColorOff; }
+   if (typeof updateKeyLabels === 'function') updateKeyLabels();
+   return;
   }
 
   // For Ctrl+key combos, pass specific ones through to button() (Ctrl+C, Ctrl+A, Ctrl+V)
-  if ((event.ctrlKey || ctrl)) {
+  if ((event.ctrlKey || ctrl) && event.source !== 'virtual') {
     var ctrlKey = event.key ? event.key.toLowerCase() : '';
     if (ctrlKey === 'c' || ctrlKey === 'a' || ctrlKey === 'v') {
-      if (event.source !== 'virtual') { event.preventDefault(); }
+      if (event.preventDefault && typeof event.preventDefault === 'function') { event.preventDefault(); }
       highlightKey(k);
       button(k, event); 
     }
@@ -4338,6 +4335,8 @@ window.press=function(event) {
   if (typeof RUN !== 'undefined' && RUN !== "qandy.js" && typeof keydown === 'function') {
     if (!event.key) { try { event.key = String.fromCharCode(event.keyCode || 0); } catch (e) { event.key = ""; } }
     event.source = event.source || 'physical';
+    event.ctrlKey = !!(event.ctrlKey || ctrl);
+    event.altKey  = !!(event.altKey  || alt);
     if (keyboard==true) {
       window.button(event.keyCode, event);
     } else {
@@ -4350,12 +4349,18 @@ window.press=function(event) {
       }
       //event.preventDefault && event.preventDefault();
       //event.stopPropagation && event.stopPropagation();
+      // Auto-clear virtual modifier locks after key delivery (one-shot behavior)
+      if (ctrlVirtual) { ctrlVirtual = false; ctrl = ctrlPhysical ? 1 : 0; var elCk=document.getElementById(kid+"ctrl"); if (elCk) { elCk.style.backgroundColor = ctrl ? modifierFlagBgColorPhysical : modifierFlagBgColorOff; elCk.style.color = ctrl ? modifierFlagFgColor : modifierFlagFgColorOff; } }
+      if (altVirtual) { altVirtual = false; alt = altPhysical ? 1 : 0; var elAk=document.getElementById(kid+"alt"); if (elAk) { elAk.style.backgroundColor = alt ? modifierFlagBgColor : modifierFlagBgColorOff; elAk.style.color = alt ? modifierFlagFgColor : modifierFlagFgColorOff; } if (typeof updateKeyLabels === 'function') updateKeyLabels(); }
       return;
     }
   }
   // Default host behavior: highlight and send to emulator button()
   highlightKey(k);
   button(k, event);
+  // Auto-clear virtual modifier locks after key delivery (one-shot behavior)
+  if (ctrlVirtual) { ctrlVirtual = false; ctrl = ctrlPhysical ? 1 : 0; var elCb=document.getElementById(kid+"ctrl"); if (elCb) { elCb.style.backgroundColor = ctrl ? modifierFlagBgColorPhysical : modifierFlagBgColorOff; elCb.style.color = ctrl ? modifierFlagFgColor : modifierFlagFgColorOff; } }
+  if (altVirtual) { altVirtual = false; alt = altPhysical ? 1 : 0; var elAb=document.getElementById(kid+"alt"); if (elAb) { elAb.style.backgroundColor = alt ? modifierFlagBgColor : modifierFlagBgColorOff; elAb.style.color = alt ? modifierFlagFgColor : modifierFlagFgColorOff; } if (typeof updateKeyLabels === 'function') updateKeyLabels(); }
 }
 
 window.pressup=function(event) {
