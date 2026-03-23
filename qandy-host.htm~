@@ -3090,9 +3090,7 @@ function command_js() {
     cmd=String(cmd || '').trim();
     switch (cmd) {
       case 'cls':
-        SYNC=1; pokeCursorOff();
-        pokeText(0,0," ",800); pokeColor(0,0,CURFG, CURBG, 800); pokeAttr(0,0,0, 800);
-        SYNC=1; pokeRefresh(); CURX=0; CURY=0; LINEX=0; LINEY=0; pokeCursorOn(); return;
+        cls(); return;
       case 'whoami':
         var context = HOST ? "HOST (sysop access)" : "GUEST (user sandbox)";
         print("\n"+context+"\n"); print("URL:"+window.location.href+"\n");
@@ -4540,11 +4538,11 @@ window.dosExit=function() {
 function clearScreen() { cls(); }
 
 window.cls=function() {
-  SYNC=1; pokeCursorOff();
+  pokeCursorOff();
   pokeText(0,0," ",800); pokeColor(0,0,CURFG, CURBG, 800); pokeAttr(0,0,0, 800);
   CURX=0; CURY=0; LINEX=0; LINEY=0;
-  SYNC=1; pokeRefresh;
   pokeCursorOn();
+  alert("cls()");
 }
 
 // public print(...) replacement
