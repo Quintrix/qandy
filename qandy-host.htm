@@ -2744,7 +2744,7 @@ function updateKeyLabels() {
     var label = base;
 
     if (window.altActive) {
-      if (window.shiftActive && typeof altShiftKeys === 'object' && altShiftKeys.hasOwnProperty(lookup)) {
+      if ((window.shiftActive || window.capsActive) && typeof altShiftKeys === 'object' && altShiftKeys.hasOwnProperty(lookup)) {
         label = altShiftKeys[lookup];
       } else if (typeof altKeys === 'object' && altKeys.hasOwnProperty(lookup)) {
         label = altKeys[lookup];
@@ -3851,11 +3851,11 @@ window.button=function(b, event) {
   if (k === "ctrl") {
     ctrlVirtual = !ctrlVirtual;
     ctrl = ctrlVirtual ? 1 : 0;
-    var el = document.getElementById("ctrl");
+    var el = document.getElementById(kid+"ctrl");  // Also add kid prefix
     if (el) { el.style.backgroundColor = ctrlVirtual ? modifierFlagBgColor : modifierFlagBgColorOff; el.style.color = ctrlVirtual ? modifierFlagFgColor : modifierFlagFgColorOff; }
+    updateKeyLabels(); 
     pokeCursorOn(); return;
-  }
-  if (k === "alt") {
+  }  if (k === "alt") {
     altVirtual = !altVirtual;
     alt = altVirtual ? 1 : 0;
     var el2 = document.getElementById("alt");
@@ -4089,7 +4089,7 @@ window.button=function(b, event) {
     var finalChar = l;
     var hasAltFlag = !!((typeof alt !== 'undefined' && alt) || (typeof altPhysical !== 'undefined' && altPhysical) || (event && !!event.altKey));
     var hasCtrlFlag = !!((typeof ctrl !== 'undefined' && ctrl) || (typeof ctrlPhysical !== 'undefined' && ctrlPhysical) || (event && !!event.ctrlKey));
-    var hasAltShift = hasAltFlag && !!shift;
+    var hasAltShift = hasAltFlag && (!!shift || !!caps);
 
     if (hasAltFlag) {
       var baseLower = (typeof l === 'string' && l.length > 0) ? l.toLowerCase() : '';
@@ -4101,8 +4101,10 @@ window.button=function(b, event) {
     }
     if (hasCtrlFlag) {
       // Handle ctrl shortcuts
-      ctrl = 0;
-      ctrlVirtual = false;
+      if (ctrlPhysical) {
+        ctrl = 0;
+        ctrlPhysical = false;
+      }
       var cel = document.getElementById("ctrl");
       if (cel) { cel.style.backgroundColor = modifierFlagBgColorOff; cel.style.color = modifierFlagFgColorOff; }
       var lc = finalChar.toLowerCase();
@@ -4115,9 +4117,7 @@ window.button=function(b, event) {
         } else {
           copyText = LINE;
         }
-        if (copyText.length > 0) {
-          navigator.clipboard.writeText(copyText).catch(function(){});
-        }
+        if (copyText.length > 0) { navigator.clipboard.writeText(copyText).catch(function(){}); }
         pokeCursorOn();
         return;
       }
@@ -4241,7 +4241,7 @@ window.press=function(event) {
       event.preventDefault && event.preventDefault();
       highlightKey(k);
       resolve(char);
-      return;
+      return;CTR
     }
   }
 
@@ -4295,11 +4295,11 @@ window.press=function(event) {
     return;
   }
 
-  if (event.ctrlKey && (event.key === 'v' || event.key === 'V')) {
+  if ((event.ctrlKey || ctrl) && (event.key === 'v' || event.key === 'V')) {
     // Let the browser fire the native paste event (handled by the paste listener)
     return;
   }
-
+  
   if (event.keyCode === 27) { event.preventDefault(); }
   if (event.keyCode === 16) {
     var capsBtn = document.getElementById(kid+"caps");
@@ -4333,11 +4333,11 @@ window.press=function(event) {
   }
 
   // For Ctrl+key combos, pass specific ones through to button() (Ctrl+C, Ctrl+A)
-  // Ctrl+V is handled via the native paste event listener instead
-  if (event.ctrlKey && event.source !== 'virtual') {
+  // For Ctrl+key combos, pass specific ones through to button() (Ctrl+C, Ctrl+A, Ctrl+V)
+  if ((event.ctrlKey || ctrl)) {
     var ctrlKey = event.key ? event.key.toLowerCase() : '';
-    if (ctrlKey === 'c' || ctrlKey === 'a') {
-      event.preventDefault();
+    if (ctrlKey === 'c' || ctrlKey === 'a' || ctrlKey === 'v') {
+      if (event.source !== 'virtual') { event.preventDefault(); }
       highlightKey(k);
       button(k, event); 
     } else if (ctrl && !ctrlPhysical) {

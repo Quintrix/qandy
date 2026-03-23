@@ -42,12 +42,5 @@ draw.js  - ansi draw progran (need cursor keys and/or mouse)
 15	☼	Sun				31	▼	Down Pointer
 
 
-            ½ ¼ 
- 
-
-
-
-
-
 
 
