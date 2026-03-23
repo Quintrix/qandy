@@ -2712,7 +2712,7 @@ function keyboard_js() {
     btn.onclick = function() {
       var keyData = {keyCode: key.keyCode, key: String.fromCharCode(key.keyCode), shiftKey: !!shift, ctrlKey: !!ctrl, altKey: !!alt, source: 'virtual', originalEvent: null};
       press(keyData);
-      setTimeout(function() { press('keyup', keyData); }, 50);
+      setTimeout(function() { pressup(keyData); }, 50); 
     };
 
     // Append into the selected container (defensive: ensure it exists)
@@ -3741,6 +3741,7 @@ window.qandy_js=function() {
 RUN="qandy.js"; 
 
 window.button=function(b, event) {
+  console.log("button("+b+")");
   pokeCursorOff(); 
   var virtualclick=!!(event && event.source === 'virtual'); 
   if (event && typeof event.shiftKey !== 'undefined') shift = !!event.shiftKey;
@@ -4101,10 +4102,7 @@ window.button=function(b, event) {
     }
     if (hasCtrlFlag) {
       // Handle ctrl shortcuts
-      if (ctrlPhysical) {
-        ctrl = 0;
-        ctrlPhysical = false;
-      }
+      // if (ctrlPhysical) { ctrl = 0; ctrlPhysical = false; }
       var cel = document.getElementById("ctrl");
       if (cel) { cel.style.backgroundColor = modifierFlagBgColorOff; cel.style.color = modifierFlagFgColorOff; }
       var lc = finalChar.toLowerCase();
@@ -4241,7 +4239,7 @@ window.press=function(event) {
       event.preventDefault && event.preventDefault();
       highlightKey(k);
       resolve(char);
-      return;CTR
+      return;
     }
   }
 
@@ -4249,7 +4247,6 @@ window.press=function(event) {
   if (event.keyCode === 20) {
     // Determine the platform state if available
     var platformState = (typeof event.getModifierState === 'function') ? !!event.getModifierState('CapsLock') : null;
-
     // Compute the new desired caps state:
     // - If platformState is available, use it.
     // - But some browsers report the previous state on keydown; if platformState equals current caps,
@@ -4293,13 +4290,8 @@ window.press=function(event) {
     // Prevent default browser handling side-effects and stop further processing for this key event
     event.preventDefault && event.preventDefault();
     return;
-  }
+  } 
 
-  if ((event.ctrlKey || ctrl) && (event.key === 'v' || event.key === 'V')) {
-    // Let the browser fire the native paste event (handled by the paste listener)
-    return;
-  }
-  
   if (event.keyCode === 27) { event.preventDefault(); }
   if (event.keyCode === 16) {
     var capsBtn = document.getElementById(kid+"caps");
@@ -4312,10 +4304,10 @@ window.press=function(event) {
      ctrl=1; ctrlPhysical=true;
      document.getElementById(kid+"ctrl").style.backgroundColor = modifierFlagBgColorPhysical;
      document.getElementById(kid+"ctrl").style.color = modifierFlagFgColor;
-    }
+    } 
     return;
    }
-   // Virtual CTRL: fall through to button() for toggle handling
+   // Virtual CTRL: fall through to button() for toggle handling 
   }
   if (event.keyCode === 18) {
    if (event.source !== 'virtual') {
@@ -4332,7 +4324,6 @@ window.press=function(event) {
    // Virtual ALT: fall through to button() for toggle handling
   }
 
-  // For Ctrl+key combos, pass specific ones through to button() (Ctrl+C, Ctrl+A)
   // For Ctrl+key combos, pass specific ones through to button() (Ctrl+C, Ctrl+A, Ctrl+V)
   if ((event.ctrlKey || ctrl)) {
     var ctrlKey = event.key ? event.key.toLowerCase() : '';
@@ -4340,12 +4331,6 @@ window.press=function(event) {
       if (event.source !== 'virtual') { event.preventDefault(); }
       highlightKey(k);
       button(k, event); 
-    } else if (ctrl && !ctrlPhysical) {
-      // Virtual CTRL was active but no recognized combo: auto-reset it
-      ctrl = 0;
-      ctrlVirtual = false;
-      var cel = document.getElementById("ctrl");
-      if (cel) { cel.style.backgroundColor = modifierFlagBgColorOff; cel.style.color = modifierFlagFgColorOff; }
     }
     // All other ctrl combos: let browser handle
     return;
@@ -4377,7 +4362,7 @@ window.pressup=function(event) {
   // Prevent browser from handling ALT key - must be done before any conditionals
   if (HOST) { kid="host-"; } else { kid="guest-"; }
   if (event.keyCode === 18 || event.altKey) {
-    event.preventDefault(); // Prevent browser menu from opening
+    if (event.source !== 'virtual') { event.preventDefault(); }
   }
   // Handle physical CTRL key release (unhighlight)
   if (event.keyCode === 17 && ctrlPhysical) {
