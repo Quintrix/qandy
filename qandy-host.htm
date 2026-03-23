@@ -1900,7 +1900,7 @@ function video_js() {
       var span = cellGrid[row] && cellGrid[row][col];
       if (span) {
         var ch = span.textContent === EMPTY_CELL ? ' ' : span.textContent;
-        var currentAttr = (ATTR && ATTR[row] && ATTR[row][col]) ? ATTR[row][col] : 0;
+        var currentAttr = extractAttrFromDOM(span);
         pokeCell(col, row, ch, f, b, currentAttr);
       }
       offset++;
@@ -1971,8 +1971,9 @@ function video_js() {
       var span = cellGrid[row] && cellGrid[row][col];
       if (span) {
         var ch = span.textContent === EMPTY_CELL ? ' ' : span.textContent;
-        var currentBg = (ATTR && ATTR[row] && ATTR[row][col]) ? ATTR[row][col] : CURBG;
-        var currentAttr = (ATTR && ATTR[row] && ATTR[row][col]) ? ATTR[row][col] : 0;
+        var bgMatch = span.className.match(/ansi-bg-(\d+)/);
+        var currentBg = bgMatch ? parseInt(bgMatch[1], 10) : CURBG;
+        var currentAttr = extractAttrFromDOM(span);
         pokeCell(col, row, ch, fgCode, currentBg, currentAttr);
       }
       offset++;
@@ -2017,7 +2018,7 @@ function video_js() {
         var currentFg = 37; // fallback
         var match = span.className.match(/ansi-fg-(\d+)/);
         if (match) currentFg = parseInt(match[1], 10);
-        var currentAttr = (ATTR && ATTR[row] && ATTR[row][col]) ? ATTR[row][col] : 0;
+        var currentAttr = extractAttrFromDOM(span);
         pokeCell(col, row, ch, currentFg, bgCode, currentAttr);
       }
       offset++;
@@ -2047,10 +2048,7 @@ function video_js() {
       for (var i = 0; i < take; i++) {
         var span = cellGrid[cy] && cellGrid[cy][cx + i];
         if (span) {
-          // Update ATTR array
-          if (!ATTR[cy]) ATTR[cy] = new Uint16Array(cols);
-          ATTR[cy][cx + i] = attrValue;
-          // Rebuild class with new attr
+          // Rebuild class with new attr; no ATTR array to update
           var ch = span.textContent === EMPTY_CELL ? ' ' : span.textContent;
           var match_fg = span.className.match(/ansi-fg-(\d+)/);
           var match_bg = span.className.match(/ansi-bg-(\d+)/);
@@ -2556,48 +2554,44 @@ function video_js() {
   
   window.peekAttr = function(x, y) { 
     if (!validateCoords(x, y)) return undefined;
-    if (ATTR && ATTR[y] && typeof ATTR[y][x] !== 'undefined') return ATTR[y][x];
-    return 0;
+    var span = cellGrid[y] && cellGrid[y][x];
+    if (!span) return 0;
+    return extractAttrFromDOM(span);
   };
   
   window.peekBold = function(x, y) { 
     if (!validateCoords(x, y)) return undefined;
-    if (ATTR && ATTR[y] && typeof ATTR[y][x] !== 'undefined') {
-      return !!(ATTR[y][x] & (window.ATTR_BOLD || 0x0002));
-    }
-    return false;
+    var span = cellGrid[y] && cellGrid[y][x];
+    if (!span) return false;
+    return !!(extractAttrFromDOM(span) & (window.ATTR_BOLD || 0x0002));
   };
   
   window.peekItalic = function(x, y) { 
     if (!validateCoords(x, y)) return undefined;
-    if (ATTR && ATTR[y] && typeof ATTR[y][x] !== 'undefined') {
-      return !!(ATTR[y][x] & (window.ATTR_ITALIC || 0x0008));
-    }
-    return false;
+    var span = cellGrid[y] && cellGrid[y][x];
+    if (!span) return false;
+    return !!(extractAttrFromDOM(span) & (window.ATTR_ITALIC || 0x0008));
   };
   
   window.peekBlink = function(x, y) { 
     if (!validateCoords(x, y)) return undefined;
-    if (ATTR && ATTR[y] && typeof ATTR[y][x] !== 'undefined') {
-      return !!(ATTR[y][x] & (window.ATTR_BLINK || 0x0020));
-    }
-    return false;
+    var span = cellGrid[y] && cellGrid[y][x];
+    if (!span) return false;
+    return !!(extractAttrFromDOM(span) & (window.ATTR_BLINK || 0x0020));
   };
   
   window.peekLine = function(x, y) { 
     if (!validateCoords(x, y)) return undefined;
-    if (ATTR && ATTR[y] && typeof ATTR[y][x] !== 'undefined') {
-      return !!(ATTR[y][x] & (window.ATTR_UNDERLINE || 0x0010));
-    }
-    return false;
+    var span = cellGrid[y] && cellGrid[y][x];
+    if (!span) return false;
+    return !!(extractAttrFromDOM(span) & (window.ATTR_UNDERLINE || 0x0010));
   };
   
   window.peekInverse = function(x, y) {
     if (!validateCoords(x, y)) return undefined;
-    if (ATTR && ATTR[y] && typeof ATTR[y][x] !== 'undefined') {
-      return !!(ATTR[y][x] & (window.ATTR_INVERSE || 0x0001));
-    }
-    return false;
+    var span = cellGrid[y] && cellGrid[y][x];
+    if (!span) return false;
+    return !!(extractAttrFromDOM(span) & (window.ATTR_INVERSE || 0x0001));
   };
   
   // ──── video helpers ────────────────────────
