@@ -4359,8 +4359,8 @@ window.press=function(event) {
   highlightKey(k);
   button(k, event);
   // Auto-clear virtual modifier locks after key delivery (one-shot behavior)
-  // if (ctrlVirtual) { ctrlVirtual = false; ctrl = ctrlPhysical ? 1 : 0; var elCb=document.getElementById(kid+"ctrl"); if (elCb) { elCb.style.backgroundColor = ctrl ? modifierFlagBgColorPhysical : modifierFlagBgColorOff; elCb.style.color = ctrl ? modifierFlagFgColor : modifierFlagFgColorOff; } }
-  // if (altVirtual) { altVirtual = false; alt = altPhysical ? 1 : 0; var elAb=document.getElementById(kid+"alt"); if (elAb) { elAb.style.backgroundColor = alt ? modifierFlagBgColor : modifierFlagBgColorOff; elAb.style.color = alt ? modifierFlagFgColor : modifierFlagFgColorOff; } if (typeof updateKeyLabels === 'function') updateKeyLabels(); }
+  if (ctrlVirtual) { ctrlVirtual = false; ctrl = ctrlPhysical ? 1 : 0; var elCb=document.getElementById(kid+"ctrl"); if (elCb) { elCb.style.backgroundColor = ctrl ? modifierFlagBgColorPhysical : modifierFlagBgColorOff; elCb.style.color = ctrl ? modifierFlagFgColor : modifierFlagFgColorOff; } }
+  if (altVirtual) { altVirtual = false; alt = altPhysical ? 1 : 0; var elAb=document.getElementById(kid+"alt"); if (elAb) { elAb.style.backgroundColor = alt ? modifierFlagBgColor : modifierFlagBgColorOff; elAb.style.color = alt ? modifierFlagFgColor : modifierFlagFgColorOff; } if (typeof updateKeyLabels === 'function') updateKeyLabels(); }
 }
 
 window.pressup=function(event) {
