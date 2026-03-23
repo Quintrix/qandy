@@ -195,36 +195,42 @@ body { margin: 0; background-color: #333; }
       max-width: 24px; max-height: 24px; margin: 0; padding: 4; 
       display: flex; justify-content: center;  align-items: center;       
 	      color: white; background-color: #222; text-align: center;
-      font-family: Arial; font-size: 14px; weight: bold;
+      font-family: Arial; font-size: 13px; weight: bold;
       cursor: pointer; z-index: 99; 
       border: 1px solid #555; border-radius: 3px;
-      user-select: none; }
-.k1:hover { background-color: #444; }
-.k1:active { background-color: #666; }
+      user-select: none; font-weight: bold; }
+
 .k2 { position: absolute; top: 0px; left: 0px; width: 52px; height: 30px;
       padding-left: 0px; padding-right: 0px; align-items: center;
       max-width: 52px; max-height: 24px; margin: 0; padding: 4;        
       display: flex; justify-content: center;  align-items: center;      
       color: white; background-color: #222; text-align: center;
-      font-family: Arial; font-size: 12px; weight: bold; 
+      font-family: Arial; font-size: 11px; weight: normal; 
       cursor: pointer; z-index: 99; 
       border: 1px solid #555; border-radius: 3px;
-      user-select: none; }
+      user-select: none; font-weight: bold; }
 .k2:hover { background-color: #444; }
 .k2:active { background-color: #666; }
+
 .k4 { position: absolute; top: 0px; left: 0px; width: 109px; height: 30px;
       padding-left: 0px; padding-right: 0px; align-items: center;
       max-width: 109px; max-height: 24px; margin: 0; padding: 4;        
       display: flex; justify-content: center;  align-items: center;      
       color: white; background-color: #888; text-align: center;
-      font-family: Arial; font-size: 12px; weight: bold;
+      font-family: Arial; font-size: 11px; weight: bold;
       cursor: pointer; z-index: 99; 
       border: 1px solid #555; border-radius: 3px;
-      user-select: none; }
+      user-select: none; font-weight: bold; }
 .k4:hover { background-color: #aaa; }
 .k4:active { background-color: #666; }
 
+
+
 /* New key classes for full keyboard */
+
+.k-arrow { font-family: Arial; font-size: 24px; weight: bold; }
+.k-cursor { font-family: Arial; font-size: 10px; weight: bold; }
+
 .k-ctrl { position: absolute; top: 0px; left: 0px; width: 40px; height: 30px;
       padding-left: 0px; padding-right: 0px; align-items: center;
       max-width: 40px; max-height: 30px; margin: 0; padding: 4px;        
@@ -525,6 +531,12 @@ var altPhysical=false;   // track if alt was activated by physical keyboard
 var ctrlVirtual = false; // virtual ctrl key lock 
 var altVirtual = false;  // virtual alt key lock 
 
+var modifierFlagBgColor = '#fff';          // active modifier key background
+var modifierFlagFgColor = '#000';          // active modifier key foreground
+var modifierFlagBgColorOff = '#222';       // inactive modifier key background
+var modifierFlagFgColorOff = '#fff';       // inactive modifier key foreground
+var modifierFlagBgColorPhysical = '#bbb';  // physical-hold modifier key background
+
 var keyboard=1; // turn keyboard input on/off
 
 var LINE ="";  // input line
@@ -538,10 +550,12 @@ var SEND=-1;    // selection end
 var selectionBgColor = '#ffffff';   // old Selection background color
 var selectionFgColor = '#000000';   // old Selection text color
 
+//
 // keyboard.js
+//
 
 var normalKeys = {
-           "`":"`","\\":"\\","[":"[", "]":"]", "-":"-", "=":"=", 
+           "`":"`","[":"[", "]":"]", "\\":"\\","-":"-", "=":"=", 
   "1":"1", "2":"2", "3":"3", "4":"4", "5":"5", "6":"6", "7":"7", "8":"8", "9":"9", "0":"0",
   "q":"q", "w":"w", "e":"e", "r":"r", "t":"t", "y":"y", "u":"u", "i":"i", "o":"o", "p":"p",
   "a":"a", "s":"s", "d":"d", "f":"f", "g":"g", "h":"h", "j":"j", "k":"k", "l":"l", "'":"'",
@@ -559,29 +573,30 @@ var shiftedKeys = {
 };
 
 var altKeys = {
-           "`":"°","\\":"¦", "[":"«", "]":"»", "-":"─", "=":"═",
-  "1":"☺", "2":"☻", "3":"♥", "4":"♦", "5":"♣", "6":"♠", "7":"•", "8":"◘", "9":"○", "0":"◙",
-  "q":"┌", "w":"─", "e":"┐", "r":"├", "t":"┤", "y":"└", "u":"┴", "i":"┘", "o":"│", "p":"┼",
-  "a":"╔", "s":"═", "d":"╗", "f":"╠", "g":"╣", "h":"╚", "j":"╩", "k":"╝", "l":"║", "'":"″",
-  "z":"▀", "x":"▄", "c":"█", "v":"▌", "b":"▐", "n":"░", "m":"▒", ";":"╬",
-                    " ":"·",                   ",":"▓", ".":"■", "/":"□"
+           "`":"¶", "[":"§", "]":"¼", "\\":"½","-":"*", "=":"/",
+  "1":"1", "2":"2", "3":"3", "4":"4", "5":"5", "6":"6", "7":"7", "8":"8", "9":"9", "0":"0",
+  "q":"Hm","w":"↑", "e":"Ed","r":"Pu","t":"•", "y":"◘", "u":"4", "i":"5", "o":"6", "p":"-",
+  "a":"←", "s":"↓", "d":"→", "f":"Pd","g":"○", "h":"◙", "j":"1", "k":"2", "l":"3", "'":"+",
+  "z":"♪", "x":"♫", "c":"♀", "v":"♂", "b":"¿", "n":"‼", "m":".", ";":"0",
+                                       " ":" ", ",":"«", ".":"»", "/":"☼"
 };
 
 var altShiftKeys = {
-  "`":"¬","\\":"¦", "[":"‹", "]":"›", "-":"―", "=":"≡",
-  "1":"↑", "2":"↓", "3":"←", "4":"→", "5":"↔", "6":"↕", "7":"★", "8":"☆", "9":"◆", "0":"◇",
-  "q":"╭", "w":"╌", "e":"╮", "r":"╞", "t":"╡", "y":"╰", "u":"╴", "i":"╯", "o":"╎", "p":"╪",
-  "a":"┏", "s":"━", "d":"┓", "f":"┣", "g":"┫", "h":"┗", "j":"┻", "k":"┛", "l":"┃", "'":"′",
-  "z":"▔", "x":"▁", "c":"▪", "v":"▸", "b":"◂", "n":"▴", "m":"▾", ";":"╋",
-  " ":"·", ",":"◊", ".":"●", "/":"○"
+           "`":"█", "[":"▌", "]":"▄","\\":"▀", "-":"▐", "=":"▬",
+  "1":"▲", "2":"▼", "3":"◄", "4":"►", "5":"↑", "6":"↓", "7":"←", "8":"→", "9":"↔", "0":"↕ ",
+  "q":"┌", "w":"┬", "e":"┐", "r":"│", "t":"╔", "y":"╦", "u":"╗", "i":"║", "o":"♥", "p":"♣",
+  "a":"├", "s":"┼", "d":"┤", "f":"─", "g":"╠", "h":"╬", "j":"╣", "k":"═", "l":"♦", "'":"♠",
+  "z":"└", "x":"┴", "c":"┘", "v":"☺", "b":"╚", "n":"╩", "m":"╝", ";":"☻",
+  " ":" ", ",":"▓", ".":"▒", "/":"░"
 };
+
 var keyboardData = [
   // Row 0: ESC, BACKTICK, BACKSLASH, OPEN, CLOSE, DASH, EQUAL, BACK (y=446)
   {id:"esc", label:"ESC", keyCode:27, x:47, y:446, width:52},
   {id:"backtick", label:"`", keyCode:192, x:103, y:446, width:28},
-  {id:"backslash", label:"\\", keyCode:220, x:132, y:446, width:28},
-  {id:"open", label:"[", keyCode:219, x:160, y:446, width:28},
-  {id:"close", label:"]", keyCode:221, x:189, y:446, width:28},
+  {id:"open", label:"[", keyCode:219, x:132, y:446, width:28},
+  {id:"close", label:"]", keyCode:221, x:160, y:446, width:28},
+  {id:"backslash", label:"\\", keyCode:220, x:189, y:446, width:28},
   {id:"dash", label:"-", keyCode:173, x:218, y:446, width:28},
   {id:"equal", label:"=", keyCode:61, x:247, y:446, width:28},
   {id:"back", label:"BACK", keyCode:8, x:275, y:446, width:52},
@@ -2641,14 +2656,8 @@ function video_js() {
 //
 
 function keyboard_js() { 
-  window.keyson=function() {
-    //keyon=1;
-    //cursor(1);
-  }
-  window.keysoff=function() {
-    //keyon=0;
-    //cursor(0);
-  }
+  window.keyson=function() { }
+  window.keysoff=function() { }
  
   function _selectKeyboardContainer(prefer) {
     // prefer can be 'host' or 'guest' or undefined
@@ -2701,9 +2710,9 @@ function keyboard_js() {
     btn.style.left = key.x + 'px';
     btn.style.top = key.y + 'px';
     btn.onclick = function() {
-      var keyData = {keyCode: key.keyCode, key: String.fromCharCode(key.keyCode), shiftKey: !!shift, ctrlKey: !!ctrl, altKey: !!alt, source: 'virtual', originalEvent: null, preventDefault: function() {}};
+      var keyData = {keyCode: key.keyCode, key: String.fromCharCode(key.keyCode), shiftKey: !!shift, ctrlKey: !!ctrl, altKey: !!alt, source: 'virtual', originalEvent: null};
       press(keyData);
-      setTimeout(function() { pressup(keyData); }, 50);
+      setTimeout(function() { pressup(keyData); }, 50); 
     };
 
     // Append into the selected container (defensive: ensure it exists)
@@ -2735,7 +2744,7 @@ function updateKeyLabels() {
     var label = base;
 
     if (window.altActive) {
-      if (window.shiftActive && typeof altShiftKeys === 'object' && altShiftKeys.hasOwnProperty(lookup)) {
+      if ((window.shiftActive || window.capsActive) && typeof altShiftKeys === 'object' && altShiftKeys.hasOwnProperty(lookup)) {
         label = altShiftKeys[lookup];
       } else if (typeof altKeys === 'object' && altKeys.hasOwnProperty(lookup)) {
         label = altKeys[lookup];
@@ -2824,8 +2833,8 @@ function updateKeyLabels() {
       if (key.id === 'ctrl') {
         try {
           if (ctrlVirtual || ctrlPhysical) {
-            el.style.backgroundColor = '#fff';
-            el.style.color = '#000';
+            el.style.backgroundColor = modifierFlagBgColor;
+            el.style.color = modifierFlagFgColor;
           } else {
             el.style.backgroundColor = '';
             el.style.color = '';
@@ -2837,8 +2846,8 @@ function updateKeyLabels() {
       if (key.id === 'alt') {
         try {
           if (altVirtual || altPhysical) {
-            el.style.backgroundColor = '#fff';
-            el.style.color = '#000';
+            el.style.backgroundColor = modifierFlagBgColor;
+            el.style.color = modifierFlagFgColor;
           } else {
             el.style.backgroundColor = '';
             el.style.color = '';
@@ -2884,13 +2893,13 @@ window.updateKeyLabels = updateKeyLabels;
       return;
     }
     if (elementId === 'ctrl' && (ctrlVirtual || ctrlPhysical)) {
-      element.style.backgroundColor = '#fff';
-      element.style.color = '#000';
+      element.style.backgroundColor = modifierFlagBgColor;
+      element.style.color = modifierFlagFgColor;
       return;
     }
     if (elementId === 'alt' && (altVirtual || altPhysical)) {
-      element.style.backgroundColor = '#fff';
-      element.style.color = '#000';
+      element.style.backgroundColor = modifierFlagBgColor;
+      element.style.color = modifierFlagFgColor;
       return;
     }
     // Not locked -> clear inline styles
@@ -4065,7 +4074,7 @@ window.button=function(b, event) {
     var finalChar = l;
     var hasAltFlag = !!((typeof alt !== 'undefined' && alt) || (typeof altPhysical !== 'undefined' && altPhysical) || (event && !!event.altKey));
     var hasCtrlFlag = !!((typeof ctrl !== 'undefined' && ctrl) || (typeof ctrlPhysical !== 'undefined' && ctrlPhysical) || (event && !!event.ctrlKey));
-    var hasAltShift = hasAltFlag && !!shift;
+    var hasAltShift = hasAltFlag && (!!shift || !!caps);
 
     if (hasAltFlag) {
       var baseLower = (typeof l === 'string' && l.length > 0) ? l.toLowerCase() : '';
@@ -4077,10 +4086,9 @@ window.button=function(b, event) {
     }
     if (hasCtrlFlag) {
       // Handle ctrl shortcuts
-      ctrl = 0;
-      ctrlVirtual = false;
+      // if (ctrlPhysical) { ctrl = 0; ctrlPhysical = false; }
       var cel = document.getElementById("ctrl");
-      if (cel) { cel.style.backgroundColor = "#222"; cel.style.color = "#fff"; }
+      if (cel) { cel.style.backgroundColor = modifierFlagBgColorOff; cel.style.color = modifierFlagFgColorOff; }
       var lc = finalChar.toLowerCase();
       if (lc === 'c') {
         var copyText = "";
@@ -4091,9 +4099,7 @@ window.button=function(b, event) {
         } else {
           copyText = LINE;
         }
-        if (copyText.length > 0) {
-          navigator.clipboard.writeText(copyText).catch(function(){});
-        }
+        if (copyText.length > 0) { navigator.clipboard.writeText(copyText).catch(function(){}); }
         pokeCursorOn();
         return;
       }
@@ -4156,6 +4162,32 @@ document.addEventListener('keydown', function (event) {
 });
 
 document.addEventListener('keyup', function (event) { pressup(event); });
+
+// Reset modifier keys when window regains focus
+window.addEventListener('focus', function(e) {
+  // Reset physical modifier key states that may have been missed
+  alt = 0; altPhysical = false;
+  ctrl = 0; ctrlPhysical = false;
+  altVirtual = false;
+  ctrlVirtual = false;
+  // Update UI to reflect reset state
+  var kid = (typeof HOST !== 'undefined' && HOST) ? "host-" : "guest-";
+  var altBtn = document.getElementById(kid + "alt");
+  //if (altBtn) {
+  //  altBtn.style.backgroundColor = modifierFlagBgColorOff || "#222";
+  //  altBtn.style.color = modifierFlagFgColorOff || "#fff";
+  //}
+  //var ctrlBtn = document.getElementById(kid + "ctrl");
+  //if (ctrlBtn) {
+  //  ctrlBtn.style.backgroundColor = modifierFlagBgColorOff || "#222";
+  //  ctrlBtn.style.color = modifierFlagFgColorOff || "#fff";
+  //}
+  // Update keyboard labels if available
+  if (typeof updateKeyLabels === 'function') {
+    updateKeyLabels();
+  }
+});
+
 document.addEventListener('paste', function (event) {
  if (keyon) {
   event.preventDefault();
@@ -4203,6 +4235,21 @@ window.press=function(event) {
   key=""; k=event.keyCode; shift=event.shiftKey;
   if (HOST) { kid="host-"; } else { kid="guest-"; }
 
+  var altActive = !!(alt || altPhysical || altVirtual);
+  // Only convert if ALT is pressed WITHOUT SHIFT or CAPS
+  if (altActive && !shift && !caps) {
+    // WASD → Arrow keys
+    if (k === 87) { k = 38; }  // ALT-W → Up (38)
+    if (k === 65) { k = 37; }  // ALT-A → Left (37)
+    if (k === 83) { k = 40; }  // ALT-S → Down (40)
+    if (k === 68) { k = 39; }  // ALT-D → Right (39)
+    // QERF → Cursor keys
+    if (k === 81) { k = 36; }  // ALT-Q → Home (36)
+    if (k === 69) { k = 35; }  // ALT-E → End (35)
+    if (k === 82) { k = 33; }  // ALT-R → Page Up (33)
+    if (k === 70) { k = 34; }  // ALT-F → Page Down (34)
+  }
+
   if (_inkey_waiting && _inkey_resolve) {
     if (k === 16 || k === 17 || k === 18 || k === 20) return;
     // Don't process function keys (F1-F12: keyCode 112-123)
@@ -4221,11 +4268,12 @@ window.press=function(event) {
     }
   }
 
+  if (SOUND) { beep(900, 25, .01); }
+
   // Handle physical CapsLock keypress (keyCode 20)
   if (event.keyCode === 20) {
     // Determine the platform state if available
     var platformState = (typeof event.getModifierState === 'function') ? !!event.getModifierState('CapsLock') : null;
-
     // Compute the new desired caps state:
     // - If platformState is available, use it.
     // - But some browsers report the previous state on keydown; if platformState equals current caps,
@@ -4269,15 +4317,9 @@ window.press=function(event) {
     // Prevent default browser handling side-effects and stop further processing for this key event
     event.preventDefault && event.preventDefault();
     return;
-  }
+  } 
 
-  if (event.ctrlKey && (event.key === 'v' || event.key === 'V')) {
-    // Let the browser fire the native paste event (handled by the paste listener)
-    return;
-  }
-
-  if ((event.keyCode === 18 || event.altKey) && event.source !== 'virtual') { event.preventDefault(); }
-  if (event.keyCode === 27 && event.source !== 'virtual') { event.preventDefault(); }
+  if (event.keyCode === 27) { event.preventDefault(); }
   if (event.keyCode === 16) {
     var capsBtn = document.getElementById(kid+"caps");
     if (capsBtn) { capsBtn.style.backgroundColor = "#444"; capsBtn.style.color = "#fff"; }
@@ -4287,25 +4329,27 @@ window.press=function(event) {
    if (event.source !== 'virtual') {
     if (!ctrl) {
      ctrl=1; ctrlPhysical=true;
-     document.getElementById(kid+"ctrl").style.backgroundColor = "#ddd";
-     document.getElementById(kid+"ctrl").style.color = "#000";
-    }
+     document.getElementById(kid+"ctrl").style.backgroundColor = modifierFlagBgColorPhysical;
+     document.getElementById(kid+"ctrl").style.color = modifierFlagFgColor;
+    } 
     return;
    }
    // Virtual CTRL: toggle lock and return early
    ctrlVirtual = !ctrlVirtual;
    ctrl = ctrlVirtual ? 1 : 0;
    var elCtrl = document.getElementById(kid+"ctrl");
-   if (elCtrl) { elCtrl.style.backgroundColor = ctrlVirtual ? "#fff" : "#222"; elCtrl.style.color = ctrlVirtual ? "#000" : "#fff"; }
+   if (elCtrl) { elCtrl.style.backgroundColor = ctrlVirtual ? modifierFlagBgColor : modifierFlagBgColorOff; elCtrl.style.color = ctrlVirtual ? modifierFlagFgColor : modifierFlagFgColorOff; }
+   if (typeof updateKeyLabels === 'function') updateKeyLabels();
    return;
   }
   if (event.keyCode === 18) {
    if (event.source !== 'virtual') {
+    event.preventDefault();
     if (!alt) {
      highlightKey(k);
      alt = 1; altPhysical = true;
-     document.getElementById(kid+"alt").style.backgroundColor = "#fff";
-     document.getElementById(kid+"alt").style.color = "#000";
+     document.getElementById(kid+"alt").style.backgroundColor = modifierFlagBgColor;
+     document.getElementById(kid+"alt").style.color = modifierFlagFgColor;
      updateKeyLabels();
     }
     return; // Physical ALT: don't call button()
@@ -4314,17 +4358,16 @@ window.press=function(event) {
    altVirtual = !altVirtual;
    alt = altVirtual ? 1 : 0;
    var elAlt = document.getElementById(kid+"alt");
-   if (elAlt) { elAlt.style.backgroundColor = altVirtual ? "#fff" : "#222"; elAlt.style.color = altVirtual ? "#000" : "#fff"; }
+   if (elAlt) { elAlt.style.backgroundColor = altVirtual ? modifierFlagBgColor : modifierFlagBgColorOff; elAlt.style.color = altVirtual ? modifierFlagFgColor : modifierFlagFgColorOff; }
    if (typeof updateKeyLabels === 'function') updateKeyLabels();
    return;
   }
 
-  // For Ctrl+key combos, pass specific ones through to button() (Ctrl+C, Ctrl+A)
-  // Ctrl+V is handled via the native paste event listener instead
-  if (event.ctrlKey && event.source !== 'virtual') {
+  // For Ctrl+key combos, pass specific ones through to button() (Ctrl+C, Ctrl+A, Ctrl+V)
+  if ((event.ctrlKey || ctrl) && event.source !== 'virtual') {
     var ctrlKey = event.key ? event.key.toLowerCase() : '';
-    if (ctrlKey === 'c' || ctrlKey === 'a') {
-      event.preventDefault();
+    if (ctrlKey === 'c' || ctrlKey === 'a' || ctrlKey === 'v') {
+      if (event.preventDefault && typeof event.preventDefault === 'function') { event.preventDefault(); }
       highlightKey(k);
       button(k, event); 
     }
@@ -4349,8 +4392,8 @@ window.press=function(event) {
       //event.preventDefault && event.preventDefault();
       //event.stopPropagation && event.stopPropagation();
       // Auto-clear virtual modifier locks after key delivery (one-shot behavior)
-      if (ctrlVirtual) { ctrlVirtual = false; ctrl = ctrlPhysical ? 1 : 0; var elCk=document.getElementById(kid+"ctrl"); if (elCk) { elCk.style.backgroundColor = ctrl ? "#ddd" : "#222"; elCk.style.color = ctrl ? "#000" : "#fff"; } }
-      if (altVirtual) { altVirtual = false; alt = altPhysical ? 1 : 0; var elAk=document.getElementById(kid+"alt"); if (elAk) { elAk.style.backgroundColor = alt ? "#fff" : "#222"; elAk.style.color = alt ? "#000" : "#fff"; } if (typeof updateKeyLabels === 'function') updateKeyLabels(); }
+      if (ctrlVirtual) { ctrlVirtual = false; ctrl = ctrlPhysical ? 1 : 0; var elCk=document.getElementById(kid+"ctrl"); if (elCk) { elCk.style.backgroundColor = ctrl ? modifierFlagBgColorPhysical : modifierFlagBgColorOff; elCk.style.color = ctrl ? modifierFlagFgColor : modifierFlagFgColorOff; } }
+      if (altVirtual) { altVirtual = false; alt = altPhysical ? 1 : 0; var elAk=document.getElementById(kid+"alt"); if (elAk) { elAk.style.backgroundColor = alt ? modifierFlagBgColor : modifierFlagBgColorOff; elAk.style.color = alt ? modifierFlagFgColor : modifierFlagFgColorOff; } if (typeof updateKeyLabels === 'function') updateKeyLabels(); }
       return;
     }
   }
@@ -4358,24 +4401,22 @@ window.press=function(event) {
   highlightKey(k);
   button(k, event);
   // Auto-clear virtual modifier locks after key delivery (one-shot behavior)
-  if (ctrlVirtual) { ctrlVirtual = false; ctrl = ctrlPhysical ? 1 : 0; var elCb=document.getElementById(kid+"ctrl"); if (elCb) { elCb.style.backgroundColor = ctrl ? "#ddd" : "#222"; elCb.style.color = ctrl ? "#000" : "#fff"; } }
-  if (altVirtual) { altVirtual = false; alt = altPhysical ? 1 : 0; var elAb=document.getElementById(kid+"alt"); if (elAb) { elAb.style.backgroundColor = alt ? "#fff" : "#222"; elAb.style.color = alt ? "#000" : "#fff"; } if (typeof updateKeyLabels === 'function') updateKeyLabels(); }
+  // if (ctrlVirtual) { ctrlVirtual = false; ctrl = ctrlPhysical ? 1 : 0; var elCb=document.getElementById(kid+"ctrl"); if (elCb) { elCb.style.backgroundColor = ctrl ? modifierFlagBgColorPhysical : modifierFlagBgColorOff; elCb.style.color = ctrl ? modifierFlagFgColor : modifierFlagFgColorOff; } }
+  // if (altVirtual) { altVirtual = false; alt = altPhysical ? 1 : 0; var elAb=document.getElementById(kid+"alt"); if (elAb) { elAb.style.backgroundColor = alt ? modifierFlagBgColor : modifierFlagBgColorOff; elAb.style.color = alt ? modifierFlagFgColor : modifierFlagFgColorOff; } if (typeof updateKeyLabels === 'function') updateKeyLabels(); }
 }
 
 window.pressup=function(event) {
   // Prevent browser from handling ALT key - must be done before any conditionals
   if (HOST) { kid="host-"; } else { kid="guest-"; }
   if (event.keyCode === 18 || event.altKey) {
-    if (event.preventDefault && typeof event.preventDefault === 'function') {
-      event.preventDefault(); // Prevent browser menu from opening
-    }
+    if (event.source !== 'virtual') { event.preventDefault(); }
   }
   // Handle physical CTRL key release (unhighlight)
   if (event.keyCode === 17 && ctrlPhysical) {
     ctrl = 0;
     ctrlPhysical = false;
-    document.getElementById(kid+"ctrl").style.backgroundColor = "#222";
-    document.getElementById(kid+"ctrl").style.color = "#fff";
+    document.getElementById(kid+"ctrl").style.backgroundColor = modifierFlagBgColorOff;
+    document.getElementById(kid+"ctrl").style.color = modifierFlagFgColorOff;
     return;
   }
   // Handle physical SHIFT key release (unhighlight CAPS unless caps mode is active)
@@ -4389,8 +4430,8 @@ window.pressup=function(event) {
   if (event.keyCode === 18 && altPhysical) {
     alt = 0;
     altPhysical = false;
-    document.getElementById(kid+"alt").style.backgroundColor = "#fff";
-    document.getElementById(kid+"alt").style.color = "#000";
+    document.getElementById(kid+"alt").style.backgroundColor = modifierFlagBgColorOff;
+    document.getElementById(kid+"alt").style.color = modifierFlagFgColorOff;
     updateKeyLabels();
     return;
   }
