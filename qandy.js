@@ -89,22 +89,7 @@ function button(b, event) {
   // Ignore raw control codes (<32) that aren't already mapped
   if (!k && b < 32) { pokeCursorOn(); return; }
 
-  // Modifier key toggles (virtual keyboard)
-  if (k === "ctrl") {
-    ctrlVirtual = !ctrlVirtual;
-    ctrl = ctrlVirtual ? 1 : 0;
-    var el = document.getElementById("ctrl");
-    if (el) { el.style.backgroundColor = ctrlVirtual ? "#fff" : "#222"; el.style.color = ctrlVirtual ? "#000" : "#fff"; }
-    pokeCursorOn(); return;
-  }
-  if (k === "alt") {
-    altVirtual = !altVirtual;
-    alt = altVirtual ? 1 : 0;
-    var el2 = document.getElementById("alt");
-    if (el2) { el2.style.backgroundColor = altVirtual ? "#fff" : "#222"; el2.style.color = altVirtual ? "#000" : "#fff"; }
-    updateKeyLabels();
-    pokeCursorOn(); return;
-  }
+
   if (k === "caps") {
     caps = !caps;
     var capsEl = document.getElementById("kcaps") || document.getElementById("caps");
@@ -433,6 +418,11 @@ document.addEventListener('paste', function (event) {
  }
 });
 
+function clearVirtualModifiers() {
+  if (ctrlVirtual) { ctrlVirtual = false; ctrl = ctrlPhysical ? 1 : 0; var ce = document.getElementById("ctrl"); if (ce && !ctrlPhysical) { ce.style.backgroundColor = "#222"; ce.style.color = "#fff"; } }
+  if (altVirtual) { altVirtual = false; alt = altPhysical ? 1 : 0; var ae = document.getElementById("alt"); if (ae && !altPhysical) { ae.style.backgroundColor = "#222"; ae.style.color = "#fff"; } updateKeyLabels(); }
+}
+
 function press(event) { 
  key=""; k=event.keyCode; shift=event.shiftKey;
 
@@ -507,7 +497,12 @@ function press(event) {
    }
    return;
   }
-  // Virtual CTRL: fall through to button() for toggle handling
+  // Virtual CTRL: toggle lock and return early
+  ctrlVirtual = !ctrlVirtual;
+  ctrl = ctrlVirtual ? 1 : 0;
+  var ctrlEl = document.getElementById("ctrl");
+  if (ctrlEl) { ctrlEl.style.backgroundColor = ctrlVirtual ? "#fff" : "#222"; ctrlEl.style.color = ctrlVirtual ? "#000" : "#fff"; }
+  return;
  }
  if (event.keyCode === 18) {
   if (event.source !== 'virtual') {
@@ -520,9 +515,15 @@ function press(event) {
    }
    return; // Physical ALT: don't call button()
   }
-  // Virtual ALT: fall through to button() for toggle handling
+  // Virtual ALT: toggle lock and return early
+  altVirtual = !altVirtual;
+  alt = altVirtual ? 1 : 0;
+  var altEl = document.getElementById("alt");
+  if (altEl) { altEl.style.backgroundColor = altVirtual ? "#fff" : "#222"; altEl.style.color = altVirtual ? "#000" : "#fff"; }
+  updateKeyLabels();
+  return;
  }
- // For Ctrl+key combos, pass specific ones through to button() (Ctrl+C, Ctrl+A)
+  // For Ctrl+key combos, pass specific ones through to button() (Ctrl+C, Ctrl+A)
  // Ctrl+V is handled via the native paste event listener instead
  if (event.ctrlKey && event.source !== 'virtual') {
   var ctrlKey = event.key ? event.key.toLowerCase() : '';
@@ -530,18 +531,22 @@ function press(event) {
    event.preventDefault();
    highlightKey(k);
    button(k, event);
+   clearVirtualModifiers();
   }
   // All other ctrl combos: let browser handle
   return;
  }
  highlightKey(k);
  button(k, event);
+ clearVirtualModifiers();
 }
 
 function pressup(event) {
   // Prevent browser from handling ALT key - must be done before any conditionals
   if (event.keyCode === 18 || event.altKey) {
-    event.preventDefault(); // Prevent browser menu from opening
+    if (event.preventDefault && typeof event.preventDefault === 'function') {
+      event.preventDefault(); // Prevent browser menu from opening
+    }
   }
  
   // Handle physical CTRL key release (unhighlight)
