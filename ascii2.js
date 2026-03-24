@@ -11,9 +11,6 @@ function centerCharCell(ch, width) {
   return ' '.repeat(left) + ch + ' '.repeat(right);
 }
 
-/* Partial CP437 -> Unicode mapping for the glyphs you asked about.
-   Extend this map if you want more of the 128..255 range converted.
-   Values are Unicode characters (strings). */
 var CP437 = {
   // graphics that were historically shown in codes 1-31
   1: '\u263A',  2: '\u263B',  3: '\u2665',  4: '\u2666',  5: '\u2663',  6: '\u2660',

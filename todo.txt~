@@ -2,8 +2,7 @@
 
 
     clipboard device?
-    
-    move ctrl and alt to beside caps   
+   
     overhaul command_js
     add insert/delete to alt keyboard
     add total size and number of files to localDir())

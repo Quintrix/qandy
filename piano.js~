@@ -10,37 +10,10 @@ if (typeof beep === 'undefined' || typeof playNote === 'undefined') {
   var initializePiano;
 }
 
-// Piano keyboard mapping
-// Top row (black keys): W E  T Y U  (sharps/flats)
-// Bottom row (white keys): A S D F G H J K (natural notes C-C)
-
-var pianoKeyMap = {
-  // White keys (natural notes)
-  'a': 'C4', 's': 'D4', 'd': 'E4', 'f': 'F4', 'g': 'G4', 'h': 'A4', 'j': 'B4', 'k': 'C5',
-  // Black keys (sharps/flats)
-  'w': 'C#4', 'e': 'D#4', 't': 'F#4', 'y': 'G#4', 'u': 'A#4'
-};
-
-var pianoKeyLabels = {
-  'C4': 'A', 'C#4': 'W',
-  'D4': 'S', 'D#4': 'E',
-  'E4': 'D',
-  'F4': 'F', 'F#4': 'T',
-  'G4': 'G', 'G#4': 'Y',
-  'A4': 'H', 'A#4': 'U',
-  'B4': 'J',
-  'C5': 'K'
-};
-
-// Track which keys are currently pressed (for visual feedback)
-var pressedKeys = {};
-
-// Track the line number where we display the currently playing note
-var noteDisplayLine = 20; // Updated for compact layout
-
 function drawPiano() {
+  cls();
   pokeCursorOff();
-  print("[-black][cls]\n[bold][bgreen]  ╔══════════════════════════╗\n");
+  print("[-black]\n[bold][bgreen]  ╔══════════════════════════╗\n");
   print("  ║        [yellow]QANDY PIANO[bgreen]       ║\n");
   print("  ╚══════════════════════════╝\n\n");
   
@@ -50,77 +23,30 @@ function drawPiano() {
   keyBlk="[black][-white]▐[-black] [-white]▌[down][left][left][left][-white]▐[-black] [-white]▌[down][left][left][left][-white]▐[-black] [-white]▌";  
   
   pokeCursorOff();
-   print("[white][-black]");
-   print("\033[7;5H[-white]"+keyWht+"[-black]");
-   print("\033[7;8H[-white]"+keyWht+"[-black]");
-  print("\033[7;11H[-white]"+keyWht+"[-black]");
-  print("\033[7;14H[-white]"+keyWht+"[-black]");
-  print("\033[7;17H[-white]"+keyWht+"[-black]");
-  print("\033[7;20H[-white]"+keyWht+"[-black]");
-  print("\033[7;23H[-white]"+keyWht+"[-black]");
-  print("\033[7;26H[-white]"+keyWht+"[-black]");
-   print("\033[10;5H[-white]"+keyWht+"[-black]");
-   print("\033[10;8H[-white]"+keyWht+"[-black]");
-  print("\033[10;11H[-white]"+keyWht+"[-black]");
-  print("\033[10;14H[-white]"+keyWht+"[-black]");
-  print("\033[10;17H[-white]"+keyWht+"[-black]");
-  print("\033[10;20H[-white]"+keyWht+"[-black]");
-  print("\033[10;23H[-white]"+keyWht+"[-black]");
-  print("\033[10;26H[-white]"+keyWht+"[-black]");
-
-   print("\033[7;6H"+keyBlk+"");
-   print("\033[7;9H"+keyBlk+"");
-  print("\033[7;15H"+keyBlk+"");
-  print("\033[7;18H"+keyBlk+"");
-  print("\033[7;21H"+keyBlk+"");
-
-  print("\033[14;5H[-black][cyan]C  D  E  F   G  A  B  C\n\n");
-  
-}
-
-function keydown(keyCode, event) {
-  // keyCode: numeric event.keyCode from press()
-  // event: the original event object (optional)
-  if (typeof keyCode !== 'number') return false;
-
-  // Escape -> exit
-  if (keyCode === 27) {
-    dosExit();
-    return;
-  }
-
-  // Convert keyCode (e.g. 65) to character 'a'
-  var keyChar = String.fromCharCode(keyCode).toLowerCase();
-
-  // Look up the note for that piano key
-  var note = pianoKeyMap[keyChar];
-  if (!note) return false;
-
-  // Only play if key wasn't already pressed (prevents key repeat)
-  if (!pressedKeys[keyChar]) {
-    playNote(note, 300);
-    pressedKeys[keyChar] = note;
-    updateNowPlayingDisplay();
-  }
-
-  return true;
-}
-
-function keyup(keyCode, event) {
-  // Expect numeric keyCode from press()
-  if (typeof keyCode !== 'number') return false;
-
-  // Convert keyCode to lowercase character used by pianoKeyMap/pressedKeys
-  var keyChar = String.fromCharCode(keyCode).toLowerCase();
-
-  // If this key maps to a piano note and is currently marked pressed, release it
-  if (pianoKeyMap[keyChar] && pressedKeys[keyChar]) {
-    delete pressedKeys[keyChar];
-    updateNowPlayingDisplay();
-    return true;
-  }
-
-  return false;
+  print("[white][-black]");
+  // top half of white keys
+  print("\033[7;7H[-white]"+keyWht+"[-black]");
+  print("\033[7;10H[-white]"+keyWht+"[-black]");
+  print("\033[7;13H[-white]"+keyWht+"[-black]");
+  print("\033[7;16H[-white]"+keyWht+"[-black]");
+  print("\033[7;19H[-white]"+keyWht+"[-black]");
+  print("\033[7;22H[-white]"+keyWht+"[-black]");
+  print("\033[7;25H[-white]"+keyWht+"[-black]");
+  // bottom half of white keys
+  print("\033[10;7H[-white]"+keyWht+"[-black]");
+  print("\033[10;10H[-white]"+keyWht+"[-black]");
+  print("\033[10;13H[-white]"+keyWht+"[-black]");
+  print("\033[10;16H[-white]"+keyWht+"[-black]");
+  print("\033[10;19H[-white]"+keyWht+"[-black]");
+  print("\033[10;22H[-white]"+keyWht+"[-black]");
+  print("\033[10;25H[-white]"+keyWht+"[-black]");
+  // black keys
+  print("\033[7;8H"+keyBlk+"");
+  print("\033[7;11H"+keyBlk+"");
+  print("\033[7;17H"+keyBlk+"");
+  print("\033[7;20H"+keyBlk+"");
+  print("\033[7;23H"+keyBlk+"");
+  print("\033[14;7H[-black][cyan]C  D  E  F   G  A  B\n\n");
 }
 
 function updateNowPlayingDisplay() {
@@ -149,43 +75,159 @@ function updateNowPlayingDisplay() {
 }
 
 function keyHighlight(note) {
-  SYNC=0;
   switch (note) {
     case "C4":
-      pokeBG(4,6,33,2); pokeBG(4,7,33,2); pokeBG(4,8,33,2);
-      pokeBG(4,9,33,2); pokeBG(4,10,33,2); pokeBG(4,11,33,2);
+      pokeBG(6,6,103,2); pokeBG(6, 7,103,2); pokeBG(6, 8,103,2);
+      pokeBG(6,9,103,2); pokeBG(6,10,103,2); pokeBG(6,11,103,2);
       break;
     case "D4":
-      pokeBG(7,6,33,2); pokeBG(7,7,33,2); pokeBG(7,8,33,2);
-      pokeBG(7,9,33,2); pokeBG(7,10,33,2); pokeBG(7,11,33,2);
+      pokeBG(9,6,103,2); pokeBG(9, 7,103,2); pokeBG(9, 8,103,2);
+      pokeBG(9,9,103,2); pokeBG(9,10,103,2); pokeBG(9,11,103,2);
       break;
     case "E4":
-      pokeBG(10,6,33,2); pokeBG(10,7,33,2); pokeBG(10,8,33,2);
-      pokeBG(10,9,33,2); pokeBG(10,10,33,2); pokeBG(10,11,33,2);
+      pokeBG(12,6,103,2); pokeBG(12, 7,103,2); pokeBG(12, 8,103,2);
+      pokeBG(12,9,103,2); pokeBG(12,10,103,2); pokeBG(12,11,103,2);
       break;
     case "F4":
-      pokeBG(13,6,33,2); pokeBG(13,7,33,2); pokeBG(13,8,33,2);
-      pokeBG(13,9,33,2); pokeBG(13,10,33,2); pokeBG(13,11,33,2);
+      pokeBG(15,6,103,2); pokeBG(15, 7,103,2); pokeBG(15, 8,103,2);
+      pokeBG(15,9,103,2); pokeBG(15,10,103,2); pokeBG(15,11,103,2);
       break;
     case "G4":
-      pokeBG(16,6,33,2); pokeBG(16,7,33,2); pokeBG(16,8,33,2);
-      pokeBG(16,9,33,2); pokeBG(16,10,33,2); pokeBG(16,11,33,2);
+      pokeBG(18,6,103,2); pokeBG(18, 7,103,2); pokeBG(18, 8,103,2);
+      pokeBG(18,9,103,2); pokeBG(18,10,103,2); pokeBG(18,11,103,2);
       break;
     case "A4":
-      pokeBG(19,6,33,2); pokeBG(19,7,33,2); pokeBG(198,33,2);
-      pokeBG(19,9,33,2); pokeBG(19,10,33,2); pokeBG(19,11,33,2);
+      pokeBG(21,6,103,2); pokeBG(21, 7,103,2); pokeBG(21, 8,103,2);
+      pokeBG(21,9,103,2); pokeBG(21,10,103,2); pokeBG(21,11,103,2);
       break;
     case "B4":
-      pokeBG(22,6,33,2); pokeBG(22,7,33,2); pokeBG(22,8,33,2);
-      pokeBG(22,9,33,2); pokeBG(22,10,33,2); pokeBG(22,11,33,2);
+      pokeBG(24,6,103,2); pokeBG(24, 7,103,2); pokeBG(24, 8,103,2);
+      pokeBG(24,9,103,2); pokeBG(24,10,103,2); pokeBG(24,11,103,2);
       break;
-    case "C5":
-      pokeBG(25,6,33,2); pokeBG(25,7,33,2); pokeBG(25,8,33,2);
-      pokeBG(25,9,33,2); pokeBG(25,10,33,2); pokeBG(25,11,33,2);
+    case "C#4":
+      pokeFG(7,6,33,1); pokeBG(8,6,43,1); pokeFG(9,6,33,1);
+      pokeFG(7,7,33,1); pokeBG(8,7,43,1); pokeFG(9,7,33,1);
+      pokeFG(7,8,33,1); pokeBG(8,8,43,1); pokeFG(9,8,33,1); 
+      break;
+    case "D#4":
+      pokeFG(10,6,33,1); pokeBG(11,6,43,1); pokeFG(12,6,33,1);
+      pokeFG(10,7,33,1); pokeBG(11,7,43,1); pokeFG(12,7,33,1);
+      pokeFG(10,8,33,1); pokeBG(11,8,43,1); pokeFG(12,8,33,1);
+      break;
+    case "F#4":
+      pokeFG(16,6,33,1); pokeBG(17,6,43,1); pokeFG(18,6,33,1);
+      pokeFG(16,7,33,1); pokeBG(17,7,43,1); pokeFG(18,7,33,1);
+      pokeFG(16,8,33,1); pokeBG(17,8,43,1); pokeFG(18,8,33,1);
+      break;
+    case "G#4":
+      pokeFG(19,6,33,1); pokeBG(20,6,43,1); pokeFG(21,6,33,1);
+      pokeFG(19,7,33,1); pokeBG(20,7,43,1); pokeFG(21,7,33,1);
+      pokeFG(19,8,33,1); pokeBG(20,8,43,1); pokeFG(21,8,33,1);
       break;
   }
-  SYNC=1; pokeRefresh();
 }
+
+function keyRestore(note) {
+  switch (note) {
+    case "C4":
+      pokeBG(6,6,47,2); pokeBG(6, 7,47,2); pokeBG(6, 8,47,2);
+      pokeBG(6,9,47,2); pokeBG(6,10,47,2); pokeBG(6,11,47,2);
+      break;
+    case "D4":
+      pokeBG(9,6,47,2); pokeBG(9, 7,47,2); pokeBG(9, 8,47,2);
+      pokeBG(9,9,47,2); pokeBG(9,10,47,2); pokeBG(9,11,47,2);
+      break;
+    case "E4":
+      pokeBG(12,6,47,2); pokeBG(12, 7,47,2); pokeBG(12, 8,47,2);
+      pokeBG(12,9,47,2); pokeBG(12,10,47,2); pokeBG(12,11,47,2);
+      break;
+    case "F4":
+      pokeBG(15,6,47,2); pokeBG(15, 7,47,2); pokeBG(15, 8,47,2);
+      pokeBG(15,9,47,2); pokeBG(15,10,47,2); pokeBG(15,11,47,2);
+      break;
+    case "G4":
+      pokeBG(18,6,47,2); pokeBG(18, 7,47,2); pokeBG(18, 8,47,2);
+      pokeBG(18,9,47,2); pokeBG(18,10,47,2); pokeBG(18,11,47,2);
+      break;
+    case "A4":
+      pokeBG(21,6,47,2); pokeBG(21, 7,47,2); pokeBG(21, 8,47,2);
+      pokeBG(21,9,47,2); pokeBG(21,10,47,2); pokeBG(21,11,47,2);
+      break;
+    case "B4":
+      pokeBG(24,6,47,2); pokeBG(24, 7,47,2); pokeBG(24, 8,47,2);
+      pokeBG(24,9,47,2); pokeBG(24,10,47,2); pokeBG(24,11,47,2);
+      break;
+  }
+}
+
+
+var pianoKeyMap = {
+  // White keys (natural notes)
+  'a': 'C4', 's': 'D4', 'd': 'E4', 'f': 'F4', 'g': 'G4', 'h': 'A4', 'j': 'B4',
+  // Black keys (sharps/flats)
+  'w': 'C#4', 'e': 'D#4', 't': 'F#4', 'y': 'G#4', 'u': 'A#4'
+};
+
+var pianoKeyLabels = {
+  'C4': 'A', 'C#4': 'W',
+  'D4': 'S', 'D#4': 'E',
+  'E4': 'D',
+  'F4': 'F', 'F#4': 'T',
+  'G4': 'G', 'G#4': 'Y',
+  'A4': 'H', 'A#4': 'U',
+  'B4': 'J',
+  'C5': 'K'
+};
+
+// Track which keys are currently pressed (for visual feedback)
+var pressedKeys = {};
+
+// Track the line number where we display the currently playing note
+var noteDisplayLine = 20; // Updated for compact layout
+
+function keydown(keyCode, event) {
+  // keyCode: numeric event.keyCode from press()
+  // event: the original event object (optional)
+  if (typeof keyCode !== 'number') return false;
+
+  // Escape -> exit
+  if (keyCode === 27) { dosExit(); return; }
+
+  // Convert keyCode (e.g. 65) to character 'a'
+  var keyChar = String.fromCharCode(keyCode).toLowerCase();
+
+  // Look up the note for that piano key
+  var note = pianoKeyMap[keyChar];
+  if (!note) return false;
+
+  // Only play if key wasn't already pressed (prevents key repeat)
+  if (!pressedKeys[keyChar]) {
+    playNote(note, 300);
+    pressedKeys[keyChar] = note;
+    updateNowPlayingDisplay();
+  }
+
+  return true;
+}
+
+function keyup(keyCode, event) {
+  // Expect numeric keyCode from press()
+  if (typeof keyCode !== 'number') return false;
+
+  // Convert keyCode to lowercase character used by pianoKeyMap/pressedKeys
+  var keyChar = String.fromCharCode(keyCode).toLowerCase();
+
+  // If this key maps to a piano note and is currently marked pressed, release it
+  if (pianoKeyMap[keyChar] && pressedKeys[keyChar]) {
+    keyRestore(pianoKeyMap[keyChar]);
+    delete pressedKeys[keyChar];
+    updateNowPlayingDisplay();
+    return true;
+  }
+
+  return false;
+}
+
 
 // Example songs using the music API
 
