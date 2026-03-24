@@ -108,8 +108,8 @@ function updateStatusLine() {
   var lm = lengthModes[currentLengthMode];
   var col = octaveColor(currentOctave);
   var restStr = restMode ? "\x1b[1;31m[REST]\x1b[0m" : "      ";
-  print("\x1b[16;1H\x1b[K");
-  print(col + "O" + currentOctave + "\x1b[0m \x1b[1;37m" + lm.label + "\x1b[0m " + restStr);
+  //print("\x1b[16;1H\x1b[K");
+  //print(col + "O" + currentOctave + "\x1b[0m \x1b[1;37m" + lm.label + "\x1b[0m " + restStr);
   gotoGwbasicCursor();
 }
 
@@ -261,7 +261,7 @@ function keydown(keyCode, event) {
     print("\n");
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(finalCmd).then(function() {
-        print("\x1b[1;32mCopied!\x1b[0m\n\x1b[1;37m" + finalCmd + "\x1b[0m\n");
+        print("Copied!\n");
         setTimeout(function() { dosExit(); }, 1500);
       }).catch(function() {
         print("\x1b[1;33m" + finalCmd + "\x1b[0m\n");
@@ -349,16 +349,16 @@ function keyup(keyCode, event) {
 initializePiano = function() {
   drawPiano();
   // Set output position before first status draw so gotoGwbasicCursor() is valid
-  gwbasicRow = 18;
+  gwbasicRow = 16;
   gwbasicCol = 1;
   // Key hint row (row 15 is blank after drawPiano's \n\n from row 14)
-  print("\x1b[15;1H\x1b[2;37mCAP=O3 ^=O5 1-8=L SPC=P ESC=copy\x1b[0m");
+  //print("\x1b[15;1H\x1b[2;37mCAP=O3 ^=O5 1-8=L SPC=P ESC=copy\x1b[0m");
   // Status line at row 16
   updateStatusLine();
   // GWBASIC label at row 17
-  print("\x1b[17;1H\x1b[1;37mGWBASIC:\x1b[0m");
+  //print("\x1b[17;1H\x1b[1;37mGWBASIC:\x1b[0m");
   // Initial token at row 18
-  print("\x1b[18;1H\x1b[1;37mT120 \x1b[0m");
+  //print("\x1b[18;1H\x1b[1;37mT120 \x1b[0m");
   gwbasicCol = 6;  // 5 visible chars in "T120 " → cursor is now at col 6
 };
 

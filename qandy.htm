@@ -575,8 +575,8 @@ var shiftedKeys = {
 var altKeys = {
            "`":"¶", "[":"§", "]":"¼", "\\":"½","-":"*", "=":"/",
   "1":"1", "2":"2", "3":"3", "4":"4", "5":"5", "6":"6", "7":"7", "8":"8", "9":"9", "0":"0",
-  "q":"Hm","w":"↑", "e":"Ed","r":"Pu","t":"•", "y":"◘", "u":"4", "i":"5", "o":"6", "p":"-",
-  "a":"←", "s":"↓", "d":"→", "f":"Pd","g":"○", "h":"◙", "j":"1", "k":"2", "l":"3", "'":"+",
+  "q":"Hm","w":"⬆", "e":"Ed","r":"Pu","t":"•", "y":"◘", "u":"4", "i":"5", "o":"6", "p":"-",
+  "a":"⬅", "s":"⬇", "d":"➡", "f":"Pd","g":"○", "h":"◙", "j":"1", "k":"2", "l":"3", "'":"+",
   "z":"♪", "x":"♫", "c":"♀", "v":"♂", "b":"¿", "n":"‼", "m":".", ";":"0",
                                        " ":" ", ",":"«", ".":"»", "/":"☼"
 };
@@ -896,7 +896,6 @@ function powerOn() {
 init();
 
 function init() {
-  console.info("Initalizing HOST="+HOST);
   if (document.readyState === 'loading') {
     if (HOST==true) {
       LOG+="power on HOST\n";
@@ -946,6 +945,10 @@ async function qandyGuestHtm(options) {
       .replace(/<\/script>/gi, '<\\/script>');        // escape closing script sequences
   }
 }
+
+//
+// ──── Host Message Handler ──────────────────────────────────────────────────────────
+//
 
 async function hostMessageHandler(ev) {
   //if (!iframe.contentWindow || ev.source !== iframe.contentWindow) {
@@ -1179,7 +1182,6 @@ async function hostMessageHandler(ev) {
           // Defensive: ensure we pass a string to dosExists
           if (typeof validName !== 'string') validName = String(validName);
           // Optional debug to trace corrupted messages
-          try { console.debug('host: dosExists request', { id: d.id, raw: d.file, fname: fname, validated: validName }); } catch (e) {}
           if (typeof dosExists !== 'function') {
             dosXmitQdos(_dosIframe, d.id, 'dosExists', false, 'host: dosExists not implemented');
             break;
@@ -1320,7 +1322,6 @@ function dosXmitQdos(iframe, id, action, ok, resultOrError) {
 
 async function createGuest(options) {
   if (HOST==true) {
-    console.info("<host> createGuest() creating <guest>");
     var html = await qandyGuestHtm(options).catch(function (e) { console.info('Error: qandyGuestHtm ', e); return ''; });
     if (!html) throw new Error('Error: qandyGuestHtm null');
     var vmContainer = document.createElement('div');
@@ -1373,73 +1374,71 @@ async function createGuest(options) {
 }
 
 function user() {
-        if (GUEST) {
-          try {
-            var hostEl = document.getElementById('txt');
-            var hostKb = document.getElementById('host-keyboard');
-            var guestKb = document.getElementById('guest-keyboard');
-            var vm = document.getElementById('vm-container') || window._vmContainer || null;
-            var iframe = document.getElementById('vm-iframe') || window._vmIframe || null;
-            if (hostEl) { hostEl.style.display = 'none'; hostEl.style.visibility = 'hidden'; hostEl.style.pointerEvents = 'none'; }
-            if (hostKb) { hostKb.style.display = 'none'; hostKb.style.visibility = 'hidden'; hostKb.style.pointerEvents = 'none'; }
-            // Show guest container / iframe and bring it to front
-            if (vm) {
-              vm.style.display = 'block';
-              vm.style.visibility = 'visible';
-              vm.style.pointerEvents = 'auto';
-              // ensure vm is above host
-              try {
-                vm.style.position = vm.style.position || 'absolute';
-                vm.style.zIndex = String(Math.max(parseInt(vm.style.zIndex || 0, 10) || 100, 1000));
-              } catch (e) {}
-            }
-            if (iframe) {
-              iframe.style.display = 'block';
-              iframe.style.visibility = 'visible';
-              iframe.style.pointerEvents = 'auto';
-              try { iframe.style.zIndex = vm && vm.style && vm.style.zIndex ? String(parseInt(vm.style.zIndex,10) + 1) : '1001'; } catch (e) {}
-            }
-            if (guestKb) {
-              guestKb.style.display = 'block';
-              guestKb.style.visibility = 'visible';
-              guestKb.style.pointerEvents = 'auto';
-              try {
-                guestKb.style.position = guestKb.style.position || 'absolute';
-                // put guest keyboard above vm-container
-                var vmZ = vm && vm.style && vm.style.zIndex ? parseInt(vm.style.zIndex,10) : 1000;
-                guestKb.style.zIndex = String(Math.max(parseInt(guestKb.style.zIndex || 0,10) || (vmZ + 1), vmZ + 1));
-              } catch (e) {}
-            }
-            if (hostEl) { hostEl.style.pointerEvents = 'none'; }
-            if (hostKb) { hostKb.style.pointerEvents = 'none'; hostKb.style.visibility = 'hidden'; }
-            try {
-              if (iframe) {
-                iframe.setAttribute && iframe.setAttribute('tabindex', '0'); // make focusable
-                try { iframe.focus(); } catch (e) { console.warn('iframe.focus failed', e); }
-                try { if (iframe.contentWindow && typeof iframe.contentWindow.focus === 'function') iframe.contentWindow.focus(); } catch (e) { console.warn('iframe.contentWindow.focus failed', e); }
-                try { 
-                  var doc = iframe.contentDocument || (iframe.contentWindow && iframe.contentWindow.document);
-                  if (doc && doc.body && typeof doc.body.focus === 'function') doc.body.focus();
-                } catch (e) { /* cross-origin or not accessible; ignore */ }
-                setTimeout(function() {
-                  try { iframe.focus(); } catch (e) {}
-                  try { if (iframe.contentWindow && typeof iframe.contentWindow.focus === 'function') iframe.contentWindow.focus(); } catch (e) {}
-                }, 50);
-              }
-            } catch (errFocus) {
-              console.warn('focus restore attempted but failed', errFocus);
-            }
-            console.log('Attempted to focus guest iframe; activeElement is:', document.activeElement);
-          } catch (err) {
-            console.error('focusGuestIframe failed', err);
-          }
+  if (GUEST) {
+    try {
+      var hostEl = document.getElementById('txt');
+      var hostKb = document.getElementById('host-keyboard');
+      var guestKb = document.getElementById('guest-keyboard');
+      var vm = document.getElementById('vm-container') || window._vmContainer || null;
+      var iframe = document.getElementById('vm-iframe') || window._vmIframe || null;
+      if (hostEl) { hostEl.style.display = 'none'; hostEl.style.visibility = 'hidden'; hostEl.style.pointerEvents = 'none'; }
+      if (hostKb) { hostKb.style.display = 'none'; hostKb.style.visibility = 'hidden'; hostKb.style.pointerEvents = 'none'; }
+      // Show guest container / iframe and bring it to front
+      if (vm) {
+        vm.style.display = 'block';
+        vm.style.visibility = 'visible';
+        vm.style.pointerEvents = 'auto';
+        // ensure vm is above host
+        try {
+          vm.style.position = vm.style.position || 'absolute';
+          vm.style.zIndex = String(Math.max(parseInt(vm.style.zIndex || 0, 10) || 100, 1000));
+        } catch (e) {}
+      }
+      if (iframe) {
+        iframe.style.display = 'block';
+        iframe.style.visibility = 'visible';
+        iframe.style.pointerEvents = 'auto';
+        try { iframe.style.zIndex = vm && vm.style && vm.style.zIndex ? String(parseInt(vm.style.zIndex,10) + 1) : '1001'; } catch (e) {}
+      }
+      if (guestKb) {
+        guestKb.style.display = 'block';
+        guestKb.style.visibility = 'visible';
+        guestKb.style.pointerEvents = 'auto';
+        try {
+          guestKb.style.position = guestKb.style.position || 'absolute';
+          // put guest keyboard above vm-container
+          var vmZ = vm && vm.style && vm.style.zIndex ? parseInt(vm.style.zIndex,10) : 1000;
+          guestKb.style.zIndex = String(Math.max(parseInt(guestKb.style.zIndex || 0,10) || (vmZ + 1), vmZ + 1));
+        } catch (e) {}
+      }
+      if (hostEl) { hostEl.style.pointerEvents = 'none'; }
+      if (hostKb) { hostKb.style.pointerEvents = 'none'; hostKb.style.visibility = 'hidden'; }
+      try {
+        if (iframe) {
+          iframe.setAttribute && iframe.setAttribute('tabindex', '0'); // make focusable
+          try { iframe.focus(); } catch (e) { console.warn('iframe.focus failed', e); }
+          try { if (iframe.contentWindow && typeof iframe.contentWindow.focus === 'function') iframe.contentWindow.focus(); } catch (e) { console.warn('iframe.contentWindow.focus failed', e); }
+          try { 
+            var doc = iframe.contentDocument || (iframe.contentWindow && iframe.contentWindow.document);
+             if (doc && doc.body && typeof doc.body.focus === 'function') doc.body.focus();
+          } catch (e) { /* cross-origin or not accessible; ignore */ }
+          setTimeout(function() {
+            try { iframe.focus(); } catch (e) {}
+            try { if (iframe.contentWindow && typeof iframe.contentWindow.focus === 'function') iframe.contentWindow.focus(); } catch (e) {}
+          }, 50);
         }
+      } catch (errFocus) {
+        console.warn('focus restore attempted but failed', errFocus);
+      }
+      console.log('Attempted to focus guest iframe; activeElement is:', document.activeElement);
+    } catch (err) {
+      console.error('focusGuestIframe failed', err);
+    }
+  }
 }
 
 function sysop() { 
-  console.log('Guest requested to show host');
   if (isAudioUnlocked()===false) { sound_js(); }        
-  console.log('Guest requested to show host');
   // Hide guest VM and guest keyboard only; keep host UI visible
   try {
     // Ensure host text area is visible / interactive
@@ -1475,7 +1474,7 @@ function sysop() {
     }
     // Hide vm-container and/or iframe (guest VM)
     var vm = document.getElementById('vm-container') || window._vmContainer || null;
-    if (vm) {
+    if (vm) {play
       vm.style.display = 'none';
       vm.style.visibility = 'hidden';
       vm.style.pointerEvents = 'none';
@@ -1488,8 +1487,7 @@ function sysop() {
       iframe.style.pointerEvents = 'none';
       try { iframe.style.zIndex = '-1'; } catch (e) {}
     }
-    console.log('Host shown; guest hidden.');
-  } catch (err) {
+  } catch (err) {play
     console.error('showHostHideGuest failed', err);
   }
 }
@@ -1508,25 +1506,21 @@ async function startup() {
   // Determine guest status (support sync or async isGuest)
 
   if (HOST) {
-    console.info('HOST ready, assemebling GUEST');
     await createGuest({ hideHost: false });
     // Listen once for guest-ready to optionally hide host UI / focus guest
     function onHostMessage(ev) {
       var d = ev && ev.data;
       if (d && typeof d === 'object' && d.type === 'guest-ready') {
-        console.info('startup: guest reported ready (host may hide UI now)');
         try { if (window._vmIframe && window._vmIframe.contentWindow) window._vmIframe.contentWindow.focus(); } catch (e) {}
         window.removeEventListener('message', onHostMessage, false);
       }
     }
     window.addEventListener('message', onHostMessage, false);
-  } else {
-    console.info('startup: guest mode detected — skipping host assembly');
   }
 }
 
 //
-// sound.js 
+// ──── Qandy Sound Card ──────────────────────────────────────────────────────────────
 //
 
 window.sound_js=function() {
@@ -1558,9 +1552,9 @@ window.sound_js=function() {
     'C8': 4186.01, 'C#8': 4434.92, 'Db8': 4434.92, 'D8': 4698.63, 'D#8': 4978.03, 'Eb8': 4978.03,
     'E8': 5274.04, 'F8': 5587.65, 'F#8': 5919.91, 'Gb8': 5919.91, 'G8': 6271.93, 'G#8': 6644.88, 'Ab8': 6644.88,
     'A8': 7040.00, 'A#8': 7458.62, 'Bb8': 7458.62, 'B8': 7902.13
-   };
+  };
 
-   window.playNote = function(note, duration = 200) {
+  window.playNote = function(note, duration = 200) {
     // Convert note to uppercase and trim whitespace
     note = note.toString().trim().toUpperCase();
   
@@ -1581,123 +1575,121 @@ window.sound_js=function() {
       // Octaves: 0-8 (e.g., 'C4' is middle C, 'A4' is 440Hz)
       return false;
     }
-  
     // Use the existing beep function with the note's frequency
     return beep(frequency, duration);
-   }
-   currentTune = null;  // Currently playing tune (can be stopped)
-   var tuneTimeout = null;  // Timeout for next note
-   window.playTune = function(musicString, onComplete) {
-    stopTune();
-    window.notes = parseMusicString(musicString);
-    if (!notes || notes.length === 0) { return false; }
-    currentTune = { notes: notes, index: 0, onComplete: onComplete };
-    playNextNote();
-    return true;
-   }
-   window.parseMusicString = function(musicString) {
-    const notes = []; const tokens = musicString.trim().split(/\s+/);
-    for (let i = 0; i < tokens.length; i++) {
-      const token = tokens[i];
-      const parts = token.split(':');
-      const noteName = parts[0].trim().toUpperCase();
-      let duration = parts[1] ? parseInt(parts[1]) : 200;
-      if (isNaN(duration) || duration <= 0) { duration = 200; }
-      if (noteName === 'R' || noteName === 'REST') { notes.push({ type: 'rest', duration: duration }); } else { notes.push({ type: 'note', note: noteName, duration: duration });}
-    }
-    return notes;
-   }
-  window.playNextNote = function() {
-  if (!currentTune || currentTune.index >= currentTune.notes.length) {
-    const callback = currentTune ? currentTune.onComplete : null;
-    currentTune = null;
-    if (callback) { callback(); }
-    return;
   }
-  const noteInfo = currentTune.notes[currentTune.index];
-  currentTune.index++;
-  if (noteInfo.type === 'rest') {
-    tuneTimeout = setTimeout(playNextNote, noteInfo.duration);
-  } else {
-    playNote(noteInfo.note, noteInfo.duration);
-    tuneTimeout = setTimeout(playNextNote, noteInfo.duration);
-  }
- }
+  window._playbackState = {
+    isPlaying: false,
+    backgroundMode: false,
+    notes: [],
+    index: 0,
+    timeoutId: null,
+    promiseResolve: null
+  };
 
-window.stopTune = function() { if (tuneTimeout) { clearTimeout(tuneTimeout); tuneTimeout = null; } currentTune = null; }
-window.loopTune = function(musicString) { playTune(musicString, function() { loopTune(musicString); });}
-window.loopNotes = function(gwbasicString) { playNotes(gwbasicString, function() { loopNotes(gwbasicString); }); }
-window.playMelody = function(notesArray, onComplete) {
-  const musicString = notesArray.map(function(note) {
-    if (note[0] === 'R' || note[0] === 'rest') { return 'R:' + (note[1] || 200); }
-    return note[0] + ':' + (note[1] || 200);
-  }).join(' ');
-  return playTune(musicString, onComplete);
-}
-window.playNotes = function(gwbasicString, onComplete) {
-  const notes = parseGWBasicString(gwbasicString);
-  if (!notes || notes.length === 0) { return false; }
-  const musicString = notes.map(function(note) {
-    if (note.type === 'rest') { return 'R:' + note.duration; }
-    return note.note + ':' + note.duration;
-  }).join(' ');
-  return playTune(musicString, onComplete);
-}
-window.parseGWBasicString = function(str) {
-  const notes = [];
-  let currentOctave = 4;  // Default octave
-  let currentLength = 4;  // Default quarter note (L4)
-  let currentTempo = 120; // Default tempo (120 BPM = quarter notes per minute)
-  function getDuration(length) { return Math.round((60000 / currentTempo) * (4 / length)); }
-  str = str.trim().toUpperCase();
-  let i = 0;
-  while (i < str.length) {
-    const char = str[i];
-    if (char === ' ' || char === '\t') { i++; continue; }
-    if (char === 'T') { i++; let numStr = '';
-      while (i < str.length && str[i] >= '0' && str[i] <= '9') { numStr += str[i]; i++; }
-      if (numStr) { const tempo = parseInt(numStr); if (tempo > 0 && tempo <= 255) { currentTempo = tempo; } }
-      continue;
-    }
-    if (char === 'L') {
-      i++; let numStr = '';
-      while (i < str.length && str[i] >= '0' && str[i] <= '9') { numStr += str[i]; i++; }
-      if (numStr) { const length = parseInt(numStr); if (length > 0 && length <= 64) { currentLength = length; } }
-      continue;
-    }
-    if (char === 'O') {
-      i++; if (i < str.length && str[i] >= '0' && str[i] <= '6') { currentOctave = parseInt(str[i]); i++; }
-      continue;
-    }
-    
-    if (char === 'P') {
-      i++; let numStr = '';
-      while (i < str.length && str[i] >= '0' && str[i] <= '9') { numStr += str[i]; i++; }
-      const length = numStr ? parseInt(numStr) : currentLength;
-      notes.push({ type: 'rest', duration: getDuration(length) });
-      continue;
-    }
-    if (char >= 'A' && char <= 'G') {
-      let noteName = char; i++;
-      if (i < str.length && (str[i] === '#' || str[i] === '+')) {
-        noteName += '#'; i++;
-      } else if (i < str.length && str[i] === '-') {
-        const flats = { 'D': 'C#', 'E': 'D#', 'G': 'F#', 'A': 'G#', 'B': 'A#' };
-        if (flats[noteName]) { noteName = flats[noteName]; }
-        i++;
-      }
-      let noteLength = currentLength; let numStr = '';
-      while (i < str.length && str[i] >= '0' && str[i] <= '9') { numStr += str[i]; i++; }
-      if (numStr) { noteLength = parseInt(numStr); }
-      notes.push({ type: 'note', note: noteName + currentOctave, duration: getDuration(noteLength) });
-      continue;
-    }
-    i++;
+  window.stopCurrentTune = function() {
+    if (_playbackState.timeoutId) { clearTimeout(_playbackState.timeoutId); _playbackState.timeoutId = null; }
+    _playbackState.isPlaying = false;
+    _playbackState.index = 0;
+    if (_playbackState.promiseResolve) { _playbackState.promiseResolve(); _playbackState.promiseResolve = null; }
   }
-  return notes;
-}
-window.BEEP_VOLUME = (typeof window.BEEP_VOLUME !== 'undefined') ? window.BEEP_VOLUME : 0.3;
-window.beep = function(frequency = 800, duration = 200, volume) {
+
+  window.stopTune = window.stopCurrentTune;
+
+  window.parseGWBasic = function(str) {
+    const result = { backgroundMode: false, notes: [] };
+    let currentOctave = 4;
+    let currentLength = 4;
+    let currentTempo = 120;
+    function getDuration(length) { return Math.round((60000 / currentTempo) * (4 / length)); }
+    str = str.trim().toUpperCase();
+    let i = 0;
+    while (i < str.length) {
+      const char = str[i];
+      if (char === 'M' && i + 1 < str.length && str[i + 1] === 'B') { result.backgroundMode = true; i += 2; continue; }
+      if (char === ' ' || char === '\t') { i++; continue; }
+      if (char === 'T') {
+        i++; let numStr = '';
+        while (i < str.length && str[i] >= '0' && str[i] <= '9') { numStr += str[i]; i++; }
+        if (numStr) { const tempo = parseInt(numStr); if (tempo > 0 && tempo <= 255) { currentTempo = tempo; } }
+        continue;
+      }
+      if (char === 'L') {
+        i++; let numStr = '';
+        while (i < str.length && str[i] >= '0' && str[i] <= '9') { numStr += str[i]; i++; }
+        if (numStr) { const length = parseInt(numStr); if (length > 0 && length <= 64) { currentLength = length; } }
+        continue;
+      }
+      if (char === 'O') {
+        i++; if (i < str.length && str[i] >= '0' && str[i] <= '6') { currentOctave = parseInt(str[i]); i++; }
+        continue;
+      }
+      if (char === 'P') {
+        i++; let numStr = '';
+        while (i < str.length && str[i] >= '0' && str[i] <= '9') { numStr += str[i]; i++; }
+        const length = numStr ? parseInt(numStr) : currentLength;
+        result.notes.push({ type: 'rest', duration: getDuration(length) });
+        continue;
+      }
+      if (char >= 'A' && char <= 'G') {
+        let noteName = char; i++;
+        if (i < str.length && (str[i] === '#' || str[i] === '+')) {
+          noteName += '#'; i++;
+        } else if (i < str.length && str[i] === '-') {
+          const flats = { 'D': 'C#', 'E': 'D#', 'G': 'F#', 'A': 'G#', 'B': 'A#' };
+          if (flats[noteName]) { noteName = flats[noteName]; }
+          i++;
+        }
+        let noteLength = currentLength; let numStr = '';
+        while (i < str.length && str[i] >= '0' && str[i] <= '9') { numStr += str[i]; i++; }
+        if (numStr) { noteLength = parseInt(numStr); }
+        result.notes.push({ type: 'note', note: noteName + currentOctave, duration: getDuration(noteLength) });
+        continue;
+      }
+      i++;
+    }
+    return result;
+  }
+
+  function playNextNoteFromGWBasic() {
+    if (!_playbackState.isPlaying || _playbackState.index >= _playbackState.notes.length) {
+      _playbackState.isPlaying = false;
+      if (_playbackState.promiseResolve) { _playbackState.promiseResolve(); _playbackState.promiseResolve = null; }
+      return;
+    }
+    const noteInfo = _playbackState.notes[_playbackState.index];
+    _playbackState.index++;
+    if (noteInfo.type === 'rest') {
+      _playbackState.timeoutId = setTimeout(playNextNoteFromGWBasic, noteInfo.duration);
+    } else {
+      playNote(noteInfo.note, noteInfo.duration);
+      _playbackState.timeoutId = setTimeout(playNextNoteFromGWBasic, noteInfo.duration);
+    }
+  }
+
+  window.play = function(gwbasicString) {
+    const parsed = parseGWBasic(gwbasicString);
+    if (!parsed.notes || parsed.notes.length === 0) { return Promise.resolve(); }
+    stopCurrentTune();
+    _playbackState.notes = parsed.notes;
+    _playbackState.index = 0;
+    _playbackState.isPlaying = true;
+    _playbackState.backgroundMode = parsed.backgroundMode;
+    if (parsed.backgroundMode) {
+      _playbackState.promiseResolve = null;
+      playNextNoteFromGWBasic();
+      return Promise.resolve();
+    } else {
+      const promise = new Promise(function(resolve) { _playbackState.promiseResolve = resolve; });
+      playNextNoteFromGWBasic();
+      return promise;
+    }
+  }
+
+  window.sound = function(frequency, duration) { return beep(frequency, duration); }
+  window.BEEP_VOLUME = (typeof window.BEEP_VOLUME !== 'undefined') ? window.BEEP_VOLUME : 0.3;
+  window.beep = function(frequency = 800, duration = 200, volume) {
+  
   try {
     if (!audioContext) {
       if (!window.AudioContext && !window.webkitAudioContext) { throw new Error('Web Audio API is not supported in this browser'); }
@@ -1717,37 +1709,28 @@ window.beep = function(frequency = 800, duration = 200, volume) {
     oscillator.start(startTime);
     oscillator.stop(endTime);
     return true;
-  } catch (error) {
-    return false;
+    } catch (error) { return false; }
+  }
+
+  window.volume = function(level) {
+    if (typeof level === 'undefined') { return (typeof window.BEEP_VOLUME === 'number') ? window.BEEP_VOLUME : 0.3; }
+    var prev = (typeof window.BEEP_VOLUME === 'number') ? window.BEEP_VOLUME : 0.3;
+    var v = Number(level);
+    if (isNaN(v)) v = 0;
+    window.BEEP_VOLUME = Math.max(0, Math.min(1, v));
+    return prev;
+  }
+
+  // Signal that sound.js is ready
+  if (typeof window.qandySignalReady === 'function') {
+    window.qandySignalReady('sound.js');
   }
 }
-
-window.volume = function(level) {
-  if (typeof level === 'undefined') { return (typeof window.BEEP_VOLUME === 'number') ? window.BEEP_VOLUME : 0.3; }
-  var prev = (typeof window.BEEP_VOLUME === 'number') ? window.BEEP_VOLUME : 0.3;
-  var v = Number(level);
-  if (isNaN(v)) v = 0;
-  window.BEEP_VOLUME = Math.max(0, Math.min(1, v));
-  return prev;
-}
-
-// if (isGuest) { beep(); }
-
-// Signal that sound.js is ready
-if (typeof window.qandySignalReady === 'function') {
-  window.qandySignalReady('sound.js');
-}
-}
-
-
-
-//
-// ──── Qandy Video Graphics Adaptor ──────────────────────────────────────────────────
-//
 
 //
 // ──── Qandy Video Graphics Adaptor (DOM-based) ──────────────────────────────────────
 //
+
 function video_js() {
   var cellGrid = [];
   var EMPTY_CELL = '\u00A0';
@@ -1778,7 +1761,7 @@ function video_js() {
     return r; 
   }
   
-  // ──── Initalization ────────────────────────
+  // ──── Initalization ────────────────────────────────────────────────
   
   function initGrid() {
     var cols = getW(); 
@@ -1814,7 +1797,7 @@ function video_js() {
   
   initGrid();
   
-  // ──── the pokes ────────────────────────────
+  // ──── the pokes ────────────────────────────────────────────────────
   
   window.pokeCell=function(x, y, ch, fg, bg, attr) {
     var cols = getW();
@@ -1900,7 +1883,7 @@ function video_js() {
       var span = cellGrid[row] && cellGrid[row][col];
       if (span) {
         var ch = span.textContent === EMPTY_CELL ? ' ' : span.textContent;
-        var currentAttr = (ATTR && ATTR[row] && ATTR[row][col]) ? ATTR[row][col] : 0;
+        var currentAttr = extractAttrFromDOM(span);
         pokeCell(col, row, ch, f, b, currentAttr);
       }
       offset++;
@@ -1971,8 +1954,9 @@ function video_js() {
       var span = cellGrid[row] && cellGrid[row][col];
       if (span) {
         var ch = span.textContent === EMPTY_CELL ? ' ' : span.textContent;
-        var currentBg = (ATTR && ATTR[row] && ATTR[row][col]) ? ATTR[row][col] : CURBG;
-        var currentAttr = (ATTR && ATTR[row] && ATTR[row][col]) ? ATTR[row][col] : 0;
+        var bgMatch = span.className.match(/ansi-bg-(\d+)/);
+        var currentBg = bgMatch ? parseInt(bgMatch[1], 10) : CURBG;
+        var currentAttr = extractAttrFromDOM(span);
         pokeCell(col, row, ch, fgCode, currentBg, currentAttr);
       }
       offset++;
@@ -2017,7 +2001,7 @@ function video_js() {
         var currentFg = 37; // fallback
         var match = span.className.match(/ansi-fg-(\d+)/);
         if (match) currentFg = parseInt(match[1], 10);
-        var currentAttr = (ATTR && ATTR[row] && ATTR[row][col]) ? ATTR[row][col] : 0;
+        var currentAttr = extractAttrFromDOM(span);
         pokeCell(col, row, ch, currentFg, bgCode, currentAttr);
       }
       offset++;
@@ -2047,10 +2031,7 @@ function video_js() {
       for (var i = 0; i < take; i++) {
         var span = cellGrid[cy] && cellGrid[cy][cx + i];
         if (span) {
-          // Update ATTR array
-          if (!ATTR[cy]) ATTR[cy] = new Uint16Array(cols);
-          ATTR[cy][cx + i] = attrValue;
-          // Rebuild class with new attr
+          // Rebuild class with new attr; no ATTR array to update
           var ch = span.textContent === EMPTY_CELL ? ' ' : span.textContent;
           var match_fg = span.className.match(/ansi-fg-(\d+)/);
           var match_bg = span.className.match(/ansi-bg-(\d+)/);
@@ -2226,7 +2207,8 @@ function video_js() {
     }
   };
   
-  var prevCursorAttr = 0;
+  var prevCursorAttr = 0; //how does it know this??
+  
   window.pokeCursorOff = function() {
     if (typeof CURX === 'undefined' || typeof CURY === 'undefined') return false;
     var sx = Math.max(0, Math.min(getW()-1, CURX|0));
@@ -2240,7 +2222,7 @@ function video_js() {
     return true;
   };
   
-  // ──── the menu bar ─────────────────────────  
+  // ──── the menu bar ─────────────────────────────────────────────────  
 
   window.pokeMenu = function(t) {
     var cols = getW();
@@ -2508,7 +2490,6 @@ function video_js() {
        if (cury >= H) { return false; }
       }
       pokeCell(curx, cury, char); curx++;
-      if (SYNC) { pokeRefresh(curx, cury); }
     }
     var str = (typeof LINE === 'string') ? LINE : String(LINE || "");
     var targetP = (typeof CURP === 'number') ? CURP : str.length;
@@ -2529,7 +2510,7 @@ function video_js() {
     return true;
   };
   
-  // ──── the peeks ────────────────────────────
+  // ──── the peeks ────────────────────────────────────────────────────
   
   window.peekChar = function(x, y) { 
     if (!validateCoords(x, y)) return undefined;
@@ -2556,51 +2537,47 @@ function video_js() {
   
   window.peekAttr = function(x, y) { 
     if (!validateCoords(x, y)) return undefined;
-    if (ATTR && ATTR[y] && typeof ATTR[y][x] !== 'undefined') return ATTR[y][x];
-    return 0;
+    var span = cellGrid[y] && cellGrid[y][x];
+    if (!span) return 0;
+    return extractAttrFromDOM(span);
   };
   
   window.peekBold = function(x, y) { 
     if (!validateCoords(x, y)) return undefined;
-    if (ATTR && ATTR[y] && typeof ATTR[y][x] !== 'undefined') {
-      return !!(ATTR[y][x] & (window.ATTR_BOLD || 0x0002));
-    }
-    return false;
+    var span = cellGrid[y] && cellGrid[y][x];
+    if (!span) return false;
+    return !!(extractAttrFromDOM(span) & (window.ATTR_BOLD || 0x0002));
   };
   
   window.peekItalic = function(x, y) { 
     if (!validateCoords(x, y)) return undefined;
-    if (ATTR && ATTR[y] && typeof ATTR[y][x] !== 'undefined') {
-      return !!(ATTR[y][x] & (window.ATTR_ITALIC || 0x0008));
-    }
-    return false;
+    var span = cellGrid[y] && cellGrid[y][x];
+    if (!span) return false;
+    return !!(extractAttrFromDOM(span) & (window.ATTR_ITALIC || 0x0008));
   };
   
   window.peekBlink = function(x, y) { 
     if (!validateCoords(x, y)) return undefined;
-    if (ATTR && ATTR[y] && typeof ATTR[y][x] !== 'undefined') {
-      return !!(ATTR[y][x] & (window.ATTR_BLINK || 0x0020));
-    }
-    return false;
+    var span = cellGrid[y] && cellGrid[y][x];
+    if (!span) return false;
+    return !!(extractAttrFromDOM(span) & (window.ATTR_BLINK || 0x0020));
   };
   
   window.peekLine = function(x, y) { 
     if (!validateCoords(x, y)) return undefined;
-    if (ATTR && ATTR[y] && typeof ATTR[y][x] !== 'undefined') {
-      return !!(ATTR[y][x] & (window.ATTR_UNDERLINE || 0x0010));
-    }
-    return false;
+    var span = cellGrid[y] && cellGrid[y][x];
+    if (!span) return false;
+    return !!(extractAttrFromDOM(span) & (window.ATTR_UNDERLINE || 0x0010));
   };
   
   window.peekInverse = function(x, y) {
     if (!validateCoords(x, y)) return undefined;
-    if (ATTR && ATTR[y] && typeof ATTR[y][x] !== 'undefined') {
-      return !!(ATTR[y][x] & (window.ATTR_INVERSE || 0x0001));
-    }
-    return false;
+    var span = cellGrid[y] && cellGrid[y][x];
+    if (!span) return false;
+    return !!(extractAttrFromDOM(span) & (window.ATTR_INVERSE || 0x0001));
   };
   
-  // ──── video helpers ────────────────────────
+  // ──── video helpers ────────────────────────────────────────────────
 
   function extractAttrFromDOM(span) {
     var attr = 0;
@@ -3070,29 +3047,24 @@ window.updateKeyLabels = updateKeyLabels;
 
 
 //
-// command.js (modified)
+// ──── Qandy Command ──────────────────────────────────────────────────────────────────
 //
 
 function command_js() {
   window.command=async function(cmd) {
     if (RUN != "qandy.js") {
-      console.log("RUN = "+RUN+" command "+cmd);
       print("\n");
       try { input(cmd); } catch (e) { /* ignore */ }
       // this needs testing AFTER run command works
       LINE = ""; CURP = 0; LINEX = CURX; LINEY = CURY;
-      pokeRefresh();
       return;
     }
     // system commands
-    console.log("system command "+cmd);
     print("\n");
     cmd=String(cmd || '').trim();
     switch (cmd) {
       case 'cls':
-        SYNC=1; pokeCursorOff();
-        pokeText(0,0," ",800); pokeColor(0,0,CURFG, CURBG, 800); pokeAttr(0,0,0, 800);
-        SYNC=1; pokeRefresh(); CURX=0; CURY=0; LINEX=0; LINEY=0; pokeCursorOn(); return;
+        cls(); return;
       case 'whoami':
         var context = HOST ? "HOST (sysop access)" : "GUEST (user sandbox)";
         print("\n"+context+"\n"); print("URL:"+window.location.href+"\n");
@@ -3223,7 +3195,7 @@ function command_js() {
       } 
       return;
     }
-    console.log("f="+f+" d="+d);
+
     switch (c) {
       case "dir":
         print(await qdosDir(f, d));
@@ -3295,7 +3267,6 @@ function command_js() {
           pokeCursorOn();
           LINE=""; CURP = 0;
           LINEX = CURX; LINEY = CURY;
-          pokeRefresh();
           return;
         }
     }
@@ -3316,10 +3287,8 @@ function command_js() {
   }  
 
 //
-// qdos.js this is the bridge that lets the guest machine
-//         access dos.js via posting messages to the host.
-//         it translates simple user commands into dos.js
-//            
+// ──── Qandy DOS ─────────────────────────────────────────────────────────────────────
+//
 
   window.__qandy_pending = window.__qandy_pending || Object.create(null);
   window.__qandy_reqCounter = window.__qandy_reqCounter || 0;
@@ -3631,10 +3600,7 @@ function command_js() {
   window.qdosChDir = window.qdosChDir;
   window.qdosRmDir = window.qdosRmDir;
 
-  //
   // these functions transmit packets to and from the host
-  //
-
   function qdosXmitDos(action, packet, timeoutMs) {
     return new Promise(function (resolve, reject) {
       if (!window.parent || window.parent === window) { return reject(new Error('Error: no <host>')); }
@@ -3734,7 +3700,7 @@ if (typeof window.qandySignalReady === 'function') {
 }
 
 //
-// qandy.js
+// ──── Qandy Core ─────────────────────────────────────────────────────────────────────
 //
 
 window.qandy_js=function() {
@@ -4046,7 +4012,6 @@ window.button=function(b, event) {
           LINEY = CURY;
           LINE = "";
           CURP = 0;
-          pokeRefresh();
           QandyKeyboard.acceptPending(_val);
           pokeCursorOn();
           return;
@@ -4064,7 +4029,6 @@ window.button=function(b, event) {
       historyIndex = -1;
       tempCommand = "";
       cmd=LINE; LINE=""; CURP=0; LINEX=CURX; LINEY=CURY; if (CURMORE>-1) { CURMORE=0; }
-      pokeRefresh();
       command(cmd);
       pokeCursorOn();
       return;
@@ -4267,9 +4231,7 @@ window.press=function(event) {
       return;
     }
   }
-
-  if (SOUND) { beep(900, 25, .01); }
-
+  if (SOUND && typeof beep === 'function') { try { beep(900, 25, 0.01); } catch (e) {}}
   // Handle physical CapsLock keypress (keyCode 20)
   if (event.keyCode === 20) {
     // Determine the platform state if available
@@ -4540,10 +4502,9 @@ window.dosExit=function() {
 function clearScreen() { cls(); }
 
 window.cls=function() {
-  SYNC=1; pokeCursorOff();
+  pokeCursorOff();
   pokeText(0,0," ",800); pokeColor(0,0,CURFG, CURBG, 800); pokeAttr(0,0,0, 800);
   CURX=0; CURY=0; LINEX=0; LINEY=0;
-  SYNC=1; pokeRefresh;
   pokeCursorOn();
 }
 
@@ -4614,7 +4575,7 @@ window.print=function(t) {
 }
 
 
-pokeCursorOn(); pokeRefresh();
+pokeCursorOn(); 
 
 if (HOST) {
   var s=document.createElement('script');
@@ -4626,6 +4587,10 @@ if (HOST) {
 } else {
   systemReady();
 }
+
+//
+// ──── Qandy DOS ─────────────────────────────────────────────────────────────────────
+//
 
 async function systemReady() {
   // system ready
@@ -4647,7 +4612,6 @@ async function systemReady() {
     }
   }
 }
-
 
 if (typeof qandySignalReady === 'function') { qandySignalReady('qandy.js'); }}
 
