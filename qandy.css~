@@ -1,0 +1,359 @@
+
+body { margin: 0; background-color: #333; }
+#cursor { background-color: #CCC; }
+.qpc { position: absolute; top: 0px; left: 0px; width: 160px; height: 24px;
+       padding-left: 0px; padding-right: 0px; align-items: center;
+       backgroudo itnd-color: grey; z-index: 0; }
+.txt { 
+  position: absolute; 
+  left: 54px; 
+  top: 64px;  
+  width: 256px; 
+  height: 384px; 
+  z-index: 250; 
+  font-family: 'Courier New', Courier, 'Consolas', 'DejaVu Sans Mono', 'Liberation Mono', 'Menlo', Monaco, monospace;
+  font-size: 12px;
+  font-weight: normal;
+  color: #fff;
+  background-color: #000;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 4px;
+  line-height: 1.2;
+  box-sizing: border-box;
+  white-space: pre;
+  word-wrap: break-word;
+  display: block;
+  scrollbar-width: thin;
+  scrollbar-color: #0f0 #000;
+}
+
+.txt::-webkit-scrollbar { width: 12px; }
+.txt::-webkit-scrollbar-track { background: #000; border-left: 1px solid #222; }
+.txt::-webkit-scrollbar-thumb { background: #0f0; border-radius: 6px; border: 2px solid #000; }
+.txt::-webkit-scrollbar-thumb:hover { background: #0f0; box-shadow: inset 0 0 6px rgba(0, 255, 0, 0.3); }
+.txt::-webkit-scrollbar-thumb:active { background: #0f0; }
+
+#cursor {
+  display: inline-block;
+  background-color: #fff;
+  width: 8px;
+  height: 14px;
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+.ansi-black { color: #000; }
+.ansi-red { color: #f00; }
+.ansi-green { color: #0f0; }
+.ansi-yellow { color: #ff0; }
+.ansi-blue { color: #00f; }
+.ansi-magenta { color: #f0f; }
+.ansi-cyan { color: #0ff; }
+.ansi-white { color: #fff; }
+
+.ansi-bg-black { background-color: #000; }
+.ansi-bg-red { background-color: #f00; }
+.ansi-bg-green { background-color: #0f0; }
+.ansi-bg-yellow { background-color: #ff0; }
+.ansi-bg-blue { background-color: #00f; }
+.ansi-bg-magenta { background-color: #f0f; }
+.ansi-bg-cyan { background-color: #0ff; }
+.ansi-bg-white { background-color: #fff; }
+
+.ansi-bold { font-weight: bold; }
+.ansi-inverse {
+  background-color: #fff !important;
+  color: #000 !important;
+  filter: none !important;
+}
+
+@keyframes qandy-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+.qandy-cursor {
+  display: inline-block;
+  background-color: #fff;
+  color: #000;
+  animation: qandy-blink 1s steps(1, start) infinite;
+}
+
+:root {
+  --cols: 32;               /* columns */
+  --cell-w: 13px;
+  --cell-h: 15px;
+  --cell-fs: 13px;
+}
+
+#screen {
+  display: grid;
+  grid-template-columns: repeat(var(--cols), var(--cell-w));
+  grid-auto-rows: var(--cell-h);
+  font-family: monospace, monospace;
+  font-size: var(--cell-fs);
+  line-height: var(--cell-h);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Each cell is a grid item; set background per cell without seams */
+.cell {
+  width: var(--cell-w);
+  height: var(--cell-h);
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Make rows own the background and ensure cells are exact-size and transparent when desired */
+.qandy-row {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  height: var(--cell-h);
+  line-height: var(--cell-h);
+  align-items: center;
+  gap: 0;
+  background-color: transparent; /* default: transparent, mode can override */
+}
+
+/* Ensure cells are exact-pixel sized and don't introduce borders/gaps */
+.qandy-cell {
+  width: var(--cell-w);
+  height: var(--cell-h);
+  font-size: var(--cell-fs);
+  line-height: var(--cell-h);
+  padding: 0;
+  margin: 0;
+  border: 0;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent; /* default transparent so row owns bg if needed */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transform: translateZ(0); /* force compositing layer (helps some UA rendering) */
+}
+
+/* Sysop mode: make each row the visible background and keep cells transparent */
+#txt.sysop .qandy-row,
+#screen.sysop .qandy-row {
+  background-color: #0b2340 !important; /* choose your distinctive sysop color */
+}
+
+#txt.sysop .qandy-cell,
+#screen.sysop .qandy-cell {
+  background: transparent !important;
+  color: #ffffff !important; /* ensure legible text on sysop bg */
+}
+
+/* Defensive: clear inline-borders/margins that can cause hairlines */
+.qandy-row, .qandy-cell { outline: none; box-shadow: none; }
+
+
+.pop { position:absolute; top:260; left:190; z-index:250;
+       font-family: arial; font-size: 14px; weight: bold;
+       color: navy; background-color: #999; visibility:hidden;
+       text-align: center;
+       padding-top: 0px; padding-bottom: 0px;  
+       padding-right: 4px; padding-left: 4px; }
+.tile { position: absolute; top: 0px; left: 0px; }
+.item { position: absolute; top: 0px; left: 0px; }
+.char { position: absolute; top: 0px; left: 0px; }
+
+.k1 { position: absolute; top: 0px; left: 0px; width: 30px; height: 30px;
+      padding-left: 0px; padding-right: 0px; align-items: center;
+      max-width: 24px; max-height: 24px; margin: 0; padding: 4; 
+      display: flex; justify-content: center;  align-items: center;       
+	      color: white; background-color: #222; text-align: center;
+      font-family: Arial; font-size: 13px; weight: bold;
+      cursor: pointer; z-index: 99; 
+      border: 1px solid #555; border-radius: 3px;
+      user-select: none; font-weight: bold; }
+
+.k2 { position: absolute; top: 0px; left: 0px; width: 52px; height: 30px;
+      padding-left: 0px; padding-right: 0px; align-items: center;
+      max-width: 52px; max-height: 24px; margin: 0; padding: 4;        
+      display: flex; justify-content: center;  align-items: center;      
+      color: white; background-color: #222; text-align: center;
+      font-family: Arial; font-size: 11px; weight: normal; 
+      cursor: pointer; z-index: 99; 
+      border: 1px solid #555; border-radius: 3px;
+      user-select: none; font-weight: bold; }
+.k2:hover { background-color: #444; }
+.k2:active { background-color: #666; }
+
+.k4 { position: absolute; top: 0px; left: 0px; width: 109px; height: 30px;
+      padding-left: 0px; padding-right: 0px; align-items: center;
+      max-width: 109px; max-height: 24px; margin: 0; padding: 4;        
+      display: flex; justify-content: center;  align-items: center;      
+      color: white; background-color: #888; text-align: center;
+      font-family: Arial; font-size: 11px; weight: bold;
+      cursor: pointer; z-index: 99; 
+      border: 1px solid #555; border-radius: 3px;
+      user-select: none; font-weight: bold; }
+.k4:hover { background-color: #aaa; }
+.k4:active { background-color: #666; }
+
+
+
+/* New key classes for full keyboard */
+
+.k-arrow { font-family: Arial; font-size: 24px; weight: bold; }
+.k-cursor { font-family: Arial; font-size: 10px; weight: bold; }
+
+.k-ctrl { position: absolute; top: 0px; left: 0px; width: 40px; height: 30px;
+      padding-left: 0px; padding-right: 0px; align-items: center;
+      max-width: 40px; max-height: 30px; margin: 0; padding: 4px;        
+      display: flex; justify-content: center;  align-items: center;      
+      color: white; background-color: #222; text-align: center;
+      font-family: Arial; font-size: 11px; font-weight: bold;
+      cursor: pointer; z-index: 99; 
+      border: 1px solid #555; border-radius: 3px;
+      user-select: none; }
+.k-ctrl:hover { background-color: #444; }
+.k-ctrl:active { background-color: #666; }
+.k-enter { position: absolute; top: 0px; left: 0px; width: 40px; height: 30px;
+      padding-left: 0px; padding-right: 0px; align-items: center;
+      max-width: 40px; max-height: 30px; margin: 0; padding: 4px;        
+      display: flex; justify-content: center;  align-items: center;      
+      color: white; background-color: #222; text-align: center;
+      font-family: Arial; font-size: 11px; font-weight: bold;
+      cursor: pointer; z-index: 99; 
+      border: 1px solid #555; border-radius: 3px;
+      user-select: none; }
+.k-enter:hover { background-color: #444; }
+.k-enter:active { background-color: #666; }
+
+/* Custom width for SPACE key (81px) */
+.k-space { position: absolute; top: 0px; left: 0px; width: 81px; height: 30px;
+      padding-left: 0px; padding-right: 0px; align-items: center;
+      max-width: 81px; max-height: 24px; margin: 0; padding: 4;        
+      display: flex; justify-content: center;  align-items: center;      
+      color: white; background-color: #222; text-align: center;
+      font-family: Arial; font-size: 12px; font-weight: bold;
+      cursor: pointer; z-index: 99; 
+      border: 1px solid #555; border-radius: 3px;
+      user-select: none; }
+.k-space:hover { background-color: #444; }
+.k-space:active { background-color: #666; }
+
+
+/* Import authentic IBM VGA fonts from The Ultimate Oldschool PC Font Pack */
+/* License: CC BY-SA 4.0 - https://int10h.org/oldschool-pc-fonts/ */
+@font-face {
+  font-family: 'IBM VGA 8x16';
+  src: url('fonts/IBM_VGA_8x16.woff') format('woff');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'IBM VGA 8x14';
+  src: url('fonts/IBM_VGA_8x14.woff') format('woff');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'IBM VGA 9x16';
+  src: url('fonts/IBM_VGA_9x16.woff') format('woff');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Import Google Fonts for better extended ASCII character support (optional fallback) */
+@import url('https://fonts.googleapis.com/css2?family=VT323&family=IBM+Plex+Mono:wght@400;700&display=swap');
+
+/* Default cell */
+.qandy-cell {
+  /* default variables (fg/bg) */
+  --fg: #e5e5e5;   /* light gray (default fg 37) */
+  --bg: #000000;   /* black (default bg 40) */
+  color: var(--fg);
+  background-color: var(--bg);
+  display: inline-block;
+  white-space: pre;
+  line-height: 1;
+  font-family: monospace;
+  padding: 0;
+  margin: 0;
+}
+
+/* Inverse: swap fg/bg */
+.qandy-cell.ansi-inverse {
+  color: var(--bg) !important;
+  background-color: var(--fg) !important;
+}
+
+/* Text styles */
+.qandy-cell.ansi-bold { font-weight: 700; }
+.qandy-cell.ansi-underline { text-decoration: underline; }
+.qandy-cell.ansi-italic { font-style: italic; }
+.qandy-cell.ansi-dim { opacity: 0.6; }
+
+/* Simple blink (can be turned off on some browsers) */
+@keyframes qandy-blink { 50% { visibility: hidden; } }
+.qandy-cell.ansi-blink { animation: qandy-blink 1s step-end infinite; }
+
+/* Foreground colors (30-37) */
+.qandy-cell.ansi-fg-30 { --fg: #000000; color: var(--fg); } /* black */
+.qandy-cell.ansi-fg-31 { --fg: #cd0000; color: var(--fg); } /* red */
+.qandy-cell.ansi-fg-32 { --fg: #00cd00; color: var(--fg); } /* green */
+.qandy-cell.ansi-fg-33 { --fg: #cdcd00; color: var(--fg); } /* yellow */
+.qandy-cell.ansi-fg-34 { --fg: #0000ee; color: var(--fg); } /* blue */
+.qandy-cell.ansi-fg-35 { --fg: #cd00cd; color: var(--fg); } /* magenta */
+.qandy-cell.ansi-fg-36 { --fg: #00cdcd; color: var(--fg); } /* cyan */
+.qandy-cell.ansi-fg-37 { --fg: #e5e5e5; color: var(--fg); } /* white/light gray */
+
+/* Bright foreground (90-97) */
+.qandy-cell.ansi-fg-90 { --fg: #7f7f7f; color: var(--fg); } /* bright black / gray */
+.qandy-cell.ansi-fg-91 { --fg: #ff0000; color: var(--fg); } /* bright red */
+.qandy-cell.ansi-fg-92 { --fg: #00ff00; color: var(--fg); } /* bright green */
+.qandy-cell.ansi-fg-93 { --fg: #ffff00; color: var(--fg); } /* bright yellow */
+.qandy-cell.ansi-fg-94 { --fg: #5c5cff; color: var(--fg); } /* bright blue */
+.qandy-cell.ansi-fg-95 { --fg: #ff00ff; color: var(--fg); } /* bright magenta */
+.qandy-cell.ansi-fg-96 { --fg: #00ffff; color: var(--fg); } /* bright cyan */
+.qandy-cell.ansi-fg-97 { --fg: #ffffff; color: var(--fg); } /* bright white */
+
+/* Background colors (40-47) */
+.qandy-cell.ansi-bg-40 { --bg: #000000; background-color: var(--bg); } /* black */
+.qandy-cell.ansi-bg-41 { --bg: #cd0000; background-color: var(--bg); } /* red */
+.qandy-cell.ansi-bg-42 { --bg: #00cd00; background-color: var(--bg); } /* green */
+.qandy-cell.ansi-bg-43 { --bg: #cdcd00; background-color: var(--bg); } /* yellow */
+.qandy-cell.ansi-bg-44 { --bg: #0000ee; background-color: var(--bg); } /* blue */
+.qandy-cell.ansi-bg-45 { --bg: #cd00cd; background-color: var(--bg); } /* magenta */
+.qandy-cell.ansi-bg-46 { --bg: #00cdcd; background-color: var(--bg); } /* cyan */
+.qandy-cell.ansi-bg-47 { --bg: #e5e5e5; background-color: var(--bg); } /* white/light gray */
+
+/* Bright backgrounds (100-107) */
+.qandy-cell.ansi-bg-100 { --bg: #7f7f7f; background-color: var(--bg); }
+.qandy-cell.ansi-bg-101 { --bg: #ff0000; background-color: var(--bg); }
+.qandy-cell.ansi-bg-102 { --bg: #00ff00; background-color: var(--bg); }
+.qandy-cell.ansi-bg-103 { --bg: #ffff00; background-color: var(--bg); }
+.qandy-cell.ansi-bg-104 { --bg: #5c5cff; background-color: var(--bg); }
+.qandy-cell.ansi-bg-105 { --bg: #ff00ff; background-color: var(--bg); }
+.qandy-cell.ansi-bg-106 { --bg: #00ffff; background-color: var(--bg); }
+.qandy-cell.ansi-bg-107 { --bg: #ffffff; background-color: var(--bg); }
+
+/* Improve touch behavior */
+.k1, .k2, .k3, [role="button"], button {
+  touch-action: manipulation;                /* hints to browsers to avoid double-tap zoom */
+  -webkit-tap-highlight-color: rgba(0,0,0,0);/* remove ugly highlight (optional) */
+  -ms-touch-action: manipulation;
+}
+html { -webkit-text-size-adjust: 100%; }     /* keep text size stable across zoom/text adjustments */

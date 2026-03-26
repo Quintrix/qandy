@@ -15,9 +15,7 @@
  *   mouseMove(ev)
  *
  * Utilities:
- *   ensureCellAttribI think the first thing to do with mouse.js is to add mouse support for "shift to select" ... the shieft
-
-utes() - (re)apply stable data-qx/data-qy/data-qz attributes to DOM cells
+ *   ensureCellAttributes() - (re)apply stable data-qx/data-qy/data-qz attributes to DOM cells
  *   attachPointerHandlers(container) - convenience: bind pointer events for host UI
  *
  * Integration notes:
@@ -406,49 +404,3 @@ utes() - (re)apply stable data-qx/data-qy/data-qz attributes to DOM cells
 })(window);
 
 /* End of mouse.js */
-
-
-
-
-
-
-Summary: Mouse Support Integration for Qandy Pocket Computer
-Context
-
-You have a retro pocket computer emulator (Quintrix/qandy) with embedded JavaScript. You previously saved qandy-pointer.js for later implementation and are now ready to integrate mouse/touch support.
-Key Points for Future Implementation
-Architecture Understanding
-
-    Current setup: All JavaScript is embedded as wrapper functions inside qandy-host.htm (massive single file)
-    Target setup: Extract individual .js files that will be loaded separately
-    Script loading: Uses SCRIPT_QUEUE array and loadNext() function for sequential script initialization
-    Ready signal: Each script must call window.qandySignalReady(scriptName) when loaded
-
-What qandy-pointer.js Provides
-
-    Core functions: pointerDown(), pointerUp(), pointerClick(), pointerMove()
-    Guest aliases: mouseDown(), mouseUp(), mouseClick(), mouseMove() (for RUN scripts)
-    Cell resolution: Converts DOM events to grid coordinates (cellX, cellY)
-    Listener registry: addListener(type, fn) / removeListener(type, fn) for event subscription
-    DOM helpers: ensureCellAttributes() applies stable data-qx/data-qy/data-qz attributes to cells
-    Auto-attach: Binds to container element (#txt, #qandy, or document.body)
-
-Integration Steps (When Ready)
-
-    Extract all .js files from qandy-host.htm
-    Add qandy-pointer.js to SCRIPT_QUEUE (load before keyboard.js)
-    Update loadNext() switch statement to handle pointer script
-    In keyboard_js(): Subscribe to pointer events using QandyPointer.addListener('down', ...)
-    Implement click handler: Check shiftKey modifier for selection vs. cursor movement
-    Helper function needed: screenToLinePosition(cellX, cellY) to map grid coords to input line position
-
-Keyboard Integration Details
-
-    Uses variables: SSTART (selection start), SEND (selection end), LINEP (cursor position)
-    Click with Shift = extend selection; regular click = move cursor
-    Need to validate clicks fall within input line's screen row (LINEY) and column range (LINEX)
-
-Historical Accuracy
-
-    Mouse support is as retro as it gets: Windows 3.1 popularized mouse usage (early 1990s)
-    Commodore 64 had no mouse; your pointer system correctly mirrors that historical transition
