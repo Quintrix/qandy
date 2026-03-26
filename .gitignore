@@ -1,3 +1,11 @@
-*~.html test files
-test-qjs-esc.html
-test-*.html
+index.htm
+index2.htm
+manifest.json
+qandy.htm
+queville.js
+queville-gfx.js
+queville-readmen.txt
+queville-tileset.htm
+readme.txt
+vercel.json
+world.js
