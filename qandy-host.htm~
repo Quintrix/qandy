@@ -3715,6 +3715,7 @@ window.qandy_js=function() {
 RUN="qandy.js"; 
 
 window.button=function(b, event) {
+  console.log("button="+b);
   pokeCursorOff(); 
   var virtualclick=!!(event && event.source === 'virtual'); 
   if (event && typeof event.shiftKey !== 'undefined') shift = !!event.shiftKey;

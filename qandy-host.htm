@@ -3715,6 +3715,7 @@ window.qandy_js=function() {
 RUN="qandy.js"; 
 
 window.button=function(b, event) {
+  console.log("button="+b);
   pokeCursorOff(); 
   var virtualclick=!!(event && event.source === 'virtual'); 
   if (event && typeof event.shiftKey !== 'undefined') shift = !!event.shiftKey;
@@ -4349,16 +4350,32 @@ window.press=function(event) {
     event.source = event.source || 'physical';
     event.ctrlKey = !!(event.ctrlKey || ctrl);
     event.altKey  = !!(event.altKey  || alt);
+    var remappedKeyCode = event.keyCode;
+    var keyChar = String.fromCharCode(event.keyCode).toLowerCase();
+    
+    if (event.altKey || alt) {
+      if ((event.shiftKey || shift) && typeof altShiftKeys === 'object' && altShiftKeys.hasOwnProperty(keyChar)) {
+        // ALT+SHIFT pressed - use altShiftKeys table
+        var newChar = altShiftKeys[keyChar];
+        remappedKeyCode = newChar.charCodeAt(0);
+      } else if (typeof altKeys === 'object' && altKeys.hasOwnProperty(keyChar)) {
+        // ALT only - use altKeys table
+        var newChar = altKeys[keyChar];
+        remappedKeyCode = newChar.charCodeAt(0);
+      }
+    }
+    
     if (keyboard==true) {
       window.button(event.keyCode, event);
     } else {
       try {
-        keydown(event.keyCode, event);
+        keydown(remappedKeyCode, event);  // ← Pass remapped keyCode
       } catch (err) {
         // again, what to do with this error?
         // need to terminate running script and alert user
         console.error("Error: keydown() ", err);
       }
+      return;
       //event.preventDefault && event.preventDefault();
       //event.stopPropagation && event.stopPropagation();
       // Auto-clear virtual modifier locks after key delivery (one-shot behavior)
