@@ -1,3 +1,6 @@
+RUN="charmap.js";
+keyboard=false; // don't think this script needs this?
+
 // Build printable-character strings for the Qandy charmap (step 1)
 // - Uses CP437 glyph substitutions where available
 // - Assembles a single string of displayable characters (no numeric codes)
@@ -66,28 +69,14 @@ function buildQandyPrintableString() {
   return pieces.join('');
 }
 
-// Example usage in a host with `print()` (qandy-host.htm / your environment).
-// If running in a browser where you want to show in the DOM, replace print(...) with a DOM injection.
-//print("\n-- All displayable (0..255) (CP437 substitution where available) --\n");
-//print(buildAllDisplayable(true));
-
-//print("\n-- Qandy printable characters string (1..31, 32..127, 168..223) --\n");
-//var qandyString = buildQandyPrintableString();
-//print(qandyString);
-
 var qandyString=buildAllDisplayable(true);
 
 // Export for later UI code
 window._qandy_charmap_all = buildAllDisplayable(true);
 window._qandy_charmap_keyboard = qandyString;
 
-// Convert a char string into a grid of cells and render them.
-// Each cell is represented visually as: "<pad>char<pad>" (default pad=1 -> " A ").
-// Default screen width is 32 cells (cols = 32).
-
-
 cls();
-print("\n\x1b[35m──── \x1b[33mCharacter Map: \x1b[35m────────────\n\x1b[37m");
+print("\n\x1b[35m──── \x1b[33mCharacter Map: \x1b[35m────────────\n\x1b[37m ");
 
 l=0; for (i=0;i<qandyString.length;i++) {
   print(" "+qandyString.charAt(i));
@@ -95,13 +84,35 @@ l=0; for (i=0;i<qandyString.length;i++) {
   if (l==14) { print("\n "); l=0; }
 }
 
-splash();
+print("\n");
 
-async function splash() {
-  pokeMenu(" Space=select, Enter=Copy ");
-  let morePrompt = await inkey();
-  pokeMenu();
+charString=""; // characters the user has selected
+charPos=65;    // selected character position, default 65 A
+
+function keydown(keyCode, event) {
+  if (typeof keyCode !== 'number') return false;
+  
+  // if (cursor right) charPos++; if (charPos>255) { charPos=1; }}
+  // if (cursor left) { charPos--; if (charPos<1) { charPos=255; }}
+  // if (cursor down) { charPos=charPos+14; if (charPos>255) { charPos=255; }}
+  // if (cursor up) { charPos=charPos-14; ; if (charPos<0) { charPos=0; }}
+  
+  //   need helper to calculate x,y position of selected character on screen
+  //     beware: qandy x,y starts a 0,0 while ansi starts at 1,1 
+  //     the first printed character is at qandy x2 y3  
+  //     there are 14 characters printed per y line, each line starts printing at qandy x2
+  //   
+  //     and then change background color of selected charPos to yellow
+  //     turn it back to black before changing charPos and then change new charPos background to yellow  
+  
+  // if (ctrl-c) { copy charString to clipboard }
+  // if (space) { add currently seclected charPos character to charString and print(character); }
+  // if (back) {
+  //   if (charString>"") {
+  //     remove last character from charString;
+  //     print ANSI code to backspace, delete last printed character
+  //   }
+  // }
+  // if (esc) { dosExit(); }   
+
 }
-
-_cursor=CURSOR; CURSOR=0;
-

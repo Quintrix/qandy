@@ -87,7 +87,7 @@ window._qandy_charmap_keyboard = qandyString;
 
 
 cls();
-print("\n\x1b[35m──── \x1b[33mCharacter Map: \x1b[35m────────────\n\x1b[37m");
+print("\n── Character Map ───────────────\n");
 
 l=0; for (i=0;i<qandyString.length;i++) {
   print(" "+qandyString.charAt(i));

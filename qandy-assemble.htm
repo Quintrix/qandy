@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Qandy Script Injector</title>
+    <style>
+        body { font-family: monospace; padding: 20px; }
+        textarea { width: 100%; height: 300px; margin: 10px 0; }
+        button { padding: 10px 20px; font-size: 16px; background: #0366d6; color: white; border: none; cursor: pointer; }
+        button:hover { background: #0256c7; }
+        #status { margin-top: 20px; padding: 10px; border-radius: 4px; }
+        .success { background: #28a745; color: white; }
+        .error { background: #dc3545; color: white; }
+        .info { background: #17a2b8; color: white; }
+    </style>
+</head>
+<body>
+    <h1>Qandy Script Injector</h1>
+    <p>This tool injects extracted .js files back into qandy-new.htm and copies the result to your clipboard.</p>
+    
+    <h2>Setup Instructions</h2>
+    <ol>
+        <li>Paste the content of <code>qandy-new.htm</code> below</li>
+        <li>Click "Inject Scripts from Repo"</li>
+        <li>The assembled file will be copied to your clipboard</li>
+    </ol>
+    
+    <textarea id="htmlInput" placeholder="Paste qandy-new.htm content here..."></textarea>
+    <button onclick="injectScripts()">Inject Scripts from Repo</button>
+    
+    <div id="status"></div>
+
+    <script>
+        async function injectScripts() {
+            const status = document.getElementById('status');
+            const htmlInput = document.getElementById('htmlInput');
+            
+            if (!htmlInput.value.trim()) {
+                showStatus('Please paste qandy-new.htm content first', 'error');
+                return;
+            }
+            
+            try {
+                showStatus('Loading script files...', 'info');
+                
+                // Define the scripts to inject
+                const scripts = {
+                    'qandy-sound.js': 'https://raw.githubusercontent.com/Quintrix/qandy/master/qandy-sound.js',
+                    'qandy-video.js': 'https://raw.githubusercontent.com/Quintrix/qandy/master/qandy-video.js',
+                    'qandy-keyboard.js': 'https://raw.githubusercontent.com/Quintrix/qandy/master/qandy-keyboard.js',
+                    'qandy-command.js': 'https://raw.githubusercontent.com/Quintrix/qandy/master/qandy-command.js'
+                };
+                
+                // Fetch all scripts
+                const scriptContents = {};
+                for (const [name, url] of Object.entries(scripts)) {
+                    try {
+                        const response = await fetch(url);
+                        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                        scriptContents[name] = await response.text();
+                    } catch (err) {
+                        showStatus(`Warning: Could not load ${name} (${err.message}). It may not exist yet.`, 'info');
+                        scriptContents[name] = `// [${name} not found - file may not exist yet]`;
+                    }
+                }
+                
+                // Inject scripts into HTML
+                let result = htmlInput.value;
+                const injectionMap = {
+                    'function sound_js()': scriptContents['qandy-sound.js'],
+                    'function video_js()': scriptContents['qandy-video.js'],
+                    'function keyboard_js()': scriptContents['qandy-keyboard.js'],
+                    'function command_js()': scriptContents['qandy-command.js']
+                };
+                
+                let injected = 0;
+                for (const [funcName, scriptContent] of Object.entries(injectionMap)) {
+                    // Find the function and replace the placeholder
+                    const pattern = new RegExp(
+                        '(' + funcName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*\\{[^}]*\\/\\/\\s*@@@[^}]*\\})',
+                        'g'
+                    );
+                    
+                    if (pattern.test(result)) {
+                        result = result.replace(pattern, 
+                            `${funcName} {\n${scriptContent}\n}`
+                        );
+                        injected++;
+                    }
+                }
+                
+                // Copy to clipboard
+                await navigator.clipboard.writeText(result);
+                
+                showStatus(
+                    `✓ Success! Injected ${injected} script(s) and copied to clipboard.\n` +
+                    `Total file size: ${(result.length / 1024 / 1024).toFixed(2)} MB`,
+                    'success'
+                );
+            } catch (err) {
+                showStatus(`Error: ${err.message}`, 'error');
+                console.error(err);
+            }
+        }
+        
+        function showStatus(message, type) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = type;
+        }
+    </script>
+</body>
+</html>

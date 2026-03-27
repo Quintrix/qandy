@@ -1,7 +1,6 @@
 // ──── Qandy Keyboard Driver ──────────────────────────────────────────────────────────
 
-function keyboard_js() {
-  alert("yes");
+function keyboard_js() {  
   function _selectKeyboardContainer(prefer) {
     // prefer can be 'host' or 'guest' or undefined
     if (typeof window._getKeyboardContainer === 'function') {

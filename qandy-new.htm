@@ -11,12 +11,12 @@ if (typeof window.print === 'function' && window.print.toString().indexOf('[nati
 </script>
 </head><body><p><br>
 <div id=txt class="txt"></div>
-<script>
+<script>file:///home/joe/qandy/qandy/qandy-host.htm
 // inject style sheet into header for virutal machine  
 (function () {
   if (typeof document === 'undefined') return;
   var css = String.raw`
-  
+
 body { margin: 0; background-color: #333; }
 #cursor { background-color: #CCC; }
 .qpc { position: absolute; top: 0px; left: 0px; width: 160px; height: 24px;
@@ -194,7 +194,7 @@ body { margin: 0; background-color: #333; }
       padding-left: 0px; padding-right: 0px; align-items: center;
       max-width: 24px; max-height: 24px; margin: 0; padding: 4; 
       display: flex; justify-content: center;  align-items: center;       
-	      color: white; background-color: #222; text-align: center;
+      color: white; background-color: #222; text-align: center;
       font-family: Arial; font-size: 13px; weight: bold;
       cursor: pointer; z-index: 99; 
       border: 1px solid #555; border-radius: 3px;
@@ -353,7 +353,7 @@ body { margin: 0; background-color: #333; }
 .qandy-cell.ansi-bg-41 { --bg: #cd0000; background-color: var(--bg); } /* red */
 .qandy-cell.ansi-bg-42 { --bg: #00cd00; background-color: var(--bg); } /* green */
 .qandy-cell.ansi-bg-43 { --bg: #cdcd00; background-color: var(--bg); } /* yellow */
-.qandy-cell.ansi-bg-44 { --bg: #0000ee; background-color: var(--bg); } /* blue */
+.qandy-cellfile:///home/joe/qandy/qandy/qandy-host.htm.ansi-bg-44 { --bg: #0000ee; background-color: var(--bg); } /* blue */
 .qandy-cell.ansi-bg-45 { --bg: #cd00cd; background-color: var(--bg); } /* magenta */
 .qandy-cell.ansi-bg-46 { --bg: #00cdcd; background-color: var(--bg); } /* cyan */
 .qandy-cell.ansi-bg-47 { --bg: #e5e5e5; background-color: var(--bg); } /* white/light gray */
@@ -374,7 +374,7 @@ body { margin: 0; background-color: #333; }
   -webkit-tap-highlight-color: rgba(0,0,0,0);/* remove ugly highlight (optional) */
   -ms-touch-action: manipulation;
 }
-html { -webkit-text-size-adjust: 100%; }     /* keep text size stable across zoom/text adjustments */
+html { -webfile:///home/joe/qandy/qandy/qandy-host.htmkit-text-size-adjust: 100%; }     /* keep text size stable across zoom/text adjustments */
 `;
 
   if (document.getElementById('qandy-css-js')) return; // avoid duplicate insertion
@@ -386,7 +386,7 @@ html { -webkit-text-size-adjust: 100%; }     /* keep text size stable across zoo
   // Use textContent where possible; fall back to createTextNode for very old browsers
   if ('textContent' in style) {
     style.textContent = css;
-  } else {
+  } else {Android Studio
     style.appendChild(document.createTextNode(css));
   }
 
@@ -395,7 +395,7 @@ html { -webkit-text-size-adjust: 100%; }     /* keep text size stable across zoo
 })();
 </script>
 
-<script>
+<script>file:///home/joe/qandy/qandy/qandy-host.htm
 // Define Global Variables
 // sound.js
 var SOUND=true;       // enable/disable sound card
@@ -404,7 +404,7 @@ var SOUND=true;       // enable/disable sound card
 var HOST = 1; if (HOST) { var LOG='host defined\n'; }
 var GUEST = 0; if (GUEST) { var LOG='guest defined\n'; }
 
-var RUN="";     // current script running starting with qandy.js 
+var RUN="";     //Android Studio current script running starting with qandy.js 
 var RUNIN="";   // input mode set by running script, line or key
 var RUNOUT="";  // output display set by running script, gfx or txt
 
@@ -416,11 +416,11 @@ var tempCommand = "";     // Temporary storage for command being typed when brow
 
 var CURSOR=4; // cursor type 0=off, 1=line, 3=blink line, 4=block, 5=blink block  
 var CURX = 0;    // cursor x
-var CURY = 0;    // cursor y
+var CURY = file:///home/joe/qandy/qandy/qandy-host.htm0;    // cursor y
 var CURP = 0;    // cursor p 
 
 var CURANSI=true;   // cursor text ANSI on
-var CURFG=37;       // cursor text fg color white
+var CURFG=37;     Android Studio  // cursor text fg color white
 var CURBG=40;       // cursor text bg color black
 var CURATTR=0;      // cursor text attr 
 var CURBAUD=0;      // baud rate to display text
@@ -436,9 +436,9 @@ var H=25; // screen height
 //var COLOR = [];  // color memory
 //var FCOLOR = []; // foreground color memory
 //var BCOLOR = []; // background color memory
-//var ATTR = [];   // attribute memory
+//var ATTR = [];  Android Studio // attribute memory
 //var DOM = [];    // DOM memory
-
+file:///home/joe/qandy/qandy/qandy-host.htm
 var SYNC=true; // keeps DOM in sync with video
 
 // Attribute bit constants (16-bit)
@@ -452,14 +452,14 @@ var ATTR_RAPIDBLINK = 0x0040; // optional
 var ATTR_HIDDEN     = 0x0080;
 var ATTR_STRIKE     = 0x0100;
 var ATTR_OVERLINE   = 0x0200; // optional
-
+Android Studio
 // Foreground (normal)
 var ANSIblack = "\x1b[30m";
 var ANSIred = "\x1b[31m";
 var ANSIgreen = "\x1b[32m";
 var ANSIyellow = "\x1b[33m";
 var ANSIblue = "\x1b[34m";
-var ANSImagenta = "\x1b[35m";
+var ANSImagfile:///home/joe/qandy/qandy/qandy-host.htmenta = "\x1b[35m";
 var ANSIcyan = "\x1b[36m";
 var ANSIwhite = "\x1b[37m";
 
@@ -467,7 +467,7 @@ var ANSIwhite = "\x1b[37m";
 var ANSIreset = "\x1b[0m";
 
 // Foreground (bright / high-intensity)
-var ANSIblack_bright = "\x1b[90m";
+var ANSIblack_brigAndroid Studioht = "\x1b[90m";
 var ANSIred_bright = "\x1b[91m";
 var ANSIgreen_bright = "\x1b[92m";
 var ANSIyellow_bright = "\x1b[93m";
@@ -483,10 +483,10 @@ var ANSIbgred = "\x1b[41m";
 var ANSIbggreen = "\x1b[42m";
 var ANSIbgyellow = "\x1b[43m";
 var ANSIbgblue = "\x1b[44m";
-var ANSIbgmagenta = "\x1b[45m";
+var ANSIbgmfile:///home/joe/qandy/qandy/qandy-host.htmagenta = "\x1b[45m";
 var ANSIbgcyan = "\x1b[46m";
 var ANSIbgwhite = "\x1b[47m";
-
+Android Studio
 // Background (bright)
 var ANSIbgblack_bright = "\x1b[100m";
 var ANSIbgred_bright = "\x1b[101m";
@@ -498,11 +498,11 @@ var ANSIbgcyan_bright = "\x1b[106m";
 var ANSIbgwhite_bright = "\x1b[107m";
 
 // Useful attribute helpers
-var ANSIbold = "\x1b[1m";
+var ANSIbolfile:///home/joe/qandy/qandy/qandy-host.htmd = "\x1b[1m";
 var ANSIdim = "\x1b[2m";
 var ANSIitalic = "\x1b[3m";
 var ANSIunderline = "\x1b[4m";
-var ANSIinverse = "\x1b[7m";
+var ANSIinverse = Android Studio"\x1b[7m";
 var ANSIhidden = "\x1b[8m";
 var ANSIstrikethrough = "\x1b[9m";
 var ANSIresetAll = "\x1b[0m"; // same as ANSIreset
@@ -512,7 +512,7 @@ var txt="";
 var mode="txt"; // gfx or txt display
 var allowScriptESC=false; // if true, script handles ESC instead of universal termination
 var PopX=0;
-var PopY=0;
+var PopY=0;file:///home/joe/qandy/qandy/qandy-host.htm
 var PopHide="hidden";
 var PopAlign="center";
 var PForce="hidden";
@@ -520,7 +520,7 @@ var mapx=7;
 var mapy=11;
 var map="";
 
-// keyboard.js
+// keyboard.jsAndroid Studio
 var keyon=1;
 var caps=0;  // caps lock state: 0=lowercase, 1=uppercase, 2=extended graphics
 var shift=0; // shift key pressed  
@@ -536,9 +536,9 @@ var modifierFlagFgColor = '#000';          // active modifier key foreground
 var modifierFlagBgColorOff = '#222';       // inactive modifier key background
 var modifierFlagFgColorOff = '#fff';       // inactive modifier key foreground
 var modifierFlagBgColorPhysical = '#bbb';  // physical-hold modifier key background
-
+Android Studio
 var keyboard=1; // turn keyboard input on/off
-
+file:///home/joe/qandy/qandy/qandy-host.htm
 var LINE ="";  // input line
 var LINEX=0;   // start of input cursor x
 var LINEY=0;   // start of input cursor y
@@ -549,7 +549,7 @@ var SEND=-1;    // selection end
 
 var selectionBgColor = '#ffffff';   // old Selection background color
 var selectionFgColor = '#000000';   // old Selection text color
-
+Android Studio
 //
 // keyboard.js
 //
@@ -557,7 +557,7 @@ var selectionFgColor = '#000000';   // old Selection text color
 var normalKeys = {
            "`":"`","[":"[", "]":"]", "\\":"\\","-":"-", "=":"=", 
   "1":"1", "2":"2", "3":"3", "4":"4", "5":"5", "6":"6", "7":"7", "8":"8", "9":"9", "0":"0",
-  "q":"q", "w":"w", "e":"e", "r":"r", "t":"t", "y":"y", "u":"u", "i":"i", "o":"o", "p":"p",
+  "q":"q", file:///home/joe/qandy/qandy/qandy-host.htm"w":"w", "e":"e", "r":"r", "t":"t", "y":"y", "u":"u", "i":"i", "o":"o", "p":"p",
   "a":"a", "s":"s", "d":"d", "f":"f", "g":"g", "h":"h", "j":"j", "k":"k", "l":"l", "'":"'",
   "z":"z", "x":"x", "c":"c", "v":"v", "b":"b", "n":"n", "m":"m", ";":";",
                     " ":" ",                   ",":",", ".":".", "/":"/"
@@ -571,8 +571,8 @@ var shiftedKeys = {
   "z":"Z", "x":"X", "c":"C", "v":"V", "b":"B", "n":"N", "m":"M", ";":":", 
                     " ":" ",                   ",":"<", ".":">", "/":"?"
 };
-
-var altKeys = {
+Android Studio
+var altKeysfile:///home/joe/qandy/qandy/qandy-host.htm = {
            "`":"¶", "[":"§", "]":"¼", "\\":"½","-":"*", "=":"/",
   "1":"1", "2":"2", "3":"3", "4":"4", "5":"5", "6":"6", "7":"7", "8":"8", "9":"9", "0":"0",
   "q":"Hm","w":"⬆", "e":"Ed","r":"Pu","t":"•", "y":"◘", "u":"4", "i":"5", "o":"6", "p":"-",
@@ -584,14 +584,14 @@ var altKeys = {
 var altShiftKeys = {
            "`":"█", "[":"▌", "]":"▄","\\":"▀", "-":"▐", "=":"▬",
   "1":"▲", "2":"▼", "3":"◄", "4":"►", "5":"↑", "6":"↓", "7":"←", "8":"→", "9":"↔", "0":"↕ ",
-  "q":"┌", "w":"┬", "e":"┐", "r":"│", "t":"╔", "y":"╦", "u":"╗", "i":"║", "o":"♥", "p":"♣",
+  "q":"┌", "w":"┬"Android Studio, "e":"┐", "r":"│", "t":"╔", "y":"╦", "u":"╗", "i":"║", "o":"♥", "p":"♣",
   "a":"├", "s":"┼", "d":"┤", "f":"─", "g":"╠", "h":"╬", "j":"╣", "k":"═", "l":"♦", "'":"♠",
   "z":"└", "x":"┴", "c":"┘", "v":"☺", "b":"╚", "n":"╩", "m":"╝", ";":"☻",
   " ":" ", ",":"▓", ".":"▒", "/":"░"
 };
 
 var keyboardData = [
-  // Row 0: ESC, BACKTICK, BACKSLASH, OPEN, CLOSE, DASH, EQUAL, BACK (y=446)
+  // Row 0:file:///home/joe/qandy/qandy/qandy-host.htm ESC, BACKTICK, BACKSLASH, OPEN, CLOSE, DASH, EQUAL, BACK (y=446)
   {id:"esc", label:"ESC", keyCode:27, x:47, y:446, width:52},
   {id:"backtick", label:"`", keyCode:192, x:103, y:446, width:28},
   {id:"open", label:"[", keyCode:219, x:132, y:446, width:28},
@@ -600,7 +600,7 @@ var keyboardData = [
   {id:"dash", label:"-", keyCode:173, x:218, y:446, width:28},
   {id:"equal", label:"=", keyCode:61, x:247, y:446, width:28},
   {id:"back", label:"BACK", keyCode:8, x:275, y:446, width:52},
-  // Row 1: Number keys 1-0 (y=480)
+  // Row 1: NumberAndroid Studio keys 1-0 (y=480)
   {id:"n1", label:"1", keyCode:49, x:47, y:480, width:28},
   {id:"n2", label:"2", keyCode:50, x:75, y:480, width:28},
   {id:"n3", label:"3", keyCode:51, x:103, y:480, width:28},
@@ -612,7 +612,7 @@ var keyboardData = [
   {id:"n9", label:"9", keyCode:57, x:275, y:480, width:28},
   {id:"n0", label:"0", keyCode:48, x:303, y:480, width:28},
   // Row 2: QWERTY (y=511)
-  {id:"q", label:"q", keyCode:81, x:47, y:511, width:28},
+  {id:"q", file:///home/joe/qandy/qandy/qandy-host.htmlabel:"q", keyCode:81, x:47, y:511, width:28},
   {id:"w", label:"w", keyCode:87, x:75, y:511, width:28},
   {id:"e", label:"e", keyCode:69, x:103, y:511, width:28},
   {id:"r", label:"r", keyCode:82, x:132, y:511, width:28},
@@ -626,7 +626,7 @@ var keyboardData = [
   {id:"a", label:"a", keyCode:65, x:47, y:542, width:28},
   {id:"s", label:"s", keyCode:83, x:75, y:542, width:28},
   {id:"d", label:"d", keyCode:68, x:103, y:542, width:28},
-  {id:"f", label:"f", keyCode:70, x:132, y:542, width:28},
+  {id:"f", label:"Android Studiof", keyCode:70, x:132, y:542, width:28},
   {id:"g", label:"g", keyCode:71, x:160, y:542, width:28},
   {id:"h", label:"h", keyCode:72, x:189, y:542, width:28},
   {id:"j", label:"j", keyCode:74, x:218, y:542, width:28},
@@ -649,7 +649,7 @@ var keyboardData = [
   {id:"space", label:"SPACE", keyCode:32, x:103, y:604, width:81},
   {id:"ctrl", label:"CTRL", keyCode:17, x:189, y:604, width:28},
   {id:"alt", label:"ALT", keyCode:18, x:218, y:604, width:28},
-  {id:"comma", label:",", keyCode:188, x:247, y:604, width:28},
+  {id:"commfile:///home/joe/qandy/qandy/qandy-host.htma", label:",", keyCode:188, x:247, y:604, width:28},
   {id:"dot", label:".", keyCode:190, x:275, y:604, width:28},
   {id:"slash", label:"/", keyCode:191, x:303, y:604, width:28}
 ];
@@ -662,16 +662,16 @@ var paginationLinesBeforePause = 25;  // Lines to show before pausing
 var inInputMode = false;       // True when processing user input (prevents pagination)
 
 // mark host mode explicitly
-window.QANDY = window.QANDY || {};
+window.QANDfile:///home/joe/qandy/qandy/qandy-host.htmY = window.QANDY || {};
 window.QANDY.mode = 'host'; // 'host' (file server), not the emulated machine
 
 // Configuration array with script load order (unchanged)
 
 var SCRIPT_QUEUE = [
-  { src: 'video.js', name: 'video.js' },
-  { src: 'keyboard.js', name: 'keyboard.js' },
-  { src: 'command.js', name: 'command.js' },
-  { src: 'qandy.js', name: 'qandy.js' },
+  { src: 'video.js', name: 'video_js' },
+  { src: 'qandy-keyboard.js', name: 'keyboard_js' },
+  { src: 'command.js', name: 'command_js' },
+  { src: 'qandy.js', name: 'qandy_js' },
 ];
 
 var currentIndex = 0;
@@ -683,7 +683,7 @@ window.qandySignalReady = function(scriptName) {
 };
   
 function loadNext() {
-  if (typeof signalAdvance === 'function') { signalAdvance(); }
+  if (typeofile:///home/joe/qandy/qandy/qandy-host.htmf signalAdvance === 'function') { signalAdvance(); }
   if (currentIndex >= SCRIPT_QUEUE.length) {
     // Call startup() (if present). Use an async IIFE so startup can be async/await.
     (async function() {
@@ -705,7 +705,7 @@ function loadNext() {
   var advanced = false;
   function advance() {
     if (advanced) return;
-    advanced = true;
+    advancefile:///home/joe/qandy/qandy/qandy-host.htmd = true;
     signalAdvance = null;
     loadNext();
   }
@@ -713,13 +713,15 @@ function loadNext() {
   // Register advance as the handler for qandySignalReady for this script
   signalAdvance = advance;
 
-  switch (entry.name) {
-    case "video.js": video_js(); break;
-    case "keyboard.js": keyboard_js(); break;
-    case "command.js": command_js(); break;
-    case "qandy.js": qandy_js(); break; 
+  if (typeof window[entry.name] === 'function') {
+    window[entry.name]();
+  } else {
+    const prg=document.createElement('script');
+    prg.src=entry.src;
+    prg.onload=() => { window[entry.name](); };
+    prg.onerror=() => { print("Error loading program"); };
+    document.body.appendChild(prg);
   }
-
 
   // Keep a shorter timeout as a final safety
   var timeout = setTimeout(function() {
@@ -737,7 +739,7 @@ function powerOn() {
 
   var overlay = document.createElement('div');
   overlay.id = 'qandy-power-overlay';
-  overlay.setAttribute('role', 'button');
+  overlay.sfile:///home/joe/qandy/qandy/qandy-host.htmetAttribute('role', 'button');
   overlay.setAttribute('aria-label', 'Power on the Qandy Pocket Computer');
   overlay.tabIndex = 0;
 
@@ -756,7 +758,7 @@ function powerOn() {
     userSelect: 'none'
   });
 
-  var label = document.createElement('div');
+  var labelfile:///home/joe/qandy/qandy/qandy-host.htm = document.createElement('div');
   label.id = 'qandy-power-label';
   label.textContent = 'POWER ON';
   Object.assign(label.style, {
@@ -774,7 +776,7 @@ function powerOn() {
   var helper = document.createElement('div');
   helper.id = 'qandy-power-helper';
   helper.textContent = 'Click any button,\npress any key,\nor touch screen to power on.';
-  Object.assign(helper.style, {
+  Object.asfile:///home/joe/qandy/qandy/qandy-host.htmsign(helper.style, {
     color: '#ffffff',
     fontFamily: 'monospace, monospace',
     fontSize: '12px',
@@ -793,7 +795,7 @@ function powerOn() {
 
   overlay.appendChild(stack);
   document.body.appendChild(overlay);
-
+file:///home/joe/qandy/qandy/qandy-host.htm
   var reposition = function () {
     var r = target.getBoundingClientRect();
     overlay.style.left = r.left + 'px';
@@ -808,7 +810,7 @@ function powerOn() {
     ro = new MutationObserver(reposition);
     try { ro.observe(target, { attributes: true, childList: true, subtree: true }); } catch (e) {}
   }
-
+file:///home/joe/qandy/qandy/qandy-host.htm
   function engageHandler(e) {
     cleanupListeners();
     // Immediate tiny beep (inside user gesture)
@@ -1520,29 +1522,1784 @@ async function startup() {
 }
 
 
+//
+// ──── Qandy Sound Card ──────────────────────────────────────────────────────────────
+//
 
 window.sound_js=function() {
-// @@@ sound_js() was extracted to 'qandy-sound.js' 
+  window.audioContext = null;
+  window.noteFrequencies = {
+    'C0': 16.35, 'C#0': 17.32, 'Db0': 17.32, 'D0': 18.35, 'D#0': 19.45, 'Eb0': 19.45, 'E0': 20.60,
+    'F0': 21.83, 'F#0': 23.12, 'Gb0': 23.12, 'G0': 24.50, 'G#0': 25.96, 'Ab0': 25.96, 'A0': 27.50,
+    'A#0': 29.14, 'Bb0': 29.14, 'B0': 30.87, 'C1': 32.70, 'C#1': 34.65, 'Db1': 34.65, 'D1': 36.71,
+    'D#1': 38.89, 'Eb1': 38.89, 'E1': 41.20, 'F1': 43.65, 'F#1': 46.25, 'Gb1': 46.25, 'G1': 49.00,
+    'G#1': 51.91, 'Ab1': 51.91, 'A1': 55.00, 'A#1': 58.27, 'Bb1': 58.27, 'B1': 61.74, 'C2': 65.41,
+    'C#2': 69.30, 'Db2': 69.30, 'D2': 73.42, 'D#2': 77.78, 'Eb2': 77.78, 'E2': 82.41, 'F2': 87.31,
+    'F#2': 92.50, 'Gb2': 92.50, 'G2': 98.00, 'G#2': 103.83, 'Ab2': 103.83, 'A2': 110.00,
+    'A#2': 116.54, 'Bb2': 116.54, 'B2': 123.47,
+    'C3': 130.81, 'C#3': 138.59, 'Db3': 138.59, 'D3': 146.83, 'D#3': 155.56, 'Eb3': 155.56,
+    'E3': 164.81, 'F3': 174.61, 'F#3': 185.00, 'Gb3': 185.00, 'G3': 196.00, 'G#3': 207.65, 'Ab3': 207.65,
+    'A3': 220.00, 'A#3': 233.08, 'Bb3': 233.08, 'B3': 246.94,
+    'C4': 261.63, 'C#4': 277.18, 'Db4': 277.18, 'D4': 293.66, 'D#4': 311.13, 'Eb4': 311.13,
+    'E4': 329.63, 'F4': 349.23, 'F#4': 369.99, 'Gb4': 369.99, 'G4': 392.00, 'G#4': 415.30, 'Ab4': 415.30,
+    'A4': 440.00, 'A#4': 466.16, 'Bb4': 466.16, 'B4': 493.88,
+    'C5': 523.25, 'C#5': 554.37, 'Db5': 554.37, 'D5': 587.33, 'D#5': 622.25, 'Eb5': 622.25,
+    'E5': 659.25, 'F5': 698.46, 'F#5': 739.99, 'Gb5': 739.99, 'G5': 783.99, 'G#5': 830.61, 'Ab5': 830.61,
+    'A5': 880.00, 'A#5': 932.33, 'Bb5': 932.33, 'B5': 987.77,
+    'C6': 1046.50, 'C#6': 1108.73, 'Db6': 1108.73, 'D6': 1174.66, 'D#6': 1244.51, 'Eb6': 1244.51,
+    'E6': 1318.51, 'F6': 1396.91, 'F#6': 1479.98, 'Gb6': 1479.98, 'G6': 1567.98, 'G#6': 1661.22, 'Ab6': 1661.22,
+    'A6': 1760.00, 'A#6': 1864.66, 'Bb6': 1864.66, 'B6': 1975.53,
+    'C7': 2093.00, 'C#7': 2217.46, 'Db7': 2217.46, 'D7': 2349.32, 'D#7': 2489.02, 'Eb7': 2489.02,
+    'E7': 2637.02, 'F7': 2793.83, 'F#7': 2959.96, 'Gb7': 2959.96, 'G7': 3135.96, 'G#7': 3322.44, 'Ab7': 3322.44,
+    'A7': 3520.00, 'A#7': 3729.31, 'Bb7': 3729.31, 'B7': 3951.07,
+    'C8': 4186.01, 'C#8': 4434.92, 'Db8': 4434.92, 'D8': 4698.63, 'D#8': 4978.03, 'Eb8': 4978.03,
+    'E8': 5274.04, 'F8': 5587.65, 'F#8': 5919.91, 'Gb8': 5919.91, 'G8': 6271.93, 'G#8': 6644.88, 'Ab8': 6644.88,
+    'A8': 7040.00, 'A#8': 7458.62, 'Bb8': 7458.62, 'B8': 7902.13
+   };
+
+   window.playNote = function(note, duration = 200) {
+    // Convert note to uppercase and trim whitespace
+    note = note.toString().trim().toUpperCase();
+  
+    // If only a letter is provided (e.g., "C"), default to octave 4 (middle C)
+    const validNotes = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
+    if (note.length === 1 && validNotes.indexOf(note) !== -1) {
+      note = note + '4';
+    } else if (note.length === 2 && (note[1] === '#' || note[1] === 'B')) {
+      // If note is like "C#" or "DB" (flat after uppercase), default to octave 4
+      note = note + '4';
+    }
+  
+    // Look up the frequency for the note
+    const frequency = noteFrequencies[note];
+  
+    if (!frequency) {
+      // Error: Unknown note - valid notes are C, C#/Db, D, D#/Eb, E, F, F#/Gb, G, G#/Ab, A, A#/Bb, B
+      // Octaves: 0-8 (e.g., 'C4' is middle C, 'A4' is 440Hz)
+      return false;
+    }
+  
+    // Use the existing beep function with the note's frequency
+    return beep(frequency, duration);
+   }
+   currentTune = null;  // Currently playing tune (can be stopped)
+   var tuneTimeout = null;  // Timeout for next note
+   window.playTune = function(musicString, onComplete) {
+    stopTune();
+    window.notes = parseMusicString(musicString);
+    if (!notes || notes.length === 0) { return false; }
+    currentTune = { notes: notes, index: 0, onComplete: onComplete };
+    playNextNote();
+    return true;
+   }
+   window.parseMusicString = function(musicString) {
+    const notes = []; const tokens = musicString.trim().split(/\s+/);
+    for (let i = 0; i < tokens.length; i++) {
+      const token = tokens[i];
+      const parts = token.split(':');
+      const noteName = parts[0].trim().toUpperCase();
+      let duration = parts[1] ? parseInt(parts[1]) : 200;
+      if (isNaN(duration) || duration <= 0) { duration = 200; }
+      if (noteName === 'R' || noteName === 'REST') { notes.push({ type: 'rest', duration: duration }); } else { notes.push({ type: 'note', note: noteName, duration: duration });}
+    }
+    return notes;
+   }
+  window.playNextNote = function() {
+  if (!currentTune || currentTune.index >= currentTune.notes.length) {
+    const callback = currentTune ? currentTune.onComplete : null;
+    currentTune = null;
+    if (callback) { callback(); }
+    return;
+  }
+  const noteInfo = currentTune.notes[currentTune.index];
+  currentTune.index++;
+  if (noteInfo.type === 'rest') {
+    tuneTimeout = setTimeout(playNextNote, noteInfo.duration);
+  } else {
+    playNote(noteInfo.note, noteInfo.duration);
+    tuneTimeout = setTimeout(playNextNote, noteInfo.duration);
+  }
+ }
+
+window.stopTune = function() { if (tuneTimeout) { clearTimeout(tuneTimeout); tuneTimeout = null; } currentTune = null; }
+window.loopTune = function(musicString) { playTune(musicString, function() { loopTune(musicString); });}
+window.loopNotes = function(gwbasicString) { playNotes(gwbasicString, function() { loopNotes(gwbasicString); }); }
+window.playMelody = function(notesArray, onComplete) {
+  const musicString = notesArray.map(function(note) {
+    if (note[0] === 'R' || note[0] === 'rest') { return 'R:' + (note[1] || 200); }
+    return note[0] + ':' + (note[1] || 200);
+  }).join(' ');
+  return playTune(musicString, onComplete);
+}
+window.playNotes = function(gwbasicString, onComplete) {
+  const notes = parseGWBasicString(gwbasicString);
+  if (!notes || notes.length === 0) { return false; }
+  const musicString = notes.map(function(note) {
+    if (note.type === 'rest') { return 'R:' + note.duration; }
+    return note.note + ':' + note.duration;
+  }).join(' ');
+  return playTune(musicString, onComplete);
+}
+window.parseGWBasicString = function(str) {
+  const notes = [];
+  let currentOctave = 4;  // Default octave
+  let currentLength = 4;  // Default quarter note (L4)
+  let currentTempo = 120; // Default tempo (120 BPM = quarter notes per minute)
+  function getDuration(length) { return Math.round((60000 / currentTempo) * (4 / length)); }
+  str = str.trim().toUpperCase();
+  let i = 0;
+  while (i < str.length) {
+    const char = str[i];
+    if (char === ' ' || char === '\t') { i++; continue; }
+    if (char === 'T') { i++; let numStr = '';
+      while (i < str.length && str[i] >= '0' && str[i] <= '9') { numStr += str[i]; i++; }
+      if (numStr) { const tempo = parseInt(numStr); if (tempo > 0 && tempo <= 255) { currentTempo = tempo; } }
+      continue;
+    }
+    if (char === 'L') {
+      i++; let numStr = '';
+      while (i < str.length && str[i] >= '0' && str[i] <= '9') { numStr += str[i]; i++; }
+      if (numStr) { const length = parseInt(numStr); if (length > 0 && length <= 64) { currentLength = length; } }
+      continue;
+    }
+    if (char === 'O') {
+      i++; if (i < str.length && str[i] >= '0' && str[i] <= '6') { currentOctave = parseInt(str[i]); i++; }
+      continue;
+    }
+    
+    if (char === 'P') {
+      i++; let numStr = '';
+      while (i < str.length && str[i] >= '0' && str[i] <= '9') { numStr += str[i]; i++; }
+      const length = numStr ? parseInt(numStr) : currentLength;
+      notes.push({ type: 'rest', duration: getDuration(length) });
+      continue;
+    }
+    if (char >= 'A' && char <= 'G') {
+      let noteName = char; i++;
+      if (i < str.length && (str[i] === '#' || str[i] === '+')) {
+        noteName += '#'; i++;
+      } else if (i < str.length && str[i] === '-') {
+        const flats = { 'D': 'C#', 'E': 'D#', 'G': 'F#', 'A': 'G#', 'B': 'A#' };
+        if (flats[noteName]) { noteName = flats[noteName]; }
+        i++;
+      }
+      let noteLength = currentLength; let numStr = '';
+      while (i < str.length && str[i] >= '0' && str[i] <= '9') { numStr += str[i]; i++; }
+      if (numStr) { noteLength = parseInt(numStr); }
+      notes.push({ type: 'note', note: noteName + currentOctave, duration: getDuration(noteLength) });
+      continue;
+    }
+    i++;
+  }
+  return notes;
+}
+window.BEEP_VOLUME = (typeof window.BEEP_VOLUME !== 'undefined') ? window.BEEP_VOLUME : 0.3;
+window.beep = function(frequency = 800, duration = 200, volume) {
+  try {
+    if (!audioContext) {
+      if (!window.AudioContext && !window.webkitAudioContext) { throw new Error('Web Audio API is not supported in this browser'); }
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    var vol = (typeof volume === 'number') ? volume : (window.BEEP_VOLUME || 0.3);
+    vol = Math.max(0, Math.min(1, vol)); // clamp 0.0..1.0
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    oscillator.type = 'sine';
+    oscillator.frequency.value = frequency;
+    gainNode.gain.value = vol;
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    const startTime = audioContext.currentTime;
+    const endTime = startTime + (duration / 1000);
+    oscillator.start(startTime);
+    oscillator.stop(endTime);
+    return true;
+  } catch (error) {
+    return false;
+  }
 }
 
+window.volume = function(level) {
+  if (typeof level === 'undefined') { return (typeof window.BEEP_VOLUME === 'number') ? window.BEEP_VOLUME : 0.3; }
+  var prev = (typeof window.BEEP_VOLUME === 'number') ? window.BEEP_VOLUME : 0.3;
+  var v = Number(level);
+  if (isNaN(v)) v = 0;
+  window.BEEP_VOLUME = Math.max(0, Math.min(1, v));
+  return prev;
+}
+
+// if (isGuest) { beep(); }
+
+// Signal that sound.js is ready
+if (typeof window.qandySignalReady === 'function') {
+  window.qandySignalReady('sound.js');
+}
+}
+
+//
+// ──── Qandy Video Graphics Adaptor (DOM-based) ──────────────────────────────────────
+//
+
 function video_js() {
-// @@@ video_js extracted to 'qandy-video.js'
+  var cellGrid = [];
+  var EMPTY_CELL = '\u00A0';
+  
+  function getW() { return (typeof W === 'number') ? W : 32; }
+  function getH() { return (typeof H === 'number') ? H : 25; }
+  
+  function buildCellClass(fgCode, bgCode, attr) {
+    var cls = 'qandy-cell ansi-fg-' + (fgCode | 0) + ' ansi-bg-' + (bgCode | 0);
+    var a = attr | 0;
+    if (a & 0x0001) cls += ' ansi-inverse';
+    if (a & 0x0002) cls += ' ansi-bold';
+    if (a & 0x0004) cls += ' ansi-dim';
+    if (a & 0x0008) cls += ' ansi-italic';
+    if (a & 0x0010) cls += ' ansi-underline';
+    if (a & 0x0020) cls += ' ansi-blink';
+    return cls;
+  }
+  
+  function validateCoords(x, y) { 
+    return (typeof x === 'number' && typeof y === 'number' && x >= 0 && y >= 0 && x < getW() && y < getH()); 
+  }
+  
+  function clampRow(r) { 
+    if (typeof r !== 'number' || isNaN(r)) return 0; 
+    if (r < 0) return 0; 
+    if (r >= getH()) return getH() - 1; 
+    return r; 
+  }
+  
+  // ──── Initalization ────────────────────────────────────────────────
+  
+  function initGrid() {
+    var cols = getW(); 
+    var rows = getH();
+    var container = document.getElementById('txt');
+    if (!container) return false;
+    container.innerHTML = ''; 
+    cellGrid = [];
+
+    var frag = document.createDocumentFragment();
+    var defaultFg = (typeof CURFG === 'number') ? CURFG : 37;
+    var defaultBg = (typeof CURBG === 'number') ? CURBG : 40;
+    var defaultCls = buildCellClass(defaultFg, defaultBg, 0);
+
+    for (var y = 0; y < rows; y++) {
+      var rowDiv = document.createElement('div');
+      rowDiv.className = 'qandy-row';
+      cellGrid[y] = new Array(cols);
+
+      for (var x = 0; x < cols; x++) {
+        var span = document.createElement('span');
+        span.className = defaultCls;
+        span._lastClass = defaultCls;
+        span.textContent = EMPTY_CELL;
+        rowDiv.appendChild(span);
+        cellGrid[y][x] = span;
+      }
+      frag.appendChild(rowDiv);
+    }
+    container.appendChild(frag);
+    return true;
+  }
+  
+  initGrid();
+  
+  // ──── the pokes ────────────────────────────────────────────────────
+  
+  window.pokeCell=function(x, y, ch, fg, bg, attr) {
+    var cols = getW();
+    var rows = getH();
+
+    if (typeof x !== 'number' || typeof y !== 'number') return false;
+    if (x < 0 || x >= cols || y < 0 || y >= rows) return false;
+
+    // Normalize character
+    if (typeof ch === 'undefined' || ch === null) ch = ' ';
+    ch = String(ch).charAt(0) || ' ';
+
+    // Resolve color / attribute values, falling back to current cursor state
+    var fgCode  = (typeof fg   === 'number') ? (fg   | 0) : ((typeof CURFG   === 'number') ? CURFG   : 37);
+    var bgCode  = (typeof bg   === 'number') ? (bg   | 0) : ((typeof CURBG   === 'number') ? CURBG   : 40);
+    var attrVal = (typeof attr === 'number') ? (attr | 0) : ((typeof CURATTR === 'number') ? CURATTR : 0);
+
+    var span = cellGrid[y] && cellGrid[y][x];
+    if (!span) return false;
+
+    // Update text
+    var newText = (ch === ' ') ? EMPTY_CELL : ch;
+    if (span.textContent !== newText) span.textContent = newText;
+
+    // Update class only when it has changed
+    var cls = buildCellClass(fgCode, bgCode, attrVal);
+    if (span._lastClass !== cls) {
+      span.className = cls;
+      span._lastClass = cls;
+    }
+
+    return true;
+  }
+  
+  window.pokeText = function(x, y, t, n) {
+    if (typeof x !== 'number' || typeof y !== 'number') return false;
+    if (typeof t === 'undefined' || t === null) return false;
+    n = (typeof n === 'undefined' || n === null) ? 1 : parseInt(n, 10);
+    if (isNaN(n) || n < 1) n = 1;
+    
+    var str = String(t);
+    var cx = x, cy = y;
+    var cols = getW();
+    var rows = getH();
+    
+    for (var repeat = 0; repeat < n; repeat++) {
+      for (var i = 0; i < str.length; i++) {
+        var c = str[i];
+        if (c === '\n') {
+          cx = 0; 
+          cy++;
+          if (cy >= rows) return false;
+          continue;
+        }
+        if (cx >= cols) {
+          cx = 0; 
+          cy++;
+          if (cy >= rows) return false;
+        }
+        pokeCell(cx, cy, c, CURFG, CURBG, CURATTR);
+        cx++;
+      }
+    }
+    return true;
+  };
+  
+  window.pokeColor = function(x, y, f, b, n) {
+    if (!validateCoords(x, y)) return false;
+    if (typeof f === 'undefined') { f = CURFG; }
+    if (typeof b === 'undefined') { b = CURBG; }
+    
+    var count = (typeof n === 'number' && n > 0) ? Math.floor(n) : 1;
+    var cols = getW();
+    var rows = getH();
+    var offset = 0;
+    
+    while (count > 0) {
+      var abs = x + offset;
+      var row = y + Math.floor(abs / cols);
+      var col = abs % cols;
+      if (row >= rows) break;
+      
+      var span = cellGrid[row] && cellGrid[row][col];
+      if (span) {
+        var ch = span.textContent === EMPTY_CELL ? ' ' : span.textContent;
+        var currentAttr = extractAttrFromDOM(span);
+        pokeCell(col, row, ch, f, b, currentAttr);
+      }
+      offset++;
+      count--;
+    }
+    return true;
+  };
+  
+  window.pokeChar = function(x, y, a, n) {
+    if (typeof a === 'undefined') return false;
+    if (!validateCoords(x, y)) return false;
+    
+    var ch = (typeof a === 'string') ? a : String(a)[0] || ' ';
+    n = (typeof n === 'number' && !isNaN(n) && n > 0) ? (n|0) : 1;
+    
+    var cols = getW();
+    var rows = getH();
+    var remaining = n;
+    var cx = x | 0;
+    var cy = y | 0;
+    var written = 0;
+    
+    while (remaining > 0 && cy < rows) {
+      var space = cols - cx;
+      if (space <= 0) { cx = 0; cy++; continue; }
+      var take = Math.min(remaining, space);
+      for (var i = 0; i < take; i++) { 
+        pokeCell(cx + i, cy, ch, CURFG, CURBG, CURATTR);
+      }
+      written += take;
+      remaining -= take;
+      cx = 0;
+      cy++;
+    }
+    return (n === 1) ? true : written;
+  };
+  
+  window.pokeFG = function(x, y, fg, count) {
+    // Getter: if fg is undefined, return current fg value
+    if (typeof fg === 'undefined') {
+      if (!validateCoords(x, y)) return undefined;
+      var span = cellGrid[y] && cellGrid[y][x];
+      if (!span) return undefined;
+      // Extract fg code from class name
+      var match = span.className.match(/ansi-fg-(\d+)/);
+      return match ? parseInt(match[1], 10) : 37;
+    }
+
+    // Setter: validate coords
+    if (!validateCoords(x, y)) return false;
+    count = (typeof count === 'number' && count > 0) ? Math.floor(count) : 1;
+    
+    var cols = getW();
+    var rows = getH();
+    var maxRemaining = Math.max(0, cols * rows - (y * cols + x));
+    if (count > maxRemaining) count = maxRemaining;
+    if (count <= 0) return false;
+
+    var fgCode = (typeof fg === 'number') ? (fg | 0) : 37;
+    var offset = 0;
+    
+    while (count > 0) {
+      var abs = x + offset;
+      var row = y + Math.floor(abs / cols);
+      var col = abs % cols;
+      if (row >= rows) break;
+      
+      var span = cellGrid[row] && cellGrid[row][col];
+      if (span) {
+        var ch = span.textContent === EMPTY_CELL ? ' ' : span.textContent;
+        var bgMatch = span.className.match(/ansi-bg-(\d+)/);
+        var currentBg = bgMatch ? parseInt(bgMatch[1], 10) : CURBG;
+        var currentAttr = extractAttrFromDOM(span);
+        pokeCell(col, row, ch, fgCode, currentBg, currentAttr);
+      }
+      offset++;
+      count--;
+    }
+    return count;
+  };
+  
+  window.pokeBG = function(x, y, bg, count) {
+    // Getter: if bg is undefined, return current bg value
+    if (typeof bg === 'undefined') {
+      if (!validateCoords(x, y)) return undefined;
+      var span = cellGrid[y] && cellGrid[y][x];
+      if (!span) return undefined;
+      // Extract bg code from class name
+      var match = span.className.match(/ansi-bg-(\d+)/);
+      return match ? parseInt(match[1], 10) : 40;
+    }
+
+    // Setter: validate coords
+    if (!validateCoords(x, y)) return false;
+    count = (typeof count === 'number' && count > 0) ? Math.floor(count) : 1;
+    
+    var cols = getW();
+    var rows = getH();
+    var maxRemaining = Math.max(0, cols * rows - (y * cols + x));
+    if (count > maxRemaining) count = maxRemaining;
+    if (count <= 0) return false;
+
+    var bgCode = (typeof bg === 'number') ? (bg | 0) : 40;
+    var offset = 0;
+    
+    while (count > 0) {
+      var abs = x + offset;
+      var row = y + Math.floor(abs / cols);
+      var col = abs % cols;
+      if (row >= rows) break;
+      
+      var span = cellGrid[row] && cellGrid[row][col];
+      if (span) {
+        var ch = span.textContent === EMPTY_CELL ? ' ' : span.textContent;
+        var currentFg = 37; // fallback
+        var match = span.className.match(/ansi-fg-(\d+)/);
+        if (match) currentFg = parseInt(match[1], 10);
+        var currentAttr = extractAttrFromDOM(span);
+        pokeCell(col, row, ch, currentFg, bgCode, currentAttr);
+      }
+      offset++;
+      count--;
+    }
+    return count;
+  };
+  
+  window.pokeAttr = function(x, y, attrValue, n) {
+    if (typeof x !== 'number' || typeof y !== 'number') return false;
+    if (typeof attrValue !== 'number') return false;
+    
+    n = (typeof n === 'number' && n > 0) ? Math.floor(n) : 1;
+    attrValue = attrValue | 0;
+    
+    var cols = getW();
+    var rows = getH();
+    var remaining = n;
+    var cx = x | 0;
+    var cy = y | 0;
+    var written = 0;
+    
+    while (remaining > 0 && cy < rows) {
+      var space = cols - cx;
+      var take = Math.min(remaining, space);
+      
+      for (var i = 0; i < take; i++) {
+        var span = cellGrid[cy] && cellGrid[cy][cx + i];
+        if (span) {
+          // Rebuild class with new attr; no ATTR array to update
+          var ch = span.textContent === EMPTY_CELL ? ' ' : span.textContent;
+          var match_fg = span.className.match(/ansi-fg-(\d+)/);
+          var match_bg = span.className.match(/ansi-bg-(\d+)/);
+          var fg = match_fg ? parseInt(match_fg[1], 10) : CURFG;
+          var bg = match_bg ? parseInt(match_bg[1], 10) : CURBG;
+          pokeCell(cx + i, cy, ch, fg, bg, attrValue);
+        }
+      }
+      
+      written += take;
+      remaining -= take;
+      cx = 0;
+      cy++;
+    }
+    
+    return (n === 1) ? true : written;
+  };
+
+  window.pokeAttrBit = function(x, y, bit, state) {
+    if (typeof x !== 'number' || typeof y !== 'number') return false;
+    if (!validateCoords(x, y)) return false;
+    var span = cellGrid[y] && cellGrid[y][x];
+    if (!span) return false;
+    // Extract current attributes from DOM
+    var currentAttr = extractAttrFromDOM(span);
+    var newAttr = state ? (currentAttr | bit) : (currentAttr & ~bit);
+    // Get current cell content and colors
+    var ch = span.textContent === EMPTY_CELL ? ' ' : span.textContent;
+    var match_fg = span.className.match(/ansi-fg-(\d+)/);
+    var match_bg = span.className.match(/ansi-bg-(\d+)/);
+    var fg = match_fg ? parseInt(match_fg[1], 10) : CURFG;
+    var bg = match_bg ? parseInt(match_bg[1], 10) : CURBG;
+    pokeCell(x, y, ch, fg, bg, newAttr);
+    return true;
+  };
+
+  window.pokeInverse = function(x, y, state, n) {
+    if (typeof x !== 'number' || typeof y !== 'number') return false;
+    if (typeof n === 'number' && n > 1) {
+      var endX = x + n;
+      var cols = getW();
+      for (var xi = x; xi < endX; xi++) {
+        if (xi >= cols) break;
+        pokeAttrBit(xi, y, window.ATTR_INVERSE || 0x0001, !!state);
+      }
+      return n;
+    }
+    pokeAttrBit(x, y, window.ATTR_INVERSE || 0x0001, !!state);
+    return true;
+  };
+  
+  window.pokeBold = function(x, y, state, n) {
+    if (typeof x !== 'number' || typeof y !== 'number') return false;
+    if (typeof n === 'number' && n > 1) {
+      var endX = x + n;
+      var cols = getW();
+      for (var xi = x; xi < endX; xi++) {
+        if (xi >= cols) break;
+        pokeAttrBit(xi, y, window.ATTR_BOLD || 0x0002, !!state);
+      }
+      return n;
+    }
+    pokeAttrBit(x, y, window.ATTR_BOLD || 0x0002, !!state);
+    return true;
+  };
+  
+  window.pokeItalic = function(x, y, state, n) {
+    if (typeof x !== 'number' || typeof y !== 'number') return false;
+    if (typeof n === 'number' && n > 1) {
+      var endX = x + n;
+      var cols = getW();
+      for (var xi = x; xi < endX; xi++) {
+        if (xi >= cols) break;
+        pokeAttrBit(xi, y, window.ATTR_ITALIC || 0x0008, !!state);
+      }
+      return n;
+    }
+    pokeAttrBit(x, y, window.ATTR_ITALIC || 0x0008, !!state);
+    return true;
+  };
+  
+  window.pokeLine = function(x, y, state, n) {
+    if (typeof x !== 'number' || typeof y !== 'number') return false;
+    if (typeof n === 'number' && n > 1) {
+      var endX = x + n;
+      var cols = getW();
+      for (var xi = x; xi < endX; xi++) {
+        if (xi >= cols) break;
+        pokeAttrBit(xi, y, window.ATTR_UNDERLINE || 0x0010, !!state);
+      }
+      return n;
+    }
+    pokeAttrBit(x, y, window.ATTR_UNDERLINE || 0x0010, !!state);
+    return true;
+  };
+  
+  window.pokeBlink = function(x, y, state, n) {
+    if (typeof x !== 'number' || typeof y !== 'number') return false;
+    if (typeof n === 'number' && n > 1) {
+      var endX = x + n;
+      var cols = getW();
+      for (var xi = x; xi < endX; xi++) {
+        if (xi >= cols) break;
+        pokeAttrBit(xi, y, window.ATTR_BLINK || 0x0020, !!state);
+      }
+      return n;
+    }
+    pokeAttrBit(x, y, window.ATTR_BLINK || 0x0020, !!state);
+    return true;
+  };
+  
+  window.pokeSelect = function(state) {
+    if (typeof SSTART !== 'number' || typeof SEND !== 'number') return false;
+    if (SSTART < 0 || SEND < 0) return false;
+    var s = Math.min(SSTART, SEND);
+    var e = Math.max(SSTART, SEND);
+    var count = e - s;
+    if (count <= 0) return false;
+    var cols = getW();
+    var absCol = (typeof LINEX === 'number' ? LINEX : 0) + s;
+    var startY = (typeof LINEY === 'number' ? LINEY : 0) + Math.floor(absCol / cols);
+    var startX = absCol % cols;
+    return pokeInverse(startX, startY, !!state, count);
+  };
+  
+  window.pokeScroll = function() {
+    var cols = getW(); var rows = getH();
+    // Shift DOM rows up
+    var container = document.getElementById('txt');
+    if (!container || !container.firstChild) return false;
+    var firstRow = container.firstChild;
+    if (firstRow) firstRow.parentNode.removeChild(firstRow);
+    // Shift cellGrid up
+    cellGrid.shift();
+    // Create new blank row at bottom
+    var newRowDiv = document.createElement('div');
+    newRowDiv.className = 'qandy-row';
+    var newRowCells = new Array(cols);
+    var defaultFg = (typeof CURFG === 'number') ? CURFG : 37;
+    var defaultBg = (typeof CURBG === 'number') ? CURBG : 40;
+    var defaultCls = buildCellClass(defaultFg, defaultBg, 0);
+    for (var x = 0; x < cols; x++) {
+      var span = document.createElement('span');
+      span.className = defaultCls;
+      span._lastClass = defaultCls;
+      span.textContent = EMPTY_CELL;
+      newRowDiv.appendChild(span);
+      newRowCells[x] = span;
+    }
+    container.appendChild(newRowDiv);
+    cellGrid.push(newRowCells);
+    // Update cursor position
+    CURY = clampRow((typeof CURY === 'number' ? CURY : 0) - 1);
+    LINEY = clampRow((typeof LINEY === 'number' ? LINEY : 0) - 1);
+    CURX = Math.max(0, Math.min(cols - 1, (typeof CURX === 'number' ? CURX : 0)));
+    LINEX = Math.max(0, Math.min(cols - 1, (typeof LINEX === 'number' ? LINEX : 0)));
+    return true;
+  };
+  
+  window.pokeCursorOn = function() {
+    if (typeof CURSOR === 'undefined' || typeof CURX === 'undefined' || typeof CURY === 'undefined') return;
+    if (CURSOR === 0) return; // cursor off
+    var sx = Math.max(0, Math.min(getW()-1, CURX|0));
+    var sy = Math.max(0, Math.min(getH()-1, CURY|0));
+    
+    if (CURSOR === 1 || CURSOR === 3) { // line cursor: underline
+      pokeAttrBit(sx, sy, window.ATTR_UNDERLINE || 0x0010, true);
+      if (CURSOR === 3) pokeAttrBit(sx, sy, window.ATTR_BLINK || 0x0020, true);
+    }
+    if (CURSOR === 4 || CURSOR === 5) { // block cursor: inverse
+      pokeAttrBit(sx, sy, window.ATTR_INVERSE || 0x0001, true);
+      if (CURSOR === 5) pokeAttrBit(sx, sy, window.ATTR_BLINK || 0x0020, true);
+    }
+  };
+  
+  var prevCursorAttr = 0; //how does it know this??
+  
+  window.pokeCursorOff = function() {
+    if (typeof CURX === 'undefined' || typeof CURY === 'undefined') return false;
+    var sx = Math.max(0, Math.min(getW()-1, CURX|0));
+    var sy = Math.max(0, Math.min(getH()-1, CURY|0));
+    
+    // Clear cursor attributes while preserving others
+    pokeAttrBit(sx, sy, window.ATTR_UNDERLINE || 0x0010, false);
+    pokeAttrBit(sx, sy, window.ATTR_INVERSE || 0x0001, false);
+    pokeAttrBit(sx, sy, window.ATTR_BLINK || 0x0020, false);
+    
+    return true;
+  };
+  
+  // ──── the menu bar ─────────────────────────────────────────────────  
+
+  window.pokeMenu = function(t) {
+    var cols = getW();
+    var rows = getH();
+    if (t) {
+      for (var x=0; x<cols; x++) { 
+        var ch = x<t.length ? t[x] : ' '; 
+        pokeCell(x, H-1, ch, MENUFG || 37, MENUBG || 44, 0); 
+      }
+      return;
+    } 
+    for (var x=0; x<cols; x++) { 
+      pokeCell(x, H-1, ' ', CURFG, CURBG, 0); 
+    }
+    return;
+  };
+  
+  window.pokeCursor = async function(t) {
+    if (typeof t === 'undefined' || t === null) return false;
+    var str = String(t);
+
+    function parseParams(s) {
+      if (!s || !s.length) return [];
+      var out = [], parts = s.split(';');
+      for (var i = 0; i < parts.length; i++) { var v = parseInt(parts[i], 10); out.push(isNaN(v) ? 0 : v); }
+      return out;
+    }
+
+    function handleCSI(paramsStr, cmd) {
+      var params = parseParams(paramsStr);
+      switch (cmd) {
+        case 'm': // SGR - set graphics rendition
+          if (!params.length) params = [0];
+          for (var pi = 0; pi < params.length; pi++) {
+            var p = params[pi] | 0;
+            if (p === 0) { CURFG = 37; CURBG = 40; CURATTR = 0; }
+            else if (p === 1)  { CURATTR |= (window.ATTR_BOLD    || 0x0002); }
+            else if (p === 2)  { CURATTR |= (window.ATTR_DIM     || 0x0004); }
+            else if (p === 3)  { CURATTR |= (window.ATTR_ITALIC  || 0x0008); }
+            else if (p === 4)  { CURATTR |= (window.ATTR_UNDERLINE || 0x0010); }
+            else if (p === 5)  { CURATTR |= (window.ATTR_BLINK   || 0x0020); }
+            else if (p === 7)  { CURATTR |= (window.ATTR_INVERSE || 0x0001); }
+            else if (p === 22) { CURATTR &= ~(window.ATTR_BOLD || 0x0002); CURATTR &= ~(window.ATTR_DIM || 0x0004); }
+            else if (p === 23) { CURATTR &= ~(window.ATTR_ITALIC   || 0x0008); }
+            else if (p === 24) { CURATTR &= ~(window.ATTR_UNDERLINE || 0x0010); }
+            else if (p === 25) { CURATTR &= ~(window.ATTR_BLINK    || 0x0020); }
+            else if (p === 27) { CURATTR &= ~(window.ATTR_INVERSE  || 0x0001); }
+            else if (p >= 30 && p <= 37)   { CURFG = p; }
+            else if (p >= 90 && p <= 97)   { CURFG = p; }
+            else if (p >= 40 && p <= 47)   { CURBG = p; }
+            else if (p >= 100 && p <= 107) { CURBG = p; }
+          }
+          break;
+        case 'H': case 'f': // Cursor position (1-based)
+          CURY = Math.max(0, Math.min(getH() - 1, (params.length >= 1 && params[0] > 0) ? params[0] - 1 : 0));
+          CURX = Math.max(0, Math.min(getW() - 1, (params.length >= 2 && params[1] > 0) ? params[1] - 1 : 0));
+          break;
+        case 'A': CURY = Math.max(0, CURY - ((params.length >= 1 && params[0] > 0) ? params[0] : 1)); break;
+        case 'B': CURY = Math.min(getH() - 1, CURY + ((params.length >= 1 && params[0] > 0) ? params[0] : 1)); break;
+        case 'C': CURX = Math.min(getW() - 1, CURX + ((params.length >= 1 && params[0] > 0) ? params[0] : 1)); break;
+        case 'D': CURX = Math.max(0, CURX - ((params.length >= 1 && params[0] > 0) ? params[0] : 1)); break;
+        case 'J': if (params.length >= 1 && params[0] === 2) { pokeCursorOff(); initGrid(); pokeCursorOn(); } break;
+      }
+    }
+
+    pokeCursorOff();
+    var idx = 0;
+    var cols = getW();
+    var rows = getH();
+    
+    while (idx < str.length) {
+      var ch = str.charAt(idx);
+      if (CURANSI && ch === '\x1b') {
+        var rest = str.slice(idx);
+        var m = /^\x1b\[([0-9;]*)?([@A-Za-z])/.exec(rest);
+        if (m) { handleCSI(m[1] || '', m[2]); idx += m[0].length; }
+        else { idx++; }
+        continue;
+      }
+      if (ch === '\n') {
+        CURX = 0; 
+        CURY++;
+        if (CURY >= rows) { pokeScroll(); CURY = rows - 1; }
+        LINEX = CURX; 
+        LINEY = CURY;
+        if (typeof CURMORE === 'number' && CURMORE >= 0) {
+          CURMORE++;
+          if (CURMORE >= rows - 1) {
+            pokeMenu("  Press any key for more: ");
+            let morePrompt = await inkey();
+            pokeMenu();
+            CURMORE = 0;
+          }
+        }
+        idx++; 
+        continue;
+      }
+      pokeCell(CURX, CURY, ch, CURFG, CURBG, CURATTR);
+      CURX++;
+      if (CURX >= cols) {
+        CURX = 0; 
+        CURY++;
+        if (CURY >= rows) { pokeScroll(); CURY = rows - 1; }
+        LINEX = CURX; 
+        LINEY = CURY;
+        if (typeof CURMORE === 'number' && CURMORE >= 0) {
+          CURMORE++;
+          if (CURMORE >= rows - 1) {
+            pokeMenu("  Press ENTER to continue: ");
+            let morePrompt = await input(false);
+            pokeMenu();
+            CURMORE = 0;
+          }
+        }
+      }
+      LINEX = CURX; 
+      LINEY = CURY;
+      idx++;
+    }
+    pokeCursorOn();
+    return true;
+  };
+  
+  window.pokeModem = function(t) {
+    // paced/asynchronous rendering with baud rate simulation
+    if (typeof t === 'undefined' || t === null) return false;
+    if (window._pokeCursor_state && window._pokeCursor_state.timer) {
+      clearTimeout(window._pokeCursor_state.timer);
+    } 
+    window._pokeCursor_state = null;
+    var str = String(t);
+
+    function parseParams(paramStr) {
+      if (!paramStr || paramStr.length === 0) return [];
+      return paramStr.split(';').map(function(p){ var v = parseInt(p,10); return isNaN(v) ? 0 : v; });
+    }
+
+    function handleCSI(paramsStr, cmd) {
+      var params = parseParams(paramsStr);
+      switch (cmd) {
+        case 'm': // SGR
+          if (!params.length) params = [0];
+          for (var pi = 0; pi < params.length; pi++) {
+            var p = params[pi] | 0;
+            switch (p) {
+              case 0: CURFG = 37; CURBG = 40; CURATTR = 0; break;
+              case 1: CURATTR = (CURATTR | (window.ATTR_BOLD || 0x0002)); break;
+              case 2: CURATTR = (CURATTR | (window.ATTR_DIM || 0x0004)); break;
+              case 3: CURATTR = (CURATTR | (window.ATTR_ITALIC || 0x0008)); break;
+              case 4: CURATTR = (CURATTR | (window.ATTR_UNDERLINE || 0x0010)); break;
+              case 22: CURATTR &= ~(window.ATTR_BOLD || 0x0002); CURATTR &= ~(window.ATTR_DIM  || 0x0004); break;
+              case 23: CURATTR &= ~(window.ATTR_ITALIC || 0x0008); break;
+              case 24: CURATTR &= ~(window.ATTR_UNDERLINE || 0x0010); break;
+              case 7: CURATTR = (CURATTR | (window.ATTR_INVERSE || 0x0001)); break;
+              case 27: CURATTR &= ~(window.ATTR_INVERSE || 0x0001); break;
+              default:
+                if (p >= 30 && p <= 37) { CURFG = p; break; }
+                if (p >= 90 && p <= 97) { CURFG = p; break; }
+                if (p >= 40 && p <= 47) { CURBG = p; break; }
+                if (p >= 100 && p <= 107) { CURBG = p; break; }
+                break;
+            }
+          }
+          break;
+        case 'H': case 'f':
+          var row = (params.length >= 1 && params[0] > 0) ? (params[0] - 1) : 0;
+          var col = (params.length >= 2 && params[1] > 0) ? (params[1] - 1) : 0;
+          if (typeof row === 'number') CURY = Math.max(0, Math.min(getH() - 1, row));
+          if (typeof col === 'number') CURX = Math.max(0, Math.min(getW() - 1, col));
+          break;
+        case 'A': var nA = (params.length >= 1 && params[0] > 0) ? params[0] : 1; CURY = Math.max(0, CURY - nA); break;
+        case 'B': var nB = (params.length >= 1 && params[0] > 0) ? params[0] : 1; CURY = Math.min(getH() - 1, CURY + nB); break;
+        case 'C': var nC = (params.length >= 1 && params[0] > 0) ? params[0] : 1; CURX = Math.min(getW() - 1, CURX + nC); break;
+        case 'D': var nD = (params.length >= 1 && params[0] > 0) ? params[0] : 1; CURX = Math.max(0, CURX - nD); break;
+        case 'J': if (params.length === 0 || params[0] === 2) { pokeCursorOff(); initGrid(); pokeCursorOn(); } break;
+      }
+    }
+
+    var charsPerMs = (typeof CURBAUD === 'number' && CURBAUD > 0) ? CURBAUD / 10000 : 0;
+    var state = {
+      str: str, idx: 0, timer: null, stopped: false,
+      startTime: performance.now(), charsEmitted: 0
+    };
+    window._pokeCursor_state = state;
+
+    function scheduleNext() {
+      if (!state || state.stopped) return;
+      var delay = 0;
+      if (charsPerMs) {
+        var nextMs = state.startTime + (state.charsEmitted + 1) / charsPerMs;
+        delay = Math.max(0, nextMs - performance.now());
+      }
+      state.timer = setTimeout(processStep, delay);
+    }
+
+    function processStep() {
+      if (!state || state.stopped) return;
+      var charsAllowed = charsPerMs
+        ? Math.floor((performance.now() - state.startTime) * charsPerMs)
+        : state.str.length + 1;
+
+      pokeCursorOff();
+      var cols = getW();
+      var rows = getH();
+
+      while (state.idx < state.str.length && state.charsEmitted < charsAllowed) {
+        var ch = state.str.charAt(state.idx);
+        if (CURANSI && ch === '\x1b') {
+          var rest = state.str.slice(state.idx);
+          var m = /^\x1b\[([0-9;]*)?([@A-Za-z])/.exec(rest);
+          if (m) { handleCSI(m[1] || '', m[2]); state.idx += m[0].length; } 
+          else { state.idx++; }
+          state.charsEmitted++;
+          continue;
+        }
+        if (ch === '\n') {
+          CURX = 0; CURY = CURY + 1;
+          if (CURY >= rows) { pokeScroll(); CURY = rows - 1; }
+          LINEX = CURX; LINEY = CURY;
+          state.idx++; state.charsEmitted++;
+          continue;
+        }
+        pokeCell(CURX, CURY, ch, CURFG, CURBG, CURATTR);
+        if (SOUND && typeof beep === 'function') { try { beep(900, 25, 0.01); } catch (e) {}}
+        CURX = CURX + 1;
+        if (CURX >= cols) { CURX = 0; CURY = CURY + 1; if (CURY >= rows) { pokeScroll(); CURY = rows - 1; } }
+        LINEX = CURX; LINEY = CURY;
+        state.idx++; state.charsEmitted++;
+      }
+
+      pokeCursorOn();
+      if (state.idx >= state.str.length) { window._pokeCursor_state = null; return; }
+      scheduleNext();
+    }
+
+    scheduleNext();
+    return true;
+  };
+  
+  window.pokeRefresh = function() { return true; }  
+
+  window.pokeInput = function() {
+    if (typeof lastin === 'undefined') { lastin="";  }
+    if (lastin != "") {
+      var str = String(lastin); var curx = LINEX; var cury = LINEY;
+      for (var i = 0; i < str.length; i++) {
+        var char = str[i];
+        if (char === '\n') { 
+          curx = 0; cury++; if (cury >= H) { return false; } continue;
+          if (curx >= W) { curx = 0; cury++; if (cury >= H) { return false; } }
+        }
+        pokeCell(curx, cury, " "); curx++;
+      }
+    }
+    var curx = LINEX; var cury = LINEY;
+    for (var i = 0; i < LINE.length; i++) {
+      var char = LINE[i];
+      if (char === '\n') { 
+       curx = 0; cury++; 
+       if (cury >= H) { return false; }
+       continue;
+      }
+      if (curx >= W) { 
+       curx = 0; cury++; 
+       if (cury >= H) { return false; }
+      }
+      pokeCell(curx, cury, char); curx++;
+    }
+    var str = (typeof LINE === 'string') ? LINE : String(LINE || "");
+    var targetP = (typeof CURP === 'number') ? CURP : str.length;
+    if (targetP < 0) targetP = 0;
+    if (targetP > str.length) targetP = str.length;
+    var newX, newY;
+    var absCol = (typeof LINEX === 'number' ? LINEX : 0) + targetP;
+    newY = (typeof LINEY === 'number' ? LINEY : 0) + Math.floor(absCol / W);
+    newX = absCol % W;
+    if (newY < 0) newY = 0;
+    if (newY >= H) newY = H - 1;
+    if (newX < 0) newX = 0;
+    if (newX >= W) newX = W - 1;
+    CURX = newX;
+    CURY = newY;
+  
+    lastin = str;
+    return true;
+  };
+  
+  // ──── the peeks ────────────────────────────────────────────────────
+  
+  window.peekChar = function(x, y) { 
+    if (!validateCoords(x, y)) return undefined;
+    var span = cellGrid[y] && cellGrid[y][x];
+    if (!span) return undefined;
+    return (span.textContent === EMPTY_CELL) ? ' ' : span.textContent;
+  };
+  
+  window.peekFG = function(x, y) { 
+    if (!validateCoords(x, y)) return undefined;
+    var span = cellGrid[y] && cellGrid[y][x];
+    if (!span) return undefined;
+    var match = span.className.match(/ansi-fg-(\d+)/);
+    return match ? parseInt(match[1], 10) : 37;
+  };
+  
+  window.peekBG = function(x, y) { 
+    if (!validateCoords(x, y)) return undefined;
+    var span = cellGrid[y] && cellGrid[y][x];
+    if (!span) return undefined;
+    var match = span.className.match(/ansi-bg-(\d+)/);
+    return match ? parseInt(match[1], 10) : 40;
+  };
+  
+  window.peekAttr = function(x, y) { 
+    if (!validateCoords(x, y)) return undefined;
+    var span = cellGrid[y] && cellGrid[y][x];
+    if (!span) return 0;
+    return extractAttrFromDOM(span);
+  };
+  
+  window.peekBold = function(x, y) { 
+    if (!validateCoords(x, y)) return undefined;
+    var span = cellGrid[y] && cellGrid[y][x];
+    if (!span) return false;
+    return !!(extractAttrFromDOM(span) & (window.ATTR_BOLD || 0x0002));
+  };
+  
+  window.peekItalic = function(x, y) { 
+    if (!validateCoords(x, y)) return undefined;
+    var span = cellGrid[y] && cellGrid[y][x];
+    if (!span) return false;
+    return !!(extractAttrFromDOM(span) & (window.ATTR_ITALIC || 0x0008));
+  };
+  
+  window.peekBlink = function(x, y) { 
+    if (!validateCoords(x, y)) return undefined;
+    var span = cellGrid[y] && cellGrid[y][x];
+    if (!span) return false;
+    return !!(extractAttrFromDOM(span) & (window.ATTR_BLINK || 0x0020));
+  };
+  
+  window.peekLine = function(x, y) { 
+    if (!validateCoords(x, y)) return undefined;
+    var span = cellGrid[y] && cellGrid[y][x];
+    if (!span) return false;
+    return !!(extractAttrFromDOM(span) & (window.ATTR_UNDERLINE || 0x0010));
+  };
+  
+  window.peekInverse = function(x, y) {
+    if (!validateCoords(x, y)) return undefined;
+    var span = cellGrid[y] && cellGrid[y][x];
+    if (!span) return false;
+    return !!(extractAttrFromDOM(span) & (window.ATTR_INVERSE || 0x0001));
+  };
+  
+  // ──── video helpers ────────────────────────────────────────────────
+
+  function extractAttrFromDOM(span) {
+    var attr = 0;
+    if (!span) return attr;
+    if (span.className.includes('ansi-inverse'))   attr |= 0x0001;
+    if (span.className.includes('ansi-bold'))      attr |= 0x0002;
+    if (span.className.includes('ansi-dim'))       attr |= 0x0004;
+    if (span.className.includes('ansi-italic'))    attr |= 0x0008;
+    if (span.className.includes('ansi-underline')) attr |= 0x0010;
+    if (span.className.includes('ansi-blink'))     attr |= 0x0020;
+    return attr;
+  }
+  
+  window.ANSI = {
+    colors: {
+      30: '#000000', 31: '#aa0000', 32: '#00aa00', 33: '#aa5500', 34: '#0000aa', 35: '#aa00aa', 36: '#00aaaa', 37: '#aaaaaa',
+      90: '#555555', 91: '#ff5555', 92: '#55ff55', 93: '#ffff55', 94: '#5555ff', 95: '#ff55ff', 96: '#55ffff', 97: '#ffffff'
+    },
+    bgColors: {
+      40: '#000000', 41: '#aa0000', 42: '#00aa00', 43: '#aa5500', 44: '#0000aa', 45: '#aa00aa', 46: '#00aaaa', 47: '#aaaaaa',
+      100: '#555555', 101: '#ff5555', 102: '#55ff55', 103: '#ffff55', 104: '#5555ff', 105: '#ff55ff', 106: '#55ffff', 107: '#ffffff'
+    },
+    codes: {
+      reset: '\x1b[0m', bold: '\x1b[1m', inverse: '\x1b[7m',
+      black: '\x1b[30m', red: '\x1b[31m', green: '\x1b[32m', yellow: '\x1b[33m', blue: '\x1b[34m', magenta: '\x1b[35m', cyan: '\x1b[36m', white: '\x1b[37m',
+      bgBlack: '\x1b[40m', bgRed: '\x1b[41m', bgGreen: '\x1b[42m', bgYellow: '\x1b[43m', bgBlue: '\x1b[44m', bgMagenta: '\x1b[45m', bgCyan: '\x1b[46m', bgWhite: '\x1b[47m',
+      cursorHome: '\x1b[H',
+      cursorPos: (row, col) => `\x1b[${row};${col}H`,
+      cursorUp: (n = 1) => `\x1b[${n}A`,
+      cursorDown: (n = 1) => `\x1b[${n}B`,
+      cursorForward: (n = 1) => `\x1b[${n}C`,
+      cursorBack: (n = 1) => `\x1b[${n}D`,
+      clearScreen: '\x1b[2J',
+      clearLine: '\x1b[K'
+    }
+  };
+  
+  window.COLOR = {
+    BLACK: 30, RED: 31, GREEN: 32, YELLOW: 33, BLUE: 34, MAGENTA: 35, CYAN: 36, WHITE: 37,
+    BRIGHT_BLACK: 90, BRIGHT_RED: 91, BRIGHT_GREEN: 92, BRIGHT_YELLOW: 93, BRIGHT_BLUE: 94, BRIGHT_MAGENTA: 95, BRIGHT_CYAN: 96, BRIGHT_WHITE: 97,
+    BG_BLACK: 40, BG_RED: 41, BG_GREEN: 42, BG_YELLOW: 43, BG_BLUE: 44, BG_MAGENTA: 45, BG_CYAN: 46, BG_WHITE: 47,
+    BG_BRIGHT_BLACK: 100, BG_BRIGHT_RED: 101, BG_BRIGHT_GREEN: 102, BG_BRIGHT_YELLOW: 103, BG_BRIGHT_BLUE: 104, BG_BRIGHT_MAGENTA: 105, BG_BRIGHT_CYAN: 106, BG_BRIGHT_WHITE: 107
+  };
+
+  // Signal that video.js is ready
+  if (typeof window.qandySignalReady === 'function') {
+    window.qandySignalReady('video.js');
+  }
 }
 
 //
 // keyboard.js
 //
 
-function keyboard_js() { 
-}
 
+
+//
 // ──── Qandy Command ──────────────────────────────────────────────────────────────────
+//
 
 function command_js() {
-// @@@ command_js() extracted to qandy-command.js 
+  window.command=async function(cmd) {
+    if (RUN != "qandy.js") {
+      print("\n");
+      try { input(cmd); } catch (e) { /* ignore */ }
+      // this needs testing AFTER run command works
+      LINE = ""; CURP = 0; LINEX = CURX; LINEY = CURY;
+      return;
+    }
+    // system commands
+    print("\n");
+    cmd=String(cmd || '').trim();
+    switch (cmd) {
+      case 'cls':
+        cls(); return;
+      case 'whoami':
+        var context = HOST ? "HOST (sysop access)" : "GUEST (user sandbox)";
+        print("\n"+context+"\n"); print("URL:"+window.location.href+"\n");
+        print("localStorage: " + (typeof localStorage !== 'undefined' ? "yes" : "no") + "\n\n");
+        return;
+      case 'hostname':
+        print("\nHOST=" + HOST + "\n");
+        print("GUEST=" + GUEST + "\n");
+        print("RUN=" + RUN + "\n");
+        print("Parent is: " + (window.parent === window ? "self" : "parent iframe") + "\n\n");
+        return;
+      case 'sysop':
+        if (GUEST) {
+          try {
+            window.parent.postMessage({ type: 'guest-action', action: 'sysop', success: true }, '*');
+          } catch (e) {
+            print("Error: " + String(e) + "\n");
+          }
+        }
+        return;
+      case 'user':
+        if (HOST) {
+          try {
+            var hostEl = document.getElementById('txt');
+            var hostKb = document.getElementById('host-keyboard');
+            var guestKb = document.getElementById('guest-keyboard');
+            var vm = document.getElementById('vm-container') || window._vmContainer || null;
+            var iframe = document.getElementById('vm-iframe') || window._vmIframe || null;
+            if (hostEl) { hostEl.style.display = 'none'; hostEl.style.visibility = 'hidden'; hostEl.style.pointerEvents = 'none'; }
+            if (hostKb) { hostKb.style.display = 'none'; hostKb.style.visibility = 'hidden'; hostKb.style.pointerEvents = 'none'; }
+            // Show guest container / iframe and bring it to front
+            if (vm) {
+              vm.style.display = 'block';
+              vm.style.visibility = 'visible';
+              vm.style.pointerEvents = 'auto';
+              // ensure vm is above host
+              try {
+                vm.style.position = vm.style.position || 'absolute';
+                vm.style.zIndex = String(Math.max(parseInt(vm.style.zIndex || 0, 10) || 100, 1000));
+              } catch (e) {}
+            }
+            if (iframe) {
+              iframe.style.display = 'block';
+              iframe.style.visibility = 'visible';
+              iframe.style.pointerEvents = 'auto';
+              try { iframe.style.zIndex = vm && vm.style && vm.style.zIndex ? String(parseInt(vm.style.zIndex,10) + 1) : '1001'; } catch (e) {}
+            }
+            if (guestKb) {
+              guestKb.style.display = 'block';
+              guestKb.style.visibility = 'visible';
+              guestKb.style.pointerEvents = 'auto';
+              try {
+                guestKb.style.position = guestKb.style.position || 'absolute';
+                // put guest keyboard above vm-container
+                var vmZ = vm && vm.style && vm.style.zIndex ? parseInt(vm.style.zIndex,10) : 1000;
+                guestKb.style.zIndex = String(Math.max(parseInt(guestKb.style.zIndex || 0,10) || (vmZ + 1), vmZ + 1));
+              } catch (e) {}
+              break;
+            }
+            if (hostEl) { hostEl.style.pointerEvents = 'none'; }
+            if (hostKb) { hostKb.style.pointerEvents = 'none'; hostKb.style.visibility = 'hidden'; }
+            try {
+              if (iframe) {
+                iframe.setAttribute && iframe.setAttribute('tabindex', '0'); // make focusable
+                try { iframe.focus(); } catch (e) { console.warn('iframe.focus failed', e); }
+                try { if (iframe.contentWindow && typeof iframe.contentWindow.focus === 'function') iframe.contentWindow.focus(); } catch (e) { console.warn('iframe.contentWindow.focus failed', e); }
+                try { 
+                 break;     var doc = iframe.contentDocument || (iframe.contentWindow && iframe.contentWindow.document);
+                  if (doc && doc.body && typeof doc.body.focus === 'function') doc.body.focus();
+                } catch (e) { /* cross-origin or not accessible; ignore */ }
+                setTimeout(function() {
+                  try { iframe.focus(); } catch (e) {}
+                  try { if (iframe.contentWindow && typeof iframe.contentWindow.focus === 'function') iframe.contentWindow.focus(); } catch (e) {}
+                }, 50);
+              }
+            } catch (errFocus) {
+              console.warn('focus restore attempted but failed', errFocus);
+            }
+            console.log('Attempted to focus guest iframe; activeElement is:', document.activeElement);
+          } catch (err) {
+            console.error('focusGuestIframe failed', err);
+          }
+        }
+        return;
+        
+      default:
+        break;
+    }
+
+    // DOS commands — parameter extraction before calling qdos* wrappers.
+    var parts=extractCmdParts(cmd);
+    var c=parts.cmd.toLowerCase();
+    var args=parts.args; // array of args
+
+    var tokens = parseArgs(cmd);
+    var c=(tokens[0] || '').toLowerCase();
+    var args=tokens.slice(1); 
+    var f = ''; var d = '';
+    if (args.length > 0) {
+      var slashIndex = args.findIndex(function(t) { return t === '='; });
+      if (slashIndex !== -1) {
+        f = args.slice(0, slashIndex).join(' ').trim();
+        d = args.slice(slashIndex + 1).join(' ').trim();
+      } else {
+        if (args.length === 1 && args[0].indexOf('=') !== -1) {
+          var parts = args[0].split('=');
+          f = (parts.shift() || '').trim();
+          d = parts.join('=').trim();
+        } else {
+          f = (args[0] || '').trim();
+          d = (args[1] || '').trim();
+        }
+        f = f.replace(/\s+/g, ' ').trim();
+        d = d.replace(/\s+/g, ' ').trim();
+      }
+    }
+    
+    f=f.replace(/\s+/g, ' ').trim();
+    d=d.replace(/\s+/g, ' ').trim();
+
+    if (c.endsWith('.js')) {
+      if (HOST) {
+        print("Input \'user\' to execute scripts");
+        return;
+      }
+      var res = await qdosScript(c);
+      if (res === true) {} else {
+        print(String(res) + "\n");
+      } 
+      return;
+    }
+
+    switch (c) {
+      case "dir":
+        print(await qdosDir(f, d));
+        return;
+      case "list":
+        print(await qdosList()); 
+        return;
+      case "ls": 
+        print(await qdosList()); 
+        return;
+      case "load":
+        print(await qdosLoad(f));
+        return;
+      case "delete":
+        print(await qdosDelete(f)+"\n"); 
+        return;
+      case "del":
+        print(await qdosDelete(f)+"\n");
+        return;
+      case "rm":
+        print(await qdosDelete(f)+"\n");
+        return;
+      case "rename":
+        print(await qdosRename(f,d)+"\n");
+        return; 
+      case "ren":
+        print(await qdosRename(f,d)+"\n");
+        return; 
+      case "mount":
+        print(await qdosMount(f)+"\n");
+        return;
+      case "qpaste":
+        print(await qdosPaste(f)+"\n");
+        return;
+      case "qcopy":
+        print(await qdosCopy(f)+"\n");
+        return;
+      case "mkdir":
+        print(await qdosMkDir(f)+"\n");
+        return;     
+      case "md":
+        print(await qdosMkDir(f)+"\n");
+        return;     
+      case "chdir":
+        print(await qdosChDir(f)+"\n");
+        return;     
+      case "cd":
+        print(await qdosChDir(f)+"\n");
+        return;     
+      case "rmdir":
+        print(await qdosRmDir(f)+"\n");
+        return;     
+      case "rd":
+        print(await qdosRmDir(f)+"\n");
+        return;     
+      case "exists":
+        print(await qdosExists(f)+"\n");
+        return;
+      case "fdisk":
+        if (HOST) {
+          print(await dosfdisk()+"\n");
+        } else {
+          print("Input \'sysop\' for access\n");
+        }
+        return;
+      default:
+        if (GUEST) {
+          evalCode(cmd);
+          pokeCursorOn();
+          LINE=""; CURP = 0;
+          LINEX = CURX; LINEY = CURY;
+          return;
+        }
+    }
+  }
+
+  function parseArgs(cmd) {
+    var re = /"([^"]+)"|'([^']+)'|(\S+)/g; var m, out = [];
+    while ((m = re.exec(String(cmd || ''))) !== null) { out.push(m[1] || m[2] || m[3]); }
+    return out;
+  }
+  
+  
+  function extractCmdParts(cmd) {
+    var tokens=parseArgs(String(cmd || '').trim());
+    var c=tokens.length > 0 ? tokens[0] : '';
+    var args=tokens.slice(1); // positional args
+    return { cmd: c, args: args, rawTokens: tokens };
+  }  
+
+//
+// ──── Qandy DOS ─────────────────────────────────────────────────────────────────────
+//
+
+  window.__qandy_pending = window.__qandy_pending || Object.create(null);
+  window.__qandy_reqCounter = window.__qandy_reqCounter || 0;
+  var _pending = window.__qandy_pending;
+
+  async function qdosScript(name) {
+    if (typeof HOST !== 'undefined' && HOST) { return "Error: input 'user' to run scripts"; }
+    var nm = (typeof name === 'string') ? name.trim() : '';
+    if (!nm) return "Error: invalid filename";
+    function _isValid(n) {
+      if (typeof validateSystemFilename === 'function') return !!validateSystemFilename(n);
+      if (typeof n !== 'string') return false;
+      if (n.length === 0 || n.length > 128) return false;
+      if (n.indexOf('..') !== -1) return false;
+      return /^[A-Za-z0-9 _.\-\/]+$/.test(n);
+    }
+    if (!_isValid(nm)) return "Error: invalid filename";
+    var content;
+    try {
+      content = await qdosXmitDos('localLoad', { file: nm });
+    } catch (e) {
+      return "Error: load failed: " + ((e && e.message) ? e.message : String(e));
+    }
+    content = (content === null || typeof content === 'undefined') ? '' : String(content);
+    // sanitize BOM / shebang
+    if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
+    content = content.replace(/^\s*#!.*\r?\n/, '');
+    // Eval the script in global scope via indirect eval and capture errors
+    var evalError = null;
+    try {
+      (0, eval)(content + "\n\n//# sourceURL=" + nm);
+      // success
+      return true;
+    } catch (e) {
+      evalError = e;
+      // Attempt to extract line/column from stack or error properties
+      var line = null, column = null;
+      try {
+        var stack = e && e.stack ? String(e.stack) : '';
+        if (stack) {
+          var stackLines = stack.split('\n');
+          for (var i = 0; i < stackLines.length; i++) {
+            var sl = stackLines[i].trim();
+            var m = sl.match(/:(\d+):(\d+)\)?\s*$/);
+            if (m) { line = parseInt(m[1], 10); column = parseInt(m[2], 10); break; }
+            m = sl.match(/\((?:.*):(\d+):(\d+)\)/);
+            if (m) { line = parseInt(m[1], 10); column = parseInt(m[2], 10); break; }
+          }
+        }
+        if (!line) {
+          if (typeof e.lineNumber === 'number') line = e.lineNumber;
+          else if (typeof e.lineno === 'number') line = e.lineno;
+          if (typeof e.columnNumber === 'number') column = e.columnNumber;
+          else if (typeof e.colno === 'number') column = e.colno;
+        }
+      } catch (ex) {
+        /* ignore extraction errors */
+      }
+
+      var emsg = (e && e.message) ? e.message : String(e);
+      var loc = (line ? (nm + ':' + line + (column ? (':' + column) : '')) : nm);
+      return "Error: " + emsg + " at " + loc;
+    }
+  }
+
+  async function qdosDir(pattern, switches) {
+    var validPattern = (typeof pattern === 'string') ? pattern.trim() : '';
+    var validSwitches = (typeof switches === 'string') ? switches.trim() : '';
+    if (typeof HOST !== 'undefined' && HOST) {
+      try {
+        var res = await Promise.resolve().then(function () { return localDir(validPattern, validSwitches); });
+        res = _normalizeResult(res);
+        return String(res) + '\n';
+      } catch (e) {
+        return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+      }
+    }
+    return qdosXmitDos('localDir', { pattern: validPattern, switches: validSwitches }).then(function (result) {
+      return String(result) + '\n';
+    }).catch(function (e) {
+      return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+    });
+  }
+
+  async function qdosList() {
+    if (typeof HOST !== 'undefined' && HOST) {
+      try {
+        var res = await Promise.resolve().then(function () { return dosList(); });
+        res = _normalizeResult(res);
+        return String(res) + '\n';
+      } catch (e) {
+        return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+      }
+      return 'Error: DOS not available\n';
+    }
+    return qdosXmitDos('localList').then(function (result) {
+      // result is already normalized to a string by the handler
+      return String(result) + '\n';
+    }).catch(function (e) {
+      return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+    });
+  }
+
+  async function qdosLoad(filename, timeoutMs) {
+    var valid = (typeof qdosValidateFilename === 'function') ? qdosValidateFilename(filename) :
+                (typeof filename === 'string' ? filename.trim() : null);
+    if (!valid) return Promise.reject(new Error('invalid filename'));
+    if (typeof HOST !== 'undefined' && HOST) {
+      var loader = (typeof localLoad === 'function') ? localLoad : (typeof dosLoad === 'function' ? dosLoad : null);
+      if (!loader) return Promise.reject(new Error('Error: DOS not available'));
+      try {
+        var res = await Promise.resolve().then(function () { return loader(valid); });
+        if (typeof _normalizeResult === 'function') res = _normalizeResult(res);
+        else if (Array.isArray(res)) res = res.join('\n');
+        else if (res === null || typeof res === 'undefined') res = '';
+        else if (typeof res === 'object') {
+          try { res = JSON.stringify(res); } catch (e) { res = String(res); }
+        } else res = String(res);
+        return res;
+      } catch (e) {
+        return Promise.reject(new Error((e && e.message) ? e.message : String(e)));
+      }
+    }
+    return qdosXmitDos('localLoad', { file: valid }, timeoutMs).then(function (result) {
+      if (typeof _normalizeResult === 'function') return _normalizeResult(result);
+      if (result === null || typeof result === 'undefined') return '';
+      if (typeof result === 'string') return result;
+      try { return String(result); } catch (e) { return JSON.stringify(result); }
+    });
+  }
+
+  async function qdosRename(file, dest, timeoutMs) {
+    var validSrc = qdosValidateFilename(file); 
+    var validDest = qdosValidateFilename(dest); 
+    if (!validSrc || !validDest) return 'invalid filename(s)';
+    if(HOST) { return "Input \'user\' to rename files"; } 
+    return qdosXmitDos('localRename', { file: validSrc, dest: validDest }, timeoutMs)
+      .then(function (result) {
+        // resolution means host reported success; return true for convenience
+        return result;
+      })
+      .catch(function (err) {
+        // propagate error
+       return err;
+      });
+  }
+
+  async function qdosMount(device) {
+    var dev = (typeof device === 'undefined' || device === null) ? '' : String(device).trim();
+    if (dev === '') dev = 'localhost';
+    if (typeof HOST !== 'undefined' && HOST) {
+      if (typeof dosMount !== 'function') { return 'Error: dosMount not available\n'; }
+      try {
+        var res = await Promise.resolve().then(function () { return dosMount(dev); });
+        var out = (typeof _normalizeResult === 'function') ? _normalizeResult(res) : (res === null || res === undefined ? '' : String(res));
+        return String(out) + '\n';
+      } catch (e) {
+        return 'Error: ' + ((e && e.message) ? e.message : String(e)) + '\n';
+      }
+    }
+    return 'localhost\n';
+  }
+
+  async function qdosPaste(filename, timeoutMs) {
+    var valid = qdosValidateFilename(filename);
+    if (!valid) return Promise.reject(new Error('invalid filename'));
+    if (HOST) {
+      return 'Input \'user\' to paste scripts\n';
+    } else {
+      return qdosXmitDos('qdosPaste', { file: valid }, timeoutMs).then(function (res) {
+        // host replies with success:true or success:false (handler will resolve / reject appropriately)
+        // For success we may receive true or a message string; normalize to string.
+        if (res === true || res === undefined) return 'OK: pasted to ' + valid + '\n';
+        return String(res) + '\n';
+      }).catch(function (err) {
+        return 'Error: '+(err && err.message ? err.message : String(err));
+      });
+    }
+  }
+
+  async function qdosCopy(filename, timeoutMs) {
+    //
+    // this function doesn't work, need host/guest branch
+    // also need user interaction I thinks?
+    //
+    //var valid = qdosValidateFilename(filename);
+    //if (!valid) return Promise.reject(new Error('invalid filename'));
+    //return qdosXmitDos('qdosCopy', { file: valid }, timeoutMs).then(function (res) {
+    //  if (res === true || res === undefined) return 'OK: copied ' + valid + ' to clipboard\n';
+    //  return String(res) + '\n';
+    //}).catch(function (err) {
+    //  throw new Error('copy failed: ' + (err && err.message ? err.message : String(err)));
+    //});
+  }
+
+  async function qdosMkDir(name, timeoutMs) {
+    var valid = (typeof qdosValidateFilename === 'function') ? qdosValidateFilename(name) : (typeof name === 'string' ? name.trim() : null);
+    if (!valid) return Promise.reject(new Error('invalid name'));
+    if (typeof HOST !== 'undefined' && HOST) {
+      return 'Not implemented yet for HOST\n';
+    } else {
+      var valid = qdosValidateFilename(name);
+      if (!valid) { return Promise.reject(new Error('invalid name')); }
+      return qdosXmitDos('localMkDir', { file: valid }, timeoutMs);
+    }
+  }
+
+  async function qdosChDir(name) {
+    //var valid = (typeof qdosValidateFilename === 'function') ? qdosValidateFilename(name) : (typeof name === 'string' ? name.trim() : null);
+    if (typeof HOST !== 'undefined' && HOST) {
+      return 'Not implemented yet for HOST\n';
+    } else {
+      if (name) {
+        if (name=="..") {
+          valid=".."; 
+        } else {
+          var valid = qdosValidateFilename(name);
+          if (!valid) return 'Error: invalid name';
+        }
+      } else {
+        valid="";
+      }
+      return qdosXmitDos('localChDir', { file: valid })
+        .then(function (result) {
+          return result;
+        })
+        .catch(function (err) {
+         return err;
+        });
+    }
+  };
+
+  async function qdosRmDir(name) {
+    var valid = (typeof qdosValidateFilename === 'function') ? qdosValidateFilename(name) : (typeof name === 'string' ? name.trim() : null);
+    if (!valid) return Promise.reject(new Error('invalid name'));
+    if (typeof HOST !== 'undefined' && HOST) {
+      return 'Not implemented yet for HOST\n';  
+    } else {
+      var valid = qdosValidateFilename(name);
+      return qdosXmitDos('localRmDir', { file: valid });
+    }
+  };
+
+  async function qdosDelete(filename, timeoutMs) {
+    var valid=filename.trim()
+    valid=qdosValidateFilename(filename);
+    if (!valid) { return Promise.reject(new Error('invalid filename')); }
+    if (typeof HOST !== 'undefined' && HOST) {
+      if (typeof dosDelete !== 'function') { return 'Error: dosDelete()) not available\n'; }
+      try {
+        var res = await Promise.resolve().then(function () { return dosDelete(valid); });
+        var out = (typeof _normalizeResult === 'function') ? _normalizeResult(res) : (res === null || res === undefined ? '' : String(res));
+        return String(out) + '\n';
+      } catch (e) {
+        return 'Error: ' + ((e && e.message) ? e.message : String(e)) + '\n';
+      }
+    }
+    return qdosXmitDos('localDelete', { file: valid });
+  }
+
+  async function qdosExists(filename, timeoutMs) {
+    var name = (typeof filename === 'string') ? filename.trim() : filename;
+    var v = qdosValidateFilename(filename);
+    if (typeof v === 'string') name = v.trim();
+    else if (v === true) name = (typeof filename === 'string' ? filename.trim() : null);
+    else return false;
+    if (!name || typeof name !== 'string') return false;
+    try {
+      var res = await qdosXmitDos('dosExists', { file: name }, timeoutMs);
+      if (typeof res === 'boolean') return res;
+      if (typeof res === 'number') return !!res;
+      if (typeof res === 'string') {
+        var s = res.trim().toLowerCase();
+        if (s === 'true' || s === '1') return true;
+        if (s === 'false' || s === '0' || s === '') return false;
+      }
+      return !!res;
+    } catch (e) {
+      // Communication or host-side error: return false (avoid rejecting)
+      // If you want to surface errors instead, replace the next line with: throw e;
+      return false;
+    }
+  }
+
+  function qdosValidateFilename(name) {
+    if (typeof name !== 'string' && typeof name !== 'number') return null;
+    var s = String(name).trim();
+    if (!s) return null;
+    if (/[\/\\]/.test(s)) return null;
+    if (/\.\./.test(s)) return null;
+    if (s.length > 128) return null;
+    if (!/^[A-Za-z0-9 _.\-!]+$/.test(s)) return null;
+    return s;
+  }
+
+  // expose to global guest runtime
+  window.qdosXmitDos = qdosXmitDos;
+  window.qdosScript = qdosScript;
+  window.qdosDir = qdosDir;
+  window.qdosList = qdosList; 
+  window.qdosLoad = qdosLoad; 
+  window.qdosDelete = qdosDelete;
+  window.qdosRename = qdosRename; 
+  window.qdosMount = qdosMount;
+  window.qdosPaste = qdosPaste;
+  window.qdosCopy = qdosCopy;
+  window.qdosExists = qdosExists;
+  window.qdosMkDir = window.qdosMkDir;
+  window.qdosChDir = window.qdosChDir;
+  window.qdosRmDir = window.qdosRmDir;
+
+  // these functions transmit packets to and from the host
+  function qdosXmitDos(action, packet, timeoutMs) {
+    return new Promise(function (resolve, reject) {
+      if (!window.parent || window.parent === window) { return reject(new Error('Error: no <host>')); }
+      // compact id: timestamp + small counter (no separate helper function)
+      window.__qandy_reqCounter += 1;
+      var id = 'qdos_' + Date.now() + '_' + window.__qandy_reqCounter;
+      var msg = { type: 'guest-action', action: action, id: id };
+      if (packet) {
+        var keys = Object.keys(packet);
+        for (var i = 0; i < keys.length; i++) msg[keys[i]] = packet[keys[i]];
+      }
+      var timer = setTimeout(function () {
+        delete _pending[id];
+        reject(new Error('Error: timeout ' + action));
+      }, timeoutMs || 5000);
+      _pending[id] = { resolve: resolve, reject: reject, timer: timer };
+      try {
+        window.parent.postMessage(msg, '*');
+      } catch (e) {
+        clearTimeout(timer);
+        delete _pending[id];
+        return e;
+      }
+    });
+  }
+
+  // normalize host results into a primitive/string for qdosDir printing
+  function _normalizeResult(res) {
+    if (Array.isArray(res)) return res.join('\n');
+    if (res === null || res === undefined) return '';
+    if (typeof res === 'object') {
+      try { return JSON.stringify(res); } catch (e) { return String(res); }
+    }
+    return String(res);
+  }
+
+  // qdosAckDOS wrapper (small convenience). If you already define qdosAckDOS elsewhere, this will not override it.
+  window.qdosAckDOS = window.qdosAckDOS || function (type, handler, opts) {
+    type = String(type || 'message');
+    function wrapper(ev) {
+      if (ev.source !== window.parent) return; // only accept messages from parent
+      try { handler(ev); } catch (e) { console.error('qdosAckDOS handler error:', e && e.message ? e.message : e); }
+    }
+    window.addEventListener(type, wrapper, opts || false);
+    return function remove() { window.removeEventListener(type, wrapper, opts || false); };
+  };
+
+  // attach the ack handler using qdosAckDOS
+  qdosAckDOS('message', function (ev) {
+    var d = ev.data;
+    if (!d || typeof d !== 'object') return;
+    // accept legacy and new reply names
+    if (d.type !== 'action-result' && d.type !== 'ack') return;
+    var id = d.id;
+    if (!id || !_pending[id]) return;
+    var entry = _pending[id];
+    try { clearTimeout(entry.timer); } catch (e) {}
+    delete _pending[id];
+    var ok = (d.ok !== undefined) ? Boolean(d.ok) : (d.success !== undefined ? Boolean(d.success) : true);
+    if (!ok) {
+      entry.reject(new Error(d.error || 'DOS operation failed'));
+      return;
+    }
+    var res = d.result !== undefined ? d.result : true;
+    res = _normalizeResult(res);
+    entry.resolve(res);
+  }, false);
+ 
+ 
+  // evalCode: always-evaluates user input inside an async IIFE so top-level await is valid.
+  // Programs / REPL must use `await` for blocking calls (e.g., await print(...); await input(...);).
+  window.evalCode = async function(code) {
+    if (HOST) { print("Input \'user\' to execute code"); }
+    var src = String(code || '');
+    if (!src.trim()) return true;
+    // Wrap the user input in an async IIFE so top-level await is valid everywhere.
+    var wrapped = "(async function __qandy_repl_wrapper() {\n" + src + "\n})();";
+    try {
+      // Use indirect eval to run in global scope
+      var promise = (0, eval)(wrapped);
+      // Await the async IIFE result; print returned value if any
+      var result = await promise;
+      if (typeof result !== 'undefined') {
+        try { await print(String(result) + "\n\n"); } catch (e) { /* best-effort */ }
+      }
+      return true;
+    } catch (err) {
+      try { await print("Error: " + ((err && err.message) ? err.message : String(err)) + "\n\n"); } catch (e) {}
+      return false;
+    }
+  };
+
+// Signal that command.js is ready
+if (typeof window.qandySignalReady === 'function') {
+  window.qandySignalReady('command.js');
+}
 }
 
+//
 // ──── Qandy Core ─────────────────────────────────────────────────────────────────────
+//
 
 window.qandy_js=function() {
 RUN="qandy.js"; 
