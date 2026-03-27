@@ -890,3 +890,5 @@ window.press=function(event) {
     window.qandySignalReady('qandy_js');
   }
 }
+
+window.qandy_js=qandy_js;

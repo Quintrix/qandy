@@ -415,3 +415,4 @@ window.updateKeyLabels = updateKeyLabels;
  }
 }
 
+window.keyboard_js=keyboard_js;

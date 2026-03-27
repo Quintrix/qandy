@@ -651,3 +651,5 @@ function command_js() {
     window.qandySignalReady('command.js');
   }
 }
+
+window.command_js=command_js;

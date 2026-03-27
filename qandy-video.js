@@ -3,7 +3,6 @@
 //
 
 function video_js() {
-	alert("video.js");
   var cellGrid = [];
   var EMPTY_CELL = '\u00A0';
   
@@ -900,3 +899,4 @@ function video_js() {
   }
 }
 
+window.video_js=video_js;
