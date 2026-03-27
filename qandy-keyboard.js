@@ -1,411 +1,156 @@
-// ──── Qandy Keyboard Driver ──────────────────────────────────────────────────────────
-
-function keyboard_js() {  
-  function _selectKeyboardContainer(prefer) {
-    // prefer can be 'host' or 'guest' or undefined
-    if (typeof window._getKeyboardContainer === 'function') {
-      try {
-        var el = window._getKeyboardContainer(prefer);
-        if (el) return el;
-      } catch (e) { /* ignore and fallback */ }
-    }
-    if (prefer === 'guest') {
-      return document.getElementById('guest-keyboard')
-        || document.getElementById('host-keyboard')
-        || document.getElementById('keyboard-container')
-        || document.body;
-    }
-    // default prefer host
-    return document.getElementById('host-keyboard')
-      || document.getElementById('guest-keyboard')
-      || document.getElementById('keyboard-container')
-      || document.body;
-  }
-
-  keyboardData.forEach(function(key) {
-    var btn = document.createElement('div');
-    var owner = (typeof HOST !== 'undefined' && HOST) ? 'host' : 'guest';
-    btn.id = owner + '-' + key.id;
-    btn.dataset.owner = owner;
-    btn.dataset.logicalId = key.id;
-    btn.innerHTML = key.label;
-    // canonical single-char mapping
-    if (key.label === 'SPACE') btn.dataset.keyChar = ' ';
-    else if (key.label && key.label.length === 1) btn.dataset.keyChar = key.label;
-    else btn.dataset.keyChar = '';
-    // assign CSS class by width
-    if (key.width === 28) {
-      btn.className = 'k1';
-    } else if (key.width === 40) {
-      if (key.id === 'enter') btn.className = 'k-enter';
-      else btn.className = 'k-ctrl';
-    } else if (key.width === 52) {
-      btn.className = 'k2';
-    } else if (key.width === 81) {
-      btn.className = 'k-space';
-    } else if (key.width === 109) {
-      btn.className = 'k4';
-    }
-
-    if (key.width === 40 || key.width === 81) { btn.style.width = key.width + 'px'; }
-    if (key.id === 'ctrl' || key.id === 'alt') { btn.style.fontSize = '9px'; }
-    btn.style.left = key.x + 'px';
-    btn.style.top = key.y + 'px';
-    btn.onclick = function() {
-      var keyData = {keyCode: key.keyCode, key: String.fromCharCode(key.keyCode), shiftKey: !!shift, ctrlKey: !!ctrl, altKey: !!alt, source: 'virtual', originalEvent: null};
-      press(keyData);
-      setTimeout(function() { pressup(keyData); }, 50); 
-    };
-
-    // Append into the selected container (defensive: ensure it exists)
-    try {
-      (kbContainer || document.body).appendChild(btn);
-    } catch (e) {
-      // fallback: try to find container again (in case DOM changed)
-      var retry = _selectKeyboardContainer('host') || document.body;
-      retry.appendChild(btn);
-    }
-  });
-
-  updateKeyLabels();
-
-// Replace existing updateKeyLabels() with this version
-function updateKeyLabels() {
-  // Normalize modifier state from globals (same logic as before)
-  window.altActive = !!window.alt || !!window.altPhysical || !!window.altVirtual;
-  window.shiftActive = !!window.shift;
-  window.capsActive = !!window.caps;
-
-  // owners to update (host and guest). Order: update host first (if you prefer)
-  var owners = ['host', 'guest'];
-
-  // helper to pick label for a logical key given modifier state
-  function pickLabel(base) {
-    if (!base || base.length === 0) return base;
-    var lookup = String(base).toLowerCase();
-    var label = base;
-
-    if (window.altActive) {
-      if ((window.shiftActive || window.capsActive) && typeof altShiftKeys === 'object' && altShiftKeys.hasOwnProperty(lookup)) {
-        label = altShiftKeys[lookup];
-      } else if (typeof altKeys === 'object' && altKeys.hasOwnProperty(lookup)) {
-        label = altKeys[lookup];
-      } else if (window.shiftActive && typeof shiftedKeys === 'object' && shiftedKeys.hasOwnProperty(lookup)) {
-        label = shiftedKeys[lookup];
-      } else if (typeof normalKeys === 'object' && normalKeys.hasOwnProperty(lookup)) {
-        label = normalKeys[lookup];
-      } else {
-        label = base;
-      }
-    } else {
-      if (window.capsActive) {
-        if (typeof shiftedKeys === 'object' && shiftedKeys.hasOwnProperty(lookup)) {
-          label = shiftedKeys[lookup];
-        } else if (typeof normalKeys === 'object' && normalKeys.hasOwnProperty(lookup)) {
-          label = normalKeys[lookup];
-        } else {
-          label = base;
-        }
-      } else if (window.shiftActive) {
-        if (typeof shiftedKeys === 'object' && shiftedKeys.hasOwnProperty(lookup)) {
-          label = shiftedKeys[lookup];
-        } else if (typeof normalKeys === 'object' && normalKeys.hasOwnProperty(lookup)) {
-          label = normalKeys[lookup];
-        } else {
-          label = base;
-        }
-      } else {
-        if (typeof normalKeys === 'object' && normalKeys.hasOwnProperty(lookup)) {
-          label = normalKeys[lookup];
-        } else {
-          label = base;
-        }
-      }
-    }
-    return String(label);
-  }
-
-  // iterate all logical keys and update per-owner DOM elements
-  if (!Array.isArray(keyboardData)) return false;
-  keyboardData.forEach(function(key) {
-    // For each owner prefix, try to find the element and update it
-    owners.forEach(function(owner) {
-      var domId = owner + '-' + key.id;
-      var el = document.getElementById(domId);
-      // fallback to legacy id (no prefix) for migration support
-      if (!el) el = document.getElementById(key.id);
-
-      if (!el) return; // not present in this document
-
-      // Determine base character for label selection:
-      // prefer dataset.keyChar (set during creation), else fall back to logical label, else current text
-      var base = (el.dataset && el.dataset.keyChar) ? el.dataset.keyChar :
-                 (typeof key.label === 'string' ? key.label : '') ;
-
-      // If dataset.keyChar missing and we can set it, do so (helps future updates)
-      try { if ((!el.dataset || !el.dataset.keyChar) && base) el.dataset.keyChar = base; } catch (e) {}
-
-      // compute desired label
-      var newLabel = pickLabel(base);
-
-      // update DOM content safely (use textContent)
-      try {
-        if (el.textContent !== newLabel) el.textContent = newLabel;
-        // accessibility hint
-        el.setAttribute && el.setAttribute('aria-label', 'key ' + newLabel);
-      } catch (e) {
-        // ignore DOM exceptions
-      }
-
-      // Visual locked appearance for some special keys (per-owner)
-      // caps
-      if (key.id === 'caps') {
-        try {
-          if (window.caps) {
-            el.style.backgroundColor = '#fff';
-            el.style.color = '#000';
-          } else {
-            el.style.backgroundColor = '';
-            el.style.color = '';
-          }
-        } catch (e) {}
-      }
-
-      // ctrl
-      if (key.id === 'ctrl') {
-        try {
-          if (ctrlVirtual || ctrlPhysical) {
-            el.style.backgroundColor = modifierFlagBgColor;
-            el.style.color = modifierFlagFgColor;
-          } else {
-            el.style.backgroundColor = '';
-            el.style.color = '';
-          }
-        } catch (e) {}
-      }
-
-      // alt
-      if (key.id === 'alt') {
-        try {
-          if (altVirtual || altPhysical) {
-            el.style.backgroundColor = modifierFlagBgColor;
-            el.style.color = modifierFlagFgColor;
-          } else {
-            el.style.backgroundColor = '';
-            el.style.color = '';
-          }
-        } catch (e) {}
-      }
-    }); // end owners.forEach
-  }); // end keyboardData.forEach
-
-  return true;
-}
-window.updateKeyLabels = updateKeyLabels;
-
-  // Create a mapping from keyCode to element ID for quick lookup
-  window.keyCodeToId = {};
-  keyboardData.forEach(function(key) { keyCodeToId[key.keyCode] = key.id; });
-  // Store timeout IDs for each key to handle rapid key presses
-  window.keyTimeouts = {};
-  // Function to highlight a virtual key
-  window.highlightKey = function(keyCode) {
-    var elementId = keyCodeToId[keyCode];
-    if (!elementId) return; // Key not in virtual keyboard
-    var element = document.getElementById(elementId);
-    if (!element) return; // Element not found
-    // Clear any existing timeout for this key to prevent race conditions
-    if (keyTimeouts[elementId]) { clearTimeout(keyTimeouts[elementId]); }
-    // Apply hover effect (using the same color as :hover in CSS)
-    element.style.backgroundColor = '#444';
-    // Set a timeout to restore original color
-    keyTimeouts[elementId] = setTimeout(function() {
-      unhighlightKey(elementId);
-      delete keyTimeouts[elementId]; // Clean up timeout reference
-    }, 200); // 200ms flash effect
-  }
-  // Function to unhighlight a virtual key
-  window.unhighlightKey=function(elementId) {
-    var element = document.getElementById(elementId);
-    if (!element) return;
-    // Keep locked appearance if key is logically locked
-    if (elementId === 'caps' && caps) {
-      element.style.backgroundColor = '#fff';
-      element.style.color = '#000';
-      return;
-    }
-    if (elementId === 'ctrl' && (ctrlVirtual || ctrlPhysical)) {
-      element.style.backgroundColor = modifierFlagBgColor;
-      element.style.color = modifierFlagFgColor;
-      return;
-    }
-    if (elementId === 'alt' && (altVirtual || altPhysical)) {
-      element.style.backgroundColor = modifierFlagBgColor;
-      element.style.color = modifierFlagFgColor;
-      return;
-    }
-    // Not locked -> clear inline styles
-    element.style.backgroundColor = '';
-    element.style.color = '';
-  }
-
-  img=document.createElement('img');
-  img.id="qpc"; img.src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAA7EAAAOxAGVKw4bAAAAMklEQVRYhe3OMQEAMAjEwKei2wHxRQbLxUCu3u2fxc7mHAAAAAAAAAAAAAAAAAAAIEkGzIgCpxq6s7YAAAAASUVORK5CYII="; 
-  img.style.width="300px"; img.style.height="600px"; img.style.zIndex="0"; 
-  img.style.position="absolute";
-  img.style.left="32px";
-  img.style.top="32px";
-  document.body.appendChild(img);
-  document.getElementById("qpc").style.top = "32px";
-  document.getElementById("qpc").style.left = "32px";
-  
-  resize(); function resize() {
-   // Position text element based on mode
-   if (window.mode=="gfx") {
-    up=32+(404-(document.getElementById('txt').offsetHeight));
-    left=32+22+300;
-    document.getElementById("txt").style.left=left+"px";
-    document.getElementById("txt").style.top=up+"px";
-   } else {
-    left=32+22;
-    up=32+(402-(document.getElementById('txt').offsetHeight));
-    document.getElementById("txt").style.left="54px";
-    document.getElementById("txt").style.top=up+"px";
-   }
-  }
-
-// Qandy keyboard input glue
-// Exposes: window.QandyKeyboard and global input(...) for guest scripts.
-// Use: name = await input(); password = await input(false);
-//   input() or input(true) = echo mode (input displayed), input(false) = silent mode (nothing displayed)
-
-(function(global) {
-  if (global.QandyKeyboard) return; // don't re-install
-  var pending = null; // { resolve, reject, echo, buffer, savedLINE, savedCURP }
-  // Accept the pending input value and resolve the Promise
-  function acceptPending(value) {
-    if (!pending) return false;
-    var p = pending;
-    pending = null;
-    // resolve asynchronously to avoid reentrancy with key handlers
-    setTimeout(function() {
-      try { p.resolve(value); } catch (e) { p.reject(e); }
-    }, 0);
-    return true;
-  }
-
-  // Cancel pending input (reject)
-  function cancelPending(reason) {
-    if (!pending) return false;
-    var p = pending;
-    pending = null;
-    // reject asynchronously to match acceptPending and avoid reentrancy
-    setTimeout(function() {
-      p.reject(reason || new Error('input cancelled'));
-    }, 0);
-    return true;
-  }
-
-  // helper: resolve when any paced pokeCursor output finishes (or immediately if none)
-  function waitForCursorIdle(timeoutMs) {
-    timeoutMs = typeof timeoutMs === 'number' ? timeoutMs : 5000;
-    return new Promise(function(resolve) {
-      if (!window._pokeCursor_state) return resolve();
-      var start = Date.now();
-      var iv = setInterval(function() {
-        if (!window._pokeCursor_state) {
-          clearInterval(iv);
-          return resolve();
-        }
-        if (Date.now() - start > timeoutMs) {
-          clearInterval(iv);
-          return resolve();
-        }
-      }, 8);
-    });
-  }
-
-  // Public input API: input() = normal, input(false) = silent (no echo)
-  // p.echo is true when echo is enabled (default), false when echo is disabled.
-  function input(isEcho) {
-    if (pending) return Promise.reject(new Error('input already pending'));
-
-    var p = {};
-    var promise = new Promise(function(resolve, reject) {
-      p.resolve = resolve;
-      p.reject = reject;
-    });
-    // isEcho defaults to true (echo on); only input(false) disables echo
-    p.echo = (isEcho !== false);
-    p.buffer = "";
-    p.savedLINE = LINE;
-    p.savedCURP = CURP;
-
-    // async setup: wait for any current printing to finish, then enable input
-    (async function() {
-      try {
-        await waitForCursorIdle();
-        pending = p;
-        try { pokeCursorOn(); } catch (e) {}
-      } catch (err) {
-        try { p.reject(err); } catch (e) {}
-      }
-    })();
-
-    return promise;
-  }
-
-  // Read-only access to pending state (debug)
-  function _pendingState() { return pending; }
-
-  // Expose API
-  var API = {
-    input: input,
-    acceptPending: acceptPending,
-    cancelPending: cancelPending,
-    _pendingState: _pendingState
+function keyboard_js() {
+  window.normalKeys = {
+           "`":"`","[":"[", "]":"]", "\\":"\\","-":"-", "=":"=",
+    "1":"1", "2":"2", "3":"3", "4":"4", "5":"5", "6":"6", "7":"7", "8":"8", "9":"9", "0":"0",
+    "q":"q", "w":"w", "e":"e", "r":"r", "t":"t", "y":"y", "u":"u", "i":"i", "o":"o", "p":"p",
+    "a":"a", "s":"s", "d":"d", "f":"f", "g":"g", "h":"h", "j":"j", "k":"k", "l":"l", "'":"'",
+    "z":"z", "x":"x", "c":"c", "v":"v", "b":"b", "n":"n", "m":"m", ";":";",
+                      " ":" ",                   ",":",", ".":".", "/":"/"
   };
 
-  global.QandyKeyboard = API;
-  // convenience global for guest scripts: await input(...)
-  global.input = input;
+  window.shiftedKeys = {
+             "`":"~","\\":"|", "[":"{", "]":"}", "-":"_", "=":"+",
+    "1":"!", "2":"@", "3":"#", "4":"$", "5":"%", "6":"^", "7":"&", "8":"*", "9":"(", "0":")",
+    "q":"Q", "w":"W", "e":"E", "r":"R", "t":"T", "y":"Y", "u":"U", "i":"I", "o":"O", "p":"P",
+    "a":"A", "s":"S", "d":"D", "f":"F", "g":"G", "h":"H", "j":"J", "k":"K", "l":"L", "'":'"',
+    "z":"Z", "x":"X", "c":"C", "v":"V", "b":"B", "n":"N", "m":"M", ";":":",
+                      " ":" ",                   ",":"<", ".":">", "/":"?"
+  };
 
-})(window);
+  window.altKeys = {
+             "`":"¶", "[":"§", "]":"¼", "\\":"½","-":"*", "=":"/",
+    "1":"1", "2":"2", "3":"3", "4":"4", "5":"5", "6":"6", "7":"7", "8":"8", "9":"9", "0":"0",
+    "q":"Hm","w":"⬆", "e":"Ed","r":"Pu","t":"•", "y":"◘", "u":"4", "i":"5", "o":"6", "p":"-",
+    "a":"⬅", "s":"⬇", "d":"➡", "f":"Pd","g":"○", "h":"◙", "j":"1", "k":"2", "l":"3", "'":"+",
+    "z":"♪", "x":"♫", "c":"♀", "v":"♂", "b":"¿", "n":"‼", "m":".", ";":"0",
+                                         " ":" ", ",":"«", ".":"»", "/":"☼"
+  };
 
- if (typeof updateKeyLabels === 'function') {
-  // Replace local references inside updateKeyLabels with window.* as needed.
-  // If you can't edit the body in-place, export a wrapper that ensures window-safety:
-  var _updateKeyLabels = updateKeyLabels;
+  window.altShiftKeys = {
+             "`":"█", "[":"▌", "]":"▄","\\":"▀", "-":"▐", "=":"▬",
+    "1":"▲", "2":"▼", "3":"◄", "4":"►", "5":"↑", "6":"↓", "7":"←", "8":"→", "9":"↔", "0":"↕ ",
+    "q":"┌", "w":"┬", "e":"┐", "r":"│", "t":"╔", "y":"╦", "u":"╗", "i":"║", "o":"♥", "p":"♣",
+    "a":"├", "s":"┼", "d":"┤", "f":"─", "g":"╠", "h":"╬", "j":"╣", "k":"═", "l":"♦", "'":"♠",
+    "z":"└", "x":"┴", "c":"┘", "v":"☺", "b":"╚", "n":"╩", "m":"╝", ";":"☻",
+    " ":" ", ",":"▓", ".":"▒", "/":"░"
+  };
+
+  window.keyboardData = [
+    {id:"esc", label:"ESC", keyCode:27, x:47, y:446, width:52},
+    {id:"backtick", label:"`", keyCode:192, x:103, y:446, width:28},
+    {id:"open", label:"[", keyCode:219, x:132, y:446, width:28},
+    {id:"close", label:"]", keyCode:221, x:160, y:446, width:28},
+    {id:"backslash", label:"\\", keyCode:220, x:189, y:446, width:28},
+    {id:"dash", label:"-", keyCode:173, x:218, y:446, width:28},
+    {id:"equal", label:"=", keyCode:61, x:247, y:446, width:28},
+    {id:"back", label:"BACK", keyCode:8, x:275, y:446, width:52},
+    {id:"n1", label:"1", keyCode:49, x:47, y:480, width:28},
+    {id:"n2", label:"2", keyCode:50, x:75, y:480, width:28},
+    {id:"n3", label:"3", keyCode:51, x:103, y:480, width:28},
+    {id:"n4", label:"4", keyCode:52, x:132, y:480, width:28},
+    {id:"n5", label:"5", keyCode:53, x:160, y:480, width:28},
+    {id:"n6", label:"6", keyCode:54, x:189, y:480, width:28},
+    {id:"n7", label:"7", keyCode:55, x:218, y:480, width:28},
+    {id:"n8", label:"8", keyCode:56, x:247, y:480, width:28},
+    {id:"n9", label:"9", keyCode:57, x:275, y:480, width:28},
+    {id:"n0", label:"0", keyCode:48, x:303, y:480, width:28},
+    {id:"q", label:"q", keyCode:81, x:47, y:511, width:28},
+    {id:"w", label:"w", keyCode:87, x:75, y:511, width:28},
+    {id:"e", label:"e", keyCode:69, x:103, y:511, width:28},
+    {id:"r", label:"r", keyCode:82, x:132, y:511, width:28},
+    {id:"t", label:"t", keyCode:84, x:160, y:511, width:28},
+    {id:"y", label:"y", keyCode:89, x:189, y:511, width:28},
+    {id:"u", label:"u", keyCode:85, x:218, y:511, width:28},
+    {id:"i", label:"i", keyCode:73, x:247, y:511, width:28},
+    {id:"o", label:"o", keyCode:79, x:275, y:511, width:28},
+    {id:"p", label:"p", keyCode:80, x:303, y:511, width:28},
+    {id:"a", label:"a", keyCode:65, x:47, y:542, width:28},
+    {id:"s", label:"s", keyCode:83, x:75, y:542, width:28},
+    {id:"d", label:"d", keyCode:68, x:103, y:542, width:28},
+    {id:"f", label:"f", keyCode:70, x:132, y:542, width:28},
+    {id:"g", label:"g", keyCode:71, x:160, y:542, width:28},
+    {id:"h", label:"h", keyCode:72, x:189, y:542, width:28},
+    {id:"j", label:"j", keyCode:74, x:218, y:542, width:28},
+    {id:"k", label:"k", keyCode:75, x:247, y:542, width:28},
+    {id:"l", label:"l", keyCode:76, x:275, y:542, width:28},
+    {id:"quote", label:"'", keyCode:222, x:303, y:542, width:28},
+    {id:"z", label:"z", keyCode:90, x:47, y:573, width:28},
+    {id:"x", label:"x", keyCode:88, x:75, y:573, width:28},
+    {id:"c", label:"c", keyCode:67, x:103, y:573, width:28},
+    {id:"v", label:"v", keyCode:86, x:132, y:573, width:28},
+    {id:"b", label:"b", keyCode:66, x:160, y:573, width:28},
+    {id:"n", label:"n", keyCode:78, x:189, y:573, width:28},
+    {id:"m", label:"m", keyCode:77, x:218, y:573, width:28},
+    {id:"colon", label:";", keyCode:59, x:247, y:573, width:28},
+    {id:"enter", label:"ENTER", keyCode:13, x:275, y:573, width:52},
+    {id:"caps", label:"CAPS", keyCode:20, x:47, y:604, width:52},
+    {id:"space", label:"SPACE", keyCode:32, x:103, y:604, width:81},
+    {id:"ctrl", label:"CTRL", keyCode:17, x:189, y:604, width:28},
+    {id:"alt", label:"ALT", keyCode:18, x:218, y:604, width:28},
+    {id:"comma", label:",", keyCode:188, x:247, y:604, width:28},
+    {id:"dot", label:".", keyCode:190, x:275, y:604, width:28},
+    {id:"slash", label:"/", keyCode:191, x:303, y:604, width:28}
+  ];
+
+  window.keyon = 1; window.caps = 0; window.shift = 0; window.ctrl = 0; window.alt = 0;
+  window.ctrlPhysical = false; window.altPhysical = false; window.ctrlVirtual = false; window.altVirtual = false;
+  window.modifierFlagBgColor = '#fff'; window.modifierFlagFgColor = '#000';
+  window.modifierFlagBgColorOff = '#222'; window.modifierFlagFgColorOff = '#fff';
+  window.modifierFlagBgColorPhysical = '#bbb'; window.keyboard = 1;
+  window.LINE = ""; window.LINEX = 0; window.LINEY = 0; window.CURP = 0;
+  window.SSTART = -1; window.SEND = -1;
+
+  function _initKeys() {
+    var container = document.getElementById(window.HOST ? 'host-keyboard' : 'guest-keyboard');
+    if (!container) return;
+    window.keyboardData.forEach(function(key) {
+      var btn = document.createElement('div');
+      var owner = window.HOST ? 'host' : 'guest';
+      btn.id = owner + '-' + key.id;
+      btn.dataset.keyChar = (key.label === 'SPACE') ? ' ' : (key.label.length === 1 ? key.label : '');
+      btn.innerHTML = key.label;
+      btn.className = (key.width === 28) ? 'k1' : (key.width === 52 ? 'k2' : (key.width === 81 ? 'k-space' : 'k-ctrl'));
+      if (key.width === 40 || key.width === 81) btn.style.width = key.width + 'px';
+      btn.style.left = key.x + 'px'; btn.style.top = key.y + 'px';
+      btn.onclick = function() {
+        var d = {keyCode: key.keyCode, shiftKey: !!window.shift, ctrlKey: !!window.ctrl, altKey: !!window.alt, source: 'virtual'};
+        window.press(d); setTimeout(function() { window.pressup(d); }, 50);
+      };
+      container.appendChild(btn);
+    });
+  }
+  _initKeys();
+
   window.updateKeyLabels = function() {
-    // Normalize modifier values from window (avoid referencing undeclared locals)
-    window.altActive = !!window.alt || !!window.altPhysical || !!window.altVirtual;
-    window.shiftActive = !!window.shift;
-    window.capsActive = !!window.caps;
-    // Call the original implementation (which will now see window.* variables)
-    try { return _updateKeyLabels(); } catch (e) { /* fall through */ }
+    var altActive = !!window.alt || !!window.altPhysical || !!window.altVirtual;
+    var owners = ['host', 'guest'];
+    window.keyboardData.forEach(function(key) {
+      owners.forEach(function(owner) {
+        var el = document.getElementById(owner + '-' + key.id); if (!el) return;
+        var lookup = (el.dataset.keyChar || key.label).toLowerCase();
+        var label = key.label;
+        if (altActive) {
+           if ((window.shift || window.caps) && window.altShiftKeys[lookup]) label = window.altShiftKeys[lookup];
+           else if (window.altKeys[lookup]) label = window.altKeys[lookup];
+        } else {
+           if ((window.shift || window.caps) && window.shiftedKeys[lookup]) label = window.shiftedKeys[lookup];
+           else if (window.normalKeys[lookup]) label = window.normalKeys[lookup];
+        }
+        el.textContent = label;
+        if (key.id==='caps') { el.style.backgroundColor = window.caps?'#fff':''; el.style.color = window.caps?'#000':''; }
+      });
+    });
   };
- } else {
-  // fallback no-op to avoid undefined errors
-  window.updateKeyLabels = function() {};
- }
 
- // Export highlight/unhighlight and internal maps/timeouts so host code can call them
- if (typeof highlightKey === 'function') window.highlightKey = highlightKey;
- if (typeof unhighlightKey === 'function') window.unhighlightKey = unhighlightKey;
+  window.inkey = function() { return new Promise(function(res) { window._inkey_resolve = res; }); };
 
- // Ensure the keyCode map and timeout store are reachable from outside the closure
- if (typeof keyCodeToId !== 'undefined') window.keyCodeToId = keyCodeToId;
- if (typeof keyTimeouts !== 'undefined') window.keyTimeouts = keyTimeouts;
+  (function(global) {
+    var pending = null;
+    global.input = function(echo) {
+       return new Promise(function(res) { pending = {res:res, echo:echo!==false, buffer:""}; });
+    };
+    global.QandyKeyboard = { _pendingState: function() { return pending; }, acceptPending: function(v) { if(pending){pending.res(v); pending=null;} } };
+  })(window);
 
- // Also export keyboardData and key maps if needed elsewhere
- if (typeof keyboardData !== 'undefined') window.keyboardData = keyboardData;
- if (typeof normalKeys !== 'undefined') window.normalKeys = normalKeys;
- if (typeof shiftedKeys !== 'undefined') window.shiftedKeys = shiftedKeys;
- if (typeof altKeys !== 'undefined') window.altKeys = altKeys;
- if (typeof altShiftKeys !== 'undefined') window.altShiftKeys = altShiftKeys;
-
- // Signal that keyboard.js is ready
- if (typeof window.qandySignalReady === 'function') {
-  window.qandySignalReady('keyboard.js');
- }
+  if (typeof window.qandySignalReady === 'function') window.qandySignalReady('keyboard.js');
 }
