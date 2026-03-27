@@ -1,7 +1,11 @@
-// ──── Qandy Keyboard Driver ──────────────────────────────────────────────────────────
+//
+// ──── Qandy Keyboard Driver ─────────────────────────────────────────────────────────
+//
 
-function keyboard_js() {
-  alert("yes");
+function keyboard_js() { 
+  window.keyson=function() { }
+  window.keysoff=function() { }
+ 
   function _selectKeyboardContainer(prefer) {
     // prefer can be 'host' or 'guest' or undefined
     if (typeof window._getKeyboardContainer === 'function') {
@@ -407,6 +411,7 @@ window.updateKeyLabels = updateKeyLabels;
 
  // Signal that keyboard.js is ready
  if (typeof window.qandySignalReady === 'function') {
-  window.qandySignalReady('keyboard.js');
+  window.qandySignalReady('keyboard_js');
  }
 }
+

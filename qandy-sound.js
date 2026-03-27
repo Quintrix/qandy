@@ -1,5 +1,6 @@
-
+//
 // ──── Qandy Sound Card ──────────────────────────────────────────────────────────────
+//
 
 window.sound_js=function() {
   window.audioContext = null;
@@ -96,117 +97,119 @@ window.sound_js=function() {
   }
  }
 
-window.stopTune = function() { if (tuneTimeout) { clearTimeout(tuneTimeout); tuneTimeout = null; } currentTune = null; }
-window.loopTune = function(musicString) { playTune(musicString, function() { loopTune(musicString); });}
-window.loopNotes = function(gwbasicString) { playNotes(gwbasicString, function() { loopNotes(gwbasicString); }); }
-window.playMelody = function(notesArray, onComplete) {
-  const musicString = notesArray.map(function(note) {
-    if (note[0] === 'R' || note[0] === 'rest') { return 'R:' + (note[1] || 200); }
-    return note[0] + ':' + (note[1] || 200);
-  }).join(' ');
-  return playTune(musicString, onComplete);
-}
-window.playNotes = function(gwbasicString, onComplete) {
-  const notes = parseGWBasicString(gwbasicString);
-  if (!notes || notes.length === 0) { return false; }
-  const musicString = notes.map(function(note) {
-    if (note.type === 'rest') { return 'R:' + note.duration; }
-    return note.note + ':' + note.duration;
-  }).join(' ');
-  return playTune(musicString, onComplete);
-}
-window.parseGWBasicString = function(str) {
-  const notes = [];
-  let currentOctave = 4;  // Default octave
-  let currentLength = 4;  // Default quarter note (L4)
-  let currentTempo = 120; // Default tempo (120 BPM = quarter notes per minute)
-  function getDuration(length) { return Math.round((60000 / currentTempo) * (4 / length)); }
-  str = str.trim().toUpperCase();
-  let i = 0;
-  while (i < str.length) {
-    const char = str[i];
-    if (char === ' ' || char === '\t') { i++; continue; }
-    if (char === 'T') { i++; let numStr = '';
-      while (i < str.length && str[i] >= '0' && str[i] <= '9') { numStr += str[i]; i++; }
-      if (numStr) { const tempo = parseInt(numStr); if (tempo > 0 && tempo <= 255) { currentTempo = tempo; } }
-      continue;
-    }
-    if (char === 'L') {
-      i++; let numStr = '';
-      while (i < str.length && str[i] >= '0' && str[i] <= '9') { numStr += str[i]; i++; }
-      if (numStr) { const length = parseInt(numStr); if (length > 0 && length <= 64) { currentLength = length; } }
-      continue;
-    }
-    if (char === 'O') {
-      i++; if (i < str.length && str[i] >= '0' && str[i] <= '6') { currentOctave = parseInt(str[i]); i++; }
-      continue;
-    }
-    
-    if (char === 'P') {
-      i++; let numStr = '';
-      while (i < str.length && str[i] >= '0' && str[i] <= '9') { numStr += str[i]; i++; }
-      const length = numStr ? parseInt(numStr) : currentLength;
-      notes.push({ type: 'rest', duration: getDuration(length) });
-      continue;
-    }
-    if (char >= 'A' && char <= 'G') {
-      let noteName = char; i++;
-      if (i < str.length && (str[i] === '#' || str[i] === '+')) {
-        noteName += '#'; i++;
-      } else if (i < str.length && str[i] === '-') {
-        const flats = { 'D': 'C#', 'E': 'D#', 'G': 'F#', 'A': 'G#', 'B': 'A#' };
-        if (flats[noteName]) { noteName = flats[noteName]; }
-        i++;
+  window.stopTune = function() { if (tuneTimeout) { clearTimeout(tuneTimeout); tuneTimeout = null; } currentTune = null; }
+  window.loopTune = function(musicString) { playTune(musicString, function() { loopTune(musicString); });}
+  window.loopNotes = function(gwbasicString) { playNotes(gwbasicString, function() { loopNotes(gwbasicString); }); }
+  window.playMelody = function(notesArray, onComplete) {
+    const musicString = notesArray.map(function(note) {
+      if (note[0] === 'R' || note[0] === 'rest') { return 'R:' + (note[1] || 200); }
+      return note[0] + ':' + (note[1] || 200);
+    }).join(' ');
+    return playTune(musicString, onComplete);
+  }
+
+  window.playNotes = function(gwbasicString, onComplete) {
+    const notes = parseGWBasicString(gwbasicString);
+    if (!notes || notes.length === 0) { return false; }
+    const musicString = notes.map(function(note) {
+      if (note.type === 'rest') { return 'R:' + note.duration; }
+      return note.note + ':' + note.duration;
+    }).join(' ');
+    return playTune(musicString, onComplete);
+  }
+
+  window.parseGWBasicString = function(str) {
+    const notes = [];
+    let currentOctave = 4;  // Default octave
+    let currentLength = 4;  // Default quarter note (L4)
+    let currentTempo = 120; // Default tempo (120 BPM = quarter notes per minute)
+    function getDuration(length) { return Math.round((60000 / currentTempo) * (4 / length)); }
+    str = str.trim().toUpperCase();
+    let i = 0;
+    while (i < str.length) {
+      const char = str[i];
+      if (char === ' ' || char === '\t') { i++; continue; }
+      if (char === 'T') { i++; let numStr = '';
+        while (i < str.length && str[i] >= '0' && str[i] <= '9') { numStr += str[i]; i++; }
+        if (numStr) { const tempo = parseInt(numStr); if (tempo > 0 && tempo <= 255) { currentTempo = tempo; } }
+        continue;
       }
-      let noteLength = currentLength; let numStr = '';
-      while (i < str.length && str[i] >= '0' && str[i] <= '9') { numStr += str[i]; i++; }
-      if (numStr) { noteLength = parseInt(numStr); }
-      notes.push({ type: 'note', note: noteName + currentOctave, duration: getDuration(noteLength) });
-      continue;
+      if (char === 'L') {
+        i++; let numStr = '';
+        while (i < str.length && str[i] >= '0' && str[i] <= '9') { numStr += str[i]; i++; }
+        if (numStr) { const length = parseInt(numStr); if (length > 0 && length <= 64) { currentLength = length; } }
+        continue;
+      }
+      if (char === 'O') {
+        i++; if (i < str.length && str[i] >= '0' && str[i] <= '6') { currentOctave = parseInt(str[i]); i++; }
+        continue;
+      }
+    
+      if (char === 'P') {
+        i++; let numStr = '';
+        while (i < str.length && str[i] >= '0' && str[i] <= '9') { numStr += str[i]; i++; }
+        const length = numStr ? parseInt(numStr) : currentLength;
+        notes.push({ type: 'rest', duration: getDuration(length) });
+        continue;
+      }
+      if (char >= 'A' && char <= 'G') {
+        let noteName = char; i++;
+        if (i < str.length && (str[i] === '#' || str[i] === '+')) {
+          noteName += '#'; i++;
+        } else if (i < str.length && str[i] === '-') {
+          const flats = { 'D': 'C#', 'E': 'D#', 'G': 'F#', 'A': 'G#', 'B': 'A#' };
+          if (flats[noteName]) { noteName = flats[noteName]; }
+          i++;
+        }
+        let noteLength = currentLength; let numStr = '';
+        while (i < str.length && str[i] >= '0' && str[i] <= '9') { numStr += str[i]; i++; }
+        if (numStr) { noteLength = parseInt(numStr); }
+        notes.push({ type: 'note', note: noteName + currentOctave, duration: getDuration(noteLength) });
+        continue;
+      }
+      i++;
     }
-    i++;
+    return notes;
   }
-  return notes;
-}
-window.BEEP_VOLUME = (typeof window.BEEP_VOLUME !== 'undefined') ? window.BEEP_VOLUME : 0.3;
-window.beep = function(frequency = 800, duration = 200, volume) {
-  try {
-    if (!audioContext) {
-      if (!window.AudioContext && !window.webkitAudioContext) { throw new Error('Web Audio API is not supported in this browser'); }
-      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+  window.BEEP_VOLUME = (typeof window.BEEP_VOLUME !== 'undefined') ? window.BEEP_VOLUME : 0.3;
+  window.beep = function(frequency = 800, duration = 200, volume) {
+    try {
+      if (!audioContext) {
+        if (!window.AudioContext && !window.webkitAudioContext) { throw new Error('Web Audio API is not supported in this browser'); }
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      var vol = (typeof volume === 'number') ? volume : (window.BEEP_VOLUME || 0.3);
+      vol = Math.max(0, Math.min(1, vol)); // clamp 0.0..1.0
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      oscillator.type = 'sine';
+      oscillator.frequency.value = frequency;
+      gainNode.gain.value = vol;
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      const startTime = audioContext.currentTime;
+      const endTime = startTime + (duration / 1000);
+      oscillator.start(startTime);
+      oscillator.stop(endTime);
+      return true;
+    } catch (error) {
+      return false;
     }
-    var vol = (typeof volume === 'number') ? volume : (window.BEEP_VOLUME || 0.3);
-    vol = Math.max(0, Math.min(1, vol)); // clamp 0.0..1.0
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    oscillator.type = 'sine';
-    oscillator.frequency.value = frequency;
-    gainNode.gain.value = vol;
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-    const startTime = audioContext.currentTime;
-    const endTime = startTime + (duration / 1000);
-    oscillator.start(startTime);
-    oscillator.stop(endTime);
-    return true;
-  } catch (error) {
-    return false;
+  }
+
+  window.volume = function(level) {
+    if (typeof level === 'undefined') { return (typeof window.BEEP_VOLUME === 'number') ? window.BEEP_VOLUME : 0.3; }
+    var prev = (typeof window.BEEP_VOLUME === 'number') ? window.BEEP_VOLUME : 0.3;
+    var v = Number(level);
+    if (isNaN(v)) v = 0;
+    window.BEEP_VOLUME = Math.max(0, Math.min(1, v));
+    return prev;
+  }
+
+  // Signal that sound.js is ready
+  if (typeof window.qandySignalReady === 'function') {
+    window.qandySignalReady('sound.js');
   }
 }
 
-window.volume = function(level) {
-  if (typeof level === 'undefined') { return (typeof window.BEEP_VOLUME === 'number') ? window.BEEP_VOLUME : 0.3; }
-  var prev = (typeof window.BEEP_VOLUME === 'number') ? window.BEEP_VOLUME : 0.3;
-  var v = Number(level);
-  if (isNaN(v)) v = 0;
-  window.BEEP_VOLUME = Math.max(0, Math.min(1, v));
-  return prev;
-}
-
-// if (isGuest) { beep(); }
-
-// Signal that sound.js is ready
-if (typeof window.qandySignalReady === 'function') {
-  window.qandySignalReady('sound.js');
-}
-}

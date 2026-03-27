@@ -61,9 +61,3 @@ the Qandy will load and execute that file, ie:
   piano.js
   
 
-
-Control Key Combinations:
-
-  CTRL-A  Select all text
-  
-  
