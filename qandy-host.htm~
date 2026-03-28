@@ -1583,8 +1583,6 @@ async function systemReady() {
       print("localStorage not formated.\nInput \'fdisk\' to install.\n\n");
     }
     
-    // test
-    localSave("video.js", video_js.toString());
   }
 }
 window.systemReady=systemReady;
