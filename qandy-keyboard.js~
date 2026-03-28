@@ -394,20 +394,25 @@ window.updateKeyLabels = updateKeyLabels;
   window.updateKeyLabels = function() {};
  }
 
-  // Export highlight/unhighlight and internal maps/timeouts so host code can call them
-  if (typeof highlightKey === 'function') window.highlightKey = highlightKey;
-  if (typeof unhighlightKey === 'function') window.unhighlightKey = unhighlightKey;
+ // Export highlight/unhighlight and internal maps/timeouts so host code can call them
+ if (typeof highlightKey === 'function') window.highlightKey = highlightKey;
+ if (typeof unhighlightKey === 'function') window.unhighlightKey = unhighlightKey;
 
-  // Ensure the keyCode map and timeout store are reachable from outside the closure
-  if (typeof keyCodeToId !== 'undefined') window.keyCodeToId = keyCodeToId;
-  if (typeof keyTimeouts !== 'undefined') window.keyTimeouts = keyTimeouts;
+ // Ensure the keyCode map and timeout store are reachable from outside the closure
+ if (typeof keyCodeToId !== 'undefined') window.keyCodeToId = keyCodeToId;
+ if (typeof keyTimeouts !== 'undefined') window.keyTimeouts = keyTimeouts;
 
-  // Also export keyboardData and key maps if needed elsewhere
-  if (typeof keyboardData !== 'undefined') window.keyboardData = keyboardData;
-  if (typeof normalKeys !== 'undefined') window.normalKeys = normalKeys;
-  if (typeof shiftedKeys !== 'undefined') window.shiftedKeys = shiftedKeys;
-  if (typeof altKeys !== 'undefined') window.altKeys = altKeys;
-  if (typeof altShiftKeys !== 'undefined') window.altShiftKeys = altShiftKeys;
+ // Also export keyboardData and key maps if needed elsewhere
+ if (typeof keyboardData !== 'undefined') window.keyboardData = keyboardData;
+ if (typeof normalKeys !== 'undefined') window.normalKeys = normalKeys;
+ if (typeof shiftedKeys !== 'undefined') window.shiftedKeys = shiftedKeys;
+ if (typeof altKeys !== 'undefined') window.altKeys = altKeys;
+ if (typeof altShiftKeys !== 'undefined') window.altShiftKeys = altShiftKeys;
+
+  // Signal that keyboard.js is ready
+  if (typeof window.qandySignalReady === 'function') {
+    window.qandySignalReady('keyboard_js');
+  }
 
   window.keyson = keyson;
   window.keysoff = keysoff;
@@ -424,9 +429,7 @@ window.updateKeyLabels = updateKeyLabels;
   window.shiftedKeys = shiftedKeys;
   window.altKeys = altKeys;
   window.altShiftKeys = altShiftKeys; 
-  // Signal that keyboard.js is ready
-  if (typeof window.qandySignalReady === 'function') {
-    window.qandySignalReady('keyboard_js');
-  }
+ 
 }
+
 window.keyboard_js=keyboard_js;

@@ -207,6 +207,11 @@ window.sound_js=function() {
     return prev;
   }
 
+  // Signal that sound.js is ready
+  if (typeof window.qandySignalReady === 'function') {
+    window.qandySignalReady('sound_js');
+  }
+  
   window.audioContext = audioContext;
   window.noteFrequencies = noteFrequencies;
   window.playNote = playNote;
@@ -225,9 +230,5 @@ window.sound_js=function() {
   window.volume = volume;
   window.notes = notes;
   window.tuneTimeout = tuneTimeout;
-  // Signal that sound.js is ready
-  if (typeof window.qandySignalReady === 'function') {
-    window.qandySignalReady('sound_js');
-  }
 }
 window.sound_js=sound_js;

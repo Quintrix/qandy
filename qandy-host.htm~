@@ -854,7 +854,7 @@ function powerOn() {
       osc.connect(gain);
       gain.connect(ctx.destination);
       osc.start();
-      osc.stop(ctx.currentTime + 0.25);
+      osc.stop(ctx.currentTime + 0.04);
       setTimeout(function () { try { if (ctx.close) ctx.close(); } catch (e) {} }, 200);
     } catch (err) {
       console.warn('qandy: beep failed', err);
