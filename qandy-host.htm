@@ -1579,13 +1579,14 @@ async function systemReady() {
   } else {
     // host system ready
     print("[yellow]Qandy Sysop Access[white]\n\n");
-    //if (!qdosExists("dir.sys")) {
-    //  print("localStorage not formated.\nInput \'fdisk\' to install.\n\n");
-    //}
+    if (!qdosExists("dir.sys")) {
+      print("localStorage not formated.\nInput \'fdisk\' to install.\n\n");
+    }
+    
   }
 }
 window.systemReady=systemReady;
-
+ 
 </script>
 </body>
 </html></html>
