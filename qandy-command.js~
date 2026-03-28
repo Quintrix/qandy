@@ -553,98 +553,6 @@ function command_js() {
   window.qdosChDir = window.qdosChDir;
   window.qdosRmDir = window.qdosRmDir;
 
-  // these functions transmit packets to and from the host
-  function qdosXmitDos(action, packet, timeoutMs) {
-    return new Promise(function (resolve, reject) {
-      if (!window.parent || window.parent === window) { return reject(new Error('Error: no <host>')); }
-      // compact id: timestamp + small counter (no separate helper function)
-      window.__qandy_reqCounter += 1;
-      var id = 'qdos_' + Date.now() + '_' + window.__qandy_reqCounter;
-      var msg = { type: 'guest-action', action: action, id: id };
-      if (packet) {
-        var keys = Object.keys(packet);
-        for (var i = 0; i < keys.length; i++) msg[keys[i]] = packet[keys[i]];
-      }
-      var timer = setTimeout(function () {
-        delete _pending[id];
-        reject(new Error('Error: timeout ' + action));
-      }, timeoutMs || 5000);
-      _pending[id] = { resolve: resolve, reject: reject, timer: timer };
-      try {
-        window.parent.postMessage(msg, '*');
-      } catch (e) {
-        clearTimeout(timer);
-        delete _pending[id];
-        return e;
-      }
-    });
-  }
-
-  // normalize host results into a primitive/string for qdosDir printing
-  function _normalizeResult(res) {
-    if (Array.isArray(res)) return res.join('\n');
-    if (res === null || res === undefined) return '';
-    if (typeof res === 'object') {
-      try { return JSON.stringify(res); } catch (e) { return String(res); }
-    }
-    return String(res);
-  }
-
-  // qdosAckDOS wrapper (small convenience). If you already define qdosAckDOS elsewhere, this will not override it.
-  window.qdosAckDOS = window.qdosAckDOS || function (type, handler, opts) {
-    type = String(type || 'message');
-    function wrapper(ev) {
-      if (ev.source !== window.parent) return; // only accept messages from parent
-      try { handler(ev); } catch (e) { console.error('qdosAckDOS handler error:', e && e.message ? e.message : e); }
-    }
-    window.addEventListener(type, wrapper, opts || false);
-    return function remove() { window.removeEventListener(type, wrapper, opts || false); };
-  };
-
-  // attach the ack handler using qdosAckDOS
-  qdosAckDOS('message', function (ev) {
-    var d = ev.data;
-    if (!d || typeof d !== 'object') return;
-    // accept legacy and new reply names
-    if (d.type !== 'action-result' && d.type !== 'ack') return;
-    var id = d.id;
-    if (!id || !_pending[id]) return;
-    var entry = _pending[id];
-    try { clearTimeout(entry.timer); } catch (e) {}
-    delete _pending[id];
-    var ok = (d.ok !== undefined) ? Boolean(d.ok) : (d.success !== undefined ? Boolean(d.success) : true);
-    if (!ok) {
-      entry.reject(new Error(d.error || 'DOS operation failed'));
-      return;
-    }
-    var res = d.result !== undefined ? d.result : true;
-    res = _normalizeResult(res);
-    entry.resolve(res);
-  }, false);
- 
- 
-  // evalCode: always-evaluates user input inside an async IIFE so top-level await is valid.
-  // Programs / REPL must use `await` for blocking calls (e.g., await print(...); await input(...);).
-  window.evalCode = async function(code) {
-    if (HOST) { print("Input \'user\' to execute code"); }
-    var src = String(code || '');
-    if (!src.trim()) return true;
-    // Wrap the user input in an async IIFE so top-level await is valid everywhere.
-    var wrapped = "(async function __qandy_repl_wrapper() {\n" + src + "\n})();";
-    try {
-      // Use indirect eval to run in global scope
-      var promise = (0, eval)(wrapped);
-      // Await the async IIFE result; print returned value if any
-      var result = await promise;
-      if (typeof result !== 'undefined') {
-        try { await print(String(result) + "\n\n"); } catch (e) { /* best-effort */ }
-      }
-      return true;
-    } catch (err) {
-      try { await print("Error: " + ((err && err.message) ? err.message : String(err)) + "\n\n"); } catch (e) {}
-      return false;
-    }
-  };
 
   window.command_js = command_js;
   window.command = command;
@@ -667,8 +575,6 @@ function command_js() {
   window.qdosChDir = qdosChDir;
   window.qdosRmDir = qdosRmDir;
   window.qdosValidateFilename = qdosValidateFilename;
-  window.qdosAckDOS = qdosAckDOS;
-  window.evalCode = evalCode;
   window._normalizeResult = _normalizeResult;
   window._pending = _pending;  
   // Signal that command.js is ready

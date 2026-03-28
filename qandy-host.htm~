@@ -980,375 +980,362 @@ async function qandyGuestHtm(options) {
 // ──── Host Message Handler ──────────────────────────────────────────────────────────
 //
 
-async function hostMessageHandler(ev) {
-  //if (!iframe.contentWindow || ev.source !== iframe.contentWindow) {
-  //  console.log("Message is not from our iframe");
-  //  return;
-  //}
-  var iframe = window._vmIframe || document.getElementById('vm-iframe');
-  if (!iframe || !iframe.contentWindow || ev.source !== iframe.contentWindow) { return; }
-  var d = ev.data || {}; if (!d || typeof d !== 'object') return;
-  
-  if (d.type === 'guest-action' && typeof d.action === 'string') {
-    try {
-      switch(d.action) {
-      
-        case 'sysop': { sysop(); break; }
-        case 'user': { sysop(); break; }
-        
-        case 'localList': {
-          var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
-          // call localDir() and handle both sync and Promise-returning implementations
-          Promise.resolve().then(function () { return localList(); })
-            .then(function (result) {
-              dosXmitQdos(_dosIframe, d.id, 'localList', true, result);
-            })
-            .catch(function (err) {
-              dosXmitQdos(_dosIframe, d.id, 'localList', false, err && err.message ? err.message : String(err));
-            });
-          break;
-        }
-
-        case 'localDir': {
-          var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
-          var pattern = validateGuestPattern((typeof d.pattern === 'undefined' || d.pattern === null) ? '' : String(d.pattern));
-          var switches = validateGuestSwitches((typeof d.switches === 'undefined' || d.switches === null) ? '' : String(d.switches));
-          // call localDir() and handle both sync and Promise-returning implementations
-          Promise.resolve().then(function () { return localDir(pattern, switches); })
-            .then(function (result) {
-              dosXmitQdos(_dosIframe, d.id, 'localDir', true, result);
-            })
-            .catch(function (err) {
-              dosXmitQdos(_dosIframe, d.id, 'localDir', false, err && err.message ? err.message : String(err));
-            });
-          break;
-        }
-
-        case 'localMkDir': {
-          var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
-          var fname = (typeof d.file === 'undefined' || d.file === null) ? '' : String(d.file);
-          var validName = validateGuestFilename(fname);
-          if (!validName) { dosXmitQdos(_dosIframe, d.id, 'localMkDir', false, 'invalid filename'); break; }
-          // Use Promise.resolve() to handle both sync and async implementations
-          Promise.resolve().then(function () { return localMkDir(validName); })
-            .then(function(result) {
-              dosXmitQdos(_dosIframe, d.id, 'localMkDir', true, result);
-            })
-            .catch(function(err) {
-              err=err+" [987]";
-              dosXmitQdos(_dosIframe, d.id, 'localMkDir', false, err && err.message ? err.message : String(err));
-            });
-          break;
-        }
-
-        case 'localChDir': {
-          var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
-          var fname = (typeof d.file === 'undefined' || d.file === null) ? '' : String(d.file);
-          if (fname) {
-            if (fname=="..") {
-              validName="..";
-            } else {
-              var validName = validateGuestFilename(fname);
-              if (!validName) { dosXmitQdos(_dosIframe, d.id, 'localChDir', false, 'invalid filename'); break; }
-            }
-          } else {
-            validName="";
-          }
-          Promise.resolve().then(function () { return localChDir(validName); })
-            .then(function(result) {
-              dosXmitQdos(_dosIframe, d.id, 'localChDir', true, result);
-            })
-            .catch(function(err) {
-              dosXmitQdos(_dosIframe, d.id, 'localChDir', false, err && err.message ? err.message : String(err));
-            });
-          break;
-        }
-
-        case 'localRmDir': {
-          var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
-          var fname = (typeof d.file === 'undefined' || d.file === null) ? '' : String(d.file);
-          var validName = validateGuestFilename(fname);
-          if (!validName) { dosXmitQdos(_dosIframe, d.id, 'localRmDir', false, 'invalid filename'); break; }
-          // Use Promise.resolve() to handle both sync and async implementations
-          Promise.resolve().then(function () { return localRmDir(validName); })
-            .then(function(result) {
-              dosXmitQdos(_dosIframe, d.id, 'localRmDir', true, result);
-            })
-            .catch(function(err) {
-              dosXmitQdos(_dosIframe, d.id, 'localRmDir', false, err && err.message ? err.message : String(err));
-            });
-          break;
-        }
-      
-        case 'localLoad': {
-          var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
-          var fname = (typeof d.file === 'undefined' || d.file === null) ? '' : String(d.file);
-          var validName = validateGuestFilename(fname);
-          //if (!validName) {
-          //  // reject invalid filenames explicitly
-          //  dosXmitQdos(_dosIframe, d.id, 'localLoad', false, 'invalid filename');
-          //  break;
-          //}
-          Promise.resolve().then(function () { return localLoad(validName); })
-            .then(function (result) {
-              dosXmitQdos(_dosIframe, d.id, 'localLoad', true, result);
-            })
-            .catch(function (err) {
-              dosXmitQdos(_dosIframe, d.id, 'localLoad', false, err && err.message ? err.message : String(err));
-            });
-          break;
-        }
-        
-        case 'localSave': {
-          var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
-          localSave(d.file, d.data).then(function(result) {
-            if (_dosIframe && _dosIframe.contentWindow) {
-              if (result === true) {
-                _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'localSave', id: d.id, success: true, result: true }, '*');
-              } else {
-                _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'localSave', id: d.id, success: false, error: String(result) }, '*');
-              }
-            }
-          }).catch(function(e) {
-            if (_dosIframe && _dosIframe.contentWindow) {
-              _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'localSave', id: d.id, success: false, error: String(e) }, '*');
-            }
-          });
-          break;
-        }
-
-        case 'localDelete': {
-          var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
-          var fname = (typeof d.file === 'undefined' || d.file === null) ? '' : String(d.file);
-          var validName = (typeof validateGuestFilename === 'function') ? validateGuestFilename(fname) : null;
-          if (!validName) { dosXmitQdos(_dosIframe, d.id, 'localDelete', false, 'invalid filename'); break; }
-          Promise.resolve().then(function () { return localDelete(validName); })
-            .then(function (result) {
-              dosXmitQdos(_dosIframe, d.id, 'localDelete', true, result);
-            })
-            .catch(function (err) {
-              dosXmitQdos(_dosIframe, d.id, 'localDelete', false, 'Error: '+err);
-            });
-          break;
-        }
-        
-        case 'localExists': {
-          var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
-          localExists(d.file).then(function(result) {
-            if (_dosIframe && _dosIframe.contentWindow) {
-              _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'localExists', id: d.id, success: true, result: result }, '*');
-            }
-          }).catch(function(e) {
-            if (_dosIframe && _dosIframe.contentWindow) {
-              _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'localExists', id: d.id, success: false, error: String(e) }, '*');
-            }
-          });
-          break;
-        }
-
-        case 'localRename': {
-          var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
-          var src = (typeof d.file === 'undefined' || d.file === null) ? '' : String(d.file);
-          var dest = (typeof d.dest === 'undefined' || d.dest === null) ? '' : String(d.dest);
-          var validSrc = (typeof validateGuestFilename === 'function') ? validateGuestFilename(src) : null;
-          var validDest = (typeof validateGuestFilename === 'function') ? validateGuestFilename(dest) : null;
-          if (!validSrc || !validDest) { dosXmitQdos(_dosIframe, d.id, 'localRename', false, 'invalid filename(s)'); break; }
-          if (validSrc === validDest) { dosXmitQdos(_dosIframe, d.id, 'localRename', false, 'source and destination are identical'); break; }
-          if (typeof localRename !== 'function') { dosXmitQdos(_dosIframe, d.id, 'localRename', false, 'host: rename not supported'); break; }
-          Promise.resolve().then(function () { return localRename(validSrc, validDest); })
-            .then(function (result) {
-              dosXmitQdos(_dosIframe, d.id, 'localRename', true, result === undefined ? true : result);
-            })
-            .catch(function (err) {
-              dosXmitQdos(_dosIframe, d.id, 'localRename', false, err && err.message ? err.message : String(err));
-            });
-          break;
-        }
-
-        case 'dosMount': {
-          var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
-          try {
-            // For the host-backed guest device, only 'local' is supported
-            var _reqDev = (d.device == null || String(d.device).trim() === '') ? null : String(d.device).trim();
-            var _curDev = (typeof DEVICE !== 'undefined') ? DEVICE : 'local';
-            var _result = _reqDev || _curDev;
-            if (_dosIframe && _dosIframe.contentWindow) {
-              _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'dos-mount', id: d.id, success: true, result: _result }, '*');
-            }
-          } catch (_e) {
-            if (_dosIframe && _dosIframe.contentWindow) {
-              _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'dos-mount', id: d.id, success: false, error: String(_e) }, '*');
-            }
-          }
-          break;
-        }
-
-        case 'qdosPaste': {
-          var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
-          var fname = (typeof d.file === 'undefined' || d.file === null) ? '' : String(d.file).trim();
-          var validName = (typeof validateGuestFilename === 'function') ? validateGuestFilename(fname) : null;
-          if (!validName) { dosXmitQdos(_dosIframe, d.id, 'qdosPaste', false, 'invalid filename'); break; }
-          if (typeof dosPaste !== 'function') { dosXmitQdos(_dosIframe, d.id, 'qdosPaste', false, 'host: dosPaste not implemented'); break; }
-          Promise.resolve().then(function () { return dosPaste(validName); })
-            .then(function (result) {
-              dosXmitQdos(_dosIframe, d.id, 'qdosPaste', true, result === undefined ? true : result);
-            })
-            .catch(function (err) {
-              dosXmitQdos(_dosIframe, d.id, 'qdosPaste', false, err && err.message ? err.message : String(err));
-            });
-          break;
-        }
-        
-        case 'dosExists': {
-          var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
-          var fname = (typeof d.file === 'undefined' || d.file === null) ? '' : String(d.file).trim();
-          // Normalize validateGuestFilename return values to a filename string or null
-          var validName = null;
-          var v = validateGuestFilename(fname);
-          if (typeof v === 'string') validName = v.trim();
-          else if (v === true) validName = fname; // true => original name is valid
-          else validName = null;
-          if (!validName) { dosXmitQdos(_dosIframe, d.id, 'dosExists', false, 'invalid filename'); break; }
-          // Defensive: ensure we pass a string to dosExists
-          if (typeof validName !== 'string') validName = String(validName);
-          // Optional debug to trace corrupted messages
-          if (typeof dosExists !== 'function') {
-            dosXmitQdos(_dosIframe, d.id, 'dosExists', false, 'host: dosExists not implemented');
+if (HOST) {
+  async function hostMessageHandler(ev) {
+    //if (!iframe.contentWindow || ev.source !== iframe.contentWindow) {
+    //  console.log("Message is not from our iframe");
+    //  return;
+    //}
+    var iframe = window._vmIframe || document.getElementById('vm-iframe');
+    if (!iframe || !iframe.contentWindow || ev.source !== iframe.contentWindow) { return; }
+    var d = ev.data || {}; if (!d || typeof d !== 'object') return;
+    
+    if (d.type === 'guest-action' && typeof d.action === 'string') {
+      try {
+        switch(d.action) {
+          case 'sysop': { sysop(); break; }
+          case 'user': { sysop(); break; }
+          case 'localList': {
+            var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+            // call localDir() and handle both sync and Promise-returning implementations
+            Promise.resolve().then(function () { return localList(); })
+              .then(function (result) {
+                dosXmitQdos(_dosIframe, d.id, 'localList', true, result);
+              })
+              .catch(function (err) {
+                dosXmitQdos(_dosIframe, d.id, 'localList', false, err && err.message ? err.message : String(err));
+              });
             break;
           }
-          Promise.resolve().then(function () { return dosExists(validName); })
-            .then(function (result) {
-          var exists = !!result;
-          dosXmitQdos(_dosIframe, d.id, 'dosExists', true, exists);
-        })
-        .catch(function (err) {
-          dosXmitQdos(_dosIframe, d.id, 'dosExists', false, err && err.message ? err.message : String(err));
-        });
-      break;
-      }
-
-        case 'dosFormat': {
-          var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
-          var _LS_PFX = 'qandy_file:';
-          var _LS_MAN = 'qandy_manifest_local';
-          try {
-            if (d.data === null || typeof d.data === 'undefined') {
-              // export: return JSON archive of all local files
-              var _expRaw = localStorage.getItem(_LS_MAN);
-              var _expList = _expRaw ? JSON.parse(_expRaw) : [];
-              if (!Array.isArray(_expList)) _expList = [];
-              var _expFiles = {};
-              for (var _fi = 0; _fi < _expList.length; _fi++) {
-                var _fn = _expList[_fi];
-                _expFiles[_fn] = localStorage.getItem(_LS_PFX + _fn);
-              }
-              var _archive = JSON.stringify({ device: 'local', created: (new Date()).toISOString(), files: _expFiles });
-              if (_dosIframe && _dosIframe.contentWindow) {
-                _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'dos-format', id: d.id, success: true, result: _archive }, '*');
+          case 'localDir': {
+            var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+            var pattern = validateGuestPattern((typeof d.pattern === 'undefined' || d.pattern === null) ? '' : String(d.pattern));
+            var switches = validateGuestSwitches((typeof d.switches === 'undefined' || d.switches === null) ? '' : String(d.switches));
+            // call localDir() and handle both sync and Promise-returning implementations
+            Promise.resolve().then(function () { return localDir(pattern, switches); })
+              .then(function (result) {
+                dosXmitQdos(_dosIframe, d.id, 'localDir', true, result);
+              })
+              .catch(function (err) {
+                dosXmitQdos(_dosIframe, d.id, 'localDir', false, err && err.message ? err.message : String(err));
+              });
+            break;
+          }
+          case 'localMkDir': {
+            var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+            var fname = (typeof d.file === 'undefined' || d.file === null) ? '' : String(d.file);
+            var validName = validateGuestFilename(fname);
+            if (!validName) { dosXmitQdos(_dosIframe, d.id, 'localMkDir', false, 'invalid filename'); break; }
+            // Use Promise.resolve() to handle both sync and async implementations
+            Promise.resolve().then(function () { return localMkDir(validName); })
+              .then(function(result) {
+                dosXmitQdos(_dosIframe, d.id, 'localMkDir', true, result);
+              })
+              .catch(function(err) {
+                err=err+" [987]";
+               dosXmitQdos(_dosIframe, d.id, 'localMkDir', false, err && err.message ? err.message : String(err));
+              } );
+            break;
+          }
+          case 'localChDir': {
+            var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+            var fname = (typeof d.file === 'undefined' || d.file === null) ? '' : String(d.file);
+            if (fname) {
+             if (fname=="..") {
+                validName="..";
+              } else {
+               var validName = validateGuestFilename(fname);
+                if (!validName) { dosXmitQdos(_dosIframe, d.id, 'localChDir', false, 'invalid filename'); break; }
               }
             } else {
-              // import: overwrite device with provided archive
-              var _impObj = d.data;
-              if (typeof _impObj === 'string') { try { _impObj = JSON.parse(_impObj); } catch (pe) { throw new Error('dos-format: data must be valid JSON'); } }
-              if (!_impObj || typeof _impObj !== 'object' || !_impObj.files) throw new Error('dos-format: invalid archive');
-              // clear existing files
-              var _clrRaw = localStorage.getItem(_LS_MAN);
-              var _clrList = _clrRaw ? JSON.parse(_clrRaw) : [];
-              if (Array.isArray(_clrList)) {
-                for (var _ci = 0; _ci < _clrList.length; _ci++) localStorage.removeItem(_LS_PFX + _clrList[_ci]);
-              }
-              // write new files
-              var _newList = [];
-              var _impKeys = Object.keys(_impObj.files);
-              for (var _ii = 0; _ii < _impKeys.length; _ii++) {
-                var _iname = _impKeys[_ii];
-                var _ival = _impObj.files[_iname];
-                localStorage.setItem(_LS_PFX + _iname, _ival == null ? '' : String(_ival));
-                _newList.push(_iname);
-              }
-              localStorage.setItem(_LS_MAN, JSON.stringify(_newList));
-              if (_dosIframe && _dosIframe.contentWindow) {
-                _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'dos-format', id: d.id, success: true, result: true }, '*');
-              }
+              validName="";
             }
-          } catch (_e) {
-            if (_dosIframe && _dosIframe.contentWindow) {
-              _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'dos-format', id: d.id, success: false, error: String(_e) }, '*');
-            }
+            Promise.resolve().then(function () { return localChDir(validName); })
+              .then(function(result) {
+                dosXmitQdos(_dosIframe, d.id, 'localChDir', true, result);
+              })
+              .catch(function(err) {
+                dosXmitQdos(_dosIframe, d.id, 'localChDir', false, err && err.message ? err.message : String(err));
+              });
+            break;
           }
-          break;
+          case 'localRmDir': {
+            var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+            var fname = (typeof d.file === 'undefined' || d.file === null) ? '' : String(d.file);
+            var validName = validateGuestFilename(fname);
+            if (!validName) { dosXmitQdos(_dosIframe, d.id, 'localRmDir', false, 'invalid filename'); break; }
+            // Use Promise.resolve() to handle both sync and async implementations
+            Promise.resolve().then(function () { return localRmDir(validName); })
+              .then(function(result) {
+                dosXmitQdos(_dosIframe, d.id, 'localRmDir', true, result);
+              })
+              .catch(function(err) {
+                dosXmitQdos(_dosIframe, d.id, 'localRmDir', false, err && err.message ? err.message : String(err));
+              });
+            break;
+          }
+          case 'localLoad': {
+            var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+            var fname = (typeof d.file === 'undefined' || d.file === null) ? '' : String(d.file);
+            var validName = validateGuestFilename(fname);
+            //if (!validName) {
+            //  // reject invalid filenames explicitly
+            //  dosXmitQdos(_dosIframe, d.id, 'localLoad', false, 'invalid filename');
+            //  break;
+            //}
+            Promise.resolve().then(function () { return localLoad(validName); })
+              .then(function (result) {
+                dosXmitQdos(_dosIframe, d.id, 'localLoad', true, result);
+              })
+              .catch(function (err) {
+                dosXmitQdos(_dosIframe, d.id, 'localLoad', false, err && err.message ? err.message : String(err));
+              });
+            break;
+          }
+          case 'localSave': {
+            var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+            localSave(d.file, d.data).then(function(result) {
+              if (_dosIframe && _dosIframe.contentWindow) {
+                if (result === true) {
+                  _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'localSave', id: d.id, success: true, result: true }, '*');
+               } else {
+                  _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'localSave', id: d.id, success: false, error: String(result) }, '*');
+                } 
+              }
+            }).catch(function(e) {
+              if (_dosIframe && _dosIframe.contentWindow) {
+                _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'localSave', id: d.id, success: false, error: String(e) }, '*');
+              }
+            });
+            break;
+          }
+          case 'localDelete': {
+            var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+            var fname = (typeof d.file === 'undefined' || d.file === null) ? '' : String(d.file);
+            var validName = (typeof validateGuestFilename === 'function') ? validateGuestFilename(fname) : null;
+            if (!validName) { dosXmitQdos(_dosIframe, d.id, 'localDelete', false, 'invalid filename'); break; }
+            Promise.resolve().then(function () { return localDelete(validName); })
+              .then(function (result) {
+                dosXmitQdos(_dosIframe, d.id, 'localDelete', true, result);
+              })
+              .catch(function (err) {
+                dosXmitQdos(_dosIframe, d.id, 'localDelete', false, 'Error: '+err);
+              });
+            break;
+          }
+          case 'localExists': {
+            var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+            localExists(d.file).then(function(result) {
+              if (_dosIframe && _dosIframe.contentWindow) {
+                _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'localExists', id: d.id, success: true, result: result }, '*');
+              }
+            }).catch(function(e) {
+              if (_dosIframe && _dosIframe.contentWindow) {
+                _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'localExists', id: d.id, success: false, error: String(e) }, '*');
+              }
+            });
+            break;
+          }
+          case 'localRename': {
+            var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+            var src = (typeof d.file === 'undefined' || d.file === null) ? '' : String(d.file);
+            var dest = (typeof d.dest === 'undefined' || d.dest === null) ? '' : String(d.dest);
+            var validSrc = (typeof validateGuestFilename === 'function') ? validateGuestFilename(src) : null;
+            var validDest = (typeof validateGuestFilename === 'function') ? validateGuestFilename(dest) : null;
+            if (!validSrc || !validDest) { dosXmitQdos(_dosIframe, d.id, 'localRename', false, 'invalid filename(s)'); break; }
+            if (validSrc === validDest) { dosXmitQdos(_dosIframe, d.id, 'localRename', false, 'source and destination are identical'); break; }
+            if (typeof localRename !== 'function') { dosXmitQdos(_dosIframe, d.id, 'localRename', false, 'host: rename not supported'); break; }
+            Promise.resolve().then(function () { return localRename(validSrc, validDest); })
+              .then(function (result) {
+                dosXmitQdos(_dosIframe, d.id, 'localRename', true, result === undefined ? true : result);
+              })
+              .catch(function (err) {
+                dosXmitQdos(_dosIframe, d.id, 'localRename', false, err && err.message ? err.message : String(err));
+              });
+            break;
+          }
+          case 'dosMount': {
+            var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+            try {
+              // For the host-backed guest device, only 'local' is supported
+              var _reqDev = (d.device == null || String(d.device).trim() === '') ? null : String(d.device).trim();
+              var _curDev = (typeof DEVICE !== 'undefined') ? DEVICE : 'local';
+              var _result = _reqDev || _curDev;
+              if (_dosIframe && _dosIframe.contentWindow) {
+                _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'dos-mount', id: d.id, success: true, result: _result }, '*');
+              }
+            } catch (_e) {
+              if (_dosIframe && _dosIframe.contentWindow) {
+                _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'dos-mount', id: d.id, success: false, error: String(_e) }, '*');
+              }
+            }
+            break;
+          }
+          case 'qdosPaste': {
+            var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+            var fname = (typeof d.file === 'undefined' || d.file === null) ? '' : String(d.file).trim();
+            var validName = (typeof validateGuestFilename === 'function') ? validateGuestFilename(fname) : null;
+            if (!validName) { dosXmitQdos(_dosIframe, d.id, 'qdosPaste', false, 'invalid filename'); break; }
+            if (typeof dosPaste !== 'function') { dosXmitQdos(_dosIframe, d.id, 'qdosPaste', false, 'host: dosPaste not implemented'); break; }
+            Promise.resolve().then(function () { return dosPaste(validName); })
+              .then(function (result) {
+                dosXmitQdos(_dosIframe, d.id, 'qdosPaste', true, result === undefined ? true : result);
+              })
+              .catch(function (err) {
+                dosXmitQdos(_dosIframe, d.id, 'qdosPaste', false, err && err.message ? err.message : String(err));
+              });
+            break;
+          }
+          case 'dosExists': {
+            var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+            var fname = (typeof d.file === 'undefined' || d.file === null) ? '' : String(d.file).trim();
+            // Normalize validateGuestFilename return values to a filename string or null
+            var validName = null;
+            var v = validateGuestFilename(fname);
+            if (typeof v === 'string') validName = v.trim();
+            else if (v === true) validName = fname; // true => original name is valid
+             else validName = null;
+            if (!validName) { dosXmitQdos(_dosIframe, d.id, 'dosExists', false, 'invalid filename'); break; }
+            // Defensive: ensure we pass a string to dosExists
+            if (typeof validName !== 'string') validName = String(validName);
+            // Optional debug to trace corrupted messages
+            if (typeof dosExists !== 'function') {
+              dosXmitQdos(_dosIframe, d.id, 'dosExists', false, 'host: dosExists not implemented');
+              break;
+            }
+            Promise.resolve().then(function () { return dosExists(validName); })
+              .then(function (result) {
+            var exists = !!result;
+            dosXmitQdos(_dosIframe, d.id, 'dosExists', true, exists);
+          })
+          .catch(function (err) {
+            dosXmitQdos(_dosIframe, d.id, 'dosExists', false, err && err.message ? err.message : String(err));
+          });
+        break;
         }
-      }
-    } catch (e) {
-      console.info('Error handling guest action:', e);
-      var _errIframe = window._vmIframe || document.getElementById('vm-iframe');
-      if (_errIframe && _errIframe.contentWindow) {
-        _errIframe.contentWindow.postMessage({ 
-          type: 'action-result', 
-          action: d.action, 
-          success: false, 
-          error: String(e) 
-        }, '*');
+         case 'dosFormat': {
+             var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+            var _LS_PFX = 'qandy_file:';
+            var _LS_MAN = 'qandy_manifest_local';
+            try {
+              if (d.data === null || typeof d.data === 'undefined') {
+                // export: return JSON archive of all local files
+                var _expRaw = localStorage.getItem(_LS_MAN);
+                var _expList = _expRaw ? JSON.parse(_expRaw) : [];
+                if (!Array.isArray(_expList)) _expList = [];
+                var _expFiles = {};
+                for (var _fi = 0; _fi < _expList.length; _fi++) {
+                  var _fn = _expList[_fi];
+                  _expFiles[_fn] = localStorage.getItem(_LS_PFX + _fn);
+                }
+                var _archive = JSON.stringify({ device: 'local', created: (new Date()).toISOString(), files: _expFiles });
+                if (_dosIframe && _dosIframe.contentWindow) {
+                  _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'dos-format', id: d.id, success: true, result: _archive }, '*');
+                }
+              } else {
+                // import: overwrite device with provided archive
+                var _impObj = d.data;
+                if (typeof _impObj === 'string') { try { _impObj = JSON.parse(_impObj); } catch (pe) { throw new Error('dos-format: data must be valid JSON'); } }
+                if (!_impObj || typeof _impObj !== 'object' || !_impObj.files) throw new Error('dos-format: invalid archive');
+                // clear existing files
+                var _clrRaw = localStorage.getItem(_LS_MAN);
+                var _clrList = _clrRaw ? JSON.parse(_clrRaw) : [];
+                if (Array.isArray(_clrList)) {
+                  for (var _ci = 0; _ci < _clrList.length; _ci++) localStorage.removeItem(_LS_PFX + _clrList[_ci]);
+                }
+                // write new files
+                var _newList = [];
+                var _impKeys = Object.keys(_impObj.files);
+                for (var _ii = 0; _ii < _impKeys.length; _ii++) {
+                  var _iname = _impKeys[_ii];
+                  var _ival = _impObj.files[_iname];
+                  localStorage.setItem(_LS_PFX + _iname, _ival == null ? '' : String(_ival));
+                  _newList.push(_iname);
+                }
+                localStorage.setItem(_LS_MAN, JSON.stringify(_newList));
+                if (_dosIframe && _dosIframe.contentWindow) {
+                  _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'dos-format', id: d.id, success: true, result: true }, '*');
+                }
+              }
+            } catch (_e) {
+              if (_dosIframe && _dosIframe.contentWindow) {
+                _dosIframe.contentWindow.postMessage({ type: 'action-result', action: 'dos-format', id: d.id, success: false, error: String(_e) }, '*');
+              }
+            }
+            break;
+          }
+        }
+      } catch (e) {
+        console.info('Error handling guest action:', e);
+        var _errIframe = window._vmIframe || document.getElementById('vm-iframe');
+        if (_errIframe && _errIframe.contentWindow) {
+          _errIframe.contentWindow.postMessage({ 
+            type: 'action-result', 
+            action: d.action, 
+            success: false, 
+            error: String(e) 
+          }, '*');
+        }
       }
     }
   }
+
+  function validateGuestFilename(name) {
+    if (typeof name !== 'string' && typeof name !== 'number') return null;
+    var s = String(name).trim();
+    if (!s) return null;
+    // Reject path separators and traversal
+    if (/[\/\\]/.test(s)) return null;
+    if (/\.\./.test(s)) return null;
+    // Allow letters, numbers, spaces, dot, dash, underscore (adjust to taste)
+    // Limit length to reasonable size to avoid DOS attacks
+    if (s.length > 128) return null;
+    if (!/^[A-Za-z0-9 _.\-!]+$/.test(s)) return null;
+    return s;
+  }
+
+  function validateGuestPattern(pattern) {
+    if (typeof pattern !== 'string') return '';
+    var s = String(pattern).trim();
+    if (!s) return '';
+    // Reject path separators and traversal
+    if (/[\/\\]/.test(s)) return '';
+    if (/\.\./.test(s)) return '';
+    // Like validateGuestFilename but also allow wildcards * and ?
+    if (s.length > 128) return '';
+    if (!/^[A-Za-z0-9 _.\-!*?]+$/.test(s)) return '';
+    return s;
+  }
+
+  function validateGuestSwitches(sw) {
+    if (typeof sw !== 'string') return '';
+    var s = String(sw).trim();
+    if (!s) return '';
+    // Only allow dash and lowercase letters (e.g. "-th", "-t", "th")
+    if (!/^-?[a-zA-Z]+$/.test(s)) return '';
+    if (s.length > 16) return '';
+    return s;
+  }
+
+  function dosXmitQdos(iframe, id, action, ok, resultOrError) {
+    if (!iframe || !iframe.contentWindow) return;
+    var msg = { type: 'action-result', action: action, id: id, success: Boolean(ok) };
+    if (ok) {
+      var r = resultOrError;
+      if (Array.isArray(r)) r = r.join('\n');
+      else if (r === null || typeof r === 'undefined') r = '';
+      else if (typeof r === 'object') {
+        try { r = JSON.stringify(r); } catch (e) { r = String(r); }
+      } else r = String(r);
+      msg.result = r;
+    } else {
+      msg.error = String(resultOrError || 'error');
+    }
+    try { iframe.contentWindow.postMessage(msg, '*'); } catch (e) {
+      console.warn('dosXmitQdos: postMessage failed', e);
+    }
+  }
 }  
-
-function validateGuestFilename(name) {
-  if (typeof name !== 'string' && typeof name !== 'number') return null;
-  var s = String(name).trim();
-  if (!s) return null;
-  // Reject path separators and traversal
-  if (/[\/\\]/.test(s)) return null;
-  if (/\.\./.test(s)) return null;
-  // Allow letters, numbers, spaces, dot, dash, underscore (adjust to taste)
-  // Limit length to reasonable size to avoid DOS attacks
-  if (s.length > 128) return null;
-  if (!/^[A-Za-z0-9 _.\-!]+$/.test(s)) return null;
-  return s;
-}
-
-function validateGuestPattern(pattern) {
-  if (typeof pattern !== 'string') return '';
-  var s = String(pattern).trim();
-  if (!s) return '';
-  // Reject path separators and traversal
-  if (/[\/\\]/.test(s)) return '';
-  if (/\.\./.test(s)) return '';
-  // Like validateGuestFilename but also allow wildcards * and ?
-  if (s.length > 128) return '';
-  if (!/^[A-Za-z0-9 _.\-!*?]+$/.test(s)) return '';
-  return s;
-}
-
-function validateGuestSwitches(sw) {
-  if (typeof sw !== 'string') return '';
-  var s = String(sw).trim();
-  if (!s) return '';
-  // Only allow dash and lowercase letters (e.g. "-th", "-t", "th")
-  if (!/^-?[a-zA-Z]+$/.test(s)) return '';
-  if (s.length > 16) return '';
-  return s;
-}
-
-function dosXmitQdos(iframe, id, action, ok, resultOrError) {
-  if (!iframe || !iframe.contentWindow) return;
-  var msg = { type: 'action-result', action: action, id: id, success: Boolean(ok) };
-  if (ok) {
-    var r = resultOrError;
-    if (Array.isArray(r)) r = r.join('\n');
-    else if (r === null || typeof r === 'undefined') r = '';
-    else if (typeof r === 'object') {
-      try { r = JSON.stringify(r); } catch (e) { r = String(r); }
-    } else r = String(r);
-    msg.result = r;
-  } else {
-    msg.error = String(resultOrError || 'error');
-  }
-  try { iframe.contentWindow.postMessage(msg, '*'); } catch (e) {
-    console.warn('dosXmitQdos: postMessage failed', e);
-  }
-}
 
 async function createGuest(options) {
   if (HOST==true) {
@@ -1532,8 +1519,114 @@ function isAudioUnlocked() {
   return false;
 }
 
-async function startup() {
+if (GUEST) {
+  // these functions transmit packets to and from the host
+  function qdosXmitDos(action, packet, timeoutMs) {
+    return new Promise(function (resolve, reject) {
+      if (!window.parent || window.parent === window) { return reject(new Error('Error: no <host>')); }
+      // compact id: timestamp + small counter (no separate helper function)
+      window.__qandy_reqCounter += 1;
+      var id = 'qdos_' + Date.now() + '_' + window.__qandy_reqCounter;
+      var msg = { type: 'guest-action', action: action, id: id };
+      if (packet) {
+        var keys = Object.keys(packet);
+        for (var i = 0; i < keys.length; i++) msg[keys[i]] = packet[keys[i]];
+      }
+      var timer = setTimeout(function () {
+        delete _pending[id];
+        reject(new Error('Error: timeout ' + action));
+      }, timeoutMs || 5000);
+      _pending[id] = { resolve: resolve, reject: reject, timer: timer };
+      try {
+        window.parent.postMessage(msg, '*');
+      } catch (e) {
+        clearTimeout(timer);
+        delete _pending[id];
+        return e;
+      }
+    });
+  }
 
+  // normalize host results into a primitive/string for qdosDir printing
+  function _normalizeResult(res) {
+    if (Array.isArray(res)) return res.join('\n');
+    if (res === null || res === undefined) return '';
+    if (typeof res === 'object') {
+      try { return JSON.stringify(res); } catch (e) { return String(res); }
+    }
+    return String(res);
+  }
+
+  // qdosAckDOS wrapper (small convenience). If you already define qdosAckDOS elsewhere, this will not override it.
+  window.qdosAckDOS = window.qdosAckDOS || function (type, handler, opts) {
+    type = String(type || 'message');
+    function wrapper(ev) {
+      if (ev.source !== window.parent) return; // only accept messages from parent
+      try { handler(ev); } catch (e) { console.error('qdosAckDOS handler error:', e && e.message ? e.message : e); }
+    }
+    window.addEventListener(type, wrapper, opts || false);
+    return function remove() { window.removeEventListener(type, wrapper, opts || false); };
+  };
+
+  // attach the ack handler using qdosAckDOS
+  qdosAckDOS('message', function (ev) {
+    var d = ev.data;
+    if (!d || typeof d !== 'object') return;
+    // accept legacy and new reply names
+    if (d.type !== 'action-result' && d.type !== 'ack') return;
+    var id = d.id;
+    if (!id || !_pending[id]) return;
+    var entry = _pending[id];
+    try { clearTimeout(entry.timer); } catch (e) {}
+    delete _pending[id];
+    var ok = (d.ok !== undefined) ? Boolean(d.ok) : (d.success !== undefined ? Boolean(d.success) : true);
+    if (!ok) {
+      entry.reject(new Error(d.error || 'DOS operation failed'));
+      return;
+    }
+    var res = d.result !== undefined ? d.result : true;
+    res = _normalizeResult(res);
+    entry.resolve(res);
+  }, false);
+ 
+ 
+  // evalCode: always-evaluates user input inside an async IIFE so top-level await is valid.
+  // Programs / REPL must use `await` for blocking calls (e.g., await print(...); await input(...);).
+  window.evalCode = async function(code) {
+    if (HOST) { print("Input \'user\' to execute code"); }
+    var src = String(code || '');
+    if (!src.trim()) return true;
+    // Wrap the user input in an async IIFE so top-level await is valid everywhere.
+    var wrapped = "(async function __qandy_repl_wrapper() {\n" + src + "\n})();";
+    try {
+      // Use indirect eval to run in global scope
+      var promise = (0, eval)(wrapped);
+      // Await the async IIFE result; print returned value if any
+      var result = await promise;
+      if (typeof result !== 'undefined') {
+        try { await print(String(result) + "\n\n"); } catch (e) { /* best-effort */ }
+      }
+      return true;
+    } catch (err) {
+      try { await print("Error: " + ((err && err.message) ? err.message : String(err)) + "\n\n"); } catch (e) {}
+      return false;
+    }
+  };
+  
+  window.qdosAckDOS = qdosAckDOS;
+  window.evalCode = evalCode;
+  window._normalizeResult = _normalizeResult;
+
+}
+
+
+
+
+
+
+
+
+async function startup() {
   if (HOST) {
     var s=document.createElement('script');
     s.id='dos.js';
