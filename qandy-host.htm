@@ -822,7 +822,18 @@ async function loadNext() {
       }
       if (GUEST) {
         var content = await qdosXmitDos('script', { file: entry.name });
-        alert(content);
+        // sanitize BOM / shebang
+        if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
+        content = content.replace(/^\s*#!.*\r?\n/, '');
+        // Eval the script in global scope via indirect eval and capture errors
+        var evalError = null;
+        try {
+          (0, eval)(content);
+          return true;
+        } catch (e) {
+          console.log(e);
+        }
+        video_js();
       }
       break;
     case "keyboard_js":
@@ -877,171 +888,172 @@ async function loadNext() {
 //
 
 if (HOST) {
-powerOn();
-function powerOn() {
-  LOG+="Creating Power On Button\n";
-  var target = document.getElementById('qandy') || document.getElementById('txt') || document.body;
-  var rect = target.getBoundingClientRect();
+  powerOn();
+  function powerOn() {
+    LOG+="Creating Power On Button\n";
+    var target = document.getElementById('qandy') || document.getElementById('txt') || document.body;
+    var rect = target.getBoundingClientRect();
 
-  var overlay = document.createElement('div');
-  overlay.id = 'qandy-power-overlay';
-  overlay.setAttribute('role', 'button');
-  overlay.setAttribute('aria-label', 'Power on the Qandy Pocket Computer');
-  overlay.tabIndex = 0;
+    var overlay = document.createElement('div');
+    overlay.id = 'qandy-power-overlay';
+    overlay.setAttribute('role', 'button');
+    overlay.setAttribute('aria-label', 'Power on the Qandy Pocket Computer');
+    overlay.tabIndex = 0;
 
-  Object.assign(overlay.style, {
-    position: 'fixed',
-    left: rect.left + 'px',
-    top: rect.top + 'px',
-    width: rect.width + 'px',
-    height: rect.height + 'px',
-    zIndex: '300',
-    background: 'transparent',
-    pointerEvents: 'auto',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    userSelect: 'none'
-  });
+    Object.assign(overlay.style, {
+      position: 'fixed',
+      left: rect.left + 'px',
+      top: rect.top + 'px',
+      width: rect.width + 'px',
+      height: rect.height + 'px',
+      zIndex: '300',
+      background: 'transparent',
+      pointerEvents: 'auto',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      userSelect: 'none'
+    });
 
-  var label = document.createElement('div');
-  label.id = 'qandy-power-label';
-  label.textContent = 'POWER ON';
-  Object.assign(label.style, {
-    color: '#fff',
-    fontFamily: 'monospace, monospace',
-    fontSize: '28px',
-    letterSpacing: '2px',
-    textAlign: 'center',
-    textTransform: 'uppercase',
-    lineHeight: '1',
-    textShadow: '0 1px 0 rgba(0,0,0,0.6)',
-    pointerEvents: 'none'
-  });
+    var label = document.createElement('div');
+    label.id = 'qandy-power-label';
+    label.textContent = 'POWER ON';
+    Object.assign(label.style, {
+      color: '#fff',
+      fontFamily: 'monospace, monospace', 
+      fontSize: '28px',
+      letterSpacing: '2px',
+      textAlign: 'center',
+      textTransform: 'uppercase',
+      lineHeight: '1',
+      textShadow: '0 1px 0 rgba(0,0,0,0.6)',
+      pointerEvents: 'none'
+    });
 
-  var helper = document.createElement('div');
-  helper.id = 'qandy-power-helper';
-  helper.textContent = 'Touch, Press, or\nClick screen to power on.';
-  Object.assign(helper.style, {
-    color: '#ffffff',
-    fontFamily: 'monospace, monospace',
-    fontSize: '12px',
-    marginTop: '8px',
-    opacity: '0.95',
-    pointerEvents: 'none'
-  });
+    var helper = document.createElement('div');
+    helper.id = 'qandy-power-helper';
+    helper.textContent = 'Touch, Press, or\nClick screen to power on.';
+    Object.assign(helper.style, {
+      color: '#ffffff',
+      fontFamily: 'monospace, monospace',
+      fontSize: '12px',
+      marginTop: '8px',
+      opacity: '0.95',
+      pointerEvents: 'none'
+    });
 
-  var stack = document.createElement('div');
-  stack.style.display = 'flex';
-  stack.style.flexDirection = 'column';
-  stack.style.alignItems = 'center';
-  stack.style.justifyContent = 'center';
-  stack.appendChild(label);
-  stack.appendChild(helper);
+    var stack = document.createElement('div');
+    stack.style.display = 'flex';
+    stack.style.flexDirection = 'column';
+    stack.style.alignItems = 'center';
+    stack.style.justifyContent = 'center';
+    stack.appendChild(label);
+    stack.appendChild(helper);
 
-  overlay.appendChild(stack);
-  document.body.appendChild(overlay);
+    overlay.appendChild(stack);
+    document.body.appendChild(overlay);
 
-  var reposition = function () {
-    var r = target.getBoundingClientRect();
-    overlay.style.left = r.left + 'px';
-    overlay.style.top = r.top + 'px';
-    overlay.style.width = r.width + 'px';
-    overlay.style.height = r.height + 'px';
-  };
-  window.addEventListener('resize', reposition);
+    var reposition = function () {
+      var r = target.getBoundingClientRect();
+      overlay.style.left = r.left + 'px';
+      overlay.style.top = r.top + 'px';
+      overlay.style.width = r.width + 'px';
+      overlay.style.height = r.height + 'px';
+    };
+    window.addEventListener('resize', reposition);
 
-  var ro;
-  if (typeof MutationObserver !== 'undefined') {
-    ro = new MutationObserver(reposition);
-    try { ro.observe(target, { attributes: true, childList: true, subtree: true }); } catch (e) {}
-  }
-
-  function engageHandler(e) {
-    cleanupListeners();
-    // Immediate tiny beep (inside user gesture)
-    try {
-      var ctx = new (window.AudioContext || window.webkitAudioContext)();
-      var osc = ctx.createOscillator();
-      var gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.value = 880;
-      gain.gain.value = 0.04;
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.25);
-      setTimeout(function () { try { if (ctx.close) ctx.close(); } catch (e) {} }, 200);
-    } catch (err) {
-      console.warn('qandy: beep failed', err);
+    var ro;
+    if (typeof MutationObserver !== 'undefined') {
+      ro = new MutationObserver(reposition);
+      try { ro.observe(target, { attributes: true, childList: true, subtree: true }); } catch (e) {}
     }
 
-    // IMPORTANT: call sound_js() (embedded) synchronously so the embedded sound module
-    // initializes within the user gesture and can create/resume an AudioContext.
-    try {
-      if (typeof sound_js === 'function') {
-        try {
-          sound_js(); // initialize embedded sound module
-        } catch (innerErr) {
-          console.warn('qandy: sound_js() threw', innerErr);
-        }
-        // If the embedded sound module exposed an audioContext, attempt to resume it if suspended.
-        try {
-          if (window.audioContext && typeof window.audioContext.resume === 'function' && window.audioContext.state === 'suspended') {
-            window.audioContext.resume().catch(function(){});
-          }
-        } catch (e) { /* ignore */ }
-      } else {
-        // Fallback: if sound_js not present, try to resume any existing global audio context.
-        if (window.audioContext && typeof window.audioContext.resume === 'function') {
-          window.audioContext.resume().catch(function(){});
-        } else {
-          console.warn('qandy: sound_js() not found; sound may be unavailable.');
-        }
-      }
-    } catch (e) {
-      console.warn('qandy: error while initializing sound', e);
-    }
-
-    // Remove overlay and observers, continue startup
-    if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-    if (ro) try { ro.disconnect(); } catch (e) {}
-    try { window.removeEventListener('resize', reposition); } catch (e) {}
-    loadNext();
-  }
-
-  function cleanupListeners() {
-    overlay.removeEventListener('pointerdown', engageHandler, true);
-    overlay.removeEventListener('touchstart', engageHandler, true);
-    overlay.removeEventListener('click', engageHandler, true);
-    document.removeEventListener('keydown', engageHandler, true);
-    overlay.removeEventListener('keydown', onOverlayKeyDown, true);
-  }
-
-  function onOverlayKeyDown(e) {
-    engageHandler(e);
-  }
-
-  overlay.addEventListener('pointerdown', engageHandler, { capture: true, passive: true, once: true });
-  overlay.addEventListener('touchstart', engageHandler, { capture: true, passive: true, once: true });
-  overlay.addEventListener('click', engageHandler, { capture: true, passive: true, once: true });
-  document.addEventListener('keydown', engageHandler, { capture: true, once: true });
-  overlay.addEventListener('keydown', onOverlayKeyDown, { capture: true, once: true });
-
-  try { overlay.focus(); } catch (e) {}
-
-  return {
-    overlayElement: overlay,
-    remove: function () {
+    function engageHandler(e) {
       cleanupListeners();
+      // Immediate tiny beep (inside user gesture)
+      try {
+        var ctx = new (window.AudioContext || window.webkitAudioContext)();
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = 880;
+        gain.gain.value = 0.04;
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.25);
+        setTimeout(function () { try { if (ctx.close) ctx.close(); } catch (e) {} }, 200);
+      } catch (err) {
+        console.warn('qandy: beep failed', err);
+      }
+
+      // IMPORTANT: call sound_js() (embedded) synchronously so the embedded sound module
+      // initializes within the user gesture and can create/resume an AudioContext.
+      try {
+        if (typeof sound_js === 'function') {
+          try {
+            sound_js(); // initialize embedded sound module
+          } catch (innerErr) {
+            console.warn('qandy: sound_js() threw', innerErr);
+          }
+          // If the embedded sound module exposed an audioContext, attempt to resume it if suspended.
+          try {
+            if (window.audioContext && typeof window.audioContext.resume === 'function' && window.audioContext.state === 'suspended') {
+              window.audioContext.resume().catch(function(){});
+            }
+          } catch (e) { /* ignore */ }
+        } else {
+          // Fallback: if sound_js not present, try to resume any existing global audio context.
+          if (window.audioContext && typeof window.audioContext.resume === 'function') {
+            window.audioContext.resume().catch(function(){});
+          } else {
+            console.warn('qandy: sound_js() not found; sound may be unavailable.');
+          }
+        }
+      } catch (e) {
+        console.warn('qandy: error while initializing sound', e);
+      }
+
+      // Remove overlay and observers, continue startup
       if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
       if (ro) try { ro.disconnect(); } catch (e) {}
       try { window.removeEventListener('resize', reposition); } catch (e) {}
+      loadNext();
     }
-  };
-}} else {
- loadNext();
-}
+
+    function cleanupListeners() {
+      overlay.removeEventListener('pointerdown', engageHandler, true);
+      overlay.removeEventListener('touchstart', engageHandler, true);
+      overlay.removeEventListener('click', engageHandler, true);
+      document.removeEventListener('keydown', engageHandler, true);
+      overlay.removeEventListener('keydown', onOverlayKeyDown, true);
+    }
+
+    function onOverlayKeyDown(e) {
+      engageHandler(e);
+    }
+
+    overlay.addEventListener('pointerdown', engageHandler, { capture: true, passive: true, once: true });
+    overlay.addEventListener('touchstart', engageHandler, { capture: true, passive: true, once: true });
+    overlay.addEventListener('click', engageHandler, { capture: true, passive: true, once: true });
+    document.addEventListener('keydown', engageHandler, { capture: true, once: true });
+    overlay.addEventListener('keydown', onOverlayKeyDown, { capture: true, once: true });
+
+    try { overlay.focus(); } catch (e) {}
+
+    return {
+      overlayElement: overlay,
+      remove: function () {
+        cleanupListeners();
+        if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+        if (ro) try { ro.disconnect(); } catch (e) {}
+        try { window.removeEventListener('resize', reposition); } catch (e) {}
+      }
+    };
+  }
+} 
+
+if (GUEST) { loadNext(); }
 
 function init() {
   if (document.readyState === 'loading') {
@@ -1098,8 +1110,8 @@ async function qandyGuestHtm(options) {
 // ──── Host Message Handler ──────────────────────────────────────────────────────────
 //
 
-if (HOST) {
-  async function hostMessageHandler(ev) {
+async function hostMessageHandler(ev) {
+  
     alert("host message handler");
     //if (!iframe.contentWindow || ev.source !== iframe.contentWindow) {
     //  console.log("Message is not from our iframe");
@@ -1417,7 +1429,7 @@ if (HOST) {
           }, '*');
         }
       }
-    }
+    
   }
 
   function validateGuestFilename(name) {
@@ -1631,7 +1643,7 @@ function sysop() {
     }
     // Hide vm-container and/or iframe (guest VM)
     var vm = document.getElementById('vm-container') || window._vmContainer || null;
-    if (vm) {play
+    if (vm) {
       vm.style.display = 'none';
       vm.style.visibility = 'hidden';
       vm.style.pointerEvents = 'none';
@@ -1644,7 +1656,7 @@ function sysop() {
       iframe.style.pointerEvents = 'none';
       try { iframe.style.zIndex = '-1'; } catch (e) {}
     }
-  } catch (err) {play
+  } catch (err) {
     console.error('showHostHideGuest failed', err);
   }
 }
