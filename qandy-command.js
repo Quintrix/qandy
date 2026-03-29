@@ -38,69 +38,109 @@ function command_js() {
         }
         return;
       case 'user':
-        if (HOST) {
-          try {
-            var hostEl = document.getElementById('txt');
-            var hostKb = document.getElementById('host-keyboard');
-            var guestKb = document.getElementById('guest-keyboard');
-            var vm = document.getElementById('vm-container') || window._vmContainer || null;
-            var iframe = document.getElementById('vm-iframe') || window._vmIframe || null;
-            if (hostEl) { hostEl.style.display = 'none'; hostEl.style.visibility = 'hidden'; hostEl.style.pointerEvents = 'none'; }
-            if (hostKb) { hostKb.style.display = 'none'; hostKb.style.visibility = 'hidden'; hostKb.style.pointerEvents = 'none'; }
-            // Show guest container / iframe and bring it to front
-            if (vm) {
-              vm.style.display = 'block';
-              vm.style.visibility = 'visible';
-              vm.style.pointerEvents = 'auto';
-              // ensure vm is above host
-              try {
-                vm.style.position = vm.style.position || 'absolute';
-                vm.style.zIndex = String(Math.max(parseInt(vm.style.zIndex || 0, 10) || 100, 1000));
-              } catch (e) {}
-            }
-            if (iframe) {
-              iframe.style.display = 'block';
-              iframe.style.visibility = 'visible';
-              iframe.style.pointerEvents = 'auto';
-              try { iframe.style.zIndex = vm && vm.style && vm.style.zIndex ? String(parseInt(vm.style.zIndex,10) + 1) : '1001'; } catch (e) {}
-            }
-            if (guestKb) {
-              guestKb.style.display = 'block';
-              guestKb.style.visibility = 'visible';
-              guestKb.style.pointerEvents = 'auto';
-              try {
-                guestKb.style.position = guestKb.style.position || 'absolute';
-                // put guest keyboard above vm-container
-                var vmZ = vm && vm.style && vm.style.zIndex ? parseInt(vm.style.zIndex,10) : 1000;
-                guestKb.style.zIndex = String(Math.max(parseInt(guestKb.style.zIndex || 0,10) || (vmZ + 1), vmZ + 1));
-              } catch (e) {}
-              break;
-            }
-            if (hostEl) { hostEl.style.pointerEvents = 'none'; }
-            if (hostKb) { hostKb.style.pointerEvents = 'none'; hostKb.style.visibility = 'hidden'; }
-            try {
-              if (iframe) {
-                iframe.setAttribute && iframe.setAttribute('tabindex', '0'); // make focusable
-                try { iframe.focus(); } catch (e) { console.warn('iframe.focus failed', e); }
-                try { if (iframe.contentWindow && typeof iframe.contentWindow.focus === 'function') iframe.contentWindow.focus(); } catch (e) { console.warn('iframe.contentWindow.focus failed', e); }
-                try { 
-                 break;     var doc = iframe.contentDocument || (iframe.contentWindow && iframe.contentWindow.document);
-                  if (doc && doc.body && typeof doc.body.focus === 'function') doc.body.focus();
-                } catch (e) { /* cross-origin or not accessible; ignore */ }
-                setTimeout(function() {
-                  try { iframe.focus(); } catch (e) {}
-                  try { if (iframe.contentWindow && typeof iframe.contentWindow.focus === 'function') iframe.contentWindow.focus(); } catch (e) {}
-                }, 50);
-              }
-            } catch (errFocus) {
-              console.warn('focus restore attempted but failed', errFocus);
-            }
-            console.log('Attempted to focus guest iframe; activeElement is:', document.activeElement);
-          } catch (err) {
-            console.error('focusGuestIframe failed', err);
-          }
+
+//
+// user command should create host and switch to it
+// 
+
+  if (HOST) {
+    try {
+      // Check if guest machine already exists
+      var vm = document.getElementById('vm-container') || window._vmContainer || null;
+      var iframe = document.getElementById('vm-iframe') || window._vmIframe || null;
+      
+      // If guest doesn't exist, create it
+      if (!vm || !iframe) {
+        print("Creating guest machine...\n");
+        try {
+          await createGuest({ zIndex: 100, iframeId: 'vm-iframe' });
+          print("Guest machine created.\n");
+        } catch (e) {
+          print("Error creating guest machine: " + String(e) + "\n");
+          return;
         }
-        return;
+        // Re-fetch references after creation
+        vm = document.getElementById('vm-container') || window._vmContainer || null;
+        iframe = document.getElementById('vm-iframe') || window._vmIframe || null;
+      }
+      
+      // Now display/focus the guest machine
+      var hostEl = document.getElementById('txt');
+      var hostKb = document.getElementById('host-keyboard');
+      var guestKb = document.getElementById('guest-keyboard');
+      
+      if (hostEl) { hostEl.style.display = 'none'; hostEl.style.visibility = 'hidden'; hostEl.style.pointerEvents = 'none'; }
+      if (hostKb) { hostKb.style.display = 'none'; hostKb.style.visibility = 'hidden'; hostKb.style.pointerEvents = 'none'; }
+      
+      // Show guest container / iframe and bring it to front
+      if (vm) {
+        vm.style.display = 'block';
+        vm.style.visibility = 'visible';
+        vm.style.pointerEvents = 'auto';
+        try {
+          vm.style.position = vm.style.position || 'absolute';
+          vm.style.zIndex = String(Math.max(parseInt(vm.style.zIndex || 0, 10) || 100, 1000));
+        } catch (e) {}
+      }
+      
+      if (iframe) {
+        iframe.style.display = 'block';
+        iframe.style.visibility = 'visible';
+        iframe.style.pointerEvents = 'auto';
+        try { 
+          iframe.style.zIndex = vm && vm.style && vm.style.zIndex ? String(parseInt(vm.style.zIndex, 10) + 1) : '1001'; 
+        } catch (e) {}
+      }
+      
+      if (guestKb) {
+        guestKb.style.display = 'block';
+        guestKb.style.visibility = 'visible';
+        guestKb.style.pointerEvents = 'auto';
+        try {
+          guestKb.style.position = guestKb.style.position || 'absolute';
+          var vmZ = vm && vm.style && vm.style.zIndex ? parseInt(vm.style.zIndex, 10) : 1000;
+          guestKb.style.zIndex = String(Math.max(parseInt(guestKb.style.zIndex || 0, 10) || (vmZ + 1), vmZ + 1));
+        } catch (e) {}
+      }
+      
+      // Focus the iframe
+      try {
+        if (iframe) {
+          iframe.setAttribute && iframe.setAttribute('tabindex', '0');
+          try { iframe.focus(); } catch (e) { console.warn('iframe.focus failed', e); }
+          try { 
+            if (iframe.contentWindow && typeof iframe.contentWindow.focus === 'function') { 
+              iframe.contentWindow.focus(); 
+            } 
+          } catch (e) { console.warn('iframe.contentWindow.focus failed', e); }
+          try { 
+            var doc = iframe.contentDocument || (iframe.contentWindow && iframe.contentWindow.document);
+            if (doc && doc.body && typeof doc.body.focus === 'function') { 
+              doc.body.focus(); 
+            }
+          } catch (e) { /* cross-origin or not accessible; ignore */ }
+          
+          setTimeout(function() {
+            try { iframe.focus(); } catch (e) {}
+            try { 
+              if (iframe.contentWindow && typeof iframe.contentWindow.focus === 'function') { 
+                iframe.contentWindow.focus(); 
+              } 
+            } catch (e) {}
+          }, 50);
+        }
+      } catch (errFocus) {
+        console.warn('focus restore attempted but failed', errFocus);
+      }
+      
+      console.log('Switched to guest machine; activeElement is:', document.activeElement);
+    } catch (err) {
+      console.error('user command failed', err);
+      print("Error switching to guest machine: " + String(err) + "\n");
+    }
+  }
+  return;
+
         
       default:
         break;

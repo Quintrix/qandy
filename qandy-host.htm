@@ -654,6 +654,115 @@ var keyboardData = [
 window.QANDY = window.QANDY || {};
 window.QANDY.mode = 'host'; // 'host' (file server), not the emulated machine
 
+//
+// ──── Guest Message Handler ────────────────────────────────────────────────────────
+//
+
+if (GUEST) {
+  // these functions transmit packets to and from the host
+  window.__qandy_reqCounter = 0;
+  window._pending = {};
+  function qdosXmitDos(action, packet, timeoutMs) {
+    return new Promise(function (resolve, reject) {
+      if (!window.parent || window.parent === window) { return reject(new Error('Error: no <host>')); }
+      // compact id: timestamp + small counter (no separate helper function)
+      window.__qandy_reqCounter += 1;
+      var id = 'qdos_' + Date.now() + '_' + window.__qandy_reqCounter;
+      var msg = { type: 'guest-action', action: action, id: id };
+      if (packet) {
+        var keys = Object.keys(packet);
+        for (var i = 0; i < keys.length; i++) msg[keys[i]] = packet[keys[i]];
+      }
+      var timer = setTimeout(function () {
+        delete _pending[id];
+        reject(new Error('Error: timeout ' + action));
+      }, timeoutMs || 5000);
+      _pending[id] = { resolve: resolve, reject: reject, timer: timer };
+      try {
+        window.parent.postMessage(msg, '*');
+      } catch (e) {
+        clearTimeout(timer);
+        delete _pending[id];
+        return e;
+      }
+    });
+  }
+
+  // normalize host results into a primitive/string for qdosDir printing
+  function _normalizeResult(res) {
+    if (Array.isArray(res)) return res.join('\n');
+    if (res === null || res === undefined) return '';
+    if (typeof res === 'object') {
+      try { return JSON.stringify(res); } catch (e) { return String(res); }
+    }
+    return String(res);
+  }
+
+  // qdosAckDOS wrapper (small convenience). If you already define qdosAckDOS elsewhere, this will not override it.
+  window.qdosAckDOS = window.qdosAckDOS || function (type, handler, opts) {
+    type = String(type || 'message');
+    function wrapper(ev) {
+      if (ev.source !== window.parent) return; // only accept messages from parent
+      try { handler(ev); } catch (e) { console.error('qdosAckDOS handler error:', e && e.message ? e.message : e); }
+    }
+    window.addEventListener(type, wrapper, opts || false);
+    return function remove() { window.removeEventListener(type, wrapper, opts || false); };
+  };
+
+  // attach the ack handler using qdosAckDOS
+  qdosAckDOS('message', function (ev) {
+    var d = ev.data;
+    if (!d || typeof d !== 'object') return;
+    // accept legacy and new reply names
+    if (d.type !== 'action-result' && d.type !== 'ack') return;
+    var id = d.id;
+    if (!id || !_pending[id]) return;
+    var entry = _pending[id];
+    try { clearTimeout(entry.timer); } catch (e) {}
+    delete _pending[id];
+    var ok = (d.ok !== undefined) ? Boolean(d.ok) : (d.success !== undefined ? Boolean(d.success) : true);
+    if (!ok) {
+      entry.reject(new Error(d.error || 'DOS operation failed'));
+      return;
+    }
+    var res = d.result !== undefined ? d.result : true;
+    res = _normalizeResult(res);
+    entry.resolve(res);
+  }, false);
+ 
+ 
+  // evalCode: always-evaluates user input inside an async IIFE so top-level await is valid.
+  // Programs / REPL must use `await` for blocking calls (e.g., await print(...); await input(...);).
+  window.evalCode = async function(code) {
+    if (HOST) { print("Input \'user\' to execute code"); }
+    var src = String(code || '');
+    if (!src.trim()) return true;
+    // Wrap the user input in an async IIFE so top-level await is valid everywhere.
+    var wrapped = "(async function __qandy_repl_wrapper() {\n" + src + "\n})();";
+    try {
+      // Use indirect eval to run in global scope
+      var promise = (0, eval)(wrapped);
+      // Await the async IIFE result; print returned value if any
+      var result = await promise;
+      if (typeof result !== 'undefined') {
+        try { await print(String(result) + "\n\n"); } catch (e) { /* best-effort */ }
+      }
+      return true;
+    } catch (err) {
+      try { await print("Error: " + ((err && err.message) ? err.message : String(err)) + "\n\n"); } catch (e) {}
+      return false;
+    }
+  };
+  window.qdosAckDOS = qdosAckDOS;
+  window.evalCode = evalCode;
+  window._normalizeResult = _normalizeResult;
+  window.qdosXmitDos = qdosXmitDos; 
+}
+
+//
+// ──── Boot Loader for Hardware Drivers ──────────────────────────────────────────────
+//
+
 // Configuration array with script load order (unchanged)
 var SCRIPT_QUEUE = [
   { src: 'qandy-video.js', name: 'video_js' },
@@ -670,7 +779,7 @@ window.qandySignalReady = function(scriptName) {
   if (typeof signalAdvance === 'function') { signalAdvance(); }
 };
   
-function loadNext() {
+async function loadNext() {
   if (typeof signalAdvance === 'function') { signalAdvance(); }
   if (currentIndex >= SCRIPT_QUEUE.length) {
     // all scripts loaded, call startup() 
@@ -711,7 +820,9 @@ function loadNext() {
         document.head.appendChild(js);
       }
       if (GUEST) {
-        // use qdos commands to request file
+        // @@@ need 'script'
+        var content = await qdosXmitDos('script', { file: entry.name });
+        alert(content);
       }
       break;
     case "keyboard_js":
@@ -761,6 +872,11 @@ function loadNext() {
   }, 2000);
 }
 
+//
+// ──── Power On Overlay ──────────────────────────────────────────────────────────────
+//
+
+if (HOST) {
 powerOn();
 function powerOn() {
   LOG+="Creating Power On Button\n";
@@ -923,6 +1039,8 @@ function powerOn() {
       try { window.removeEventListener('resize', reposition); } catch (e) {}
     }
   };
+}} else {
+ loadNext();
 }
 
 function init() {
@@ -994,7 +1112,31 @@ if (HOST) {
       try {
         switch(d.action) {
           case 'sysop': { sysop(); break; }
-          case 'user': { sysop(); break; }
+          case 'user': {
+            // this can't be right, is it not called??
+            sysop();
+            break; 
+          }
+          case 'script': {
+            var scriptSrc = "";
+            if (d.file == "sound_js") { scriptSrc = sound_js.toString(); }
+            if (d.file == "video_js") { scriptSrc = video_js.toString(); }
+            if (d.file == "keyboard_js") { scriptSrc = keyboard_js.toString(); }
+            if (d.file == "command_js") { scriptSrc = command_js.toString(); }
+            if (d.file == "core_js") { scriptSrc = qandy_js.toString(); }
+            if (scriptSrc) {
+              Promise.resolve().then(function () { return scriptSrc; })
+                .then(function (result) {
+                  dosXmitQdos(_dosIframe, d.id, 'script', true, result);
+                })
+                .catch(function (err) {
+                  dosXmitQdos(_dosIframe, d.id, 'script', false, err && err.message ? err.message : String(err));
+                });
+            } else {
+              dosXmitQdos(_dosIframe, d.id, 'script', false, 'script not found: ' + d.file);
+            }
+            break;
+          }
           case 'localList': {
             var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
             // call localDir() and handle both sync and Promise-returning implementations
@@ -1078,11 +1220,6 @@ if (HOST) {
             var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
             var fname = (typeof d.file === 'undefined' || d.file === null) ? '' : String(d.file);
             var validName = validateGuestFilename(fname);
-            //if (!validName) {
-            //  // reject invalid filenames explicitly
-            //  dosXmitQdos(_dosIframe, d.id, 'localLoad', false, 'invalid filename');
-            //  break;
-            //}
             Promise.resolve().then(function () { return localLoad(validName); })
               .then(function (result) {
                 dosXmitQdos(_dosIframe, d.id, 'localLoad', true, result);
@@ -1519,112 +1656,9 @@ function isAudioUnlocked() {
   return false;
 }
 
-if (GUEST) {
-  // these functions transmit packets to and from the host
-  function qdosXmitDos(action, packet, timeoutMs) {
-    return new Promise(function (resolve, reject) {
-      if (!window.parent || window.parent === window) { return reject(new Error('Error: no <host>')); }
-      // compact id: timestamp + small counter (no separate helper function)
-      window.__qandy_reqCounter += 1;
-      var id = 'qdos_' + Date.now() + '_' + window.__qandy_reqCounter;
-      var msg = { type: 'guest-action', action: action, id: id };
-      if (packet) {
-        var keys = Object.keys(packet);
-        for (var i = 0; i < keys.length; i++) msg[keys[i]] = packet[keys[i]];
-      }
-      var timer = setTimeout(function () {
-        delete _pending[id];
-        reject(new Error('Error: timeout ' + action));
-      }, timeoutMs || 5000);
-      _pending[id] = { resolve: resolve, reject: reject, timer: timer };
-      try {
-        window.parent.postMessage(msg, '*');
-      } catch (e) {
-        clearTimeout(timer);
-        delete _pending[id];
-        return e;
-      }
-    });
-  }
-
-  // normalize host results into a primitive/string for qdosDir printing
-  function _normalizeResult(res) {
-    if (Array.isArray(res)) return res.join('\n');
-    if (res === null || res === undefined) return '';
-    if (typeof res === 'object') {
-      try { return JSON.stringify(res); } catch (e) { return String(res); }
-    }
-    return String(res);
-  }
-
-  // qdosAckDOS wrapper (small convenience). If you already define qdosAckDOS elsewhere, this will not override it.
-  window.qdosAckDOS = window.qdosAckDOS || function (type, handler, opts) {
-    type = String(type || 'message');
-    function wrapper(ev) {
-      if (ev.source !== window.parent) return; // only accept messages from parent
-      try { handler(ev); } catch (e) { console.error('qdosAckDOS handler error:', e && e.message ? e.message : e); }
-    }
-    window.addEventListener(type, wrapper, opts || false);
-    return function remove() { window.removeEventListener(type, wrapper, opts || false); };
-  };
-
-  // attach the ack handler using qdosAckDOS
-  qdosAckDOS('message', function (ev) {
-    var d = ev.data;
-    if (!d || typeof d !== 'object') return;
-    // accept legacy and new reply names
-    if (d.type !== 'action-result' && d.type !== 'ack') return;
-    var id = d.id;
-    if (!id || !_pending[id]) return;
-    var entry = _pending[id];
-    try { clearTimeout(entry.timer); } catch (e) {}
-    delete _pending[id];
-    var ok = (d.ok !== undefined) ? Boolean(d.ok) : (d.success !== undefined ? Boolean(d.success) : true);
-    if (!ok) {
-      entry.reject(new Error(d.error || 'DOS operation failed'));
-      return;
-    }
-    var res = d.result !== undefined ? d.result : true;
-    res = _normalizeResult(res);
-    entry.resolve(res);
-  }, false);
- 
- 
-  // evalCode: always-evaluates user input inside an async IIFE so top-level await is valid.
-  // Programs / REPL must use `await` for blocking calls (e.g., await print(...); await input(...);).
-  window.evalCode = async function(code) {
-    if (HOST) { print("Input \'user\' to execute code"); }
-    var src = String(code || '');
-    if (!src.trim()) return true;
-    // Wrap the user input in an async IIFE so top-level await is valid everywhere.
-    var wrapped = "(async function __qandy_repl_wrapper() {\n" + src + "\n})();";
-    try {
-      // Use indirect eval to run in global scope
-      var promise = (0, eval)(wrapped);
-      // Await the async IIFE result; print returned value if any
-      var result = await promise;
-      if (typeof result !== 'undefined') {
-        try { await print(String(result) + "\n\n"); } catch (e) { /* best-effort */ }
-      }
-      return true;
-    } catch (err) {
-      try { await print("Error: " + ((err && err.message) ? err.message : String(err)) + "\n\n"); } catch (e) {}
-      return false;
-    }
-  };
-  
-  window.qdosAckDOS = qdosAckDOS;
-  window.evalCode = evalCode;
-  window._normalizeResult = _normalizeResult;
-
-}
-
-
-
-
-
-
-
+//
+// ──── Start-Up into System Ready ────────────────────────────────────────────────────
+//
 
 async function startup() {
   if (HOST) {
@@ -1653,10 +1687,6 @@ async function startup() {
   //}
 }
 
-//
-// ──── System Ready ──────────────────────────────────────────────────────────────────
-//
-
 async function systemReady() {
   // system ready
   print("\n[bgreen]Qandy Pocket\nComputer v.1l\n\n");
@@ -1675,11 +1705,9 @@ async function systemReady() {
     if (!qdosExists("dir.sys")) {
       print("localStorage not formated.\nInput \'fdisk\' to install.\n\n");
     }
-    
   }
+  window.systemReady=systemReady;
 }
-window.systemReady=systemReady;
- 
 </script>
 </body>
 </html></html>

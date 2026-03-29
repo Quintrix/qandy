@@ -663,12 +663,11 @@ window.press=function(event) {
         // need to terminate running script and alert user
         console.error("Error: keydown() ", err);
       }
-      return;
       //event.preventDefault && event.preventDefault();
       //event.stopPropagation && event.stopPropagation();
       // Auto-clear virtual modifier locks after key delivery (one-shot behavior)
-      if (ctrlVirtual) { ctrlVirtual = false; ctrl = ctrlPhysical ? 1 : 0; var elCk=document.getElementById(kid+"ctrl"); if (elCk) { elCk.style.backgroundColor = ctrl ? modifierFlagBgColorPhysical : modifierFlagBgColorOff; elCk.style.color = ctrl ? modifierFlagFgColor : modifierFlagFgColorOff; } }
-      if (altVirtual) { altVirtual = false; alt = altPhysical ? 1 : 0; var elAk=document.getElementById(kid+"alt"); if (elAk) { elAk.style.backgroundColor = alt ? modifierFlagBgColor : modifierFlagBgColorOff; elAk.style.color = alt ? modifierFlagFgColor : modifierFlagFgColorOff; } if (typeof updateKeyLabels === 'function') updateKeyLabels(); }
+      // if (ctrlVirtual) { ctrlVirtual = false; ctrl = ctrlPhysical ? 1 : 0; var elCk=document.getElementById(kid+"ctrl"); if (elCk) { elCk.style.backgroundColor = ctrl ? modifierFlagBgColorPhysical : modifierFlagBgColorOff; elCk.style.color = ctrl ? modifierFlagFgColor : modifierFlagFgColorOff; } }
+      // if (altVirtual) { altVirtual = false; alt = altPhysical ? 1 : 0; var elAk=document.getElementById(kid+"alt"); if (elAk) { elAk.style.backgroundColor = alt ? modifierFlagBgColor : modifierFlagBgColorOff; elAk.style.color = alt ? modifierFlagFgColor : modifierFlagFgColorOff; } if (typeof updateKeyLabels === 'function') updateKeyLabels(); }
       return;
     }
   }
