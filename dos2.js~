@@ -1677,13 +1677,7 @@ var DEVICE = 'none';
   }
 
   window.dosInstall = async function() {
-    var files = ['qandy-sound.js', 'qandy-video.js', 'qandy-keyboard.js',
-                 'qandy-command.js', 'qandy-core.js',  
-                 
-                 'ansi.js', 'ascii.js', 'charmap.js', 'keydown.js',
-                 'mouse.js', 'piano.js', 'svga.js'
-                ];
-  	
+ 	
     if (!_readManifestRaw()) {
       try {
         localStorage.setItem(LOCAL_PREFIX + MANIFEST_KEY, MANIFEST_KEY + '|27|' + _timestamp() + "\n");
@@ -1705,6 +1699,10 @@ var DEVICE = 'none';
     }
 
     print("\nChecking system files:\n\n");
+
+    var files = ['ansi.js', 'ascii.js', 'charmap.js', 'keydown.js',
+                 'mouse.js', 'piano.js', 'svga.js'];
+
     var fileData = [];
     var filesToUpdate = [];
     var manifest = _loadManifest();

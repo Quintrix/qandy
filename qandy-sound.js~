@@ -223,7 +223,7 @@ window.sound_js=function() {
   window.BEEP_VOLUME = BEEP_VOLUME;
   window.beep = beep;
   window.volume = volume;
-  window.notes = notes;
+  //window.notes = notes;
   window.tuneTimeout = tuneTimeout;
   // Signal that sound.js is ready
   if (typeof window.qandySignalReady === 'function') {

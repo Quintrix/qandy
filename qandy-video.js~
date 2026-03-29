@@ -3,6 +3,7 @@
 //
 
 function video_js() {
+  
   var cellGrid = [];
   var EMPTY_CELL = '\u00A0';
   

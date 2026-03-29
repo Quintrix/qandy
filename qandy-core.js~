@@ -2,8 +2,8 @@
 // ──── Qandy Core ─────────────────────────────────────────────────────────────────────
 //
 
-window.qandy_js=function() {
-alert("core");
+function qandy_js() {
+  alert("core");
   RUN="qandy.js"; 
   window.button=function(b, event) {
     pokeCursorOff(); 

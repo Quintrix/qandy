@@ -2,8 +2,7 @@
 // ──── Qandy Sound Card ──────────────────────────────────────────────────────────────
 //
 
-window.sound_js=function() {
-  alert("sound");
+function sound_js() {
   window.audioContext = null;
   window.noteFrequencies = {
     'C0': 16.35, 'C#0': 17.32, 'Db0': 17.32, 'D0': 18.35, 'D#0': 19.45, 'Eb0': 19.45, 'E0': 20.60,
@@ -224,7 +223,7 @@ window.sound_js=function() {
   window.BEEP_VOLUME = BEEP_VOLUME;
   window.beep = beep;
   window.volume = volume;
-  window.notes = notes;
+  //window.notes = notes;
   window.tuneTimeout = tuneTimeout;
   // Signal that sound.js is ready
   if (typeof window.qandySignalReady === 'function') {

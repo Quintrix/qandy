@@ -403,7 +403,7 @@ var SOUND=true;       // enable/disable sound card
 // qandy.js
 var HOST = 1; if (HOST) { var LOG='host defined\n'; }
 var GUEST = 0; if (GUEST) { var LOG='guest defined\n'; }
-
+var FILE = null; // null = untested, true = works, false = blocked
 var RUN="";     // current script running starting with qandy.js 
 var RUNIN="";   // input mode set by running script, line or key
 var RUNOUT="";  // output display set by running script, gfx or txt
@@ -765,10 +765,10 @@ if (GUEST) {
 
 // Configuration array with script load order (unchanged)
 var SCRIPT_QUEUE = [
+  { src: 'qandy-sound.js', name: 'sound_js' },
   { src: 'qandy-video.js', name: 'video_js' },
   { src: 'qandy-keyboard.js', name: 'keyboard_js' },
   { src: 'qandy-command.js', name: 'command_js' },
-  { src: 'qandy-core.js', name: 'qandy_js' },
   { src: 'qandy-core.js', name: 'qandy_js' },
 ];
 
@@ -938,6 +938,11 @@ async function loadNext() {
 //
 
 if (HOST) {
+  var js=document.createElement('script');
+  js.id=entry.name;
+  js.src=entry.src;
+  js.onload = function() { sound_js(); }
+  document.head.appendChild(js);
   powerOn();
   function powerOn() {
     LOG+="Creating Power On Button\n";
@@ -1725,14 +1730,26 @@ function isAudioUnlocked() {
 //
 
 async function startup() {
-  if (HOST) {
+  if (HOST) { 
     var s=document.createElement('script');
     s.id='dos.js';
     s.src='dos2.js';
     s.onload=function() { try { dosMount("local"); } catch (e) { print("Error: "+e+"\n"); }};
     document.head.appendChild(s);
+    window.FILE = null; // null = untested, true = works, false = blocked
+    if (window.FILE === null) {
+      try {
+        const testUrl = new URL('index.htm', location.href).href;
+        await fetch(testUrl, { method: 'HEAD', cache: 'no-store' });
+        window.FILE = true;
+      } catch (err) {
+        window.FILE = false;
+      }
+    }
     systemReady();
-  } else {
+  }
+  if (GUEST) {
+    // guest startup
     systemReady();
   }
 
@@ -1763,8 +1780,13 @@ async function systemReady() {
     } else {
       print("localStorage not formated.\nInput \'sysop\' for access.\n\n");
     }
-  } else {
+  } 
+  if (HOST) {
     // host system ready
+    
+    // alert(await dosFetch("ansi.js"));
+    // --allow-file-access-from-files
+    
     print("[yellow]Qandy Sysop Access[white]\n\n");
     if (!qdosExists("dir.sys")) {
       print("localStorage not formated.\nInput \'fdisk\' to install.\n\n");
@@ -1772,6 +1794,9 @@ async function systemReady() {
   }
   window.systemReady=systemReady;
 }
+
+
+
 </script>
 </body>
 </html></html>

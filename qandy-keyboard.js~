@@ -2,7 +2,8 @@
 // ──── Qandy Keyboard Driver ─────────────────────────────────────────────────────────
 //
 
-function keyboard_js() { 
+function keyboard_js() {
+   
   window.keyson=function() { }
   window.keysoff=function() { }
  
