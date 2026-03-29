@@ -833,6 +833,7 @@ async function loadNext() {
         } catch (e) {
           console.log(e);
         }
+        video_js();
       }
       break;
     case "keyboard_js":

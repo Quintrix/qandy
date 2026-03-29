@@ -829,11 +829,12 @@ async function loadNext() {
         var evalError = null;
         try {
           (0, eval)(content);
+          video_js();
           return true;
         } catch (e) {
           console.log(e);
         }
-        video_js();
+        
       }
       break;
     case "keyboard_js":
