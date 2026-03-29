@@ -3,6 +3,7 @@
 //
 
 function command_js() {
+  alert("command");
   window.command=async function(cmd) {
     if (RUN != "qandy.js") {
       print("\n");

@@ -660,7 +660,6 @@ window.QANDY.mode = 'host'; // 'host' (file server), not the emulated machine
 
 if (GUEST) {
   // these functions transmit packets to and from the host
-  alert("guest message handler");
   window.__qandy_reqCounter = 0;
   window._pending = {};
   function qdosXmitDos(action, packet, timeoutMs) {
@@ -812,6 +811,28 @@ async function loadNext() {
   signalAdvance = advance;
 
   switch (entry.name) {
+    case "sound_js":
+      if (HOST) {
+        var js=document.createElement('script');
+        js.id=entry.name;
+        js.src=entry.src;
+        js.onload = function() { sound_js(); }
+        document.head.appendChild(js);
+      }
+      if (GUEST) {
+        var content = await qdosXmitDos('driver', { file: entry.name });
+        if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
+        content = content.replace(/^\s*#!.*\r?\n/, '');
+        var evalError = null;
+        try {
+          (0, eval)(content);
+          sound_js();
+          return true;
+        } catch (e) {
+          console.log(e);
+        }
+      }
+      break;
     case "video_js":
       if (HOST) {
         var js=document.createElement('script');
@@ -821,11 +842,9 @@ async function loadNext() {
         document.head.appendChild(js);
       }
       if (GUEST) {
-        var content = await qdosXmitDos('script', { file: entry.name });
-        // sanitize BOM / shebang
+        var content = await qdosXmitDos('driver', { file: entry.name });
         if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
         content = content.replace(/^\s*#!.*\r?\n/, '');
-        // Eval the script in global scope via indirect eval and capture errors
         var evalError = null;
         try {
           (0, eval)(content);
@@ -834,7 +853,6 @@ async function loadNext() {
         } catch (e) {
           console.log(e);
         }
-        
       }
       break;
     case "keyboard_js":
@@ -846,7 +864,17 @@ async function loadNext() {
         document.head.appendChild(js);
       }
       if (GUEST) {
-        // use qdos commands to request file
+        var content = await qdosXmitDos('driver', { file: entry.name });
+        if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
+        content = content.replace(/^\s*#!.*\r?\n/, '');
+        var evalError = null;
+        try {
+          (0, eval)(content);
+          keyboard_js();
+          return true;
+        } catch (e) {
+          console.log(e);
+        }
       }
       break;
     case "command_js":
@@ -858,7 +886,17 @@ async function loadNext() {
         document.head.appendChild(js);
       }
       if (GUEST) {
-        // use qdos commands to request file
+        var content = await qdosXmitDos('driver', { file: entry.name });
+        if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
+        content = content.replace(/^\s*#!.*\r?\n/, '');
+        var evalError = null;
+        try {
+          (0, eval)(content);
+          command_js();
+          return true;
+        } catch (e) {
+          console.log(e);
+        }
       }
       break;
     case "qandy_js":
@@ -870,7 +908,17 @@ async function loadNext() {
         document.head.appendChild(js);
       }
       if (GUEST) {
-        // use qdos commands to request file
+        var content = await qdosXmitDos('driver', { file: entry.name });
+        if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
+        content = content.replace(/^\s*#!.*\r?\n/, '');
+        var evalError = null;
+        try {
+          (0, eval)(content);
+          qandy_js();
+          return true;
+        } catch (e) {
+          console.log(e);
+        }
       }
       break; 
   }
@@ -1112,8 +1160,6 @@ async function qandyGuestHtm(options) {
 //
 
 async function hostMessageHandler(ev) {
-  
-    alert("host message handler");
     //if (!iframe.contentWindow || ev.source !== iframe.contentWindow) {
     //  console.log("Message is not from our iframe");
     //  return;
@@ -1121,6 +1167,7 @@ async function hostMessageHandler(ev) {
     
     var iframe = window._vmIframe || document.getElementById('vm-iframe');
     if (!iframe || !iframe.contentWindow || ev.source !== iframe.contentWindow) { return; }
+    var d = ev.data || {}; if (!d || typeof d !== 'object') return;
     var d = ev.data || {}; if (!d || typeof d !== 'object') return;
     
     if (d.type === 'guest-action' && typeof d.action === 'string') {
@@ -1132,24 +1179,24 @@ async function hostMessageHandler(ev) {
             sysop();
             break; 
           }
-          case 'script': {
+          case 'driver': {
             var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
-            var scriptSrc = "";
-            if (d.file == "sound_js") { scriptSrc = sound_js.toString(); }
-            if (d.file == "video_js") { scriptSrc = video_js.toString(); }
-            if (d.file == "keyboard_js") { scriptSrc = keyboard_js.toString(); }
-            if (d.file == "command_js") { scriptSrc = command_js.toString(); }
-            if (d.file == "core_js") { scriptSrc = qandy_js.toString(); }
-            if (scriptSrc) {
-              Promise.resolve().then(function () { return scriptSrc; })
+            var driverSrc = "";
+            if (d.file == "sound_js") { driverSrc = sound_js.toString(); }
+            if (d.file == "video_js") { driverSrc = video_js.toString(); }
+            if (d.file == "keyboard_js") { driverSrc = keyboard_js.toString(); }
+            if (d.file == "command_js") { driverSrc = command_js.toString(); }
+            if (d.file == "qandy_js") { driverSrc = qandy_js.toString(); }
+            if (driverSrc) {
+              Promise.resolve().then(function () { return driverSrc; })
                 .then(function (result) {
-                  dosXmitQdos(_dosIframe, d.id, 'script', true, result);
+                  dosXmitQdos(_dosIframe, d.id, 'driver', true, result);
                 })
                 .catch(function (err) {
-                  dosXmitQdos(_dosIframe, d.id, 'script', false, err && err.message ? err.message : String(err));
+                  dosXmitQdos(_dosIframe, d.id, 'driver', false, err && err.message ? err.message : String(err));
                 });
             } else {
-              dosXmitQdos(_dosIframe, d.id, 'script', false, 'script not found: ' + d.file);
+              dosXmitQdos(_dosIframe, d.id, 'driver', false, 'driver not found: ' + d.file);
             }
             break;
           }

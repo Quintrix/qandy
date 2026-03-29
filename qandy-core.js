@@ -3,13 +3,14 @@
 //
 
 window.qandy_js=function() {
-RUN="qandy.js"; 
-window.button=function(b, event) {
-  pokeCursorOff(); 
-  var virtualclick=!!(event && event.source === 'virtual'); 
-  if (event && typeof event.shiftKey !== 'undefined') shift = !!event.shiftKey;
-  var k = "", l = "";
-  if (b===32 && event) { if (!virtualclick) { event.preventDefault(); }}
+alert("qandy core");
+  RUN="qandy.js"; 
+  window.button=function(b, event) {
+    pokeCursorOff(); 
+    var virtualclick=!!(event && event.source === 'virtual'); 
+    if (event && typeof event.shiftKey !== 'undefined') shift = !!event.shiftKey;
+    var k = "", l = "";
+    if (b===32 && event) { if (!virtualclick) { event.preventDefault(); }}
 
   // Fast-path: if a user script (not qandy.js) is running and defines keydown(),
   // deliver the event directly to that function for lowest latency.
