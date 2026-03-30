@@ -117,6 +117,7 @@ function sound_js() {
     }).join(' ');
     return playTune(musicString, onComplete);
   }
+  window.play=window.playNotes;
 
   window.parseGWBasicString = function(str) {
     const notes = [];
@@ -199,7 +200,8 @@ function sound_js() {
   }
 
   window.volume = function(level) {
-    if (typeof level === 'undefined') { return (typeof window.BEEP_VOLUME === 'number') ? window.BEEP_VOLUME : 0.3; }
+    // If no argument was passed, return the current volume setting
+    if (arguments.length === 0) { return (typeof window.BEEP_VOLUME === 'number') ? window.BEEP_VOLUME : 0.3; }
     var prev = (typeof window.BEEP_VOLUME === 'number') ? window.BEEP_VOLUME : 0.3;
     var v = Number(level);
     if (isNaN(v)) v = 0;

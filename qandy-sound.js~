@@ -3,7 +3,6 @@
 //
 
 function sound_js() {
-alert("yes");
   window.audioContext = null;
   window.noteFrequencies = {
     'C0': 16.35, 'C#0': 17.32, 'Db0': 17.32, 'D0': 18.35, 'D#0': 19.45, 'Eb0': 19.45, 'E0': 20.60,
@@ -118,6 +117,7 @@ alert("yes");
     }).join(' ');
     return playTune(musicString, onComplete);
   }
+  window.play=window.playNotes;
 
   window.parseGWBasicString = function(str) {
     const notes = [];
@@ -199,14 +199,17 @@ alert("yes");
     }
   }
 
-  window.volume = function(level) {
-    if (typeof level === 'undefined') { return (typeof window.BEEP_VOLUME === 'number') ? window.BEEP_VOLUME : 0.3; }
-    var prev = (typeof window.BEEP_VOLUME === 'number') ? window.BEEP_VOLUME : 0.3;
-    var v = Number(level);
-    if (isNaN(v)) v = 0;
-    window.BEEP_VOLUME = Math.max(0, Math.min(1, v));
-    return prev;
+window.volume = function(level) {
+  // If no argument was passed, return the current volume setting
+  if (arguments.length === 0) {
+    return (typeof window.BEEP_VOLUME === 'number') ? window.BEEP_VOLUME : 0.3;
   }
+  var prev = (typeof window.BEEP_VOLUME === 'number') ? window.BEEP_VOLUME : 0.3;
+  var v = Number(level);
+  if (isNaN(v)) v = 0;
+  window.BEEP_VOLUME = Math.max(0, Math.min(1, v));
+  return prev;
+}
 
   window.audioContext = audioContext;
   window.noteFrequencies = noteFrequencies;
