@@ -1,0 +1,14 @@
+RUN="flag.js";
+
+init();
+async function init() {
+  print("Capture The Flag:\n\nEnter your player name:\n");
+  //await name=input();
+  alert(name); 
+}
+
+function keydown(keyCode, event) {
+}
+
+function keyup(keyCode, event) {
+}

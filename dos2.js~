@@ -1689,12 +1689,10 @@ var DEVICE = 'none';
       }
     }
 
-    if (!isHttpProtocol()) {
-      if (isFileProtocol()) {
-        print("\nCannot install from file://\n");
-        print("Use DOS to copy .js files to\n");
-        print("localStorage.\n\n");
-      }
+    if (!FILE==true) {
+      print("\nCannot install from file://\n");
+      print("Use DOS to copy .js files to\n");
+      print("localStorage.\n\n");
       return false;
     }
 

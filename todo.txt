@@ -1,6 +1,7 @@
 
     clipboard device?
     
+
     move ctrl and alt to beside caps
     fix missing space label
     add insert/delete to alt keyboard   

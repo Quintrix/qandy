@@ -409,7 +409,7 @@ var RUNIN="";   // input mode set by running script, line or key
 var RUNOUT="";  // output display set by running script, gfx or txt
 
 var JSfiles=['ansi.js', 'ascii.js', 'charmap.js', 'keydown.js', 'mouse.js', 'piano.js',
-             'draw.js'];
+             'draw.js', 'gfx.js', 'q.js'];
 
 var runInputMode="";      // type of input qandy sends run= (line, key, or none)
 var commandHistory = [];  // Array to store command history
@@ -437,7 +437,7 @@ var H=25; // screen height
 
 //var VIDEO = [];  // video memory
 //var COLOR = [];  // color memory
-//var FCOLOR = []; // foreground color memory
+//var FCOLOR = []; // foreiground color memory
 //var BCOLOR = []; // background color memory
 //var ATTR = [];   // attribute memory
 //var DOM = [];    // DOM memory

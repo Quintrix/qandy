@@ -56,6 +56,8 @@ function Begin() {
  }
 }
 
+input("Joe");
+
 function input(l) {
  k=1; if (PName) {
   if (PWear.indexOf("La")>-1) {
