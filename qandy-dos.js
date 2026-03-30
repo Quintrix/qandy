@@ -1,0 +1,1778 @@
+var DOS = true;
+var DOS = true;
+var DEVICE = 'none';
+
+(function (global) {
+  'use strict';
+
+  // ── Constants ────────────────────────────────────────────────────────────
+  var LOCAL_PREFIX = 'qandy:file:';
+  var MANIFEST_KEY = '_dir.sys!';
+  var MAX_NAME_BYTES = 255;
+  var VALID_NAME_RE = /^(?!\\.)[A-Za-z0-9 \\-_.()+=!]+$/;
+  var SUPPORTED_DEVICES = ['local', 'echo', 'harddrive', 'none'];
+  var SEP = '/';
+  var ROOT_SEG = '/';
+  var _cwd = ROOT_SEG;
+
+  var _echoStore = Object.create(null);
+  var _harddriveHandle = null;
+  var _clipboard = null;
+
+  // ── Utility Functions ────────────────────────────────────────────────────
+  function _utf8len(s) {
+    try { return (new TextEncoder()).encode(String(s)).length; } catch (e) { return String(s).length; }
+  }
+
+  function _normName(n) {
+    return (typeof n === 'string') ? n.trim() : String(n == null ? '' : n).trim();
+  }
+
+  function _baseName(name) {
+    var n = _normName(name);
+    var lastSlash = n.lastIndexOf('/');
+    if (lastSlash >= 0) n = n.substring(lastSlash + 1);
+    if (n.charAt(0) === '_') n = n.substring(1);
+    if (n.length > 0 && n.charAt(n.length - 1) === '!') n = n.substring(0, n.length - 1);
+    return n;
+  }
+
+  function _isHidden(canonicalName) {
+    if (typeof canonicalName !== 'string') return false;
+    var base = canonicalName.substring(canonicalName.lastIndexOf('/') + 1);
+    return base.charAt(0) === '_';
+  }
+
+  function _isProtected(canonicalName) {
+    return typeof canonicalName === 'string' && canonicalName.length > 0 &&
+           canonicalName.charAt(canonicalName.length - 1) === '!';
+  }
+
+  function _validateBase(name) {
+    var n = _normName(name);
+    if (!n) return { ok: false, reason: 'empty filename' };
+    if (!VALID_NAME_RE.test(n)) return { ok: false, reason: 'invalid characters in filename' };
+    if (_utf8len(n) > MAX_NAME_BYTES) return { ok: false, reason: 'filename exceeds 255 bytes' };
+    return { ok: true, name: n };
+  }
+
+  function _tsFromDate(d) {
+    var p = function (n) { return String(n).padStart(2, '0'); };
+    return '' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate())
+              + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+  }
+
+  function _timestamp() {
+    return _tsFromDate(new Date());
+  }
+
+  function getCwdSync() { return _cwd || ROOT_SEG; }
+  function setCwdSync(p) {
+    _cwd = (typeof p === 'string' && p.length) ? String(p) : ROOT_SEG;
+  }
+  function _buildLocalCanonical(base) {
+    var cwd = getCwdSync();
+    return (cwd === ROOT_SEG ? '' : cwd) + SEP + base;
+  }
+  function resolveDirPath(name, cwd) {
+    if (typeof name !== 'string') return null;
+    name = name.trim();
+    if (!name) return null;
+    if (name === '.' || name === './') return (cwd || getCwdSync()) || ROOT_SEG;
+    var base=(cwd && cwd.length) ? cwd : ROOT_SEG;
+    if (name.charAt(0) === SEP) { base = ''; }
+    var parts=(base+SEP+name).split(SEP).filter(Boolean);
+    var out = [];
+    for (var i = 0; i < parts.length; i++) {
+      var seg = parts[i];
+      if (seg === '.') continue;
+      if (seg === '..') { if (out.length) out.pop(); continue; }
+      out.push(seg);
+    }
+    return out.length ? SEP + out.join(SEP) : ROOT_SEG;
+  }
+
+  function loadManifest() { return typeof _loadManifest === 'function' ? _loadManifest() : []; }
+
+  function manifestHasDir(manifest, target) {
+    if (!Array.isArray(manifest)) manifest = [];
+    var token = '<' + target + '>';
+    for (var i = 0; i < manifest.length; i++) {
+      var e = manifest[i];
+      if (!e || typeof e.name !== 'string') continue;
+      if (e.name === token) return true;
+    }
+    return false;
+  }
+
+  function _classify(userInput) {
+    var base = _baseName(_normName(userInput)).toLowerCase();
+    if (base === 'dir.txt') return 'dir.txt';
+    if (base === 'dir.sys') return 'dir.sys';
+    return 'normal';
+  }
+
+  // ── Manifest Functions ───────────────────────────────────────────────────
+  function _readManifestRaw() {
+    try {
+      return localStorage.getItem(LOCAL_PREFIX + MANIFEST_KEY) || '';
+    } catch (e) { return ''; }
+  }
+
+  function _parseManifest(raw) {
+    var manifest = [];
+    if (!raw) return manifest;
+    var lines = raw.split('\n');
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim();
+      if (!line) continue;
+      var parts = line.split('|');
+      if (parts.length < 3) continue;
+      var name = parts[0].trim();
+      var size = parseInt(parts[1], 10) || 0;
+      var ts = parts[2].trim();
+      if (name) manifest.push({ name: name, size: size, timestamp: ts });
+    }
+    return manifest;
+  }
+
+  function _loadManifest() {
+    return _parseManifest(_readManifestRaw());
+  }
+
+  function _saveManifest(manifest) {
+    var ts = _timestamp();
+    var lines = [];
+    for (var i = 0; i < manifest.length; i++) {
+      var e = manifest[i];
+      if (e.name === MANIFEST_KEY) continue;
+      lines.push(e.name + '|' + e.size + '|' + e.timestamp);
+    }
+
+    var bodyText = lines.length ? lines.join('\n') + '\n' : '';
+    var selfLine = MANIFEST_KEY + '|0|' + ts;
+    var full = bodyText + selfLine;
+    var manifestSize = _utf8len(full);
+    selfLine = MANIFEST_KEY + '|' + manifestSize + '|' + ts;
+    full = bodyText + selfLine;
+
+    var finalSize = _utf8len(full);
+    if (finalSize !== manifestSize) {
+      selfLine = MANIFEST_KEY + '|' + finalSize + '|' + ts;
+      full = bodyText + selfLine;
+    }
+
+    try {
+      localStorage.setItem(LOCAL_PREFIX + MANIFEST_KEY, full);
+      return true;
+    } catch (e) {
+      return 'Error: Disk Full';
+    }
+  }
+
+  function _findEntry(manifest, userInput) {
+    var base = _baseName(_normName(userInput)).toLowerCase();
+    var cwd = getCwdSync();
+    for (var i = 0; i < manifest.length; i++) {
+      var entry = manifest[i];
+      if (!entry || typeof entry.name !== 'string') continue;
+      var entryName = entry.name;
+      var lastSlash = entryName.lastIndexOf('/');
+      var entryDir = lastSlash >= 0 ? entryName.substring(0, lastSlash) : '';
+      if (entryDir === '') entryDir = ROOT_SEG;
+      if (entryDir !== cwd) continue;
+      if (_baseName(entryName).toLowerCase() === base) {
+        return { index: i, entry: entry };
+      }
+    }
+    return null;
+  }
+
+  function _findEntryFlexible(manifest, userInput) {
+    var base = _baseName(_normName(userInput)).toLowerCase();
+    var cwd = getCwdSync();
+    for (var i = 0; i < manifest.length; i++) {
+      var entry = manifest[i];
+      if (!entry || typeof entry.name !== 'string') continue;
+      var entryName = entry.name;
+      var lastSlash = entryName.lastIndexOf('/');
+      var entryDir = lastSlash >= 0 ? entryName.substring(0, lastSlash) : '';
+      if (entryDir === '') entryDir = ROOT_SEG;
+      if (entryDir !== cwd) continue;
+      var entryBase = _baseName(entryName).toLowerCase();
+      if (entryBase === base) {
+        return { index: i, entry: entry };
+      }
+    }
+    return null;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // WILDCARD SUPPORT FUNCTIONS
+  // ─────────────────────────────────────────────────────────────────────────
+
+  function _hasWildcards(pattern) {
+    return typeof pattern === 'string' && (/[*?]/.test(pattern));
+  }
+
+  function _patternToRegex(pattern) {
+    if (!pattern || typeof pattern !== 'string') return null;
+    var escaped = pattern
+      .replace(/\./g, '\\.')
+      .replace(/\?/g, '.')
+      .replace(/\*/g, '.*');
+    try {
+      return new RegExp('^' + escaped + '$', 'i');
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function _findEntries(manifest, userInput) {
+    if (!Array.isArray(manifest)) return [];
+    var base = _baseName(_normName(userInput)).toLowerCase();
+    var cwd = getCwdSync();
+
+    if (!_hasWildcards(base)) {
+      for (var i = 0; i < manifest.length; i++) {
+        var entry = manifest[i];
+        if (!entry || typeof entry.name !== 'string') continue;
+        var lastSlash = entry.name.lastIndexOf('/');
+        var entryDir = lastSlash >= 0 ? entry.name.substring(0, lastSlash) : '';
+        if (entryDir === '') entryDir = ROOT_SEG;
+        if (entryDir !== cwd) continue;
+        if (_baseName(entry.name).toLowerCase() === base) {
+          return [{ index: i, entry: entry }];
+        }
+      }
+      return [];
+    }
+
+    var regex = _patternToRegex(base);
+    if (!regex) return [];
+
+    var results = [];
+    for (var i = 0; i < manifest.length; i++) {
+      var entry = manifest[i];
+      if (!entry || typeof entry.name !== 'string') continue;
+      var lastSlash = entry.name.lastIndexOf('/');
+      var entryDir = lastSlash >= 0 ? entry.name.substring(0, lastSlash) : '';
+      if (entryDir === '') entryDir = ROOT_SEG;
+      if (entryDir !== cwd) continue;
+      var entryBase = _baseName(entry.name).toLowerCase();
+      if (regex.test(entryBase)) {
+        results.push({ index: i, entry: entry });
+      }
+    }
+    return results;
+  }
+
+  // ── Device-aware directory listing ────────────────────────────────────────
+  async function _dirEntries(device) {
+    switch (device) {
+      case 'local':
+        return _loadManifest();
+      case 'echo': {
+        var entries = [];
+        var ts = _timestamp();
+        var keys = Object.keys(_echoStore);
+        for (var i = 0; i < keys.length; i++) {
+          var k = keys[i];
+          entries.push({ name: k, size: _utf8len(_echoStore[k]), timestamp: ts });
+        }
+        return entries;
+      }
+      case 'harddrive': {
+        if (!_harddriveHandle) return [];
+        var hdEntries = [];
+        try {
+          for await (var [hdName, hdHandle] of _harddriveHandle) {
+            if (hdHandle.kind !== 'file') continue;
+            try {
+              var hdFile = await hdHandle.getFile();
+              hdEntries.push({
+                name: hdName,
+                size: hdFile.size,
+                timestamp: _tsFromDate(new Date(hdFile.lastModified))
+              });
+            } catch (e) {}
+          }
+        } catch (e) {}
+        return hdEntries;
+      }
+      default:
+        return [];
+    }
+  }
+
+  // ── Storage backends ──────────────────────────────────────────────────────
+  function _localLoad(canonicalName) {
+    try {
+      var v = localStorage.getItem(LOCAL_PREFIX + canonicalName);
+      return v === null ? null : String(v);
+    } catch (e) { return null; }
+  }
+
+  function _localSave(canonicalName, content) {
+    try {
+      localStorage.setItem(LOCAL_PREFIX + canonicalName,
+                           String(content == null ? '' : content));
+      return true;
+    } catch (e) { return 'Error: Disk Full'; }
+  }
+
+  function _localDelete(canonicalName) {
+    try { localStorage.removeItem(LOCAL_PREFIX + canonicalName); } catch (e) {}
+  }
+
+  async function _ensureHarddrive() {
+    if (_harddriveHandle) return true;
+    if (typeof window === 'undefined' ||
+        typeof window.showDirectoryPicker !== 'function') return false;
+    try {
+      _harddriveHandle = await window.showDirectoryPicker();
+      return true;
+    } catch (e) { _harddriveHandle = null; return false; }
+  }
+
+  async function _hdLoad(name) {
+    if (!(await _ensureHarddrive())) return null;
+    try {
+      var fh = await _harddriveHandle.getFileHandle(name, { create: false });
+      var file = await fh.getFile();
+      return await file.text();
+    } catch (e) { return null; }
+  }
+
+  async function _hdSave(name, content) {
+    if (!(await _ensureHarddrive())) return false;
+    try {
+      var fh = await _harddriveHandle.getFileHandle(name, { create: true });
+      var w = await fh.createWritable();
+      await w.write(String(content == null ? '' : content));
+      await w.close();
+      return true;
+    } catch (e) { return false; }
+  }
+
+  async function _hdDelete(name) {
+    if (!_harddriveHandle) return;
+    try { await _harddriveHandle.removeEntry(name); } catch (e) {}
+  }
+
+  async function _load(device, canonicalName) {
+    switch (device) {
+      case 'local':      return _localLoad(canonicalName);
+      case 'echo':       return Object.prototype.hasOwnProperty.call(_echoStore, canonicalName) ? _echoStore[canonicalName] : null;
+      case 'harddrive':  return await _hdLoad(canonicalName);
+      case 'none':       return null;
+      default:           return null;
+    }
+  }
+
+  async function _save(device, canonicalName, content) {
+    switch (device) {
+      case 'local':     return _localSave(canonicalName, content);
+      case 'echo':      _echoStore[canonicalName] = String(content == null ? '' : content); return true;
+      case 'harddrive': return await _hdSave(canonicalName, content);
+      case 'none':      return true;
+      default:          return false;
+    }
+  }
+
+  async function _del(device, canonicalName) {
+    switch (device) {
+      case 'local':     _localDelete(canonicalName); break;
+      case 'echo':      delete _echoStore[canonicalName]; break;
+      case 'harddrive': await _hdDelete(canonicalName); break;
+    }
+  }
+
+  // ── File-picker / save-as helpers ──────────────────────────��──────────────
+  async function _pickFile() {
+    if (typeof window !== 'undefined' &&
+        typeof window.showOpenFilePicker === 'function') {
+      try {
+        var handles = await window.showOpenFilePicker({ multiple: false });
+        if (!handles || !handles.length) return null;
+        var fh = handles[0];
+        var f = await fh.getFile();
+        return { name: f.name, text: await f.text() };
+      } catch (e) { return null; }
+    }
+    return new Promise(function (resolve) {
+      var inp = document.createElement('input');
+      inp.type = 'file';
+      inp.style.cssText = 'position:fixed;left:-9999px';
+      document.body.appendChild(inp);
+      inp.onchange = function () {
+        var f = inp.files && inp.files[0];
+        if (!f) { document.body.removeChild(inp); return resolve(null); }
+        var reader = new FileReader();
+        reader.onload = function (ev) {
+          document.body.removeChild(inp);
+          resolve({ name: f.name, text: ev.target.result });
+        };
+        reader.onerror = function () { document.body.removeChild(inp); resolve(null); };
+        reader.readAsText(f);
+      };
+      inp.click();
+    });
+  }
+
+  async function _saveFileAs(name, content) {
+    if (typeof window !== 'undefined' &&
+        typeof window.showSaveFilePicker === 'function') {
+      try {
+        var handle = await window.showSaveFilePicker({ suggestedName: name });
+        var w = await handle.createWritable();
+        await w.write(String(content == null ? '' : content));
+        await w.close();
+        return true;
+      } catch (e) { /* fall through to anchor download */ }
+    }
+    var blob = new Blob([String(content == null ? '' : content)],
+                       { type: 'text/plain;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+    return true;
+  }
+
+  function formatFileSize(bytes) {
+    bytes = parseInt(bytes, 10) || 0;
+    if (bytes === 0) return '0b';
+    if (bytes < 1024) return bytes + 'b';
+    if (bytes < 1048576) return Math.round(bytes / 1024) + 'k';
+    return Math.round(bytes / 1048576) + 'm';
+  }
+
+  // ── Public API ────────────────────────────────────────────────────────────
+  global.DOS = true;
+  global.DEVICE = global.DEVICE || 'none';
+
+  global.dosMount = async function (device) {
+    if (!device || typeof device !== 'string') return global.DEVICE;
+    device = device.trim();
+    if (SUPPORTED_DEVICES.indexOf(device) === -1) return 'Error: unsupported device: ' + device;
+    if (device === 'harddrive') {
+      var ok = await _ensureHarddrive();
+      if (!ok) return 'Error: harddrive not available';
+    }
+    global.DEVICE = device;
+    return device;
+  };
+
+  global.dosFormat = async function (data) {
+    var dev = global.DEVICE;
+    if (typeof data === 'undefined') {
+      var manifest = _loadManifest();
+      var files = {};
+      for (var i = 0; i < manifest.length; i++) {
+        var e = manifest[i];
+        if (e.name === MANIFEST_KEY) continue;
+        try { files[e.name] = await _load(dev, e.name); } catch (ex) { files[e.name] = null; }
+      }
+      return JSON.stringify({ device: dev, created: new Date().toISOString(), files: files });
+    }
+
+    var obj = data;
+    if (typeof data === 'string') {
+      try { obj = JSON.parse(data); } catch (e) { return 'Error: invalid archive format'; }
+    }
+    if (!obj || typeof obj !== 'object' || !obj.files) return 'Error: invalid archive';
+
+    var curManifest = _loadManifest();
+    for (var j = 0; j < curManifest.length; j++) {
+      if (curManifest[j].name !== MANIFEST_KEY) await _del(dev, curManifest[j].name);
+    }
+    if (dev === 'echo') _echoStore = Object.create(null);
+
+    var newManifest = [];
+    var keys = Object.keys(obj.files);
+    for (var k = 0; k < keys.length; k++) {
+      var fname = keys[k];
+      if (fname === MANIFEST_KEY) continue;
+      var fbase = _baseName(fname);
+      var fv = _validateBase(fbase);
+      if (!fv.ok) continue;
+      var fcontent = String(obj.files[fname] == null ? '' : obj.files[fname]);
+      var saveRes = await _save(dev, fname, fcontent);
+      if (saveRes === 'Error: Disk Full') return 'Error: Disk Full';
+      newManifest.push({ name: fname, size: _utf8len(fcontent), timestamp: _timestamp() });
+    }
+    var mres = _saveManifest(newManifest);
+    if (mres === 'Error: Disk Full') return 'Error: Disk Full';
+    return true;
+  };
+
+  global.dosSave = async function (file, data) {
+    var fname = _normName(file);
+    var append = false;
+    if (fname.charAt(0) === '>') { append = true; fname = fname.substring(1).trimStart(); }
+
+    var cls = _classify(fname);
+    if (cls !== 'normal') return 'Error: read only file';
+
+    var fbase = _baseName(fname);
+    if (_hasWildcards(fbase)) return 'Error: invalid character';
+    var fv = _validateBase(fbase);
+    if (!fv.ok) return 'Error: ' + fv.reason;
+
+    var dev = global.DEVICE;
+    var manifest = _loadManifest();
+    var found = _findEntryFlexible(manifest, fname);
+
+    if (found && _isProtected(found.entry.name)) return 'Error: read only file';
+
+    var canonical;
+    if (found) {
+      canonical = found.entry.name;
+    } else {
+      canonical = (_isHidden(fname) ? '_' : '') + fbase + (_isProtected(fname) ? '!' : '');
+    }
+
+    var content = String(data == null ? '' : data);
+    if (append && found) {
+      var existing = await _load(dev, canonical);
+      if (existing !== null) content = existing + content;
+    }
+
+    var res = await _save(dev, canonical, content);
+    if (res === 'Error: Disk Full') return 'Error: Disk Full';
+    if (res === false) return 'Error: write failed';
+
+    var size = _utf8len(content);
+    var ts = _timestamp();
+    if (found) {
+      found.entry.size = size;
+      found.entry.timestamp = ts;
+    } else {
+      manifest.push({ name: canonical, size: size, timestamp: ts });
+    }
+    var mres = _saveManifest(manifest);
+    if (mres === 'Error: Disk Full') return 'Error: Disk Full';
+    return true;
+  };
+
+  global.dosLoad = async function (file) {
+    var fname = _normName(file);
+    var cls = _classify(fname);
+
+    if (cls === 'dir.txt') return global.dosList();
+    if (cls === 'dir.sys') return global.dosDir();
+
+    var fbase = _baseName(fname);
+    if (_hasWildcards(fbase)) return 'Error: invalid character';
+    var fv = _validateBase(fbase);
+    if (!fv.ok) return null;
+
+    var dev = global.DEVICE;
+    var manifest = _loadManifest();
+    var found = _findEntryFlexible(manifest, fname);
+    if (!found) return null;
+
+    return await _load(dev, found.entry.name);
+  };
+
+  global.dosCopy = async function (file, dest) {
+    var dev = global.DEVICE;
+    var fname = _normName(file);
+
+    if (_classify(fname) !== 'normal') return 'Error: cannot copy system file';
+    var fbase = _baseName(fname);
+    if (_hasWildcards(fbase)) return 'Error: invalid character';
+    var fv = _validateBase(fbase);
+    if (!fv.ok) return 'Error: ' + fv.reason;
+
+    var manifest = _loadManifest();
+    var found = _findEntry(manifest, fname);
+    if (!found) return 'Error: file not found';
+
+    var content = await _load(dev, found.entry.name);
+    if (content === null) return 'Error: file not found';
+
+    _clipboard = { name: found.entry.name, content: content };
+
+    if (typeof dest !== 'undefined' && dest !== null && String(dest).trim() !== '') {
+      var dname = _normName(String(dest));
+      if (_classify(dname) !== 'normal') return 'Error: read only file';
+      var dbase = _baseName(dname);
+      if (_hasWildcards(dbase)) return 'Error: invalid character';
+      var dv = _validateBase(dbase);
+      if (!dv.ok) return 'Error: invalid destination: ' + dv.reason;
+      var destFound = _findEntry(manifest, dname);
+      if (destFound) return 'Error: destination file already exists';
+      var base = (_isHidden(dname) ? '_' : '') + dbase + (_isProtected(dname) ? '!' : '');
+      var destCanonical = (dev === 'local') ? _buildLocalCanonical(base) : base;
+      var res = await _save(dev, destCanonical, content);
+      if (res === 'Error: Disk Full') return 'Error: Disk Full';
+      manifest.push({ name: destCanonical, size: _utf8len(content), timestamp: _timestamp() });
+      var mres = _saveManifest(manifest);
+      if (mres === 'Error: Disk Full') return 'Error: Disk Full';
+    }
+
+    return true;
+  };
+
+  global.dosPaste = async function (dest) {
+    var dev = global.DEVICE;
+    var content = null;
+
+    if (_clipboard && _clipboard.content !== undefined) {
+      content = _clipboard.content;
+    } else if (typeof navigator !== 'undefined' && navigator.clipboard &&
+               typeof navigator.clipboard.readText === 'function') {
+      try { content = await navigator.clipboard.readText(); } catch (e) {
+        return 'Error: clipboard read denied';
+      }
+    }
+    if (content === null || content === undefined) return 'Error: clipboard empty';
+
+    var append = false;
+    var dname = _normName(String(dest));
+    if (dname.charAt(0) === '>') { append = true; dname = dname.substring(1).trimStart(); }
+
+    if (_classify(dname) !== 'normal') return 'Error: read only file';
+    var dbase = _baseName(dname);
+    if (_hasWildcards(dbase)) return 'Error: invalid character';
+    var dv = _validateBase(dbase);
+    if (!dv.ok) return 'Error: ' + dv.reason;
+
+    var manifest = _loadManifest();
+    var destFound = _findEntry(manifest, dname);
+    if (destFound && _isProtected(destFound.entry.name)) return 'Error: read only file';
+
+    var destCanonical;
+    if (destFound) {
+      destCanonical = destFound.entry.name;
+    } else {
+      var base = (_isHidden(dname) ? '_' : '') + dbase + (_isProtected(dname) ? '!' : '');
+      destCanonical = (dev === 'local') ? _buildLocalCanonical(base) : base;
+    }
+
+    if (append && destFound) {
+      var existing = await _load(dev, destCanonical);
+      if (existing !== null) content = existing + content;
+    } else if (!append && destFound) {
+      return 'Error: file already exists';
+    }
+
+    var res = await _save(dev, destCanonical, content);
+    if (res === 'Error: Disk Full') return 'Error: Disk Full';
+
+    var size = _utf8len(content);
+    var ts = _timestamp();
+    if (destFound) {
+      destFound.entry.size = size;
+      destFound.entry.timestamp = ts;
+    } else {
+      manifest.push({ name: destCanonical, size: size, timestamp: ts });
+    }
+    var mres = _saveManifest(manifest);
+    if (mres === 'Error: Disk Full') return 'Error: Disk Full';
+    return 'done\n';
+  };
+
+  global.dosRename = async function (file, dest) {
+    var dev = global.DEVICE;
+    var fname = _normName(file);
+    var dname = _normName(dest);
+
+    if (_classify(fname) !== 'normal') return 'Error: read only file';
+    if (_classify(dname) !== 'normal') return 'Error: read only file';
+
+    var fbase = _baseName(fname);
+    if (_hasWildcards(fbase)) return 'Error: invalid character';
+    var fv = _validateBase(fbase);
+    if (!fv.ok) return 'Error: ' + fv.reason;
+    var dbase = _baseName(dname);
+    if (_hasWildcards(dbase)) return 'Error: invalid character';
+    var dv = _validateBase(dbase);
+    if (!dv.ok) return 'Error: invalid destination: ' + dv.reason;
+
+    var manifest = _loadManifest();
+    var srcFound = _findEntry(manifest, fname);
+    if (!srcFound) return 'Error: file not found';
+    if (_isProtected(srcFound.entry.name)) return 'Error: read only file';
+
+    var destFound = _findEntry(manifest, dname);
+    if (destFound) return 'Error: destination file already exists';
+
+    var content = await _load(dev, srcFound.entry.name);
+    if (content === null) return 'Error: file not found';
+
+    var destCanonical = (_isHidden(dname) ? '_' : '') + dbase + (_isProtected(dname) ? '!' : '');
+    var res = await _save(dev, destCanonical, content);
+    if (res === 'Error: Disk Full') return 'Error: Disk Full';
+
+    await _del(dev, srcFound.entry.name);
+    srcFound.entry.name = destCanonical;
+    srcFound.entry.timestamp = _timestamp();
+    var mres = _saveManifest(manifest);
+    if (mres === 'Error: Disk Full') return 'Error: Disk Full';
+    return true;
+  };
+
+  global.dosDelete = async function (filePattern) {
+    var dev = global.DEVICE;
+    var fname = _normName(filePattern);
+    if (_classify(fname) !== 'normal') return 'Error: read only file';
+    
+    var fbase = _baseName(fname);
+    var manifest = _loadManifest();
+    var matches = _findEntries(manifest, fname);
+
+    if (matches.length === 0) return 'Error: file not found';
+
+    for (var i = 0; i < matches.length; i++) {
+      if (_isProtected(matches[i].entry.name)) {
+        return 'Error: read only file (at least one)';
+      }
+    }
+
+    if (_hasWildcards(fbase) && matches.length > 10) {
+      return 'Error: pattern matches ' + matches.length + ' file(s), limit is 10. Use dosDeleteForce() to override.';
+    }
+
+    for (var j = matches.length - 1; j >= 0; j--) {
+      var entry = matches[j];
+      await _del(dev, entry.entry.name);
+      manifest.splice(entry.index, 1);
+    }
+
+    var mres = _saveManifest(manifest);
+    if (mres === 'Error: Disk Full') return 'Error: Disk Full';
+
+    if (matches.length === 1) {
+      return true;
+    } else {
+      return 'deleted ' + matches.length + ' file(s)';
+    }
+  };
+
+  global.dosDeleteForce = async function (filePattern) {
+    var dev = global.DEVICE;
+    var fname = _normName(filePattern);
+    if (_classify(fname) !== 'normal') return 'Error: read only file';
+    
+    var manifest = _loadManifest();
+    var matches = _findEntries(manifest, fname);
+
+    if (matches.length === 0) return 'Error: file not found';
+
+    for (var i = 0; i < matches.length; i++) {
+      if (_isProtected(matches[i].entry.name)) {
+        return 'Error: read only file (at least one)';
+      }
+    }
+
+    for (var j = matches.length - 1; j >= 0; j--) {
+      var entry = matches[j];
+      await _del(dev, entry.entry.name);
+      manifest.splice(entry.index, 1);
+    }
+
+    var mres = _saveManifest(manifest);
+    if (mres === 'Error: Disk Full') return 'Error: Disk Full';
+
+    return 'deleted ' + matches.length + ' file(s)';
+  };
+
+  global.dosExists = function (file) {
+    var fname = _normName(file);
+    var cls = _classify(fname);
+    var fbase = _baseName(fname);
+    var fv = _validateBase(fbase);
+    if (!fv.ok) return false;
+    var manifest = _loadManifest();
+    if (!manifest || (Array.isArray(manifest) && manifest.length === 0)) { return false; }
+    return _findEntry(manifest, fname) !== null;
+  };
+
+  global.dosDownload = async function (file) {
+    var fname = _normName(file);
+    var cls = _classify(fname);
+    var fbase = _baseName(fname);
+    if (_hasWildcards(fbase)) return 'Error: invalid character';
+    var fv = _validateBase(fbase);
+    if (!fv.ok) return 'Error: ' + fv.reason;
+
+    var content;
+    if (cls === 'dir.txt') {
+      content = await global.dosList();
+    } else if (cls === 'dir.sys') {
+      content = await global.dosDir();
+    } else {
+      var dev = global.DEVICE;
+      var manifest = _loadManifest();
+      var found = _findEntry(manifest, fname);
+      if (!found) return 'Error: file not found';
+      content = await _load(dev, found.entry.name);
+      if (content === null) return 'Error: file not found';
+    }
+
+    await _saveFileAs(fbase, content);
+    return true;
+  };
+
+  global.dosUpload = async function (optionalDest) {
+    var picked = await _pickFile();
+    if (!picked) return null;
+
+    var dname = (typeof optionalDest === 'string' && optionalDest.trim() !== '')
+                ? _normName(optionalDest) : _normName(picked.name);
+
+    if (_classify(dname) !== 'normal') return 'Error: read only file';
+    var dbase = _baseName(dname);
+    if (_hasWildcards(dbase)) return 'Error: invalid character';
+    var dv = _validateBase(dbase);
+    if (!dv.ok) return 'Error: invalid destination: ' + dv.reason;
+
+    var dev = global.DEVICE;
+    var manifest = _loadManifest();
+    var found = _findEntry(manifest, dname);
+    if (found && _isProtected(found.entry.name)) return 'Error: read only file';
+
+    var destCanonical;
+    if (found) {
+      destCanonical = found.entry.name;
+    } else {
+      var base = (_isHidden(dname) ? '_' : '') + dbase + (_isProtected(dname) ? '!' : '');
+      destCanonical = (dev === 'local') ? _buildLocalCanonical(base) : base;
+    }
+
+    var content = String(picked.text);
+    var res = await _save(dev, destCanonical, content);
+    if (res === 'Error: Disk Full') return 'Error: Disk Full';
+
+    var size = _utf8len(content);
+    var ts = _timestamp();
+    if (found) {
+      found.entry.size = size;
+      found.entry.timestamp = ts;
+    } else {
+      manifest.push({ name: destCanonical, size: size, timestamp: ts });
+    }
+    var mres = _saveManifest(manifest);
+    if (mres === 'Error: Disk Full') return 'Error: Disk Full';
+    return destCanonical;
+  };
+
+  global.dosStash = async function (file) {
+    var dev = global.DEVICE;
+    var fname = _normName(file);
+    if (_classify(fname) !== 'normal') return 'Error: read only file';
+    var fbase = _baseName(fname);
+    if (_hasWildcards(fbase)) return 'Error: invalid character';
+    var fv = _validateBase(fbase);
+    if (!fv.ok) return 'Error: ' + fv.reason;
+
+    var manifest = _loadManifest();
+    var found = _findEntry(manifest, fname);
+    if (!found) return 'Error: file not found';
+
+    var content = await _load(dev, found.entry.name);
+    if (content === null) return 'Error: file not found';
+
+    var res = _localSave(found.entry.name, content);
+    if (res === 'Error: Disk Full') return 'Error: Disk Full';
+
+    return true;
+  };
+
+  global.dosRetrieve = async function (file) {
+    var fname = _normName(file);
+    if (_classify(fname) !== 'normal') return null;
+    var fbase = _baseName(fname);
+    if (_hasWildcards(fbase)) return 'Error: invalid character';
+    var fv = _validateBase(fbase);
+    if (!fv.ok) return null;
+    var manifest = _loadManifest();
+    var found = _findEntry(manifest, fname);
+    if (!found) return null;
+    return _localLoad(found.entry.name);
+  };
+
+  global.dosList = async function (filePattern) {
+    var entries = await _dirEntries(global.DEVICE);
+    var out = [];
+    
+    for (var i = 0; i < entries.length; i++) {
+      var entry = entries[i];
+      
+      if (_isHidden(entry.name)) continue;
+      
+      var basename = _baseName(entry.name);
+      
+      if (filePattern) {
+        var pattern = _baseName(_normName(filePattern));
+        if (_hasWildcards(pattern)) {
+          var regex = _patternToRegex(pattern);
+          if (!regex || !regex.test(basename.toLowerCase())) continue;
+        } else {
+          if (basename.toLowerCase() !== pattern.toLowerCase()) continue;
+        }
+      }
+      
+      out.push(basename);
+    }
+    
+    return out.join('\n');
+  };
+
+  global.dosDir = async function (filePattern) {
+    var cwd = getCwdSync();
+    var manifest = await _dirEntries(global.DEVICE);
+    var lines = [];
+    var totalSize = 0;
+    var fileCount = 0;
+
+    for (var i = 0; i < manifest.length; i++) {
+      var e = manifest[i];
+      var entryName = e.name;
+
+      var isDir = (entryName.charAt(0) === '<' && entryName.charAt(entryName.length - 1) === '>');
+      var entryPath;
+
+      if (isDir) {
+        entryPath = entryName.substring(1, entryName.length - 1);
+      } else {
+        entryPath = entryName;
+      }
+
+      var lastSlash = entryPath.lastIndexOf('/');
+      var parentPath;
+      if (lastSlash === 0) {
+        parentPath = '/';
+      } else if (lastSlash > 0) {
+        parentPath = entryPath.substring(0, lastSlash);
+      } else {
+        parentPath = '/';
+      }
+
+      if (parentPath !== cwd) continue;
+
+      if (filePattern) {
+        var pattern = _baseName(_normName(filePattern));
+        if (_hasWildcards(pattern)) {
+          var regex = _patternToRegex(pattern);
+          var displayName = isDir ? entryPath.substring(lastSlash + 1) : _baseName(entryName);
+          if (!regex || !regex.test(displayName.toLowerCase())) continue;
+        } else {
+          var displayName = isDir ? entryPath.substring(lastSlash + 1) : _baseName(entryName);
+          if (displayName.toLowerCase() !== pattern.toLowerCase()) continue;
+        }
+      }
+
+      fileCount++;
+      totalSize += e.size;
+
+      if (isDir) {
+        var dirName = entryPath.substring(lastSlash + 1);
+        lines.push(dirName + ' ' + formatFileSize(0) + ' (dir)');
+      } else {
+        var fileName = _baseName(entryName);
+        lines.push(fileName + ' ' + formatFileSize(e.size));
+      }
+    }
+
+    var summary = fileCount + ' file(s), ' + formatFileSize(totalSize);
+    lines.push(summary);
+
+    return lines.join('\n');
+  };
+
+  global.dosFind = async function (filePattern) {
+    if (!filePattern) return 'Error: pattern required';
+    
+    var manifest = _loadManifest();
+    var matches = _findEntries(manifest, filePattern);
+    
+    if (matches.length === 0) return 'Error: no files match pattern';
+    
+    var lines = [];
+    var totalSize = 0;
+    
+    for (var i = 0; i < matches.length; i++) {
+      var e = matches[i].entry;
+      if (!_isHidden(e.name)) {
+        var name = _baseName(e.name);
+        var size = formatFileSize(e.size);
+        lines.push(name + ' (' + size + ')');
+        totalSize += e.size;
+      }
+    }
+    
+    var summary = 'Found ' + matches.length + ' file(s), ' + formatFileSize(totalSize);
+    lines.push(summary);
+    
+    return lines.join('\n');
+  };
+
+  global.dosCount = async function (filePattern) {
+    if (!filePattern) filePattern = '*';
+    
+    var manifest = _loadManifest();
+    var matches = _findEntries(manifest, filePattern);
+    
+    var count = 0;
+    var size = 0;
+    for (var i = 0; i < matches.length; i++) {
+      if (!_isHidden(matches[i].entry.name)) {
+        count++;
+        size += matches[i].entry.size;
+      }
+    }
+    
+    return count + ' file(s), ' + formatFileSize(size);
+  };
+
+  global.dosShare = async function (file) {
+    var dev = global.DEVICE;
+    if (dev === 'none') return 'Error: no device mounted';
+
+    var fname = _normName(file);
+    if (_classify(fname) !== 'normal') return 'Error: read only file';
+    var fbase = _baseName(fname);
+    if (_hasWildcards(fbase)) return 'Error: invalid character';
+    var fv = _validateBase(fbase);
+    if (!fv.ok) return 'Error: ' + fv.reason;
+
+    var canonical = null;
+    var content = null;
+    var manifest = _loadManifest();
+    var found = _findEntry(manifest, fname);
+    if (found) {
+      canonical = found.entry.name;
+      content = await _load(dev, canonical);
+    }
+
+    if (content === null) {
+      if (dev === 'echo') {
+        var eKeys = Object.keys(_echoStore);
+        for (var i = 0; i < eKeys.length; i++) {
+          var eBase = _baseName(eKeys[i]).toLowerCase();
+          if (eBase === fbase.toLowerCase()) {
+            canonical = eKeys[i];
+            content = _echoStore[canonical];
+            break;
+          }
+        }
+      } else if (dev === 'harddrive' && _harddriveHandle) {
+        var tries = [fbase, '_' + fbase, fbase + '!', '_' + fbase + '!'];
+        for (var j = 0; j < tries.length; j++) {
+          var loadedContent = await _hdLoad(tries[j]);
+          if (loadedContent !== null) { canonical = tries[j]; content = loadedContent; break; }
+        }
+      } else if (dev === 'local') {
+        try {
+          var lsKeys = Object.keys(localStorage);
+          for (var k = 0; k < lsKeys.length; k++) {
+            var lsKey = lsKeys[k];
+            if (lsKey.indexOf(LOCAL_PREFIX) !== 0) continue;
+            var lsName = lsKey.substring(LOCAL_PREFIX.length);
+            if (lsName === MANIFEST_KEY) continue;
+            if (_baseName(lsName).toLowerCase() === fbase.toLowerCase()) {
+              canonical = lsName;
+              content = _localLoad(canonical);
+              break;
+            }
+          }
+        } catch (e) {}
+      }
+    }
+
+    if (content === null) return 'Error: file not found';
+
+    var saveRes = _localSave(canonical, content);
+    if (saveRes === 'Error: Disk Full') return 'Error: Disk Full';
+
+    var size = _utf8len(content);
+    var ts = _timestamp();
+    var lsManifest = _loadManifest();
+    var lsFound = _findEntry(lsManifest, canonical);
+    if (lsFound) {
+      lsFound.entry.size = size;
+      lsFound.entry.timestamp = ts;
+    } else {
+      lsManifest.push({ name: canonical, size: size, timestamp: ts });
+    }
+    var mres = _saveManifest(lsManifest);
+    if (mres === 'Error: Disk Full') return 'Error: Disk Full';
+
+    return true;
+  };
+
+  global.localLoad = async function (file) {
+    var fname = _normName(file);
+    var cls = _classify(fname);
+    if (cls === 'dir.txt') return await global.localList();
+    var fbase = _baseName(fname);
+    var fv = _validateBase(fbase);
+    if (!fv.ok) return null;
+    var manifest = _loadManifest();
+    var found = _findEntryFlexible(manifest, fname);
+    if (!found) return "Error: file not found";
+    return _localLoad(found.entry.name);
+  };
+
+  // mkdir on localStorage
+  global.localMkDir = async function (name) {
+    try {
+      //if (typeof name !== 'string' || String(name).trim() === '') { return 'Error: invalid dir name '+name; }
+      var cwd = getCwdSync();
+      var target = resolveDirPath(name, cwd);
+      
+      if (!target) return 'Error: invalid dir name '+target;
+      // Normalize target (remove trailing separators beyond single root)
+      if (target.length > 1) {
+        while (target.length > 1 && target.slice(-SEP.length) === SEP) {
+          target = target.slice(0, -SEP.length);
+        }
+      }
+      var manifest = _loadManifest() || [];
+      var dirToken = '<'+target+'>';
+      // detect a file whose base (last segment) would conflict with this new dir
+      var parts = target.split(SEP).filter(Boolean);
+      var last = parts.length ? parts[parts.length - 1] : '';
+      var fileConflict = manifest.some(function (e) {
+        if (!e || !e.name) return false;
+        // compare base name (strip flags) against last segment
+        return _baseName(e.name).toLowerCase() === last.toLowerCase();
+      });
+      if (fileConflict) return 'Error: dir exists';
+      var dirExists = manifest.some(function (e) { return e && e.name === dirToken; });
+      if (dirExists) return 'Error: dir already exists';
+      if (target !== ROOT_SEG) {
+        if (parts.length === 0) return 'Error: invalid dir name';
+        parts.pop(); // parent path tokens
+        var parent = parts.length ? SEP + parts.join(SEP) : ROOT_SEG;
+        var parentToken = '<' + parent + '>';
+        var parentExists = (parent === ROOT_SEG) || manifest.some(function (e) { return e && e.name === parentToken; });
+        if (!parentExists) return 'Error: parent dir not found';
+      }
+      manifest.push({ name: dirToken, size: 0, timestamp: _timestamp() });
+      var saveRes = _saveManifest(manifest);
+      if (saveRes === 'Error: Disk Full') { return 'Error: Disk Full'; }
+      //setCwdSync(target);
+      return "done";
+    } catch (e) {
+      return 'Error: ' + (e && e.message ? e.message : String(e));
+    }
+  };
+
+  global.localChDir = async function (name) {
+    try {
+      var cwd = getCwdSync();
+      
+      if (!name || String(name).trim() === '') { return cwd; }
+      
+      if (!name || String(name).trim() === '') { return cwd; }
+      var target = resolveDirPath(name, cwd);
+      if (!target) { return 'Error: invalid dir name'; }
+      var man = _loadManifest();
+      if (target !== ROOT_SEG && !manifestHasDir(man, target)) { return 'Error: ' + target + ' not found'; }
+      setCwdSync(target);
+      return target;
+    } catch (e) {
+      return 'Error: ' + (e && e.message ? e.message : String(e));
+    }
+  };
+
+  // --- patched global.localRmDir ---
+  global.localRmDir = async function (name) {
+    try {
+      if (typeof name !== 'string' || String(name).trim() === '') { return 'Error: invalid dir name'; }
+      var cwd = getCwdSync();
+      var target = resolveDirPath(name, cwd);
+      if (!target) return 'Error: invalid dir name';
+      // Normalize target (remove trailing separators beyond single root)
+      if (target.length > 1) {
+        while (target.length > 1 && target.slice(-SEP.length) === SEP) {
+          target = target.slice(0, -SEP.length);
+        }
+      }
+      if (target === ROOT_SEG) return 'Error: cannot remove root directory';
+      var manifest = _loadManifest() || [];
+      var dirToken = '<' + target + '>';
+      var dirExists = manifest.some(function (e) { return e && e.name === dirToken; });
+      if (!dirExists) return 'Error: dir not found';
+      // Check if directory is empty by looking for any entries that start with target path
+      var isDirEmpty = !manifest.some(function (e) {
+        if (!e || !e.name) return false;
+        var entryName = e.name;
+        // Directory entries: "<path/...>"
+        if (entryName.charAt(0) === '<' && entryName.charAt(entryName.length - 1) === '>') {
+          var subDirPath = entryName.substring(1, entryName.length - 1);
+          // strip trailing separators (shouldn't normally be present)
+          if (subDirPath.indexOf(target + SEP) === 0) return true;
+          return false;
+        }
+        // File entries: strip leading "_" and trailing "!" to compute their actual path
+        var filePath = entryName;
+        if (filePath.charAt(0) === '_') filePath = filePath.substring(1);
+        if (filePath.charAt(filePath.length - 1) === '!') filePath = filePath.substring(0, filePath.length - 1);
+        if (filePath.indexOf(target + SEP) === 0) return true;
+        return false;
+      });
+      if (!isDirEmpty) return 'Error: dir not empty';
+      // Remove the directory token from manifest
+      var dirIndex = manifest.findIndex(function (e) { return e && e.name === dirToken; });
+      if (dirIndex !== -1) { manifest.splice(dirIndex, 1); }
+      // Save the updated manifest
+      var saveRes = _saveManifest(manifest);
+      if (saveRes === 'Error: Disk Full') { return 'Error: Disk Full'; }
+  
+      // If we were in the removed directory (or inside it), change to root
+      if (cwd === target || cwd.indexOf(target + SEP) === 0) { setCwdSync(ROOT_SEG); }
+      return 'done';
+    } catch (e) {
+      return 'Error: ' + (e && e.message ? e.message : String(e));
+    }
+  };
+  
+  global.localSave = async function (file, text) {
+    var fname = _normName(file);
+    var append = false;
+    if (fname.charAt(0) === '>') { append = true; fname = fname.substring(1).trimStart(); }
+
+    var cls = _classify(fname);
+    if (cls !== 'normal') return 'Error: read only file';
+
+    var fbase = _baseName(fname);
+    var fv = _validateBase(fbase);
+    if (!fv.ok) return 'Error: ' + fv.reason;
+
+    var manifest = _loadManifest();
+    var found = _findEntry(manifest, fname);
+    if (found && _isProtected(found.entry.name)) return 'Error: read only file';
+
+    var canonical;
+    if (found) {
+      canonical = found.entry.name;
+    } else {
+      var base = (_isHidden(fname) ? '_' : '') + fbase + (_isProtected(fname) ? '!' : '');
+      canonical = _buildLocalCanonical(base);
+    }
+
+    var content = String(text == null ? '' : text);
+    if (append && found) {
+      var existing = _localLoad(canonical);
+      if (existing !== null) content = existing + content;
+    }
+
+    var res = _localSave(canonical, content);
+    if (res === 'Error: Disk Full') return 'Error: Disk Full';
+    if (res === false) return 'Error: write failed';
+
+    var size = _utf8len(content);
+    var ts = _timestamp();
+    if (found) {
+      found.entry.size = size;
+      found.entry.timestamp = ts;
+    } else {
+      manifest.push({ name: canonical, size: size, timestamp: ts });
+    }
+    var mres = _saveManifest(manifest);
+    if (mres === 'Error: Disk Full') return 'Error: Disk Full';
+    return true;
+  };
+
+  global.localDelete = async function (file) {
+    var fname = _normName(file);
+    if (_classify(fname) !== 'normal') return 'Error: read only file';
+    
+    var fbase = _baseName(fname);
+    var fv = _validateBase(fbase);
+    if (!fv.ok) return "Error: " + fv.reason;
+    var manifest = _loadManifest();
+    // Use flexible matching - find file regardless of _ or ! in user input
+    var found = _findEntryFlexible(manifest, fname);
+    if (!found) { return 'Error: file not found'; }
+    // Check if the actual stored entry is protected
+    if (_isProtected(found.entry.name)) return 'Error: read only file';
+    _localDelete(found.entry.name);
+    manifest.splice(found.index, 1);
+    var mres = _saveManifest(manifest);
+    if (mres === 'Error: Disk Full') return 'Error: Disk Full';
+    return "done";
+  };
+  
+  global.localExists = async function (file) {
+    var fname = _normName(file);
+    var cls = _classify(fname);
+    if (cls === 'dir.txt' || cls === 'dir.sys') return true;
+
+    var fbase = _baseName(fname);
+    var fv = _validateBase(fbase);
+    if (!fv.ok) return false;
+
+    return _findEntryFlexible(_loadManifest(), fname) !== null;  // ✅ CHANGED from _findEntry
+  };
+
+
+  global.localDir = async function (patternStr, switchesStr) {
+    var manifest = _loadManifest();
+    if (!manifest || !Array.isArray(manifest)) manifest = [];
+
+    // ── Parse pattern ───────────────────────────────────────────────────────
+    var patternRegex = null;
+    if (patternStr && typeof patternStr === 'string') {
+      var pat = _baseName(_normName(patternStr.trim()));
+      if (pat) patternRegex = _patternToRegex(pat);
+    }
+
+    // ── Parse switches ──────────────────────────────────────────────────────
+    var switches = {
+      hidden: false,      // -h: show hidden files
+      timestamps: false,  // -t: show timestamps
+      sortBy: 'name',     // -n, -e, -s: sort by name, extension, or size
+      showDirs: true      // always show directories
+    };
+
+    if (switchesStr && typeof switchesStr === 'string') {
+      var switchStr = switchesStr.toLowerCase().replace(/^-/, '');
+      if (switchStr.indexOf('h') !== -1) switches.hidden = true;
+      if (switchStr.indexOf('t') !== -1) switches.timestamps = true;
+      if (switchStr.indexOf('e') !== -1) switches.sortBy = 'extension';
+      if (switchStr.indexOf('s') !== -1) switches.sortBy = 'size';
+      if (switchStr.indexOf('n') !== -1) switches.sortBy = 'name';
+    }
+
+    // ── Separate directories and files ──────────────────────────────────────
+    var dirs = [];
+    var files = [];
+
+    for (var i = 0; i < manifest.length; i++) {
+      var e = manifest[i];
+      if (!e || !e.name) continue;
+      if (e.name === MANIFEST_KEY) continue;
+
+      // ── Filter by current working directory ─────────────────────────────
+      var isDir = (e.name.charAt(0) === '<' && e.name.charAt(e.name.length - 1) === '>');
+      var entryPath = isDir ? e.name.substring(1, e.name.length - 1) : e.name;
+      var lastSlash = entryPath.lastIndexOf('/');
+      var entryDir = lastSlash >= 0 ? entryPath.substring(0, lastSlash) : '';
+      if (entryDir === '') entryDir = ROOT_SEG;
+      if (entryDir !== _cwd) continue;
+
+      var isHidden = _isHidden(e.name);
+
+      if (isDir) {
+        dirs.push(e);
+      } else {
+        if (isHidden && !switches.hidden) continue;
+        if (patternRegex && !patternRegex.test(_baseName(e.name).toLowerCase())) continue;
+        files.push(e);
+      }
+    }
+
+    // ── Sort files ──────────────────────────────────────────────────────────
+    if (switches.sortBy === 'size') {
+      files.sort(function (a, b) { return a.size - b.size; });
+    } else if (switches.sortBy === 'extension') {
+      files.sort(function (a, b) {
+        var aExt = _getExtension(_baseName(a.name));
+        var bExt = _getExtension(_baseName(b.name));
+        if (aExt !== bExt) return aExt.localeCompare(bExt);
+        return _baseName(a.name).localeCompare(_baseName(b.name));
+      });
+    } else { // 'name'
+      files.sort(function (a, b) {
+        return _baseName(a.name).localeCompare(_baseName(b.name));
+      });
+    }
+
+    // ── Format output ───────────────────────────────────────────────────────
+    var lines = [];
+    var title="local:/"+_cwd;
+    title=title.substring(0, 28);
+    title=title.padEnd(28);
+    lines.push(" \x1B[7m "+title+" \x1B[27m");
+    // Directories first (always show, no sorting needed for now)
+    for (var i = 0; i < dirs.length; i++) {
+      var dirName = dirs[i].name.substring(1, dirs[i].name.length - 1);
+      var dirBaseName = dirName.substring(dirName.lastIndexOf('/') + 1);
+      var line = _formatDirLine("<"+dirBaseName+">", dirs[i].timestamp, switches);
+      lines.push(line);
+    }
+
+    // Files
+    for (var i = 0; i < files.length; i++) {
+      var line = _formatFileLine(files[i], switches);
+      lines.push(line);
+    }
+
+    return lines.length > 0 ? '\n' + lines.join('\n') + '\n' : 'empty\n';
+  };
+
+  function _getExtension(filename) {
+    var lastDot = filename.lastIndexOf('.');
+    if (lastDot === -1 || lastDot === 0) return '';
+    return filename.substring(lastDot + 1).toLowerCase();
+  }
+
+  function _formatTimestamp(tsStr) {
+    if (!tsStr || tsStr.length < 8) return '     '; // fallback
+
+    // Parse timestamp: yyyymmddhhmmss
+    var year = parseInt(tsStr.substring(0, 4), 10);
+    var month = parseInt(tsStr.substring(4, 6), 10);
+    var day = parseInt(tsStr.substring(6, 8), 10);
+    var hour = parseInt(tsStr.substring(8, 10), 10);
+    var min = parseInt(tsStr.substring(10, 12), 10);
+    // var sec = parseInt(tsStr.substring(12, 14), 10);
+
+    var fileDate = new Date(year, month - 1, day, hour, min, 0);
+    var now = new Date();
+    var diffMs = now.getTime() - fileDate.getTime();
+    var diffHours = diffMs / (1000 * 60 * 60);
+    var diffDays = diffHours / 24;
+    var diffYears = diffDays / 365.25;
+
+    if (diffYears >= 1) {
+      // Show year: "yyyy"
+      return String(year).padStart(5, ' ');
+    } else if (diffDays >= 1) {
+      // Show month/day: "mm/dd"
+      var mStr = String(month).padStart(2, '0');
+      var dStr = String(day).padStart(2, '0');
+      return ' ' + mStr + '/' + dStr;
+    } else {
+      // Show hour:minute: "hh:mm"
+      var hStr = String(hour).padStart(2, '0');
+      var minStr = String(min).padStart(2, '0');
+      return ' ' + hStr + ':' + minStr;
+    }
+  }
+
+  function _formatSizeCompact(bytes) {
+    bytes = parseInt(bytes, 10) || 0;
+    var tags = ['b', 'k', 'm', 'g', 't'];
+    var size = bytes;
+    var tagIdx = 0;
+    while (size >= 1024 && tagIdx < tags.length - 1) { size = size / 1024; tagIdx++; }
+    var formatted;
+    if (tagIdx === 0) { formatted = String(size) + tags[tagIdx]; } else { formatted = Math.round(size) + tags[tagIdx]; }
+    return formatted.padStart(4, ' ')+' '; 
+  }
+
+  function _formatDirLine(dirName, ts, switches) {
+    var sizeCol = '     '; // directories have no size column
+    var protectCol = '';  // no protection marker for dirs
+    var tsCol = switches.timestamps ? _formatTimestamp(ts) : '     ';
+    var filenameCol = dirName;
+    return _padColumns(sizeCol, protectCol, filenameCol, tsCol);
+  }
+
+  function _formatFileLine(entry, switches) {
+    var baseName = _baseName(entry.name);
+    var isHidden = _isHidden(entry.name);
+    var isProtected = _isProtected(entry.name);
+    // Size column (5 chars, right-justified)
+    var sizeCol = _formatSizeCompact(entry.size);
+    // Protect column (2 chars): space + (! if protected, else space)
+    var protectCol = (isProtected ? ' !' : '');
+    // Timestamp column (5 chars) if requested
+    var tsCol = switches.timestamps ? _formatTimestamp(entry.timestamp) : '     ';
+    // If hidden, prepend underscore; otherwise just the name
+    var displayName = isHidden ? ('_' + baseName) : baseName;
+    return _padColumns(sizeCol, protectCol, displayName, tsCol);
+  }
+
+  function _padColumns(sizeCol, protectCol, filename, tsCol) {
+    //var maxFileWidth = switches.timestamps ? 18 : '     ';
+    var maxFileWidth=19; 
+    if (tsCol === "     ") { tsCol=""; maxFileWidth=25; }         
+    var lines = [];
+
+    // First line: all columns
+    var firstPart = filename.substring(0, maxFileWidth)+protectCol;
+    var line1 = " "+ sizeCol + _padRight(firstPart, maxFileWidth) + tsCol ;
+    lines.push(line1);
+
+    // Additional lines if filename is longer (no size, protect, or timestamp columns)
+    var remaining = filename.substring(maxFileWidth);
+    while (remaining.length > 0) {
+      var part = remaining.substring(0, maxFileWidth);
+      var line = '      ' + _padRight(part, maxFileWidth) + '     '; // 7 spaces (5+2), then name, then 5 spaces for ts
+      lines.push(line);
+      remaining = remaining.substring(maxFileWidth);
+    }
+
+    return lines.join('\n');
+  }
+
+  function _padRight(str, width) {
+    str = String(str || '');
+    while (str.length < width) {
+      str = str + ' ';
+    }
+    return str.substring(0, width); // truncate if too long
+  }
+
+
+  global.localList = async function () {
+    var entries = _loadManifest();
+    var out = [];
+    for (var i = 0; i < entries.length; i++) {
+      if (!_isHidden(entries[i].name)) {
+        out.push(" "+_baseName(entries[i].name));
+      }
+    }
+    return "\n"+out.join('\n')+"\n";
+  };
+
+  global.localRename = async function (file, dest) {
+    var fname = _normName(file);
+    var dname = _normName(dest);
+
+    if (_classify(fname) !== 'normal') return 'Error: read only file';
+    if (_classify(dname) !== 'normal') return 'Error: read only file';
+
+    var fbase = _baseName(fname);
+    var fv = _validateBase(fbase);
+    if (!fv.ok) return "Error: " + fv.reason;
+    var dbase = _baseName(dname);
+    var dv = _validateBase(dbase);
+    if (!dv.ok) return 'Error: invalid destination: ' + dv.reason;
+
+    var manifest = _loadManifest();
+    var srcFound = _findEntryFlexible(manifest, fname);  // ✅ CHANGED from _findEntry
+    if (!srcFound) return 'Error: file not found';
+    if (_isProtected(srcFound.entry.name)) return 'Error: read only file';
+
+    // ✅ KEY FIX: For destination, check if base name already exists (ignoring flags)
+    // This allows "piano.js" -> "piano.js!" (same base name, different protection)
+    var destFound = _findEntryFlexible(manifest, dname);  // ✅ CHANGED from _findEntry
+    if (destFound && _baseName(destFound.entry.name).toLowerCase() === dbase.toLowerCase()) {
+      // Same base name: allow rename if it's changing protection/hidden status
+      // Destination is the same file, just with different flags
+      destFound = null; // treat as "not found" so we can rename
+    }
+    if (destFound) return 'Error: destination file already exists';
+
+    var content = _localLoad(srcFound.entry.name);
+    if (content === null) return 'Error: file not found';
+
+    // ✅ Build the new canonical name based on dest input (which may have ! or _)
+    var destCanonical = (_isHidden(dname) ? '_' : '') + dbase + (_isProtected(dname) ? '!' : '');
+    var res = _localSave(destCanonical, content);
+    if (res === 'Error: Disk Full') return 'Error: Disk Full';
+
+    _localDelete(srcFound.entry.name);
+    srcFound.entry.name = destCanonical;
+    srcFound.entry.timestamp = _timestamp();
+    var mres = _saveManifest(manifest);
+    if (mres === 'Error: Disk Full') return 'Error: Disk Full';
+    return "done";
+  };
+
+  function hasLocalStorage() {
+    try {
+      if (typeof localStorage === 'undefined' || localStorage === null) return false;
+      var _ = localStorage.length;
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function _calcLocalStorage() {
+    try {
+      var total = 0;
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (!k) continue;
+        var v = localStorage.getItem(k) || '';
+        total += (k.length + v.length) * 2;
+      }
+      return total;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  global.dosfdisk = async function () {
+    print("\n [-bwhite][black] local://                     [-black][white]\n\n");
+    try {
+      if (typeof navigator !== 'undefined' && navigator.storage && typeof navigator.storage.estimate === 'function') {
+        var est = await navigator.storage.estimate();
+        var used = (est && est.usage) ? est.usage : 0;
+        var quota = (est && est.quota) ? est.quota : 0;
+        var free = Math.max(0, quota - used);
+        print("  size: " + formatFileSize(quota) + "\n");
+        print("  used: " + formatFileSize(used) + "\n");
+        print("  free: " + formatFileSize(free) + "\n");
+      } else if (hasLocalStorage) {
+        var used = _calcLocalStorage();
+        print(" size: unknown\n");
+        print(" used: " + formatFileSize(used) + "\n");
+      } else {
+        print("\n This device has no\n localStorage available.\n\n");
+       return;
+      }
+    } catch (err) {
+      var used = _calcLocalStorage();
+      print(" size: unknown\n");
+      print(" used: " + formatFileSize(used) + "\n");
+    }
+    await dosInstall();
+    return "done";    
+  };
+
+  function getLoadProtocol() { try {  var p = (location && location.protocol) ? String(location.protocol) : ''; return p.replace(':', '') || 'unknown'; } catch (e) { return 'unknown'; }}
+  function isFileProtocol() { return getLoadProtocol() === 'file'; }
+  function isHttpProtocol() {var p = getLoadProtocol(); return p === 'http' || p === 'https'; }
+  function getBaseURL() { try { return new URL('.', location.href).href; } catch (e) { return location.href; }}
+ 
+  // Fetch a file from the server and return { text, serverTs } or null on failure.
+  // serverTs is in yyyymmddhhmmss format, sourced from the HTTP Last-Modified header.
+    
+  async function dosInstallFetch(file) {
+    try {
+      const url = new URL(file, location.href).href;
+      const resp = await fetch(url, { cache: 'no-store' });
+      if (!resp.ok) return null;
+      const text = await resp.text();
+      var lastMod = resp.headers.get('Last-Modified');
+      if (!lastMod) return null;
+      var serverTs = _tsFromDate(new Date(lastMod));
+      if (!serverTs || serverTs.length !== 14) return null;
+      return { text: text, serverTs: serverTs };
+    } catch (err) {
+      return null;
+    }
+  }
+
+  // Save a file to localStorage with a specific timestamp (used to preserve server timestamps).
+  async function _installFile(file, text, ts) {
+    var fname = _normName(file);
+    var fbase = _baseName(fname);
+    if (_hasWildcards(fbase)) return false;
+    var fv = _validateBase(fbase);
+    if (!fv.ok) return false;
+    var canonical = fbase;
+    var dev = global.DEVICE;
+    var res = await _save(dev, canonical, text);
+    if (res === 'Error: Disk Full' || res === false) return false;
+    var size = _utf8len(text);
+    var manifest = _loadManifest();
+    var found = _findEntryFlexible(manifest, fname);
+    if (found) {
+      found.entry.size = size;
+      found.entry.timestamp = ts;
+    } else {
+      manifest.push({ name: canonical, size: size, timestamp: ts });
+    }
+    var mres = _saveManifest(manifest);
+    if (mres === 'Error: Disk Full') return false;
+    return true;
+  }
+
+  window.dosInstall = async function() {
+ 	
+    if (!_readManifestRaw()) {
+      try {
+        localStorage.setItem(LOCAL_PREFIX + MANIFEST_KEY, MANIFEST_KEY + '|27|' + _timestamp() + "\n");
+        print("\nlocalStorage has been formatted\n\n");
+        return true;
+      } catch (e) {
+        print("Error: Disk Full\n\n");
+        return false;
+      }
+    }
+
+    if (!FILE==true) {
+      print("\nCannot install from file://\n");
+      print("Use DOS to copy .js files to\n");
+      print("localStorage.\n\n");
+      return false;
+    }
+
+    print("\nChecking system files:\n\n");
+
+    var fileData = [];
+    var filesToUpdate = [];
+    var manifest = _loadManifest();
+
+    for (var i = 0; i < JSfiles.length; i++) {
+      var result = await dosInstallFetch(JSfiles[i]);
+      if (!result || !result.serverTs) { print("  "+JSfiles[i]+" \x1b[91m» failed\x1b[0m\n"); continue; }
+      var localEntry = _findEntryFlexible(manifest, JSfiles[i]);
+      var localTs = localEntry ? localEntry.entry.timestamp : null;
+      var isNew = !localEntry;
+      var isUpToDate = localTs && result.serverTs === localTs;
+      fileData.push({
+        file: JSfiles[i],
+        text: result.text,
+        serverTs: result.serverTs,
+        isNew: isNew,
+        isUpToDate: isUpToDate
+      });
+
+      if (isUpToDate) {
+        print("  " + JSfiles[i]+" \x1b[97m» ok\x1b[0m\n");
+      } else {
+        print("  " + JSfiles[i]+" \x1b[92m» new\x1b[0m\n");
+        filesToUpdate.push(fileData[fileData.length - 1]);
+      }
+    }
+
+    // If all files are up-to-date, exit
+    if (filesToUpdate.length === 0) {
+      print("\n\nSystem files up-to-date.\n\n");
+      return true;
+    }
+
+    print("\n" + filesToUpdate.length + " file" + (filesToUpdate.length === 1 ? "" : "s") + " need updating.\n");
+    print("Update files now? "); CURMORE=0;
+    var answer = await inkey();
+    if (answer.toUpperCase() !== 'Y') { print("\n\nInput 'fdisk' to update\n\n"); return false; }
+    
+    print("\n\n");
+    var successCount = 0;
+    var failCount = 0;
+    for (var i = 0; i < filesToUpdate.length; i++) {
+      var fd = filesToUpdate[i];
+      try {
+        if (dosExists(fd.file)) { await dosDelete(fd.file); }
+        var ts = fd.serverTs || _timestamp();
+        var installed = await _installFile(fd.file, fd.text, ts);
+        if (installed) {
+          print("  " + fd.file + " \x1b[92m» updated\x1b[0m\n");
+          successCount++;
+        } else {
+          print("  " + fd.file + " \x1b[91m» failed\x1b[0m\n");
+          failCount++;
+        }
+      } catch (err) {
+        print("  " + fd.file + " \x1b[91m» failed\x1b[0m\n");
+        failCount++;
+      }
+    }
+
+    // Summary
+    print("\n");
+    if (successCount > 0) {
+      print(successCount + " file" + (successCount === 1 ? "" : "s") + " updated");
+      if (failCount > 0) { print(", " + failCount + " failed"); }
+      print(".\n\n");
+    } else if (failCount > 0) {
+      print("\n" + failCount + " file" + (failCount === 1 ? "" : "s") + " failed.\n\n");
+    }
+    return;
+  }
+
+  if (dosExists("dir.sys")) {} else {  
+    print("localStorage not formated,\n");
+    print("input 'fdisk' to install.\n\n");
+  }
+
+})(window);

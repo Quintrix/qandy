@@ -255,14 +255,16 @@ function keydown(keyCode, event) {
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(finalCmd).then(function() {
         print("Copied!\n");
-        dosExit();
+        setTimeout(function() { dosExit(); }, 1500);
+        return;
       }).catch(function() {
         print("\x1b[1;33m" + finalCmd + "\x1b[0m\n");
-        dosExit();
+        setTimeout(function() { dosExit(); }, 1500);
+        return;
       });
     } else {
       print("\x1b[1;37m" + finalCmd + "\x1b[0m\n");
-      dosExit();
+      setTimeout(function() { dosExit(); }, 1500);
       return;
     }
     return true;

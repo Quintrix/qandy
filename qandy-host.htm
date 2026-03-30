@@ -401,12 +401,14 @@ html { -webkit-text-size-adjust: 100%; }     /* keep text size stable across zoo
 var SOUND=true;       // enable/disable sound card
 
 // qandy.js
-var HOST = 1; if (HOST) { var LOG='host defined\n'; }
-var GUEST = 0; if (GUEST) { var LOG='guest defined\n'; }
+var HOST = 1; if (HOST) { var LOG='HOST=true\nGUEST=false\n'; }
+var GUEST = 0; if (GUEST) { var LOG='GUEST=true\nHOST=false\n'; }
 var FILE = null; // null = untested, true = works, false = blocked
 var RUN="";     // current script running starting with qandy.js 
 var RUNIN="";   // input mode set by running script, line or key
 var RUNOUT="";  // output display set by running script, gfx or txt
+
+var JSfiles=['ansi.js', 'ascii.js', 'charmap.js', 'keydown.js', 'mouse.js', 'piano.js'];
 
 var runInputMode="";      // type of input qandy sends run= (line, key, or none)
 var commandHistory = [];  // Array to store command history
@@ -730,34 +732,33 @@ if (GUEST) {
     entry.resolve(res);
   }, false);
  
- 
   // evalCode: always-evaluates user input inside an async IIFE so top-level await is valid.
   // Programs / REPL must use `await` for blocking calls (e.g., await print(...); await input(...);).
-  window.evalCode = async function(code) {
-    if (HOST) { print("Input \'user\' to execute code"); }
-    var src = String(code || '');
-    if (!src.trim()) return true;
-    // Wrap the user input in an async IIFE so top-level await is valid everywhere.
-    var wrapped = "(async function __qandy_repl_wrapper() {\n" + src + "\n})();";
-    try {
-      // Use indirect eval to run in global scope
-      var promise = (0, eval)(wrapped);
-      // Await the async IIFE result; print returned value if any
-      var result = await promise;
-      if (typeof result !== 'undefined') {
-        try { await print(String(result) + "\n\n"); } catch (e) { /* best-effort */ }
-      }
-      return true;
-    } catch (err) {
-      try { await print("Error: " + ((err && err.message) ? err.message : String(err)) + "\n\n"); } catch (e) {}
-      return false;
-    }
-  };
   window.qdosAckDOS = qdosAckDOS;
-  window.evalCode = evalCode;
   window._normalizeResult = _normalizeResult;
   window.qdosXmitDos = qdosXmitDos; 
 }
+
+window.evalCode = async function(code) {
+  //if (HOST) { print("Input \'user\' to execute code"); }
+  var src = String(code || '');
+  if (!src.trim()) return true;
+  // Wrap the user input in an async IIFE so top-level await is valid everywhere.
+  var wrapped = "(async function __qandy_repl_wrapper() {\n" + src + "\n})();";
+  try {
+    // Use indirect eval to run in global scope
+    var promise = (0, eval)(wrapped);
+    // Await the async IIFE result; print returned value if any
+    var result = await promise;
+    if (typeof result !== 'undefined') {
+      try { await print(String(result) + "\n\n"); } catch (e) { /* best-effort */ }
+    }
+    return true;
+  } catch (err) {
+    try { await print("Error: " + ((err && err.message) ? err.message : String(err)) + "\n\n"); } catch (e) {}
+    return false;
+  }
+};
 
 //
 // ──── Boot Loader for Hardware Drivers ──────────────────────────────────────────────
@@ -765,7 +766,6 @@ if (GUEST) {
 
 // Configuration array with script load order (unchanged)
 var SCRIPT_QUEUE = [
-  { src: 'qandy-sound.js', name: 'sound_js' },
   { src: 'qandy-video.js', name: 'video_js' },
   { src: 'qandy-keyboard.js', name: 'keyboard_js' },
   { src: 'qandy-command.js', name: 'command_js' },
@@ -776,7 +776,7 @@ var currentIndex = 0;
 var signalAdvance = null;
 
 window.qandySignalReady = function(scriptName) {
-  LOG+=scriptName+' initalized\n';
+  LOG+=scriptName+'()\n';
   if (typeof signalAdvance === 'function') { signalAdvance(); }
 };
   
@@ -938,14 +938,13 @@ async function loadNext() {
 //
 
 if (HOST) {
+  LOG+="Power On\n";
   var js=document.createElement('script');
   js.id="sound_js";
   js.src="qandy-sound.js";
-  js.onload = function() { sound_js(); }
   document.head.appendChild(js);
   powerOn();
   function powerOn() {
-    LOG+="Creating Power On Button\n";
     var target = document.getElementById('qandy') || document.getElementById('txt') || document.body;
     var rect = target.getBoundingClientRect();
 
@@ -1205,6 +1204,9 @@ async function hostMessageHandler(ev) {
               dosXmitQdos(_dosIframe, d.id, 'driver', false, 'driver not found: ' + d.file);
             }
             break;
+          }
+          case 'script': {
+            
           }
           case 'localList': {
             var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
@@ -1733,7 +1735,7 @@ async function startup() {
   if (HOST) { 
     var s=document.createElement('script');
     s.id='dos.js';
-    s.src='dos2.js';
+    s.src='qandy-dos.js';
     s.onload=function() { try { dosMount("local"); } catch (e) { print("Error: "+e+"\n"); }};
     document.head.appendChild(s);
     window.FILE = null; // null = untested, true = works, false = blocked
@@ -1746,10 +1748,22 @@ async function startup() {
         window.FILE = false;
       }
     }
+    LOG+="systemReady()\n";
     systemReady();
   }
   if (GUEST) {
     // guest startup
+    var content = await qdosXmitDos('driver', { file: "sound_js" });
+    if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
+    content = content.replace(/^\s*#!.*\r?\n/, '');
+    var evalError = null;
+    try {
+      (0, eval)(content);
+      sound_js();
+    } catch (e) {
+      console.log(e);
+    }
+    LOG+="systemReady()\n";
     systemReady();
   }
 

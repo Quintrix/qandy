@@ -47,7 +47,7 @@ function command_js() {
             if (!vm || !iframe) {
               try {
                 await createGuest({ zIndex: 100, iframeId: 'vm-iframe' });
-                print("Sandbox created.\n");
+                print("sandbox created.\n");
               } catch (e) {
                 print("Error: "+String(e)+"\n");
                 return;
@@ -162,14 +162,27 @@ function command_js() {
 
     if (c.endsWith('.js')) {
       if (HOST) {
-        print("Input \'user\' to execute scripts");
+        f=0; for (let i=0; i<JSfiles.length; i++) {
+          const JSfile=JSfiles[i];
+          if (c===JSfile) {
+          	f=1;
+            var js=document.createElement('script');
+            js.id=JSfile;
+            js.src=JSfile;
+            document.head.appendChild(js);
+          }
+        }
+        if (f<1) { print("Command not found.\n"); } 
         return;
       }
-      var res = await qdosScript(c);
-      if (res === true) {} else {
-        print(String(res) + "\n");
-      } 
-      return;
+      if (GUEST) {
+        // only execute scripts from localStorage
+        var res = await qdosScript(c);
+        if (res === true) {} else {
+          print(String(res) + "\n");
+        } 
+        return;
+      }
     }
 
     switch (c) {
@@ -238,14 +251,14 @@ function command_js() {
         }
         return;
       default:
-        if (GUEST) {
+        //if (GUEST) {
           evalCode(cmd);
           pokeCursorOn();
           LINE=""; CURP = 0;
           LINEX = CURX; LINEY = CURY;
           return;
-        }
-    }
+        //}
+    }  
   }
 
   function parseArgs(cmd) {
@@ -292,43 +305,33 @@ function command_js() {
     // sanitize BOM / shebang
     if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
     content = content.replace(/^\s*#!.*\r?\n/, '');
-    // Eval the script in global scope via indirect eval and capture errors
-    var evalError = null;
-    try {
-      (0, eval)(content + "\n\n//# sourceURL=" + nm);
-      // success
-      return true;
-    } catch (e) {
-      evalError = e;
-      // Attempt to extract line/column from stack or error properties
-      var line = null, column = null;
-      try {
-        var stack = e && e.stack ? String(e.stack) : '';
-        if (stack) {
-          var stackLines = stack.split('\n');
-          for (var i = 0; i < stackLines.length; i++) {
-            var sl = stackLines[i].trim();
-            var m = sl.match(/:(\d+):(\d+)\)?\s*$/);
-            if (m) { line = parseInt(m[1], 10); column = parseInt(m[2], 10); break; }
-            m = sl.match(/\((?:.*):(\d+):(\d+)\)/);
-            if (m) { line = parseInt(m[1], 10); column = parseInt(m[2], 10); break; }
-          }
-        }
-        if (!line) {
-          if (typeof e.lineNumber === 'number') line = e.lineNumber;
-          else if (typeof e.lineno === 'number') line = e.lineno;
-          if (typeof e.columnNumber === 'number') column = e.columnNumber;
-          else if (typeof e.colno === 'number') column = e.colno;
-        }
-      } catch (ex) {
-        /* ignore extraction errors */
-      }
-
-      var emsg = (e && e.message) ? e.message : String(e);
-      var loc = (line ? (nm + ':' + line + (column ? (':' + column) : '')) : nm);
-      return "Error: " + emsg + " at " + loc;
+    if (content.substring(0,6)==="Error:") { return content; }
+    return new Promise((resolve) => {
+        try {
+          const blob = new Blob([content], { type: 'application/javascript' });
+          const blobUrl = URL.createObjectURL(blob);
+          const script = document.createElement('script');
+          script.src = blobUrl;
+          script.onload = () => {
+            // Clean up the blob URL after loading
+            URL.revokeObjectURL(blobUrl);
+            resolve(true);
+          };
+          script.onerror = (e) => {
+            URL.revokeObjectURL(blobUrl);
+            resolve("Error: script load failed for " + nm);
+          };
+          // Add sourceURL comment for better debugging
+          const scriptWithSource = content + `\n\n//# sourceURL=${nm}`;
+          const blobWithSource = new Blob([scriptWithSource], { type: 'application/javascript' });
+          const blobUrlWithSource = URL.createObjectURL(blobWithSource);
+          script.src = blobUrlWithSource;
+          document.head.appendChild(script);
+        } catch (e) {
+          resolve("Error: " + ((e && e.message) ? e.message : String(e)));
     }
-  }
+  });
+}
 
   async function qdosDir(pattern, switches) {
     var validPattern = (typeof pattern === 'string') ? pattern.trim() : '';
@@ -584,7 +587,6 @@ function command_js() {
   window.qdosMkDir = window.qdosMkDir;
   window.qdosChDir = window.qdosChDir;
   window.qdosRmDir = window.qdosRmDir;
-
 
   window.command_js = command_js;
   window.command = command;
