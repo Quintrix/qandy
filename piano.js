@@ -255,17 +255,17 @@ function keydown(keyCode, event) {
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(finalCmd).then(function() {
         print("Copied!\n");
-        dosExit();
       }).catch(function() {
         print("\x1b[1;33m" + finalCmd + "\x1b[0m\n");
-        dosExit();
       });
+      dosExit();
+      return;
     } else {
       print("\x1b[1;37m" + finalCmd + "\x1b[0m\n");
       dosExit();
       return;
-    }
-    return true;
+   }
+   return true;
   }
 
   // SPACE (32): insert a rest with the current note length
