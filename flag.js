@@ -2,9 +2,9 @@ RUN="flag.js";
 
 init();
 async function init() {
-  print("Capture The Flag:\n\nEnter your player name:\n");
+  await print("Capture The Flag:\n\nEnter your player name:\n");
   var name = await input();
-  alert(name); 
+  await print("Hello "+name); 
 }
 
 function keydown(keyCode, event) {

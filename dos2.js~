@@ -1,3 +1,24 @@
+// I am writing a plan to upgrade dos.js which qandy-host.htm uses for disk operations. A sandbox iframe GUEST  machine is created and we have decided that the localStorage should be a part of the sandbox, where the GUEST can save/load/execute scripts and the HOST can save/load scripts but not execute them.
+
+// This creates a necessity of the Sysop to be able to get files from mounted devices to the localStorage for the GUEST to execute, and without the HOST executing the files itself (unless they are trusted system files part of the repo).
+
+// Proposed Devices:
+
+// www - read-only device, default for HOST with http:// 
+
+// local - device for localStorage, HOST cannot execute scripts on localStorage
+//        but both HOST and GUEST can load/save/rename/delete etc
+
+// file - read-only device for browsers that allow --file-access-from-files (chrome) 
+
+// harddrive - File Access API (chrome)
+
+// paste - device that lets guest copy/paste files to localStorage, manual installation
+
+// xmodem - device that lets guest upload/download files to localStorage, manual installation 
+
+
+
 var DOS = true;
 var DOS = true;
 var DEVICE = 'none';

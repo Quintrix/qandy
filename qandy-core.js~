@@ -3,9 +3,9 @@
 //
 
 function qandy_js() {
-  alert("core");
   RUN="qandy.js"; 
   window.button=function(b, event) {
+  	     alert("8");
     pokeCursorOff(); 
     var virtualclick=!!(event && event.source === 'virtual'); 
     if (event && typeof event.shiftKey !== 'undefined') shift = !!event.shiftKey;
