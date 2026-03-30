@@ -1698,22 +1698,19 @@ var DEVICE = 'none';
 
     print("\nChecking system files:\n\n");
 
-    var files = ['ansi.js', 'ascii.js', 'charmap.js', 'keydown.js',
-                 'mouse.js', 'piano.js', 'svga.js'];
-
     var fileData = [];
     var filesToUpdate = [];
     var manifest = _loadManifest();
 
     for (var i = 0; i < JSfiles.length; i++) {
-      var result = await dosInstallFetch(JSfiles[i]+".js");
-      if (!result || !result.serverTs) { print("  " + JSfiles[i]+".js" + " \x1b[91m» failed\x1b[0m\n"); continue; }
-      var localEntry = _findEntryFlexible(manifest, JSfiles[i]+".js");
+      var result = await dosInstallFetch(JSfiles[i]);
+      if (!result || !result.serverTs) { print("  "+JSfiles[i]+" \x1b[91m» failed\x1b[0m\n"); continue; }
+      var localEntry = _findEntryFlexible(manifest, JSfiles[i]);
       var localTs = localEntry ? localEntry.entry.timestamp : null;
       var isNew = !localEntry;
       var isUpToDate = localTs && result.serverTs === localTs;
       fileData.push({
-        file: JSfiles[i]+".js",
+        file: JSfiles[i],
         text: result.text,
         serverTs: result.serverTs,
         isNew: isNew,
@@ -1721,9 +1718,9 @@ var DEVICE = 'none';
       });
 
       if (isUpToDate) {
-        print("  " + JSfiles[i] + ".js \x1b[97m» ok\x1b[0m\n");
+        print("  " + JSfiles[i]+" \x1b[97m» ok\x1b[0m\n");
       } else {
-        print("  " + JSfiles[i] + ".js \x1b[92m» new\x1b[0m\n");
+        print("  " + JSfiles[i]+" \x1b[92m» new\x1b[0m\n");
         filesToUpdate.push(fileData[fileData.length - 1]);
       }
     }

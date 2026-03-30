@@ -254,14 +254,14 @@ function keydown(keyCode, event) {
     print("\n");
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(finalCmd).then(function() {
-        print("Copied! 257\n");
+        print("Copied!\n");
         dosExit();
       }).catch(function() {
-        print("\x1b[1;33m 260" + finalCmd + "\x1b[0m\n");
+        print("\x1b[1;33m" + finalCmd + "\x1b[0m\n");
         dosExit();
       });
     } else {
-      print("\x1b[1;37m 264 " + finalCmd + "\x1b[0m\n");
+      print("\x1b[1;37m" + finalCmd + "\x1b[0m\n");
       dosExit();
       return;
     }

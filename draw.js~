@@ -34,6 +34,8 @@ function drawMenu() {
 }
 
 function keydown(keyCode, event) {
+  event.preventDefault();
+  
   // Cursor movement: always available
   if (keyCode === 37) { // LEFT
     pokeCursorOff();

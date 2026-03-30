@@ -1,3 +1,24 @@
+
+//
+// ──── Qandy Disk Operating System ─────────────────────────────────────────────────────
+//
+
+/**
+ *   SECURITY MODEL:
+ * 
+ *   HOST (sysop):
+ *    - Can execute scripts from mounted drives (File Access API - user-granted)
+ *    - Cannot execute scripts from localStorage (virtual drive) 
+ *    - Trust boundary: User has explicitly consented via File Access API
+ *  
+ *   GUEST (user sandbox, iframe):
+ *    - Can ONLY execute scripts from localStorage
+ *    - Cannot access File Access API
+ *    - Cannot access mounted drives
+ *    - Fully isolated by iframe boundary
+ *    - Trust boundary: Only what HOST puts in localStorage
+ */
+
 var DOS = true;
 var DOS = true;
 var DEVICE = 'none';
