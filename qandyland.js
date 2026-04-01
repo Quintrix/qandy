@@ -38,9 +38,24 @@ var SESSION_COOKIE = 'qsession';
 var VALID_NAME_RE  = /^(?!\.)[A-Za-z0-9 \-_.()+=!]+$/;
 var DRIVES_FILE    = 'drives.json';          // Legacy persistence file
 var DRIVE_FILE_MARKER = '_qandy_drive';      // Marker present in all per-drive JSON files
+var SERVER_CONFIG_FILE = 'server-config.json'; // Server settings file within data directory
+
+// Return the platform-appropriate default data directory for storing drive files.
+function getDefaultDataDir() {
+  switch (process.platform) {
+    case 'win32':
+      return path.join(process.env.APPDATA || process.env.HOME || '.', 'qandy', 'drives');
+    case 'darwin':
+      return path.join(process.env.HOME || '.', 'Library', 'Application Support', 'qandy', 'drives');
+    default:
+      return path.join(process.env.HOME || '.', '.local', 'share', 'qandy', 'drives');
+  }
+}
+
+var DATA_DIR = getDefaultDataDir(); // Overridable via --data-dir CLI arg or the create wizard
 
 // ── Server discovery / registry ───────────────────────────────────────────────
-// Configurable via command-line: node qandyland.js [port] [--name "..."] [--registry "url"] [--maxPlayers N]
+// Configurable via command-line: node qandyland.js [port] [--name "..."] [--registry "url"] [--maxPlayers N] [--data-dir "path"]
 var SERVER_NAME    = 'Qandyland Server';
 var SERVER_VERSION = '1.0';
 var REGISTRY_URL   = 'https://qandy.vercel.app/api/servers';
@@ -51,13 +66,16 @@ var _heartbeatTimer = null;
 var _serverStartTime = Date.now(); // used for uptime reporting
 
 // Parse extended command-line arguments
+var _cliDataDir  = null;
+var _cliName     = null;
 (function () {
   var args = process.argv.slice(2);
   for (var i = 0; i < args.length; i++) {
-    if (args[i] === '--name'       && args[i + 1]) { SERVER_NAME  = args[++i]; }
+    if (args[i] === '--name'       && args[i + 1]) { SERVER_NAME  = args[++i]; _cliName    = SERVER_NAME; }
     if (args[i] === '--registry'   && args[i + 1]) { REGISTRY_URL = args[++i]; }
     if (args[i] === '--maxPlayers' && args[i + 1]) { MAX_PLAYERS  = parseInt(args[++i], 10) || 100; }
     if (args[i] === '--no-registry') { REGISTRY_URL = ''; }
+    if (args[i] === '--data-dir'   && args[i + 1]) { DATA_DIR = args[++i]; _cliDataDir = DATA_DIR; }
   }
 })();
 
@@ -184,14 +202,14 @@ function logRequest(req, method, drive, name, session, result) {
 //   dirs:     { dirName: { owner, created } },
 //   owner:    session_or_'console',
 //   created:  timestamp_string,
-//   persistent:         bool   – true saves to {name}.json on every change
-//   accessLevel:        string – 'sysop' | 'user' | 'public'
+//   persistent:         bool   – true saves to DATA_DIR/{name}.json on every change
+//   accessLevel:        string – 'sysop' | 'user'
 //   defaultPermissions: string – 4-char RNDW string applied to new files
 // }
 //
 // File manifest entry fields:
 //   owner       – script name from RUN= variable (organisational label, not security)
-//   permissions – 4-char string: R=Read, N=Name(list), D=Delete, W=Write (guest access)
+//   permissions – 4-char string: R=Read, N=reName, D=Delete, W=Write (guest access)
 //   session     – session token of the client that created/last-wrote the file
 //
 var drives = {};
@@ -218,7 +236,7 @@ function formatBytes(bytes) {
   return Math.round(bytes / (1024 * 1024)) + 'MB';
 }
 
-// Save a single persistent drive to {driveName}.json
+// Save a single persistent drive to DATA_DIR/{driveName}.json
 function saveDrive(driveName) {
   var drive = drives[driveName];
   if (!drive || !drive.persistent) return; // Memory-only drives are never persisted
@@ -228,14 +246,15 @@ function saveDrive(driveName) {
   data.version  = '2.0';
   data.created  = drive.created || new Date().toISOString();
   data.owner    = drive.owner   || 'server';
-  data.accessLevel        = drive.accessLevel        || 'public';
+  data.accessLevel        = drive.accessLevel        || 'user';
   data.defaultPermissions = drive.defaultPermissions || 'RNDW';
   data.persistent = true;
   data.manifest = drive.manifest || [];
   data.files    = drive.files    || {};
   data.dirs     = drive.dirs     || {};
   data.stats    = calculateDriveStats(drive);
-  fs.writeFile(driveName + '.json', JSON.stringify(data, null, 2), function (err) {
+  var filePath = path.join(DATA_DIR, driveName + '.json');
+  fs.writeFile(filePath, JSON.stringify(data, null, 2), function (err) {
     if (err) console.warn('Failed to save drive ' + driveName + ': ' + (err.message || String(err)));
   });
 }
@@ -251,14 +270,14 @@ function saveDrives() {
 function loadDrives() {
   var loaded = {};
 
-  // Load per-drive JSON files (new format: {driveName}.json with DRIVE_FILE_MARKER)
+  // Load per-drive JSON files from DATA_DIR (new format: {driveName}.json with DRIVE_FILE_MARKER)
   try {
-    var files = fs.readdirSync('.');
-    for (var i = 0; i < files.length; i++) {
-      var f = files[i];
+    var dataDirFiles = fs.readdirSync(DATA_DIR);
+    for (var i = 0; i < dataDirFiles.length; i++) {
+      var f = dataDirFiles[i];
       if (!f.endsWith('.json')) continue;
       try {
-        var content = fs.readFileSync(f, 'utf8');
+        var content = fs.readFileSync(path.join(DATA_DIR, f), 'utf8');
         var info = JSON.parse(content);
         if (!info[DRIVE_FILE_MARKER]) continue; // Skip non-drive JSON files
         var n = normName(info.id || f.slice(0, -5));
@@ -269,7 +288,7 @@ function loadDrives() {
           dirs:               info.dirs               || {},
           owner:              info.owner              || 'server',
           created:            info.created            || new Date().toISOString(),
-          accessLevel:        info.accessLevel        || 'public',
+          accessLevel:        info.accessLevel        || 'user',
           defaultPermissions: info.defaultPermissions || 'RNDW',
           persistent: true
         };
@@ -279,7 +298,41 @@ function loadDrives() {
       }
     }
   } catch (e) {
-    // Ignore directory read errors
+    // DATA_DIR not yet created or unreadable – fine, drives will be empty
+  }
+
+  // Backward compat: also scan current directory for per-drive JSON files
+  // (for drives created before the data directory feature was added)
+  if (path.resolve(DATA_DIR) !== path.resolve('.')) {
+    try {
+      var cwdFiles = fs.readdirSync('.');
+      for (var ci = 0; ci < cwdFiles.length; ci++) {
+        var cf = cwdFiles[ci];
+        if (!cf.endsWith('.json')) continue;
+        try {
+          var cContent = fs.readFileSync(cf, 'utf8');
+          var cInfo = JSON.parse(cContent);
+          if (!cInfo[DRIVE_FILE_MARKER]) continue;
+          var cn = normName(cInfo.id || cf.slice(0, -5));
+          if (!cn || !validateName(cn).ok || loaded[cn]) continue;
+          drives[cn] = {
+            manifest:           cInfo.manifest           || [],
+            files:              cInfo.files              || {},
+            dirs:               cInfo.dirs               || {},
+            owner:              cInfo.owner              || 'server',
+            created:            cInfo.created            || new Date().toISOString(),
+            accessLevel:        cInfo.accessLevel        || 'user',
+            defaultPermissions: cInfo.defaultPermissions || 'RNDW',
+            persistent: true
+          };
+          loaded[cn] = true;
+        } catch (e) {
+          // Skip files that are not valid drive JSON
+        }
+      }
+    } catch (e) {
+      // Ignore directory read errors
+    }
   }
 
   // Backward compat: also load from legacy drives.json (created by the old server)
@@ -297,13 +350,55 @@ function loadDrives() {
         dirs:               d.dirs     || {},
         owner:              d.owner    || 'server',
         created:            d.created  || new Date().toISOString(),
-        accessLevel:        'public',
+        accessLevel:        'user',
         defaultPermissions: 'RNDW',
         persistent: true
       };
     }
   } catch (e) {
     // No legacy drives.json – fine
+  }
+}
+
+// Ensure DATA_DIR exists; returns null on success or an error message string.
+function ensureDataDir(dir) {
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+  } catch (e) {
+    if (e.code !== 'EEXIST') {
+      return 'Cannot create directory ' + dir + ': ' + (e.message || String(e));
+    }
+  }
+  // Verify write access
+  try {
+    var testFile = path.join(dir, '.write-test-' + process.pid);
+    fs.writeFileSync(testFile, '');
+    fs.unlinkSync(testFile);
+  } catch (e) {
+    return 'Cannot write to directory ' + dir + ': ' + (e.message || String(e));
+  }
+  return null; // success
+}
+
+// Load server configuration from DATA_DIR/server-config.json.
+// Returns the parsed config object, or {} if the file does not exist.
+function loadServerConfig() {
+  try {
+    var raw = fs.readFileSync(path.join(DATA_DIR, SERVER_CONFIG_FILE), 'utf8');
+    return JSON.parse(raw);
+  } catch (e) {
+    return {};
+  }
+}
+
+// Save server configuration to DATA_DIR/server-config.json.
+function saveServerConfig(cfg) {
+  try {
+    var err = ensureDataDir(DATA_DIR);
+    if (err) { console.warn('Warning: ' + err); return; }
+    fs.writeFileSync(path.join(DATA_DIR, SERVER_CONFIG_FILE), JSON.stringify(cfg, null, 2));
+  } catch (e) {
+    console.warn('Failed to save server config: ' + (e.message || String(e)));
   }
 }
 
@@ -425,17 +520,17 @@ function isHidden(name) {
 //          'user'  – guest iframe (access governed by the file's 4-bit RNDW string)
 //
 // action:  'read'   – load file content
-//          'name'   – see filename in directory listings
+//          'name'   – see filename in directory listings / rename the file
 //          'delete' – remove file
 //          'write'  – create or overwrite file
 //
 // RNDW permission string (file.permissions):
 //   [0] R – guest can Read (load content)
-//   [1] N – guest can see Name in listings
+//   [1] N – guest can reName (rename/transform the file)
 //   [2] D – guest can Delete
 //   [3] W – guest can Write (create/overwrite)
 //   '-' in any position means the permission is denied for guests.
-//   Example: 'RNDW' = full guest access, 'RN--' = read-only, '----' = no guest access
+//   Example: 'RNDW' = full guest access, 'R---' = read-only, '----' = no guest access
 //
 // qandyland.js (the server owner) always bypasses this check entirely.
 function canGuestAccess(file, context, action) {
@@ -541,11 +636,10 @@ function serveStatic(req, res) {
 // ── Drive operations ──────────────────────────────────────────────────────────
 
 // Map a drive access level to its default file permission string.
-// sysop = no guest access, user = read-only for guests, public = full guest access.
+// sysop = no guest access, user = full access for host + guest.
 function defaultPermsForAccessLevel(accessLevel) {
   if (accessLevel === 'sysop') return '----';
-  if (accessLevel === 'user')  return 'RN--';
-  return 'RNDW'; // public (default)
+  return 'RNDW'; // user (default): full access for host and guest
 }
 
 // persistent    – true: saved to {name}.json on disk; false: memory-only, cleared on restart
@@ -559,7 +653,7 @@ function driveCreate(driveName, session, persistent, accessLevel, defaultPerms) 
 
   // Validate and normalise optional parameters
   var isPersistent = (persistent === true || persistent === 'true');
-  var access = (accessLevel === 'sysop' || accessLevel === 'user') ? accessLevel : 'public';
+  var access = (accessLevel === 'sysop') ? 'sysop' : 'user';
   var perms = defaultPermsForAccessLevel(access);
   if (typeof defaultPerms === 'string' && /^[R\-][N\-][D\-][W\-]$/.test(defaultPerms)) {
     perms = defaultPerms; // Caller may supply an explicit override
@@ -1046,12 +1140,12 @@ function _formatTimestampHuman(ts) {
          hr12 + ':' + String(mn).padStart(2, '0') + ':' + String(sc).padStart(2, '0') + ' ' + ampm;
 }
 
-// Format 4-bit permission string with labels: "RNDW" → "RNDW (Read/Name/Delete/Write)"
+// Format 4-bit permission string with labels: "RNDW" → "RNDW (Read/reName/Delete/Write)"
 function _formatPermissionsHuman(perms) {
   var p = (perms || '----');
   var parts = [];
   if (p[0] === 'R') parts.push('Read');
-  if (p[1] === 'N') parts.push('Name');
+  if (p[1] === 'N') parts.push('reName');
   if (p[2] === 'D') parts.push('Delete');
   if (p[3] === 'W') parts.push('Write');
   return p + (parts.length ? ' (' + parts.join('/') + ')' : ' (none)');
@@ -1206,6 +1300,19 @@ var server = http.createServer(function (req, res) {
 });
 
 // ── Load persisted drives before starting the server ─────────────────────────
+
+// Load server config: applies saved DATA_DIR and SERVER_NAME only when not
+// overridden on the command line. Then update lastStarted and save back.
+(function () {
+  var cfg = loadServerConfig();
+  if (cfg.dataDirectory && !_cliDataDir) DATA_DIR = cfg.dataDirectory;
+  if (cfg.serverName    && !_cliName)    SERVER_NAME = cfg.serverName;
+  // Ensure saved dataDirectory and serverName are written even on first run
+  if (!cfg.dataDirectory) cfg.dataDirectory = DATA_DIR;
+  if (!cfg.serverName)    cfg.serverName    = SERVER_NAME;
+  cfg.lastStarted = new Date().toISOString();
+  saveServerConfig(cfg);
+})();
 
 loadDrives();
 
@@ -1382,10 +1489,103 @@ if (process.stdin.isTTY) {
     process.stdout.write(msg);
   }
 
-  // Start the interactive drive-creation wizard
-  function _startCreateWizard() {
-    _createWizard = { step: 'server_name' };
-    _wizardPrompt('\nServer Name [' + (SERVER_NAME || 'Qandyland') + ']: ');
+  // Parse a command line into tokens, respecting double-quoted strings.
+  // e.g. 'create "/my/dir" "My Server"' → ['create', '/my/dir', 'My Server']
+  function parseQuotedArgs(str) {
+    var tokens = [];
+    var i = 0;
+    var start;
+    while (i < str.length) {
+      while (i < str.length && str[i] === ' ') i++;
+      if (i >= str.length) break;
+      if (str[i] === '"') {
+        i++;
+        start = i;
+        while (i < str.length && str[i] !== '"') i++;
+        tokens.push(str.slice(start, i));
+        if (i < str.length) i++;
+      } else {
+        start = i;
+        while (i < str.length && str[i] !== ' ') i++;
+        tokens.push(str.slice(start, i));
+      }
+    }
+    return tokens;
+  }
+
+  // Start the interactive drive-creation wizard.
+  // preArgs: optional array of pre-supplied positional arguments matching question order:
+  //   [0] data directory, [1] server name, [2] drive name, [3] access level, [4] persistence
+  function _startCreateWizard(preArgs) {
+    _createWizard = { step: 'data_dir', args: preArgs || [] };
+    process.stdout.write('\n');
+    // Auto-advance through any pre-supplied args
+    _wizardAutoAdvance();
+  }
+
+  // If the current wizard step has a pre-supplied arg, consume it; otherwise prompt.
+  function _wizardAutoAdvance() {
+    var w = _createWizard;
+    if (!w) return;
+    var argIdx = { data_dir: 0, server_name: 1, drive_name: 2, access_level: 3, persistent: 4 };
+    var idx = argIdx[w.step];
+    if (idx !== undefined && idx < w.args.length) {
+      // Echo the pre-supplied value and process it as if the user typed it
+      var val = w.args[idx];
+      _wizardEchoStep(val);
+      _wizardStep(val);
+    } else {
+      _wizardShowPrompt();
+    }
+  }
+
+  // Print the prompt for the current wizard step.
+  function _wizardShowPrompt() {
+    var w = _createWizard;
+    if (!w) return;
+    switch (w.step) {
+      case 'data_dir':
+        _wizardPrompt('Data directory [' + DATA_DIR + ']: ');
+        break;
+      case 'server_name':
+        _wizardPrompt('Server Name [' + (SERVER_NAME || 'Qandyland') + ']: ');
+        break;
+      case 'drive_name':
+        _wizardPrompt('Input name of drive to create [' + w.defaultDrive + ']: ');
+        break;
+      case 'access_level':
+        process.stdout.write('Who can access this drive:\n');
+        process.stdout.write('  [S] Sysop only (host machine)\n');
+        process.stdout.write('  [U] User access (host + guest)\n');
+        _wizardPrompt('Default [U]: ');
+        break;
+      case 'persistent':
+        _wizardPrompt('[P]ersistent or [T]emporary data? [T]: ');
+        break;
+    }
+  }
+
+  // Echo a pre-supplied argument as if the user typed and submitted it.
+  function _wizardEchoStep(val) {
+    var w = _createWizard;
+    if (!w) return;
+    switch (w.step) {
+      case 'data_dir':
+        process.stdout.write('Data directory: ' + val + '\n');
+        break;
+      case 'server_name':
+        process.stdout.write('Server Name: ' + val + '\n');
+        break;
+      case 'drive_name':
+        process.stdout.write('Drive name: ' + val + '\n');
+        break;
+      case 'access_level':
+        process.stdout.write('Access level: ' + val + '\n');
+        break;
+      case 'persistent':
+        process.stdout.write('Persistence: ' + val + '\n');
+        break;
+    }
   }
 
   // Process one line of input while the wizard is active
@@ -1394,57 +1594,80 @@ if (process.stdin.isTTY) {
     var trimmed = line.trim();
 
     switch (w.step) {
+      case 'data_dir': {
+        var newDir = trimmed || DATA_DIR;
+        var dirErr = ensureDataDir(newDir);
+        if (dirErr) {
+          process.stdout.write('\u2717 Error: ' + dirErr + '\n');
+          _wizardShowPrompt(); // Re-prompt same step
+          return;
+        }
+        if (trimmed && trimmed !== DATA_DIR) {
+          DATA_DIR = newDir;
+          process.stdout.write('\u2713 Created directory: ' + DATA_DIR + '\n');
+        }
+        // Reload server config from new DATA_DIR
+        var cfg = loadServerConfig();
+        if (cfg.serverName && cfg.serverName !== SERVER_NAME) {
+          SERVER_NAME = cfg.serverName;
+        }
+        w.step = 'server_name';
+        _wizardAutoAdvance();
+        break;
+      }
+
       case 'server_name':
-        // Update the server's display name used in registry heartbeats and the startup banner.
-        // Press ENTER to keep the current name (shown as the default in brackets).
+        // Update the server's display name. Press ENTER to keep the current name.
         if (trimmed) SERVER_NAME = trimmed;
         var driveNames = Object.keys(drives);
         if (driveNames.length === 0) {
-          process.stdout.write('\nNo JSON drives found.\n');
+          process.stdout.write('\nNo drives found in ' + DATA_DIR + '\n');
         } else {
           process.stdout.write('\nExisting drives: ' + driveNames.join(', ') + '\n');
         }
         var defaultDrive = driveNames.length === 0 ? 'ctf-game' : 'new-drive';
         w.defaultDrive = defaultDrive;
         w.step = 'drive_name';
-        _wizardPrompt('\nInput name of drive to create [' + defaultDrive + ']: ');
+        _wizardAutoAdvance();
         break;
 
       case 'drive_name':
         w.driveName = trimmed || w.defaultDrive;
-        w.step = 'persistent';
-        _wizardPrompt('\n[P]ersistent or [T]emporary data? [T]: ');
-        break;
-
-      case 'persistent':
-        w.persistent = (trimmed.toLowerCase() === 'p');
         w.step = 'access_level';
-        process.stdout.write('\nDrive access level:\n');
-        process.stdout.write('  [S] Sysop access only\n');
-        process.stdout.write('  [U] User/Player access\n');
-        process.stdout.write('  [P] Public access\n');
-        _wizardPrompt('Default [P]: ');
+        _wizardAutoAdvance();
         break;
 
       case 'access_level': {
-        var letter = trimmed.toLowerCase() || 'p';
-        var accessLevel;
-        if (letter === 's')      accessLevel = 'sysop';
-        else if (letter === 'u') accessLevel = 'user';
-        else                     accessLevel = 'public';
-        var cr = driveCreate(w.driveName, 'console', w.persistent, accessLevel);
+        var letter = trimmed ? trimmed.toLowerCase()[0] : 'u';
+        var accessLevel = (letter === 's') ? 'sysop' : 'user';
+        w.accessLevel = accessLevel;
+        w.step = 'persistent';
+        _wizardAutoAdvance();
+        break;
+      }
+
+      case 'persistent': {
+        var persInput = trimmed.toLowerCase();
+        // 'p' or 'persistent' → persistent; anything else (t, temporary, Enter) → temporary
+        w.persistent = (persInput === 'p' || persInput === 'persistent');
+        var cr = driveCreate(w.driveName, 'console', w.persistent, w.accessLevel);
         if (cr.success) {
           var typeStr   = w.persistent ? 'persistent' : 'temporary (memory)';
-          var accessStr;
-          if (accessLevel === 'sysop')     accessStr = 'Sysop access only';
-          else if (accessLevel === 'user') accessStr = 'User/Player access';
-          else                             accessStr = 'Public access';
-          process.stdout.write('\nCreated ' + typeStr + ' drive \'' + w.driveName + '\' with ' + accessStr + '.\n');
+          var accessStr = (w.accessLevel === 'sysop') ? 'Sysop only' : 'User access';
+          process.stdout.write('\n\u2713 Created ' + typeStr + ' drive \'' + w.driveName + '\' with ' + accessStr + '.\n');
           if (w.persistent) {
-            process.stdout.write('Drive file: ' + w.driveName + '.json\n');
+            process.stdout.write('\u2713 Drive file: ' + path.join(DATA_DIR, w.driveName + '.json') + '\n');
           }
+          // Persist the server config (server name + data directory)
+          var existingCfg = loadServerConfig();
+          saveServerConfig({
+            serverName:    SERVER_NAME,
+            dataDirectory: DATA_DIR,
+            created:       existingCfg.created || new Date().toISOString(),
+            lastStarted:   new Date().toISOString()
+          });
         } else {
-          process.stdout.write('\nError: ' + cr.error + '\n');
+          process.stdout.write('\n\u2717 Error: ' + cr.error + '\n');
         }
         _createWizard = null;
         process.stdout.write('\n> ');
@@ -1467,13 +1690,13 @@ if (process.stdin.isTTY) {
 
       var trimmed = line.trim();
       if (!trimmed) return;
-      var parts = trimmed.split(/\s+/);
-      var cmd   = parts[0].toLowerCase();
-      var arg   = parts.slice(1).join(' ');
+      var allTokens = parseQuotedArgs(trimmed);
+      var cmd   = (allTokens[0] || '').toLowerCase();
+      var arg   = allTokens.slice(1).join(' ');
 
       switch (cmd) {
         case 'create':
-          _startCreateWizard();
+          _startCreateWizard(allTokens.slice(1));
           break;
 
         case 'list': {
@@ -1486,7 +1709,7 @@ if (process.stdin.isTTY) {
               var d = drives[n];
               var stats = calculateDriveStats(d);
               var typeLabel  = d.persistent ? 'persistent' : 'memory';
-              var accessLabel = d.accessLevel || 'public';
+              var accessLabel = d.accessLevel === 'sysop' ? 'sysop' : 'user';
               process.stdout.write('  ' + n + '  [' + typeLabel + ', ' + accessLabel + ']' +
                 '  ' + stats.fileCount + ' file(s), ' + formatBytes(stats.totalSize) + '\n');
             });
@@ -1544,7 +1767,8 @@ if (process.stdin.isTTY) {
               var wasPersistent = drives[dn].persistent;
               delete drives[dn];
               if (wasPersistent) {
-                // Remove the per-drive file
+                // Remove the per-drive file from DATA_DIR (also try cwd for backward compat)
+                try { fs.unlinkSync(path.join(DATA_DIR, dn + '.json')); } catch (e) { /* ignore */ }
                 try { fs.unlinkSync(dn + '.json'); } catch (e) { /* ignore */ }
               }
               process.stdout.write('Drive "' + dn + '" deleted.\n');
@@ -1578,7 +1802,9 @@ if (process.stdin.isTTY) {
         case 'help':
           process.stdout.write(
             'Server console commands:\n' +
-            '  create              - Create a new drive (interactive wizard)\n' +
+            '  create [data-dir] [server-name] [drive-name] [S|U] [P|T]\n' +
+            '                      - Create a new drive (interactive wizard)\n' +
+            '                        Arguments match question order; omit any to be prompted.\n' +
             '  list                - List all drives with type and access level\n' +
             '  delete <name>       - Delete a drive (no drive mounted) or a file (drive mounted)\n' +
             '  perms <drive> <file> [RNDW]  - View or set file permissions\n' +
@@ -1593,9 +1819,9 @@ if (process.stdin.isTTY) {
             '  exam <name>         - Examine file metadata in detail\n' +
             '  help                - Show this help\n' +
             '\nPermission string format: RNDW\n' +
-            '  R = guest can Read   N = guest sees Name in listings\n' +
+            '  R = guest can Read   N = guest can reName (rename/transform)\n' +
             '  D = guest can Delete W = guest can Write\n' +
-            '  Use - to deny:  RN-- = read-only   ---- = sysop only   RNDW = full access\n'
+            '  Use - to deny:  R--- = read-only   ---- = sysop only   RNDW = full access\n'
           );
           break;
 
