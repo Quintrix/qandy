@@ -863,9 +863,8 @@ function handleQandyland(req, res) {
     var result;
     switch (method) {
       case 'create':
-        result = driveCreate(name || drive, session);
-        logRequest(req, method, name || drive, '', session, result);
-        return respond(res, result);
+        logRequest(req, method, name || drive, '', session, { success: false, error: 'restricted' });
+        return respond(res, { success: false, error: 'Drive creation restricted to server administrator. Use the server console.' });
 
       case 'mount':
         result = driveMount(name || drive, session);
@@ -978,7 +977,74 @@ var server = http.createServer(function (req, res) {
 
 loadDrives();
 
+// ── Server console (stdin) command processing ─────────────────────────────────
+
+if (process.stdin.isTTY) {
+  process.stdin.setEncoding('utf8');
+
+  var _stdinBuf = '';
+  process.stdin.on('data', function (chunk) {
+    _stdinBuf += chunk;
+    var lines = _stdinBuf.split('\n');
+    _stdinBuf = lines.pop();
+    lines.forEach(function (line) {
+      var trimmed = line.trim();
+      if (!trimmed) return;
+      var parts = trimmed.split(/\s+/);
+      var cmd   = parts[0].toLowerCase();
+      var arg   = parts.slice(1).join(' ');
+
+      switch (cmd) {
+        case 'create':
+          if (!arg) { process.stdout.write('Usage: create <name>\n'); break; }
+          var cr = driveCreate(arg, 'console');
+          process.stdout.write(cr.success ? 'Drive "' + arg + '" created.\n' : 'Error: ' + cr.error + '\n');
+          break;
+
+        case 'list':
+          var names = Object.keys(drives);
+          if (names.length === 0) {
+            process.stdout.write('No drives.\n');
+          } else {
+            process.stdout.write('Drives: ' + names.join(', ') + '\n');
+          }
+          break;
+
+        case 'delete':
+          if (!arg) { process.stdout.write('Usage: delete <name>\n'); break; }
+          var dn = normName(arg);
+          if (!drives[dn]) {
+            process.stdout.write('Error: drive "' + dn + '" not found.\n');
+          } else {
+            process.stdout.write('Warning: All data on drive "' + dn + '" will be permanently lost.\n');
+            delete drives[dn];
+            saveDrives();
+            process.stdout.write('Drive "' + dn + '" deleted.\n');
+          }
+          break;
+
+        case 'help':
+          process.stdout.write(
+            'Server console commands:\n' +
+            '  create <name>  - Create a new drive\n' +
+            '  list           - List all drives\n' +
+            '  delete <name>  - Delete a drive\n' +
+            '  help           - Show this help\n'
+          );
+          break;
+
+        default:
+          process.stdout.write('Unknown command "' + cmd + '". Type "help" for commands.\n');
+      }
+    });
+  });
+}
+
+
 server.listen(PORT, function () {
+  if (process.stdin.isTTY) {
+    process.stdout.write('Server console ready. Type "help" for commands.\n');
+  }
   if (REGISTRY_URL) {
     getPublicIp(function (err, ip) {
       if (err || !ip) {
