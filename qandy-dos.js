@@ -1816,7 +1816,13 @@ async function _serverRequest(method, params, timeoutMs) {
     method: method,
     drive: _serverDrive,
     cwd: getServerCwd(),
-    timestamp: _timestamp()
+    timestamp: _timestamp(),
+    // Context: 'sysop' for the host machine, 'user' for the guest iframe.
+    // qandy-host.htm sets HOST=1/GUEST=0 for the host and HOST=0/GUEST=1 for the guest.
+    context: (typeof HOST !== 'undefined' && HOST) ? 'sysop' : 'user',
+    // Owner label: the name of the currently running script (RUN= variable).
+    // This is an organisational label for the file, not a security control.
+    owner: (typeof RUN !== 'undefined' && RUN) ? String(RUN) : ''
   };
   
   // Merge params into payload
