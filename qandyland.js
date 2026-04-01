@@ -1,15 +1,14 @@
 //
 // ──── Qandyland Server ────────────────────────────────────────────────────────
 //
-// Node.js HTTP server for shared, in-memory file storage.
-// Stores data in JSON "drives" (like virtual disks) that mirror the manifest
-// format used by qandy-dos.js localStorage functions.
+// Node.js HTTP server for shared file storage on persistent JSON "drives"
+// (like virtual disks) that mirror the manifest format used by qandy-dos.js.
 //
 // Usage: node qandyland.js [port]
 // Default port: 8080
 //
 // Security: Session-based ownership via HTTP-only cookies.
-//           Data is in-memory only – not persisted to disk.
+// Persistence: Drive structure saved to drives.json on every change.
 //
 // Request format (POST /qandyland.js, Content-Type: application/json):
 //   { "method": "create|mount|mkdir|chdir|rmdir|save|load|delete|rename|exists|dir|list",
@@ -35,6 +34,7 @@ var MAX_FILE_BYTES = 1024 * 1024;   // 1 MB per file
 var MAX_DRIVE_FILES = 1000;
 var SESSION_COOKIE = 'qsession';
 var VALID_NAME_RE  = /^(?!\.)[A-Za-z0-9 \-_.()+=!]+$/;
+var DRIVES_FILE    = 'drives.json';
 
 // ── Server discovery / registry ───────────────────────────────────────────────
 // Configurable via command-line: node qandyland.js [port] [--name "..."] [--registry "url"] [--maxPlayers N]
@@ -161,16 +161,16 @@ function startHeartbeat() {
 
 // ── Request logging ───────────────────────────────────────────────────────────
 
-function logRequest(req, method, drive, name, result) {
-  var ts  = new Date().toISOString().slice(11, 19);
-  var ip  = req.headers['x-forwarded-for'] || (req.socket && req.socket.remoteAddress) || 'unknown';
-  var ok  = result && result.success;
-  console.log('[' + ts + '] ' + ip + ' - ' + method);
-  if (drive) console.log('  Drive:    ' + drive);
-  if (name)  console.log('  File:     ' + name);
-  console.log('  Result:   ' + (ok ? 'SUCCESS' : 'FAILED'));
-  if (!ok && result && result.error) console.log('  Error:    ' + result.error);
-  console.log('  Drives:   [' + Object.keys(drives).join(', ') + ']');
+function logRequest(req, method, drive, name, session, result) {
+  var ts     = new Date().toISOString().slice(11, 19);
+  var ip     = (req.headers['x-forwarded-for'] || (req.socket && req.socket.remoteAddress) || 'unknown')
+    .replace('::ffff:', '').replace('::1', 'local').slice(0, 15);
+  var action = (method  || '').slice(0, 8).padEnd(9);
+  var drv    = (drive   || '-').slice(0, 8).padEnd(8);
+  var file   = (name    || '-').slice(0, 12).padEnd(12);
+  var sess   = (session || '').slice(0, 8).padEnd(8);
+  var status = (result && result.success) ? 'SUCCESS' : 'FAILED';
+  console.log('[' + ts + '] ' + ip.padEnd(15) + ' ' + action + ' ' + drv + ' ' + file + ' ' + sess + ' ' + status);
 }
 
 // ── In-memory storage ─────────────────────────────────────────────────────────
@@ -183,6 +183,134 @@ function logRequest(req, method, drive, name, result) {
 // }
 //
 var drives = {};
+
+// ── Drive persistence ─────────────────────────────────────────────────────────
+
+function calculateDriveStats(drive) {
+  var fileCount = 0;
+  var totalSize = 0;
+  var files = drive.files || {};
+  var keys = Object.keys(files);
+  for (var i = 0; i < keys.length; i++) {
+    if (keys[i] === MANIFEST_KEY) continue;
+    fileCount++;
+    totalSize += utf8len(files[keys[i]]);
+  }
+  return { fileCount: fileCount, totalSize: totalSize };
+}
+
+function formatBytes(bytes) {
+  if (bytes === 0) return '0B';
+  if (bytes < 1024) return bytes + 'B';
+  if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + 'KB';
+  return Math.round(bytes / (1024 * 1024)) + 'MB';
+}
+
+function saveDrives() {
+  var driveData = {
+    drives: {},
+    metadata: {
+      version: '1.0',
+      lastModified: new Date().toISOString()
+    }
+  };
+  var names = Object.keys(drives);
+  for (var i = 0; i < names.length; i++) {
+    var n = names[i];
+    var d = drives[n];
+    driveData.drives[n] = {
+      id:       n,
+      created:  d.created || new Date().toISOString(),
+      owner:    d.owner   || 'server',
+      manifest: d.manifest || [],
+      files:    d.files    || {},
+      dirs:     d.dirs     || {},
+      stats:    calculateDriveStats(d)
+    };
+  }
+  fs.writeFile(DRIVES_FILE, JSON.stringify(driveData, null, 2), function (err) {
+    if (err) console.warn('Failed to save ' + DRIVES_FILE + ':', err.message || String(err));
+  });
+}
+
+function loadDrives() {
+  try {
+    var data = fs.readFileSync(DRIVES_FILE, 'utf8');
+    var driveData = JSON.parse(data);
+    var names = Object.keys(driveData.drives || {});
+    for (var i = 0; i < names.length; i++) {
+      var n    = names[i];
+      var info = driveData.drives[n];
+      drives[n] = {
+        manifest: info.manifest || [],
+        files:    info.files    || {},
+        dirs:     info.dirs     || {},
+        owner:    info.owner    || 'server',
+        created:  info.created  || new Date().toISOString()
+      };
+    }
+    return driveData.drives;
+  } catch (e) {
+    return {};
+  }
+}
+
+// ── Console display ───────────────────────────────────────────────────────────
+
+var BOX_WIDTH = 62; // inner width between ║ characters
+
+function _boxLine(text) {
+  // Pad or truncate text to exactly BOX_WIDTH chars, wrap in ║
+  var s = (text == null ? '' : String(text));
+  if (s.length > BOX_WIDTH) s = s.slice(0, BOX_WIDTH);
+  return '║' + s + ' '.repeat(BOX_WIDTH - s.length) + '║';
+}
+
+function displayStartupBanner(publicIP, registryStatus, serverId) {
+  var line = '═'.repeat(BOX_WIDTH);
+  console.log('╔' + line + '╗');
+  console.log(_boxLine('                    QANDYLAND SERVER'));
+  console.log('╠' + line + '╣');
+
+  var portStr  = 'Port: ' + String(PORT).padEnd(25);
+  var ipStr    = 'Public IP: ' + (publicIP || '(unknown)').padEnd(15);
+  console.log(_boxLine(' ' + portStr + ' ' + ipStr));
+
+  var regStr  = 'Registry: ' + registryStatus.padEnd(21);
+  var idStr   = 'Server ID: ' + (serverId || '(none)').slice(0, 15);
+  console.log(_boxLine(' ' + regStr + ' ' + idStr));
+
+  console.log(_boxLine(''));
+  console.log(_boxLine(' Available Drives:'));
+
+  var driveNames = Object.keys(drives);
+  if (driveNames.length === 0) {
+    console.log(_boxLine('   (no drives created yet)'));
+  } else {
+    for (var i = 0; i < driveNames.length; i++) {
+      var n     = driveNames[i];
+      var stats = calculateDriveStats(drives[n]);
+      var created = '';
+      try {
+        var d = new Date(drives[n].created);
+        created = isNaN(d.getTime()) ? '(invalid date)' : d.toISOString().split('T')[0];
+      } catch (e) {
+        created = '(invalid date)';
+      }
+      var entry = '   \u2022 ' + n.padEnd(10) +
+        '(' + stats.fileCount + ' file' + (stats.fileCount !== 1 ? 's' : '') +
+        ', ' + formatBytes(stats.totalSize) + ')' +
+        (created ? ' - Created ' + created : '');
+      console.log(_boxLine(entry));
+    }
+  }
+
+  console.log(_boxLine(''));
+  console.log(_boxLine(' Ready for connections...'));
+  console.log('╚' + line + '╝');
+  console.log('');
+  console.log('[TIME    ] CLIENT          ACTION    DRIVE    FILE         SESSION  RESULT');
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -346,6 +474,7 @@ function driveCreate(driveName, session) {
   // Create the root manifest entry
   _saveManifest(name, []);
 
+  saveDrives();
   return { success: true, result: 'drive created' };
 }
 
@@ -427,6 +556,7 @@ function fileSave(driveName, cwd, name, content, session) {
   manifest.push({ name: fname, size: size, timestamp: ts, owner: session });
   _saveManifest(driveName, manifest);
 
+  saveDrives();
   return { success: true, result: true };
 }
 
@@ -473,6 +603,7 @@ function fileDelete(driveName, cwd, name, session) {
   });
   _saveManifest(driveName, manifest);
 
+  saveDrives();
   return { success: true, result: 'deleted' };
 }
 
@@ -513,6 +644,7 @@ function fileRename(driveName, cwd, name, dest, session) {
   manifest.push({ name: dname, size: existing.size, timestamp: ts, owner: existing.owner || session });
   _saveManifest(driveName, manifest);
 
+  saveDrives();
   return { success: true, result: 'renamed' };
 }
 
@@ -546,6 +678,7 @@ function dirMake(driveName, cwd, name, session) {
   if (drive.dirs[canonical]) return { success: false, error: 'directory already exists' };
 
   drive.dirs[canonical] = { owner: session, created: timestamp() };
+  saveDrives();
   return { success: true, result: 'done' };
 }
 
@@ -601,6 +734,7 @@ function dirRemove(driveName, cwd, name, session) {
   if (hasChildren) return { success: false, error: 'directory not empty' };
 
   delete drive.dirs[canonical];
+  saveDrives();
   return { success: true, result: 'done' };
 }
 
@@ -730,67 +864,67 @@ function handleQandyland(req, res) {
     switch (method) {
       case 'create':
         result = driveCreate(name || drive, session);
-        logRequest(req, method, name || drive, '', result);
+        logRequest(req, method, name || drive, '', session, result);
         return respond(res, result);
 
       case 'mount':
         result = driveMount(name || drive, session);
-        logRequest(req, method, name || drive, '', result);
+        logRequest(req, method, name || drive, '', session, result);
         return respond(res, result);
 
       case 'save':
         result = fileSave(drive, cwd, name, content, session);
-        logRequest(req, method, drive, name, result);
+        logRequest(req, method, drive, name, session, result);
         return respond(res, result);
 
       case 'load':
         result = fileLoad(drive, cwd, name, session);
-        logRequest(req, method, drive, name, result);
+        logRequest(req, method, drive, name, session, result);
         return respond(res, result);
 
       case 'delete':
         result = fileDelete(drive, cwd, name, session);
-        logRequest(req, method, drive, name, result);
+        logRequest(req, method, drive, name, session, result);
         return respond(res, result);
 
       case 'rename':
         result = fileRename(drive, cwd, name, dest, session);
-        logRequest(req, method, drive, name, result);
+        logRequest(req, method, drive, name, session, result);
         return respond(res, result);
 
       case 'exists':
         result = fileExists(drive, cwd, name, session);
-        logRequest(req, method, drive, name, result);
+        logRequest(req, method, drive, name, session, result);
         return respond(res, result);
 
       case 'mkdir':
         result = dirMake(drive, cwd, name, session);
-        logRequest(req, method, drive, name, result);
+        logRequest(req, method, drive, name, session, result);
         return respond(res, result);
 
       case 'chdir':
         result = dirChange(drive, cwd, name, session);
-        logRequest(req, method, drive, name, result);
+        logRequest(req, method, drive, name, session, result);
         return respond(res, result);
 
       case 'rmdir':
         result = dirRemove(drive, cwd, name, session);
-        logRequest(req, method, drive, name, result);
+        logRequest(req, method, drive, name, session, result);
         return respond(res, result);
 
       case 'dir':
         result = dirList(drive, cwd, pattern, switches, session);
-        logRequest(req, method, drive, pattern, result);
+        logRequest(req, method, drive, pattern, session, result);
         return respond(res, result);
 
       case 'list':
         result = fileList(drive, cwd, pattern, session);
-        logRequest(req, method, drive, pattern, result);
+        logRequest(req, method, drive, pattern, session, result);
         return respond(res, result);
 
       default:
         result = { success: false, error: 'unknown method: ' + method };
-        logRequest(req, method || '(unknown)', drive, name, result);
+        logRequest(req, method || '(unknown)', drive, name, session, result);
         return respond(res, result);
     }
   }).catch(function (err) {
@@ -840,29 +974,26 @@ var server = http.createServer(function (req, res) {
   serveStatic(req, res);
 });
 
-server.listen(PORT, function () {
-  console.log('Qandyland server running at http://localhost:' + PORT + '/');
-  console.log('POST to http://localhost:' + PORT + '/qandyland.js');
+// ── Load persisted drives before starting the server ─────────────────────────
 
+loadDrives();
+
+server.listen(PORT, function () {
   if (REGISTRY_URL) {
     getPublicIp(function (err, ip) {
       if (err || !ip) {
-        console.warn('Could not detect public IP (' + (err ? err.message : 'no IP returned') + ').');
-        console.warn('Registry will use 127.0.0.1. Update --registry or use --no-registry to suppress.');
+        _publicIp = null;
       } else {
         _publicIp = ip;
-        console.log('Public IP detected: ' + ip);
       }
-      registerWithRegistry(function (regErr, regResult) {
-        if (regErr) {
-          console.warn('Registry registration failed:', regErr.message || String(regErr));
-        } else {
-          console.log('Registered with registry as "' + SERVER_NAME + '" (id: ' + _serverId + ')' +
-            ' drives=[' + Object.keys(drives).join(', ') + ']');
-        }
+      registerWithRegistry(function (regErr) {
+        var regStatus = regErr ? 'Failed' : 'Connected';
+        displayStartupBanner(_publicIp, regStatus, _serverId);
         startHeartbeat();
       });
     });
+  } else {
+    displayStartupBanner(null, 'Disabled', null);
   }
 });
 
