@@ -35,20 +35,11 @@
   var mountResult = await serverMount(DRIVE);
   debugLog("Mount result: " + mountResult);
   if (typeof mountResult === 'string' && mountResult.indexOf('Error') === 0) {
-    // Drive doesn't exist yet – create it
-    print("Creating new wall drive...\n");
-    debugLog("Attempting serverCreate('" + DRIVE + "')");
-    var createResult = await serverCreate(DRIVE);
-    debugLog("Create result: " + createResult);
-    if (typeof createResult === 'string' && createResult.indexOf('Error') === 0) {
-      print("\x1b[91m" + createResult + "\x1b[0m\n");
-      print("Make sure qandyland.js is running:  node qandyland.js\n");
-      return;
-    }
-    print("Wall drive created.\n");
-  } else {
-    print("Connected: " + mountResult + "\n");
+    print("\x1b[91mError: drive '" + DRIVE + "' not found.\x1b[0m\n");
+    print("Ask the server administrator to run:  create " + DRIVE + "\n");
+    return;
   }
+  print("Connected: " + mountResult + "\n");
 
   // ── Load existing wall content ─────────────────────────────────────────────
   print("\n\x1b[1;33m── The Wall ──────────────────\x1b[0m\n");
