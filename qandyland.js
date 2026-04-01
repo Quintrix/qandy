@@ -543,7 +543,9 @@ function fileSave(driveName, cwd, name, content, userLevel) {
   var ts = timestamp();
   drive.files[canonical] = str;
 
-  // Inherit drive permissions for new files; preserve permissions for existing files
+  // Inherit drive permissions for new files; preserve permissions for existing files.
+  // Owner tracks original creator; HTTP clients have no authenticated identity yet
+  // (future: set owner from sysop key when auth is implemented).
   var filePerms = existing ? (existing.permissions || drive.permissions || 'G/G') : (drive.permissions || 'G/G');
   var fileOwner = existing ? (existing.owner || '') : '';
 
@@ -1136,7 +1138,7 @@ server.listen(PORT, function () {
   }
 
   console.log('╔' + border + '╗');
-  console.log('║' + '                    QANDYLAND SERVER                         '.slice(0, width - 2) + '║');
+  console.log('║' + 'QANDYLAND SERVER'.padStart(Math.ceil((width - 2 + 16) / 2)).padEnd(width - 2) + '║');
   console.log('╠' + border + '╣');
   console.log(bannerLine('Port: ' + PORT,           'Public IP: ' + (_publicIp || 'detecting...')));
   console.log(bannerLine('Registry: ' + regStatus,  'Server ID: ' + (_serverId || 'pending')));
@@ -1182,19 +1184,17 @@ server.listen(PORT, function () {
   }
 
   // ── Server console (stdin commands) ──────────────────────────────────────
-  if (process.stdin.isTTY || !process.stdin.isTTY) {
-    process.stdin.setEncoding('utf8');
-    process.stdin.on('readable', function () {
-      var chunk = process.stdin.read();
-      if (chunk !== null) {
-        var lines = chunk.split(/\r?\n/);
-        for (var li = 0; li < lines.length; li++) {
-          var cmd = lines[li].trim();
-          if (cmd) processServerCommand(cmd);
-        }
+  process.stdin.setEncoding('utf8');
+  process.stdin.on('readable', function () {
+    var chunk = process.stdin.read();
+    if (chunk !== null) {
+      var lines = chunk.split(/\r?\n/);
+      for (var li = 0; li < lines.length; li++) {
+        var cmd = lines[li].trim();
+        if (cmd) processServerCommand(cmd);
       }
-    });
-  }
+    }
+  });
 });
 
 // Graceful shutdown: remove this server from registry
