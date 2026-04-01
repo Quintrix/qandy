@@ -304,6 +304,12 @@ function command_js() {
       case "serverstatus":
         print(await qdosServerStatus());
         return;
+      case "serverinfo":
+        print(await qdosServerInfo());
+        return;
+      case "serverdrives":
+        print(await qdosServerDrives());
+        return;
       case "surl":
         if (f) {
           print(await qdosServerSetUrl(f) + "\n");
@@ -859,6 +865,45 @@ function command_js() {
     });
   }
 
+  async function qdosServerInfo() {
+    if (typeof HOST !== 'undefined' && HOST) {
+      try {
+        var res = (typeof serverInfo === 'function') ? serverInfo() : 'unavailable';
+        if (typeof res === 'object' && res !== null) {
+          var out = 'Server Info:\n';
+          out += '  URL:   ' + (res.url   || 'none') + '\n';
+          out += '  Drive: ' + (res.drive || 'none') + '\n';
+          out += '  Path:  ' + (res.path  || 'none') + '\n';
+          return out;
+        }
+        return _normalizeResult(res) + '\n';
+      } catch (e) {
+        return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+      }
+    }
+    return qdosXmitDos('serverInfo', {}).then(function (result) {
+      return _normalizeResult(result) + '\n';
+    }).catch(function (e) {
+      return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+    });
+  }
+
+  async function qdosServerDrives() {
+    if (typeof HOST !== 'undefined' && HOST) {
+      try {
+        var res = (typeof serverDrives === 'function') ? await serverDrives() : 'unavailable';
+        return _normalizeResult(res) + '\n';
+      } catch (e) {
+        return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+      }
+    }
+    return qdosXmitDos('serverDrives', {}).then(function (result) {
+      return _normalizeResult(result) + '\n';
+    }).catch(function (e) {
+      return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+    });
+  }
+
   async function qdosServerSetUrl(url) {
     var newUrl = (typeof url === 'string') ? url.trim() : '';
     if (typeof HOST !== 'undefined' && HOST) {
@@ -985,6 +1030,8 @@ function command_js() {
   window.qdosServerConnect = qdosServerConnect;
   window.qdosServerStatus = qdosServerStatus;
   window.qdosServerSetUrl = qdosServerSetUrl;
+  window.qdosServerInfo = qdosServerInfo;
+  window.qdosServerDrives = qdosServerDrives;
 
   // In GUEST mode, expose server* globals so scripts can call them directly.
   // (In HOST mode, qandy-dos.js loads later and sets the real server* functions.)
@@ -1005,6 +1052,8 @@ function command_js() {
     window.serverConnect = qdosServerConnect;
     window.serverStatus = qdosServerStatus;
     window.serverSetUrl = qdosServerSetUrl;
+    window.serverInfo = qdosServerInfo;
+    window.serverDrives = qdosServerDrives;
   }
 
   // Signal that command.js is ready

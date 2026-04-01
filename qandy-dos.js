@@ -2114,11 +2114,9 @@ global.serverDiscovery = async function() {
     var out = 'Available Servers:\n';
     for (var i = 0; i < list.length; i++) {
       var s = list[i];
-      var driveList = (s.drives && s.drives.length) ? s.drives.join(',')
-                    : (s.games  && s.games.length)  ? s.games.join(',')   // backward compat
-                    : 'no drives';
-      out += '- ' + s.name + ' (' + (s.players || 0) + '/' + (s.maxPlayers || '?') + ')' +
-             ' - ' + driveList + '\n';
+      var drives = (s.drives && s.drives.length) ? s.drives.join(',') : 'none';
+      out += '- ' + s.name + ' (' + s.host + ':' + s.port + ')' +
+             ' - ' + drives + '\n';
     }
     return out;
   } catch (e) {
@@ -2147,11 +2145,9 @@ global.serverConnect = async function(serverName) {
       var out = 'Available Servers:\n';
       for (var i = 0; i < list.length; i++) {
         var s = list[i];
-        var driveList = (s.drives && s.drives.length) ? s.drives.join(',')
-                      : (s.games  && s.games.length)  ? s.games.join(',')   // backward compat
-                      : 'no drives';
-        out += '- ' + s.name + ' (' + (s.players || 0) + '/' + (s.maxPlayers || '?') + ')' +
-               ' - ' + driveList + '\n';
+        var drives = (s.drives && s.drives.length) ? s.drives.join(',') : 'none';
+        out += '- ' + s.name + ' (' + s.host + ':' + s.port + ')' +
+               ' - ' + drives + '\n';
       }
       return out;
     }
@@ -2164,8 +2160,9 @@ global.serverConnect = async function(serverName) {
       }
     }
     if (!found) return 'Error: server "' + serverName + '" not found\n';
-    // Use the same protocol as the registry (https registry → assume https server, http → http)
-    var proto = (_registryUrl && _registryUrl.indexOf('https://') === 0) ? 'https' : 'http';
+    // Use the same protocol as the registry
+    var proto = 'http';
+    try { proto = new URL(_registryUrl).protocol.replace(':', ''); } catch (e) {}
     _serverUrl = proto + '://' + found.host + ':' + found.port + '/qandyland.js';
     return 'Connected to ' + found.name + ' at ' + found.host + ':' + found.port + '\n';
   } catch (e) {
@@ -2198,6 +2195,41 @@ global.serverInfo = function() {
     cwd: getServerCwd(),
     path: _serverDrive ? ('server://' + _serverDrive + getServerCwd()) : 'none'
   };
+};
+
+// Get drives available on the currently connected server (fetched from registry)
+global.serverDrives = async function() {
+  var url = _registryUrl;
+  if (!url) return 'Error: no registry URL configured';
+  try {
+    var response = await fetch(url, { method: 'GET' });
+    if (!response.ok) return 'Error: registry responded with ' + response.status;
+    var data = await response.json();
+    if (!data.success) return 'Error: ' + (data.error || 'registry request failed');
+    var list = data.servers || [];
+    // Find the server that matches our current _serverUrl
+    var out = 'Available drives:\n';
+    var found = false;
+    var _regProto = 'http';
+    try { _regProto = new URL(_registryUrl).protocol.replace(':', ''); } catch (e) {}
+    for (var i = 0; i < list.length; i++) {
+      var s = list[i];
+      var sUrl = _regProto + '://' + s.host + ':' + s.port + '/qandyland.js';
+      if (sUrl === _serverUrl) {
+        var drives = s.drives || [];
+        if (drives.length === 0) { out += '  (no drives)\n'; }
+        else {
+          for (var j = 0; j < drives.length; j++) { out += '  - ' + drives[j] + '\n'; }
+        }
+        found = true;
+        break;
+      }
+    }
+    if (!found) out += '  (server not found in registry)\n';
+    return out;
+  } catch (e) {
+    return 'Error: ' + (e.message || String(e));
+  }
 };
 
 })(window);

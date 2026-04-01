@@ -38,12 +38,14 @@ var VALID_NAME_RE  = /^(?!\.)[A-Za-z0-9 \-_.()+=!]+$/;
 
 // ── Server discovery / registry ───────────────────────────────────────────────
 // Configurable via command-line: node qandyland.js [port] [--name "..."] [--registry "url"] [--maxPlayers N]
-var SERVER_NAME = 'Qandyland Server';
-var REGISTRY_URL = 'https://qandy.vercel.app/api/servers';
-var MAX_PLAYERS = 100;
+var SERVER_NAME    = 'Qandyland Server';
+var SERVER_VERSION = '1.0';
+var REGISTRY_URL   = 'https://qandy.vercel.app/api/servers';
+var MAX_PLAYERS    = 100;
 var _serverId = null;          // assigned by registry on first POST
 var _publicIp = null;          // detected once on startup
 var _heartbeatTimer = null;
+var _serverStartTime = Date.now(); // used for uptime reporting
 
 // Parse extended command-line arguments
 (function () {
@@ -77,13 +79,13 @@ function getPublicIp(callback) {
 // Build server info object for the registry
 function buildServerInfo() {
   return {
-    id:         _serverId,
-    name:       SERVER_NAME,
-    host:       _publicIp || '127.0.0.1',
-    port:       PORT,
-    drives:     Object.keys(drives),
-    players:    0,            // active player count not tracked server-side; clients may update via heartbeat
-    maxPlayers: MAX_PLAYERS
+    id:      _serverId,
+    name:    SERVER_NAME,
+    host:    _publicIp || '127.0.0.1',
+    port:    PORT,
+    drives:  Object.keys(drives),
+    uptime:  Math.floor((Date.now() - _serverStartTime) / 60000),
+    version: SERVER_VERSION
   };
 }
 
@@ -155,6 +157,20 @@ function startHeartbeat() {
       if (err) { console.warn('Registry heartbeat failed:', err.message || String(err)); }
     });
   }, 5 * 60 * 1000);
+}
+
+// ── Request logging ───────────────────────────────────────────────────────────
+
+function logRequest(req, method, drive, name, result) {
+  var ts  = new Date().toISOString().slice(11, 19);
+  var ip  = req.headers['x-forwarded-for'] || (req.socket && req.socket.remoteAddress) || 'unknown';
+  var ok  = result && result.success;
+  console.log('[' + ts + '] ' + ip + ' - ' + method);
+  if (drive) console.log('  Drive:    ' + drive);
+  if (name)  console.log('  File:     ' + name);
+  console.log('  Result:   ' + (ok ? 'SUCCESS' : 'FAILED'));
+  if (!ok && result && result.error) console.log('  Error:    ' + result.error);
+  console.log('  Drives:   [' + Object.keys(drives).join(', ') + ']');
 }
 
 // ── In-memory storage ─────────────────────────────────────────────────────────
@@ -710,45 +726,72 @@ function handleQandyland(req, res) {
     var pattern = normName(pkt.pattern || '');
     var switches = normName(pkt.switches || '');
 
+    var result;
     switch (method) {
       case 'create':
-        return respond(res, driveCreate(name || drive, session));
+        result = driveCreate(name || drive, session);
+        logRequest(req, method, name || drive, '', result);
+        return respond(res, result);
 
       case 'mount':
-        return respond(res, driveMount(name || drive, session));
+        result = driveMount(name || drive, session);
+        logRequest(req, method, name || drive, '', result);
+        return respond(res, result);
 
       case 'save':
-        return respond(res, fileSave(drive, cwd, name, content, session));
+        result = fileSave(drive, cwd, name, content, session);
+        logRequest(req, method, drive, name, result);
+        return respond(res, result);
 
       case 'load':
-        return respond(res, fileLoad(drive, cwd, name, session));
+        result = fileLoad(drive, cwd, name, session);
+        logRequest(req, method, drive, name, result);
+        return respond(res, result);
 
       case 'delete':
-        return respond(res, fileDelete(drive, cwd, name, session));
+        result = fileDelete(drive, cwd, name, session);
+        logRequest(req, method, drive, name, result);
+        return respond(res, result);
 
       case 'rename':
-        return respond(res, fileRename(drive, cwd, name, dest, session));
+        result = fileRename(drive, cwd, name, dest, session);
+        logRequest(req, method, drive, name, result);
+        return respond(res, result);
 
       case 'exists':
-        return respond(res, fileExists(drive, cwd, name, session));
+        result = fileExists(drive, cwd, name, session);
+        logRequest(req, method, drive, name, result);
+        return respond(res, result);
 
       case 'mkdir':
-        return respond(res, dirMake(drive, cwd, name, session));
+        result = dirMake(drive, cwd, name, session);
+        logRequest(req, method, drive, name, result);
+        return respond(res, result);
 
       case 'chdir':
-        return respond(res, dirChange(drive, cwd, name, session));
+        result = dirChange(drive, cwd, name, session);
+        logRequest(req, method, drive, name, result);
+        return respond(res, result);
 
       case 'rmdir':
-        return respond(res, dirRemove(drive, cwd, name, session));
+        result = dirRemove(drive, cwd, name, session);
+        logRequest(req, method, drive, name, result);
+        return respond(res, result);
 
       case 'dir':
-        return respond(res, dirList(drive, cwd, pattern, switches, session));
+        result = dirList(drive, cwd, pattern, switches, session);
+        logRequest(req, method, drive, pattern, result);
+        return respond(res, result);
 
       case 'list':
-        return respond(res, fileList(drive, cwd, pattern, session));
+        result = fileList(drive, cwd, pattern, session);
+        logRequest(req, method, drive, pattern, result);
+        return respond(res, result);
 
       default:
-        return respond(res, { success: false, error: 'unknown method: ' + method });
+        result = { success: false, error: 'unknown method: ' + method };
+        logRequest(req, method || '(unknown)', drive, name, result);
+        return respond(res, result);
     }
   }).catch(function (err) {
     respond(res, { success: false, error: 'server error: ' + err.message });
@@ -781,6 +824,18 @@ var server = http.createServer(function (req, res) {
     return handleQandyland(req, res);
   }
 
+  // Status endpoint for debugging
+  if (reqPathname === '/status' && req.method === 'GET') {
+    var status = {
+      uptime:  Math.floor((Date.now() - _serverStartTime) / 60000),
+      drives:  Object.keys(drives),
+      memory:  process.memoryUsage(),
+      version: SERVER_VERSION
+    };
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify(status, null, 2));
+  }
+
   // Static file fallback for everything else
   serveStatic(req, res);
 });
@@ -802,8 +857,8 @@ server.listen(PORT, function () {
         if (regErr) {
           console.warn('Registry registration failed:', regErr.message || String(regErr));
         } else {
-          var dl = Object.keys(drives);
-          console.log('Server registered with drives: ' + (dl.length ? dl.join(', ') : '(none)'));
+          console.log('Registered with registry as "' + SERVER_NAME + '" (id: ' + _serverId + ')' +
+            ' drives=[' + Object.keys(drives).join(', ') + ']');
         }
         startHeartbeat();
       });
