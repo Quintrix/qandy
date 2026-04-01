@@ -81,7 +81,7 @@ function buildServerInfo() {
     name:       SERVER_NAME,
     host:       _publicIp || '127.0.0.1',
     port:       PORT,
-    games:      Object.keys(drives),
+    drives:     Object.keys(drives),
     players:    0,            // active player count not tracked server-side; clients may update via heartbeat
     maxPlayers: MAX_PLAYERS
   };
@@ -802,7 +802,8 @@ server.listen(PORT, function () {
         if (regErr) {
           console.warn('Registry registration failed:', regErr.message || String(regErr));
         } else {
-          console.log('Registered with registry as "' + SERVER_NAME + '" (id: ' + _serverId + ')');
+          var dl = Object.keys(drives);
+          console.log('Server registered with drives: ' + (dl.length ? dl.join(', ') : '(none)'));
         }
         startHeartbeat();
       });

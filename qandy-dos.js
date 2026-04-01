@@ -2114,9 +2114,11 @@ global.serverDiscovery = async function() {
     var out = 'Available Servers:\n';
     for (var i = 0; i < list.length; i++) {
       var s = list[i];
-      var games = (s.games && s.games.length) ? s.games.join(',') : 'none';
-      out += '- ' + s.name + ' (' + (s.players || 0) + '/' + (s.maxPlayers || '?') + ' players)' +
-             ' - ' + games + '\n';
+      var driveList = (s.drives && s.drives.length) ? s.drives.join(',')
+                    : (s.games  && s.games.length)  ? s.games.join(',')   // backward compat
+                    : 'no drives';
+      out += '- ' + s.name + ' (' + (s.players || 0) + '/' + (s.maxPlayers || '?') + ')' +
+             ' - ' + driveList + '\n';
     }
     return out;
   } catch (e) {
@@ -2145,9 +2147,11 @@ global.serverConnect = async function(serverName) {
       var out = 'Available Servers:\n';
       for (var i = 0; i < list.length; i++) {
         var s = list[i];
-        var games = (s.games && s.games.length) ? s.games.join(',') : 'none';
-        out += '- ' + s.name + ' (' + (s.players || 0) + '/' + (s.maxPlayers || '?') + ' players)' +
-               ' - ' + games + '\n';
+        var driveList = (s.drives && s.drives.length) ? s.drives.join(',')
+                      : (s.games  && s.games.length)  ? s.games.join(',')   // backward compat
+                      : 'no drives';
+        out += '- ' + s.name + ' (' + (s.players || 0) + '/' + (s.maxPlayers || '?') + ')' +
+               ' - ' + driveList + '\n';
       }
       return out;
     }

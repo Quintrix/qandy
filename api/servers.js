@@ -6,7 +6,7 @@
 // the list to discover available servers.
 //
 // POST /api/servers  – register / refresh a server entry
-//   Body: { id, name, host, port, games, players, maxPlayers }
+//   Body: { id, name, host, port, drives, players, maxPlayers }
 //   Returns: { success: true, id }
 //
 // GET  /api/servers  – list active servers (stale entries auto-removed)
@@ -75,7 +75,9 @@ module.exports = function handler(req, res) {
     var name = (typeof body.name === 'string') ? body.name.trim().slice(0, 64) : 'Unnamed Server';
     var host = (typeof body.host === 'string') ? body.host.trim().slice(0, 64) : '';
     var port = (typeof body.port === 'number') ? body.port : (parseInt(body.port, 10) || 8080);
-    var games = Array.isArray(body.games) ? body.games.slice(0, 20).map(String) : [];
+    var drives = Array.isArray(body.drives) ? body.drives.slice(0, 20).map(String)
+                : Array.isArray(body.games)  ? body.games.slice(0, 20).map(String)  // backward compat
+                : [];
     var players = (typeof body.players === 'number') ? body.players : (parseInt(body.players, 10) || 0);
     var maxPlayers = (typeof body.maxPlayers === 'number') ? body.maxPlayers : (parseInt(body.maxPlayers, 10) || 100);
 
@@ -88,13 +90,13 @@ module.exports = function handler(req, res) {
       name: name,
       host: host,
       port: port,
-      games: games,
+      drives: drives,
       players: players,
       maxPlayers: maxPlayers,
       timestamp: Date.now()
     };
 
-    return respond(res, 200, { success: true, id: id });
+    return respond(res, 200, { success: true, id: id, message: 'Server registered with ' + drives.length + (drives.length === 1 ? ' drive' : ' drives') });
   }
 
   // ── GET: list active servers ───────────────────────────────────────────────
