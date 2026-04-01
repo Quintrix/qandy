@@ -1800,6 +1800,7 @@ var DEVICE = 'none';
 
 // Server storage state
 var _serverUrl = 'http://localhost:8080/qandyland.js';
+var _registryUrl = 'https://qandy.vercel.app/api/servers';
 var _serverCwd = ROOT_SEG;  // Server working directory
 var _serverDrive = null;    // Currently mounted server drive
 
@@ -2084,6 +2085,105 @@ global.serverSetUrl = function(url) {
     return _serverUrl;
   }
   return _serverUrl;
+};
+
+// Set registry URL (for configuration)
+global.serverSetRegistry = function(url) {
+  if (typeof url === 'string' && url.trim()) {
+    _registryUrl = url.trim();
+    return _registryUrl;
+  }
+  return _registryUrl;
+};
+
+// Query the registry and return a list of active servers
+global.serverDiscovery = async function() {
+  var url = _registryUrl;
+  if (!url) return 'Error: no registry URL configured';
+  try {
+    var response = await fetch(url, { method: 'GET' });
+    if (!response.ok) {
+      return 'Error: registry responded with ' + response.status;
+    }
+    var data = await response.json();
+    if (!data.success) {
+      return 'Error: ' + (data.error || 'registry request failed');
+    }
+    var list = data.servers || [];
+    if (list.length === 0) return 'No servers available\n';
+    var out = 'Available Servers:\n';
+    for (var i = 0; i < list.length; i++) {
+      var s = list[i];
+      var games = (s.games && s.games.length) ? s.games.join(',') : 'none';
+      out += '- ' + s.name + ' (' + (s.players || 0) + '/' + (s.maxPlayers || '?') + ' players)' +
+             ' - ' + games + '\n';
+    }
+    return out;
+  } catch (e) {
+    return 'Error: ' + (e.message || String(e));
+  }
+};
+
+// Connect to a server by name from the registry, or show list if no name given
+// Updates _serverUrl so subsequent server* calls use the chosen server
+global.serverConnect = async function(serverName) {
+  var url = _registryUrl;
+  if (!url) return 'Error: no registry URL configured';
+  try {
+    var response = await fetch(url, { method: 'GET' });
+    if (!response.ok) {
+      return 'Error: registry responded with ' + response.status;
+    }
+    var data = await response.json();
+    if (!data.success) {
+      return 'Error: ' + (data.error || 'registry request failed');
+    }
+    var list = data.servers || [];
+    if (!serverName || !String(serverName).trim()) {
+      // No name: show available servers
+      if (list.length === 0) return 'No servers available\n';
+      var out = 'Available Servers:\n';
+      for (var i = 0; i < list.length; i++) {
+        var s = list[i];
+        var games = (s.games && s.games.length) ? s.games.join(',') : 'none';
+        out += '- ' + s.name + ' (' + (s.players || 0) + '/' + (s.maxPlayers || '?') + ' players)' +
+               ' - ' + games + '\n';
+      }
+      return out;
+    }
+    var target = String(serverName).trim().toLowerCase();
+    var found = null;
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].name && list[i].name.toLowerCase() === target) {
+        found = list[i];
+        break;
+      }
+    }
+    if (!found) return 'Error: server "' + serverName + '" not found\n';
+    // Use the same protocol as the registry (https registry → assume https server, http → http)
+    var proto = (_registryUrl && _registryUrl.indexOf('https://') === 0) ? 'https' : 'http';
+    _serverUrl = proto + '://' + found.host + ':' + found.port + '/qandyland.js';
+    return 'Connected to ' + found.name + ' at ' + found.host + ':' + found.port + '\n';
+  } catch (e) {
+    return 'Error: ' + (e.message || String(e));
+  }
+};
+
+// Show current server connection status
+global.serverStatus = function() {
+  var info = {
+    serverUrl:   _serverUrl,
+    registryUrl: _registryUrl,
+    drive:       _serverDrive,
+    cwd:         getServerCwd(),
+    path:        _serverDrive ? ('server://' + _serverDrive + getServerCwd()) : 'none'
+  };
+  var out = 'Server Status:\n';
+  out += '  URL:      ' + info.serverUrl + '\n';
+  out += '  Registry: ' + info.registryUrl + '\n';
+  out += '  Drive:    ' + (info.drive || 'none') + '\n';
+  out += '  Path:     ' + info.path + '\n';
+  return out;
 };
 
 // Get current server info
