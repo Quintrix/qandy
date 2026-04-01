@@ -540,6 +540,14 @@ function serveStatic(req, res) {
 
 // ── Drive operations ──────────────────────────────────────────────────────────
 
+// Map a drive access level to its default file permission string.
+// sysop = no guest access, user = read-only for guests, public = full guest access.
+function defaultPermsForAccessLevel(accessLevel) {
+  if (accessLevel === 'sysop') return '----';
+  if (accessLevel === 'user')  return 'RN--';
+  return 'RNDW'; // public (default)
+}
+
 // persistent    – true: saved to {name}.json on disk; false: memory-only, cleared on restart
 // accessLevel   – 'sysop' | 'user' | 'public'  (drive-level gate; sysop ignores this)
 // defaultPerms  – 4-char RNDW string applied to new files created on this drive
@@ -552,10 +560,7 @@ function driveCreate(driveName, session, persistent, accessLevel, defaultPerms) 
   // Validate and normalise optional parameters
   var isPersistent = (persistent === true || persistent === 'true');
   var access = (accessLevel === 'sysop' || accessLevel === 'user') ? accessLevel : 'public';
-  var perms;
-  if (access === 'sysop')       perms = '----';
-  else if (access === 'user')   perms = 'RN--';
-  else                          perms = 'RNDW'; // public
+  var perms = defaultPermsForAccessLevel(access);
   if (typeof defaultPerms === 'string' && /^[R\-][N\-][D\-][W\-]$/.test(defaultPerms)) {
     perms = defaultPerms; // Caller may supply an explicit override
   }
@@ -1192,6 +1197,8 @@ if (process.stdin.isTTY) {
 
     switch (w.step) {
       case 'server_name':
+        // Update the server's display name used in registry heartbeats and the startup banner.
+        // Press ENTER to keep the current name (shown as the default in brackets).
         if (trimmed) SERVER_NAME = trimmed;
         var driveNames = Object.keys(drives);
         if (driveNames.length === 0) {
@@ -1223,12 +1230,17 @@ if (process.stdin.isTTY) {
 
       case 'access_level': {
         var letter = trimmed.toLowerCase() || 'p';
-        var accessLevel = (letter === 's') ? 'sysop' : (letter === 'u' ? 'user' : 'public');
+        var accessLevel;
+        if (letter === 's')      accessLevel = 'sysop';
+        else if (letter === 'u') accessLevel = 'user';
+        else                     accessLevel = 'public';
         var cr = driveCreate(w.driveName, 'console', w.persistent, accessLevel);
         if (cr.success) {
           var typeStr   = w.persistent ? 'persistent' : 'temporary (memory)';
-          var accessStr = (accessLevel === 'sysop') ? 'Sysop access only' :
-                          (accessLevel === 'user')  ? 'User/Player access' : 'Public access';
+          var accessStr;
+          if (accessLevel === 'sysop')     accessStr = 'Sysop access only';
+          else if (accessLevel === 'user') accessStr = 'User/Player access';
+          else                             accessStr = 'Public access';
           process.stdout.write('\nCreated ' + typeStr + ' drive \'' + w.driveName + '\' with ' + accessStr + '.\n');
           if (w.persistent) {
             process.stdout.write('Drive file: ' + w.driveName + '.json\n');
