@@ -1,0 +1,681 @@
+//
+// ──── Qandyland Server ────────────────────────────────────────────────────────
+//
+// Node.js HTTP server for shared, in-memory file storage.
+// Stores data in JSON "drives" (like virtual disks) that mirror the manifest
+// format used by qandy-dos.js localStorage functions.
+//
+// Usage: node qandyland.js [port]
+// Default port: 8080
+//
+// Security: Session-based ownership via HTTP-only cookies.
+//           Data is in-memory only – not persisted to disk.
+//
+// Request format (POST /qandyland.js, Content-Type: application/json):
+//   { "method": "create|mount|mkdir|chdir|rmdir|save|load|delete|rename|exists|dir|list",
+//     "drive": "thewall",  "cwd": "/",  "name": "...", ... }
+//
+// Response format:
+//   { "success": true|false, "error": "...", "result": "...", ... }
+//
+
+'use strict';
+
+var http  = require('http');
+var path  = require('path');
+var fs    = require('fs');
+var crypto = require('crypto');
+
+// ── Configuration ─────────────────────────────────────────────────────────────
+var PORT = parseInt(process.argv[2], 10) || 8080;
+var MANIFEST_KEY  = '_dir.sys!';
+var MAX_NAME_BYTES = 255;
+var MAX_FILE_BYTES = 1024 * 1024;   // 1 MB per file
+var MAX_DRIVE_FILES = 1000;
+var SESSION_COOKIE = 'qsession';
+var VALID_NAME_RE  = /^(?!\.)[A-Za-z0-9 \-_.()+=!]+$/;
+
+// ── In-memory storage ─────────────────────────────────────────────────────────
+//
+// drives[driveName] = {
+//   manifest: [{ name, size, timestamp, owner }],
+//   files:    { canonicalName: content_string },
+//   dirs:     { dirName: true },
+//   created:  timestamp_string
+// }
+//
+var drives = {};
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function timestamp() {
+  var d = new Date();
+  var pad = function (n, w) { return String(n).padStart(w || 2, '0'); };
+  return (
+    String(d.getFullYear()) +
+    pad(d.getMonth() + 1) +
+    pad(d.getDate()) +
+    pad(d.getHours()) +
+    pad(d.getMinutes()) +
+    pad(d.getSeconds())
+  );
+}
+
+function utf8len(s) {
+  return Buffer.byteLength(String(s == null ? '' : s), 'utf8');
+}
+
+function normName(n) {
+  return (typeof n === 'string') ? n.trim() : String(n == null ? '' : n).trim();
+}
+
+function baseName(name) {
+  var n = normName(name);
+  var slash = n.lastIndexOf('/');
+  if (slash >= 0) n = n.substring(slash + 1);
+  if (n.charAt(0) === '_') n = n.substring(1);
+  if (n.length > 0 && n.charAt(n.length - 1) === '!') n = n.substring(0, n.length - 1);
+  return n;
+}
+
+function validateName(name) {
+  var n = normName(name);
+  if (!n) return { ok: false, reason: 'empty filename' };
+  if (!VALID_NAME_RE.test(n)) return { ok: false, reason: 'invalid characters in filename' };
+  if (utf8len(n) > MAX_NAME_BYTES) return { ok: false, reason: 'filename exceeds 255 bytes' };
+  return { ok: true };
+}
+
+function isWriteProtected(name) {
+  var n = normName(name);
+  return n.charAt(n.length - 1) === '!';
+}
+
+function isHidden(name) {
+  var n = normName(name);
+  // Hidden if basename starts with _
+  var b = n;
+  var slash = n.lastIndexOf('/');
+  if (slash >= 0) b = n.substring(slash + 1);
+  return b.charAt(0) === '_';
+}
+
+// Resolve a name against cwd, return canonical path (without leading /)
+function resolveName(cwd, name) {
+  var base = (cwd || '/').replace(/^\//, '');  // strip leading slash
+  var n = normName(name);
+  if (n.indexOf('/') >= 0) {
+    // Has path component – resolve relative to root
+    return n.replace(/^\//, '');
+  }
+  return base ? (base + '/' + n) : n;
+}
+
+// Get/create a session token from cookie header
+function getSession(req, res) {
+  var cookieHeader = req.headers['cookie'] || '';
+  var match = cookieHeader.match(new RegExp('(?:^|;)\\s*' + SESSION_COOKIE + '=([^;]+)'));
+  if (match) return match[1];
+
+  // Issue a new session token
+  var token = crypto.randomBytes(24).toString('hex');
+  res.setHeader('Set-Cookie',
+    SESSION_COOKIE + '=' + token +
+    '; HttpOnly; SameSite=Lax; Path=/; Max-Age=86400'
+  );
+  return token;
+}
+
+// ── Request parsing ───────────────────────────────────────────────────────────
+
+function readBody(req) {
+  return new Promise(function (resolve, reject) {
+    var chunks = [];
+    var total  = 0;
+    req.on('data', function (chunk) {
+      total += chunk.length;
+      if (total > MAX_FILE_BYTES + 4096) {
+        req.destroy();
+        return reject(new Error('Request too large'));
+      }
+      chunks.push(chunk);
+    });
+    req.on('end',   function () { resolve(Buffer.concat(chunks).toString('utf8')); });
+    req.on('error', reject);
+  });
+}
+
+// ── Static file serving ───────────────────────────────────────────────────────
+
+var MIME = {
+  '.html': 'text/html',
+  '.htm':  'text/html',
+  '.js':   'application/javascript',
+  '.css':  'text/css',
+  '.txt':  'text/plain',
+  '.json': 'application/json',
+  '.png':  'image/png',
+  '.jpg':  'image/jpeg',
+  '.gif':  'image/gif',
+  '.svg':  'image/svg+xml',
+  '.ico':  'image/x-icon'
+};
+
+function serveStatic(req, res) {
+  var pathname;
+  try {
+    pathname = new URL(req.url, 'http://localhost').pathname;
+  } catch (e) {
+    pathname = '/';
+  }
+  var filePath  = path.join(__dirname, path.normalize(pathname));
+
+  // Prevent path traversal above cwd
+  if (!filePath.startsWith(__dirname + path.sep) && filePath !== __dirname) {
+    res.writeHead(403);
+    return res.end('Forbidden');
+  }
+
+  fs.stat(filePath, function (err, stat) {
+    if (err || !stat.isFile()) {
+      res.writeHead(404);
+      return res.end('Not found');
+    }
+    var ext  = path.extname(filePath).toLowerCase();
+    var mime = MIME[ext] || 'application/octet-stream';
+    res.writeHead(200, { 'Content-Type': mime });
+    fs.createReadStream(filePath).pipe(res);
+  });
+}
+
+// ── Drive operations ──────────────────────────────────────────────────────────
+
+function driveCreate(driveName, session) {
+  var name = normName(driveName);
+  var fv = validateName(name);
+  if (!fv.ok) return { success: false, error: 'invalid drive name: ' + fv.reason };
+  if (drives[name]) return { success: false, error: 'drive already exists' };
+
+  var ts = timestamp();
+  drives[name] = {
+    manifest: [],
+    files:    {},
+    dirs:     {},
+    owner:    session,
+    created:  ts
+  };
+
+  // Create the root manifest entry
+  _saveManifest(name, []);
+
+  return { success: true, result: 'drive created' };
+}
+
+function driveMount(driveName, session) {
+  var name = normName(driveName);
+  if (!drives[name]) return { success: false, error: 'drive not found' };
+  return { success: true, result: 'server://' + name + '/', cwd: '/' };
+}
+
+function _findEntry(manifest, userInput) {
+  var base = baseName(normName(userInput)).toLowerCase();
+  for (var i = 0; i < manifest.length; i++) {
+    var entry = manifest[i];
+    if (baseName(normName(entry.name)).toLowerCase() === base) return entry;
+  }
+  return null;
+}
+
+function _saveManifest(driveName, entries) {
+  var drive = drives[driveName];
+  if (!drive) return;
+  var ts    = timestamp();
+  var lines = [];
+  for (var i = 0; i < entries.length; i++) {
+    var e = entries[i];
+    if (e.name === MANIFEST_KEY) continue;
+    lines.push(e.name + '|' + e.size + '|' + e.timestamp + '|' + (e.owner || ''));
+  }
+  var body    = lines.length ? lines.join('\n') + '\n' : '';
+  var selfLine = MANIFEST_KEY + '|0|' + ts;
+  var full    = body + selfLine;
+  var mSize   = utf8len(full);
+  selfLine    = MANIFEST_KEY + '|' + mSize + '|' + ts;
+  full        = body + selfLine;
+
+  drive.files[MANIFEST_KEY] = full;
+  drive.manifest = entries.filter(function (e) { return e.name !== MANIFEST_KEY; });
+  drive.manifest.push({ name: MANIFEST_KEY, size: utf8len(full), timestamp: ts, owner: '' });
+}
+
+function fileSave(driveName, cwd, name, content, session) {
+  var drive = drives[driveName];
+  if (!drive) return { success: false, error: 'drive not mounted' };
+
+  var fname = normName(name);
+  if (!fname) return { success: false, error: 'invalid filename' };
+  var fv = validateName(baseName(fname));
+  if (!fv.ok) return { success: false, error: fv.reason };
+
+  var canonical = resolveName(cwd, fname);
+  var existing  = _findEntry(drive.manifest, fname);
+
+  // Write-protection check
+  if (existing && isWriteProtected(existing.name)) {
+    return { success: false, error: 'file is write-protected' };
+  }
+  // Ownership check (non-public files)
+  if (existing && existing.owner && existing.owner !== session) {
+    return { success: false, error: 'permission denied' };
+  }
+
+  var str  = String(content == null ? '' : content);
+  var size = utf8len(str);
+
+  if (size > MAX_FILE_BYTES) {
+    return { success: false, error: 'file too large' };
+  }
+  if (!existing && drive.manifest.length >= MAX_DRIVE_FILES) {
+    return { success: false, error: 'drive full' };
+  }
+
+  var ts = timestamp();
+  drive.files[canonical] = str;
+
+  // Update manifest
+  var manifest = drive.manifest.filter(function (e) {
+    return e.name !== MANIFEST_KEY && baseName(normName(e.name)).toLowerCase() !== baseName(normName(fname)).toLowerCase();
+  });
+  manifest.push({ name: fname, size: size, timestamp: ts, owner: session });
+  _saveManifest(driveName, manifest);
+
+  return { success: true, result: true };
+}
+
+function fileLoad(driveName, cwd, name, session) {
+  var drive = drives[driveName];
+  if (!drive) return { success: false, error: 'drive not mounted' };
+
+  var fname    = normName(name);
+  if (!fname) return { success: false, error: 'invalid filename' };
+  var canonical = resolveName(cwd, fname);
+  var existing  = _findEntry(drive.manifest, fname);
+
+  if (!existing) return { success: false, error: 'file not found' };
+
+  // Private file ownership check
+  if (existing.owner && existing.owner !== session) {
+    return { success: false, error: 'permission denied' };
+  }
+
+  var content = drive.files[canonical];
+  if (content == null) return { success: false, error: 'file not found' };
+
+  return { success: true, content: content };
+}
+
+function fileDelete(driveName, cwd, name, session) {
+  var drive = drives[driveName];
+  if (!drive) return { success: false, error: 'drive not mounted' };
+
+  var fname    = normName(name);
+  if (!fname) return { success: false, error: 'invalid filename' };
+  var canonical = resolveName(cwd, fname);
+  var existing  = _findEntry(drive.manifest, fname);
+
+  if (!existing) return { success: false, error: 'file not found' };
+  if (isWriteProtected(existing.name)) return { success: false, error: 'file is write-protected' };
+  if (existing.owner && existing.owner !== session) {
+    return { success: false, error: 'permission denied' };
+  }
+
+  delete drive.files[canonical];
+  var manifest = drive.manifest.filter(function (e) {
+    return e.name !== MANIFEST_KEY && baseName(normName(e.name)).toLowerCase() !== baseName(normName(fname)).toLowerCase();
+  });
+  _saveManifest(driveName, manifest);
+
+  return { success: true, result: 'deleted' };
+}
+
+function fileRename(driveName, cwd, name, dest, session) {
+  var drive = drives[driveName];
+  if (!drive) return { success: false, error: 'drive not mounted' };
+
+  var fname = normName(name);
+  var dname = normName(dest);
+  if (!fname || !dname) return { success: false, error: 'invalid filename' };
+  var fv = validateName(baseName(fname));
+  var dv = validateName(baseName(dname));
+  if (!fv.ok) return { success: false, error: fv.reason };
+  if (!dv.ok) return { success: false, error: 'invalid destination: ' + dv.reason };
+
+  var srcCanonical  = resolveName(cwd, fname);
+  var destCanonical = resolveName(cwd, dname);
+  var existing      = _findEntry(drive.manifest, fname);
+  var destExisting  = _findEntry(drive.manifest, dname);
+
+  if (!existing) return { success: false, error: 'file not found' };
+  if (isWriteProtected(existing.name)) return { success: false, error: 'file is write-protected' };
+  if (existing.owner && existing.owner !== session) {
+    return { success: false, error: 'permission denied' };
+  }
+  if (destExisting) return { success: false, error: 'destination already exists' };
+
+  var content = drive.files[srcCanonical];
+  if (content == null) return { success: false, error: 'file not found' };
+
+  drive.files[destCanonical] = content;
+  delete drive.files[srcCanonical];
+
+  var ts = timestamp();
+  var manifest = drive.manifest.filter(function (e) {
+    return e.name !== MANIFEST_KEY && baseName(normName(e.name)).toLowerCase() !== baseName(normName(fname)).toLowerCase();
+  });
+  manifest.push({ name: dname, size: existing.size, timestamp: ts, owner: existing.owner || session });
+  _saveManifest(driveName, manifest);
+
+  return { success: true, result: 'renamed' };
+}
+
+function fileExists(driveName, cwd, name, session) {
+  var drive = drives[driveName];
+  if (!drive) return { success: true, exists: false };
+
+  var fname    = normName(name);
+  if (!fname) return { success: true, exists: false };
+  var existing  = _findEntry(drive.manifest, fname);
+  if (!existing) return { success: true, exists: false };
+
+  // Privately owned files are not visible unless you own them
+  if (existing.owner && existing.owner !== session) {
+    return { success: true, exists: false };
+  }
+
+  return { success: true, exists: true };
+}
+
+function dirMake(driveName, cwd, name, session) {
+  var drive = drives[driveName];
+  if (!drive) return { success: false, error: 'drive not mounted' };
+
+  var dirName = normName(name);
+  if (!dirName) return { success: false, error: 'invalid directory name' };
+  var fv = validateName(baseName(dirName));
+  if (!fv.ok) return { success: false, error: fv.reason };
+
+  var canonical = resolveName(cwd, dirName);
+  if (drive.dirs[canonical]) return { success: false, error: 'directory already exists' };
+
+  drive.dirs[canonical] = { owner: session, created: timestamp() };
+  return { success: true, result: 'done' };
+}
+
+function dirChange(driveName, cwd, name, session) {
+  var drive = drives[driveName];
+  if (!drive) return { success: false, error: 'drive not mounted' };
+
+  var dirName = normName(name);
+
+  // Navigate to root
+  if (!dirName || dirName === '/') {
+    return { success: true, cwd: '/', result: 'server://' + driveName + '/' };
+  }
+
+  // Up one level
+  if (dirName === '..') {
+    var parts = (cwd || '/').replace(/^\//, '').replace(/\/$/, '').split('/');
+    parts.pop();
+    var newCwd = '/' + parts.join('/');
+    if (newCwd !== '/') newCwd += '/';
+    return { success: true, cwd: newCwd, result: 'server://' + driveName + newCwd };
+  }
+
+  var canonical = resolveName(cwd, dirName);
+  if (!drive.dirs[canonical]) return { success: false, error: 'directory not found' };
+
+  var newCwd = '/' + canonical + '/';
+  return { success: true, cwd: newCwd, result: 'server://' + driveName + newCwd };
+}
+
+function dirRemove(driveName, cwd, name, session) {
+  var drive = drives[driveName];
+  if (!drive) return { success: false, error: 'drive not mounted' };
+
+  var dirName   = normName(name);
+  if (!dirName) return { success: false, error: 'invalid directory name' };
+  var canonical = resolveName(cwd, dirName);
+  if (!drive.dirs[canonical]) return { success: false, error: 'directory not found' };
+
+  var dirEntry = drive.dirs[canonical];
+  if (dirEntry.owner && dirEntry.owner !== session) {
+    return { success: false, error: 'permission denied' };
+  }
+
+  // Check if empty (no files or subdirs under this path)
+  var prefix = canonical + '/';
+  var hasChildren = drive.manifest.some(function (e) {
+    return e.name !== MANIFEST_KEY && e.name.indexOf(prefix) === 0;
+  }) || Object.keys(drive.dirs).some(function (d) {
+    return d !== canonical && d.indexOf(prefix) === 0;
+  });
+
+  if (hasChildren) return { success: false, error: 'directory not empty' };
+
+  delete drive.dirs[canonical];
+  return { success: true, result: 'done' };
+}
+
+function dirList(driveName, cwd, pattern, switches, session) {
+  var drive = drives[driveName];
+  if (!drive) return { success: false, error: 'drive not mounted' };
+
+  var showHidden = (switches || '').indexOf('a') >= 0;
+  var dir   = (cwd || '/').replace(/^\//, '').replace(/\/$/, '');
+  var lines = [];
+
+  // Header
+  lines.push('Directory of server://' + driveName + (cwd || '/') + '\n');
+  lines.push('\n');
+
+  // Subdirectories
+  var dirPrefix = dir ? (dir + '/') : '';
+  var subDirs   = Object.keys(drive.dirs).filter(function (d) {
+    if (!d.startsWith(dirPrefix)) return false;
+    var rel = d.substring(dirPrefix.length);
+    return rel && rel.indexOf('/') < 0;
+  });
+
+  for (var i = 0; i < subDirs.length; i++) {
+    var dname = subDirs[i].substring(dirPrefix.length);
+    if (!showHidden && isHidden(dname)) continue;
+    if (pattern && !matchPattern(dname, pattern)) continue;
+    lines.push('  <DIR>  ' + dname + '\n');
+  }
+
+  // Files
+  var entries = drive.manifest.filter(function (e) {
+    if (e.name === MANIFEST_KEY) return showHidden;
+    if (!showHidden && isHidden(e.name)) return false;
+    if (e.owner && e.owner !== session) return false;
+    var base = resolveName('/', e.name).replace(/\/$/, '');
+    var slash = base.lastIndexOf('/');
+    var fileDir = slash >= 0 ? base.substring(0, slash) : '';
+    return fileDir === dir;
+  });
+
+  for (var j = 0; j < entries.length; j++) {
+    var e   = entries[j];
+    var nb  = baseName(e.name);
+    if (pattern && !matchPattern(nb, pattern)) continue;
+    var ts  = e.timestamp || '';
+    var sz  = String(e.size);
+    lines.push('  ' + ts + '  ' + sz.padStart(8) + '  ' + e.name + '\n');
+  }
+
+  lines.push('\n');
+  lines.push(entries.length + ' file(s)\n');
+
+  return { success: true, listing: lines.join('') };
+}
+
+function fileList(driveName, cwd, pattern, session) {
+  var drive = drives[driveName];
+  if (!drive) return { success: false, error: 'drive not mounted' };
+
+  var dir   = (cwd || '/').replace(/^\//, '').replace(/\/$/, '');
+  var names = [];
+
+  var entries = drive.manifest.filter(function (e) {
+    if (e.name === MANIFEST_KEY) return false;
+    if (e.owner && e.owner !== session) return false;
+    var base = resolveName('/', e.name).replace(/\/$/, '');
+    var slash = base.lastIndexOf('/');
+    var fileDir = slash >= 0 ? base.substring(0, slash) : '';
+    return fileDir === dir;
+  });
+
+  for (var i = 0; i < entries.length; i++) {
+    var nb = baseName(entries[i].name);
+    if (pattern && !matchPattern(nb, pattern)) continue;
+    names.push(entries[i].name);
+  }
+
+  return { success: true, listing: names.join('\n') };
+}
+
+// Simple glob-style pattern matching (* and ?)
+function matchPattern(name, pattern) {
+  if (!pattern) return true;
+  var escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    .replace(/\*/g, '.*')
+    .replace(/\?/g, '.');
+  try {
+    return new RegExp('^' + escaped + '$', 'i').test(name);
+  } catch (e) {
+    return false;
+  }
+}
+
+// ── Request dispatcher ────────────────────────────────────────────────────────
+
+function respond(res, obj) {
+  var body = JSON.stringify(obj);
+  res.writeHead(200, {
+    'Content-Type':  'application/json',
+    'Cache-Control': 'no-store'
+  });
+  res.end(body);
+}
+
+function handleQandyland(req, res) {
+  getSession(req, res); // Ensure Set-Cookie fires before body read
+  var session = getSession(req, res);
+
+  readBody(req).then(function (raw) {
+    var pkt;
+    try { pkt = JSON.parse(raw); } catch (e) {
+      return respond(res, { success: false, error: 'invalid JSON' });
+    }
+
+    var method = normName(pkt.method || '').toLowerCase();
+    var drive  = normName(pkt.drive || '');
+    var cwd    = normName(pkt.cwd   || '/');
+    var name   = normName(pkt.name  || '');
+    var dest   = normName(pkt.dest  || '');
+    var content = pkt.content != null ? String(pkt.content) : '';
+    var options = pkt.options || {};
+    var pattern = normName(pkt.pattern || '');
+    var switches = normName(pkt.switches || '');
+
+    switch (method) {
+      case 'create':
+        return respond(res, driveCreate(name || drive, session));
+
+      case 'mount':
+        return respond(res, driveMount(name || drive, session));
+
+      case 'save':
+        return respond(res, fileSave(drive, cwd, name, content, session));
+
+      case 'load':
+        return respond(res, fileLoad(drive, cwd, name, session));
+
+      case 'delete':
+        return respond(res, fileDelete(drive, cwd, name, session));
+
+      case 'rename':
+        return respond(res, fileRename(drive, cwd, name, dest, session));
+
+      case 'exists':
+        return respond(res, fileExists(drive, cwd, name, session));
+
+      case 'mkdir':
+        return respond(res, dirMake(drive, cwd, name, session));
+
+      case 'chdir':
+        return respond(res, dirChange(drive, cwd, name, session));
+
+      case 'rmdir':
+        return respond(res, dirRemove(drive, cwd, name, session));
+
+      case 'dir':
+        return respond(res, dirList(drive, cwd, pattern, switches, session));
+
+      case 'list':
+        return respond(res, fileList(drive, cwd, pattern, session));
+
+      default:
+        return respond(res, { success: false, error: 'unknown method: ' + method });
+    }
+  }).catch(function (err) {
+    respond(res, { success: false, error: 'server error: ' + err.message });
+  });
+}
+
+// ── HTTP server ───────────────────────────────────────────────────────────────
+
+var server = http.createServer(function (req, res) {
+  // CORS: only allow same-machine origins (localhost / 127.0.0.1 / ::1).
+  // Reconstruct the canonical origin from matched components rather than
+  // reflecting user-supplied input, to satisfy CORS-with-credentials rules.
+  var originHeader = req.headers['origin'] || '';
+  var originMatch  = /^(https?):\/\/(localhost|127\.0\.0\.1|\[::1\])(:(\d+))?$/.exec(originHeader);
+  var allowedOrigin = originMatch
+    ? (originMatch[1] + '://' + originMatch[2] + (originMatch[3] || ''))
+    : null;
+
+  if (allowedOrigin) {
+    res.setHeader('Access-Control-Allow-Origin',      allowedOrigin);
+    res.setHeader('Access-Control-Allow-Methods',     'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers',     'Content-Type');
+    // allowedOrigin is restricted to localhost/127.0.0.1/::1 by the regex above.
+    // Credentials are required for HttpOnly session cookies to work.
+    res.setHeader('Access-Control-Allow-Credentials', 'true'); // lgtm[js/cors-misconfiguration-for-credentials]
+    res.setHeader('Vary', 'Origin');
+  }
+
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204);
+    return res.end();
+  }
+
+  var reqPathname;
+  try {
+    reqPathname = new URL(req.url, 'http://localhost').pathname;
+  } catch (e) {
+    reqPathname = '/';
+  }
+
+  if (reqPathname === '/qandyland.js' && req.method === 'POST') {
+    return handleQandyland(req, res);
+  }
+
+  // Static file fallback for everything else
+  serveStatic(req, res);
+});
+
+server.listen(PORT, function () {
+  console.log('Qandyland server running at http://localhost:' + PORT + '/');
+  console.log('POST to http://localhost:' + PORT + '/qandyland.js');
+});
