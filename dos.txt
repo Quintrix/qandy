@@ -45,12 +45,12 @@
                                     VARIABLES:
      —————————————————————————————————————————————————————————————————————————————————————
 
-                   name — Name of file, maximum length 255 bytes, allowed
-                          characters: A–Z, a–z, 0–9, space (leading/trailing
-                          trimmed), minus, underscore, dot (but not first
-                          character), parentheses, plus, and equals: -_.()+= 
+                    name — Name of file, maximum length 255 bytes, allowed
+                           characters: A–Z, a–z, 0–9, space (leading/trailing
+                           trimmed), minus, underscore, dot (but not first
+                           character), parentheses, plus, and equals: -_.()+= 
                        
-                   data — plain UTF‑8 text, use base64 for binary data, dos.js
+                    data — plain UTF‑8 text, use base64 for binary data, dos.js
                load file — displays contents of file, 'load dir.sys' for raw directory 
                
             mount device — mounts a device, 'harddrive' for File Access API or 
