@@ -10,13 +10,6 @@
   var DRIVE   = "thewall";
   var WALL_FILE = "wall.txt";
   var MAX_ENTRIES = 50;
-  var DEBUG_MODE = true;
-
-  function debugLog(message) {
-    if (DEBUG_MODE) {
-      print("[DEBUG] " + message + "\n");
-    }
-  }
 
   // ── Helper: timestamp string (yyyymmddhhmmss) ──────────────────────────────
   function ts() {
@@ -31,9 +24,7 @@
   print("Connecting to server...\n");
 
   // Try mounting an existing drive first
-  debugLog("Attempting serverMount('" + DRIVE + "')");
   var mountResult = await serverMount(DRIVE);
-  debugLog("Mount result: " + mountResult);
   if (typeof mountResult === 'string' && mountResult.indexOf('Error') === 0) {
     print("\x1b[91mError: drive '" + DRIVE + "' not found.\x1b[0m\n");
     print("Ask the server administrator to run:  create " + DRIVE + "\n");
@@ -44,9 +35,7 @@
   // ── Load existing wall content ─────────────────────────────────────────────
   print("\n\x1b[1;33m── The Wall ──────────────────\x1b[0m\n");
 
-  debugLog("Loading " + WALL_FILE);
   var wallContent = await serverLoad(WALL_FILE);
-  debugLog("Load result: " + (wallContent === null ? "null" : (typeof wallContent === 'string' ? wallContent.length + " chars" : String(wallContent))));
   if (wallContent === null || (typeof wallContent === 'string' && wallContent.indexOf('Error') === 0)) {
     print("(wall is empty)\n");
     wallContent = "";
@@ -78,9 +67,7 @@
   }
   updated = allLines.join("\n") + "\n";
 
-  debugLog("Saving " + WALL_FILE + " (" + updated.length + " chars)");
   var saveResult = await serverSave(WALL_FILE, updated);
-  debugLog("Save result: " + saveResult);
   if (typeof saveResult === 'string' && saveResult.indexOf('Error') === 0) {
     print("\x1b[91mSave failed: " + saveResult + "\x1b[0m\n");
     return;

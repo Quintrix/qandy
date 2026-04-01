@@ -8,7 +8,7 @@
 // Default port: 8080
 //
 // Security: Session-based ownership via HTTP-only cookies.
-// Persistence: Drive structure saved to drives.json on every change.
+// Persistence: Drive structure saved to per-drive JSON files in the data directory.
 //
 // Request format (POST /qandyland.js, Content-Type: application/json):
 //   { "method": "create|mount|mkdir|chdir|rmdir|save|load|delete|rename|exists|dir|list",
@@ -36,9 +36,8 @@ var MAX_FILE_BYTES = 32 * 1024;             // 32 KB per file
 var MAX_DRIVE_FILES = 1000;
 var SESSION_COOKIE = 'qsession';
 var VALID_NAME_RE  = /^(?!\.)[A-Za-z0-9 \-_.()+=!]+$/;
-var DRIVES_FILE    = 'drives.json';          // Legacy persistence file
 var DRIVE_FILE_MARKER = '_qandy_drive';      // Marker present in all per-drive JSON files
-var SERVER_CONFIG_FILE = 'server-config.json'; // Server settings file within data directory
+var SERVER_CONFIG_FILE = 'qandyland.json';   // Server settings file within data directory
 
 // Return the platform-appropriate default data directory for storing drive files.
 function getDefaultDataDir() {
@@ -302,63 +301,6 @@ function loadDrives() {
     // DATA_DIR not yet created or unreadable – fine, drives will be empty
   }
 
-  // Backward compat: also scan current directory for per-drive JSON files
-  // (for drives created before the data directory feature was added)
-  if (path.resolve(DATA_DIR) !== path.resolve('.')) {
-    try {
-      var cwdFiles = fs.readdirSync('.');
-      for (var ci = 0; ci < cwdFiles.length; ci++) {
-        var cf = cwdFiles[ci];
-        if (!cf.endsWith('.json')) continue;
-        try {
-          var cContent = fs.readFileSync(cf, 'utf8');
-          var cInfo = JSON.parse(cContent);
-          if (!cInfo[DRIVE_FILE_MARKER]) continue;
-          var cn = normName(cInfo.id || cf.slice(0, -5));
-          if (!cn || !validateName(cn).ok || loaded[cn]) continue;
-          drives[cn] = {
-            manifest:           cInfo.manifest           || [],
-            files:              cInfo.files              || {},
-            dirs:               cInfo.dirs               || {},
-            owner:              cInfo.owner              || 'server',
-            created:            cInfo.created            || new Date().toISOString(),
-            accessLevel:        cInfo.accessLevel        || 'user',
-            defaultPermissions: cInfo.defaultPermissions || 'RNDW',
-            persistent: true
-          };
-          loaded[cn] = true;
-        } catch (e) {
-          // Skip files that are not valid drive JSON
-        }
-      }
-    } catch (e) {
-      // Ignore directory read errors
-    }
-  }
-
-  // Backward compat: also load from legacy drives.json (created by the old server)
-  try {
-    var legacyRaw  = fs.readFileSync(DRIVES_FILE, 'utf8');
-    var legacyData = JSON.parse(legacyRaw);
-    var names = Object.keys(legacyData.drives || {});
-    for (var j = 0; j < names.length; j++) {
-      var ln = names[j];
-      if (loaded[ln]) continue; // Per-drive file takes precedence
-      var d = legacyData.drives[ln];
-      drives[ln] = {
-        manifest:           d.manifest || [],
-        files:              d.files    || {},
-        dirs:               d.dirs     || {},
-        owner:              d.owner    || 'server',
-        created:            d.created  || new Date().toISOString(),
-        accessLevel:        'user',
-        defaultPermissions: 'RNDW',
-        persistent: true
-      };
-    }
-  } catch (e) {
-    // No legacy drives.json – fine
-  }
 }
 
 // Ensure DATA_DIR exists; returns null on success or an error message string.
@@ -381,30 +323,24 @@ function ensureDataDir(dir) {
   return null; // success
 }
 
-// Load server configuration. Tries DATA_DIR first, then cwd (memory-only fallback).
+// Load server configuration. Only reads from DATA_DIR.
 // Returns the parsed config object, or {} if no config file exists.
 function loadServerConfig() {
-  var paths = [
-    path.join(DATA_DIR, SERVER_CONFIG_FILE),
-    path.join(process.cwd(), SERVER_CONFIG_FILE)
-  ];
-  for (var i = 0; i < paths.length; i++) {
-    try {
-      var raw = fs.readFileSync(paths[i], 'utf8');
-      return JSON.parse(raw);
-    } catch (e) {}
-  }
+  var configPath = path.join(DATA_DIR, SERVER_CONFIG_FILE);
+  try {
+    var raw = fs.readFileSync(configPath, 'utf8');
+    return JSON.parse(raw);
+  } catch (e) {}
   return {};
 }
 
-// Save server configuration. Saves to DATA_DIR when persistent, cwd when memory-only.
+// Save server configuration. In RAM mode, does not save anything.
 function saveServerConfig(cfg) {
-  var dir = (MEMORY_ONLY || !DATA_DIR) ? process.cwd() : DATA_DIR;
+  if (MEMORY_ONLY) return;
+  var dir = DATA_DIR;
   try {
-    if (!MEMORY_ONLY && DATA_DIR) {
-      var err = ensureDataDir(DATA_DIR);
-      if (err) { console.warn('Warning: ' + err); return; }
-    }
+    var err = ensureDataDir(DATA_DIR);
+    if (err) { console.warn('Warning: ' + err); return; }
     fs.writeFileSync(path.join(dir, SERVER_CONFIG_FILE), JSON.stringify(cfg, null, 2));
   } catch (e) {
     console.warn('Failed to save server config: ' + (e.message || String(e)));
@@ -1650,7 +1586,7 @@ if (process.stdin.isTTY) {
             process.stdout.write('\n\u2717 Error: ' + crAccess.error + '\n');
           }
           _createWizard = null;
-          process.stdout.write('\n> ');
+          process.stdout.write('\nqandyland.js ');
         } else {
           w.step = 'persistent';
           _wizardAutoAdvance();
@@ -1674,7 +1610,7 @@ if (process.stdin.isTTY) {
           process.stdout.write('\n\u2717 Error: ' + cr.error + '\n');
         }
         _createWizard = null;
-        process.stdout.write('\n> ');
+        process.stdout.write('\nqandyland.js ');
         break;
       }
     }
@@ -1867,25 +1803,23 @@ function _proceedWithStartup() {
           var regStatus = regErr ? 'Failed' : 'Connected';
           displayStartupBanner(_publicIp, regStatus, _serverId);
           startHeartbeat();
-          if (process.stdin.isTTY) { process.stdout.write('\n> '); }
+          if (process.stdin.isTTY) { process.stdout.write('\nqandyland.js '); }
         });
       });
     } else {
       displayStartupBanner(null, 'Disabled', null);
-      if (process.stdin.isTTY) { process.stdout.write('\n> '); }
+      if (process.stdin.isTTY) { process.stdout.write('\nqandyland.js '); }
     }
   });
 }
 
-// Determine whether this is the first startup (no saved server config anywhere).
+// Determine whether this is the first startup (no saved server config in DATA_DIR).
 function _isFirstStartup() {
-  var configPaths = [
-    path.join(DATA_DIR, SERVER_CONFIG_FILE),
-    path.join(process.cwd(), SERVER_CONFIG_FILE)
-  ];
-  return !configPaths.some(function (p) {
-    try { return fs.existsSync(p); } catch (e) { return false; }
-  });
+  try {
+    return !fs.existsSync(path.join(DATA_DIR, SERVER_CONFIG_FILE));
+  } catch (e) {
+    return true;
+  }
 }
 
 // Load saved config and apply to globals (CLI args take precedence).
