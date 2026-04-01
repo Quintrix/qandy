@@ -52,7 +52,8 @@ function getDefaultDataDir() {
   }
 }
 
-var DATA_DIR = getDefaultDataDir(); // Overridable via --data-dir CLI arg or the create wizard
+var DATA_DIR    = getDefaultDataDir(); // Overridable via --data-dir CLI arg or the startup wizard
+var MEMORY_ONLY = false;              // true when user chose blank data directory (no persistence)
 
 // ── Server discovery / registry ───────────────────────────────────────────────
 // Configurable via command-line: node qandyland.js [port] [--name "..."] [--registry "url"] [--maxPlayers N] [--data-dir "path"]
@@ -380,23 +381,31 @@ function ensureDataDir(dir) {
   return null; // success
 }
 
-// Load server configuration from DATA_DIR/server-config.json.
-// Returns the parsed config object, or {} if the file does not exist.
+// Load server configuration. Tries DATA_DIR first, then cwd (memory-only fallback).
+// Returns the parsed config object, or {} if no config file exists.
 function loadServerConfig() {
-  try {
-    var raw = fs.readFileSync(path.join(DATA_DIR, SERVER_CONFIG_FILE), 'utf8');
-    return JSON.parse(raw);
-  } catch (e) {
-    return {};
+  var paths = [
+    path.join(DATA_DIR, SERVER_CONFIG_FILE),
+    path.join(process.cwd(), SERVER_CONFIG_FILE)
+  ];
+  for (var i = 0; i < paths.length; i++) {
+    try {
+      var raw = fs.readFileSync(paths[i], 'utf8');
+      return JSON.parse(raw);
+    } catch (e) {}
   }
+  return {};
 }
 
-// Save server configuration to DATA_DIR/server-config.json.
+// Save server configuration. Saves to DATA_DIR when persistent, cwd when memory-only.
 function saveServerConfig(cfg) {
+  var dir = (MEMORY_ONLY || !DATA_DIR) ? process.cwd() : DATA_DIR;
   try {
-    var err = ensureDataDir(DATA_DIR);
-    if (err) { console.warn('Warning: ' + err); return; }
-    fs.writeFileSync(path.join(DATA_DIR, SERVER_CONFIG_FILE), JSON.stringify(cfg, null, 2));
+    if (!MEMORY_ONLY && DATA_DIR) {
+      var err = ensureDataDir(DATA_DIR);
+      if (err) { console.warn('Warning: ' + err); return; }
+    }
+    fs.writeFileSync(path.join(dir, SERVER_CONFIG_FILE), JSON.stringify(cfg, null, 2));
   } catch (e) {
     console.warn('Failed to save server config: ' + (e.message || String(e)));
   }
@@ -418,6 +427,11 @@ function displayStartupBanner(publicIP, registryStatus, serverId) {
   console.log('╔' + line + '╗');
   console.log(_boxLine('                    QANDYLAND SERVER'));
   console.log('╠' + line + '╣');
+
+  console.log(_boxLine(' Server: ' + SERVER_NAME));
+  var dataStr = MEMORY_ONLY ? 'Memory only (no persistence)' : DATA_DIR;
+  console.log(_boxLine(' Data:   ' + dataStr));
+  console.log(_boxLine(''));
 
   var portStr  = 'Port: ' + String(PORT).padEnd(25);
   var ipStr    = 'Public IP: ' + (publicIP || '(unknown)').padEnd(15);
@@ -453,7 +467,7 @@ function displayStartupBanner(publicIP, registryStatus, serverId) {
   }
 
   console.log(_boxLine(''));
-  console.log(_boxLine(' Ready for connections...'));
+  console.log(_boxLine(' Ready for connections...'))
   console.log('╚' + line + '╝');
   console.log('');
   console.log('[TIME    ] CLIENT          ACTION    DRIVE    FILE         SESSION  RESULT');
@@ -1299,22 +1313,54 @@ var server = http.createServer(function (req, res) {
   serveStatic(req, res);
 });
 
-// ── Load persisted drives before starting the server ─────────────────────────
+// ── Startup wizard (module scope – must be accessible from _initializeServer) ──
 
-// Load server config: applies saved DATA_DIR and SERVER_NAME only when not
-// overridden on the command line. Then update lastStarted and save back.
-(function () {
-  var cfg = loadServerConfig();
-  if (cfg.dataDirectory && !_cliDataDir) DATA_DIR = cfg.dataDirectory;
-  if (cfg.serverName    && !_cliName)    SERVER_NAME = cfg.serverName;
-  // Ensure saved dataDirectory and serverName are written even on first run
-  if (!cfg.dataDirectory) cfg.dataDirectory = DATA_DIR;
-  if (!cfg.serverName)    cfg.serverName    = SERVER_NAME;
-  cfg.lastStarted = new Date().toISOString();
-  saveServerConfig(cfg);
-})();
+// State for the first-startup identity wizard (server name + data directory).
+// null = not in wizard; otherwise an object tracking the current step.
+var _startupWizard = null;
 
-loadDrives();
+function _startupWizardPrompt() {
+  var w = _startupWizard;
+  if (!w) return;
+  switch (w.step) {
+    case 'server_name':
+      process.stdout.write('Server Name [' + (SERVER_NAME || 'Qandyland') + ']: ');
+      break;
+    case 'data_dir':
+      process.stdout.write('Data directory [' + DATA_DIR + '] (blank for memory-only): ');
+      break;
+  }
+}
+
+function _startupWizardStep(line) {
+  var w = _startupWizard;
+  var trimmed = line.trim();
+
+  switch (w.step) {
+    case 'server_name':
+      if (trimmed) SERVER_NAME = trimmed;
+      w.step = 'data_dir';
+      _startupWizardPrompt();
+      break;
+
+    case 'data_dir':
+      if (trimmed) {
+        var dirErr = ensureDataDir(trimmed);
+        if (dirErr) {
+          process.stdout.write('\u2717 Error: ' + dirErr + '\n');
+          _startupWizardPrompt(); // re-prompt same step
+          return;
+        }
+        DATA_DIR = trimmed;
+        MEMORY_ONLY = false;
+      } else {
+        MEMORY_ONLY = true;
+      }
+      _startupWizard = null;
+      _proceedWithStartup();
+      break;
+  }
+}
 
 // ── Server console (stdin) command processing ─────────────────────────────────
 
@@ -1515,9 +1561,11 @@ if (process.stdin.isTTY) {
 
   // Start the interactive drive-creation wizard.
   // preArgs: optional array of pre-supplied positional arguments matching question order:
-  //   [0] data directory, [1] server name, [2] drive name, [3] access level, [4] persistence
+  //   [0] drive name, [1] access level, [2] persistence
   function _startCreateWizard(preArgs) {
-    _createWizard = { step: 'data_dir', args: preArgs || [] };
+    var driveNames = Object.keys(drives);
+    var defaultDrive = driveNames.length === 0 ? 'ctf-game' : 'new-drive';
+    _createWizard = { step: 'drive_name', args: preArgs || [], defaultDrive: defaultDrive };
     process.stdout.write('\n');
     // Auto-advance through any pre-supplied args
     _wizardAutoAdvance();
@@ -1527,7 +1575,7 @@ if (process.stdin.isTTY) {
   function _wizardAutoAdvance() {
     var w = _createWizard;
     if (!w) return;
-    var argIdx = { data_dir: 0, server_name: 1, drive_name: 2, access_level: 3, persistent: 4 };
+    var argIdx = { drive_name: 0, access_level: 1, persistent: 2 };
     var idx = argIdx[w.step];
     if (idx !== undefined && idx < w.args.length) {
       // Echo the pre-supplied value and process it as if the user typed it
@@ -1544,12 +1592,6 @@ if (process.stdin.isTTY) {
     var w = _createWizard;
     if (!w) return;
     switch (w.step) {
-      case 'data_dir':
-        _wizardPrompt('Data directory [' + DATA_DIR + ']: ');
-        break;
-      case 'server_name':
-        _wizardPrompt('Server Name [' + (SERVER_NAME || 'Qandyland') + ']: ');
-        break;
       case 'drive_name':
         _wizardPrompt('Input name of drive to create [' + w.defaultDrive + ']: ');
         break;
@@ -1570,12 +1612,6 @@ if (process.stdin.isTTY) {
     var w = _createWizard;
     if (!w) return;
     switch (w.step) {
-      case 'data_dir':
-        process.stdout.write('Data directory: ' + val + '\n');
-        break;
-      case 'server_name':
-        process.stdout.write('Server Name: ' + val + '\n');
-        break;
       case 'drive_name':
         process.stdout.write('Drive name: ' + val + '\n');
         break;
@@ -1588,49 +1624,12 @@ if (process.stdin.isTTY) {
     }
   }
 
-  // Process one line of input while the wizard is active
+  // Process one line of input while the drive creation wizard is active
   function _wizardStep(line) {
     var w = _createWizard;
     var trimmed = line.trim();
 
     switch (w.step) {
-      case 'data_dir': {
-        var newDir = trimmed || DATA_DIR;
-        var dirErr = ensureDataDir(newDir);
-        if (dirErr) {
-          process.stdout.write('\u2717 Error: ' + dirErr + '\n');
-          _wizardShowPrompt(); // Re-prompt same step
-          return;
-        }
-        if (trimmed && trimmed !== DATA_DIR) {
-          DATA_DIR = newDir;
-          process.stdout.write('\u2713 Created directory: ' + DATA_DIR + '\n');
-        }
-        // Reload server config from new DATA_DIR
-        var cfg = loadServerConfig();
-        if (cfg.serverName && cfg.serverName !== SERVER_NAME) {
-          SERVER_NAME = cfg.serverName;
-        }
-        w.step = 'server_name';
-        _wizardAutoAdvance();
-        break;
-      }
-
-      case 'server_name':
-        // Update the server's display name. Press ENTER to keep the current name.
-        if (trimmed) SERVER_NAME = trimmed;
-        var driveNames = Object.keys(drives);
-        if (driveNames.length === 0) {
-          process.stdout.write('\nNo drives found in ' + DATA_DIR + '\n');
-        } else {
-          process.stdout.write('\nExisting drives: ' + driveNames.join(', ') + '\n');
-        }
-        var defaultDrive = driveNames.length === 0 ? 'ctf-game' : 'new-drive';
-        w.defaultDrive = defaultDrive;
-        w.step = 'drive_name';
-        _wizardAutoAdvance();
-        break;
-
       case 'drive_name':
         w.driveName = trimmed || w.defaultDrive;
         w.step = 'access_level';
@@ -1641,8 +1640,21 @@ if (process.stdin.isTTY) {
         var letter = trimmed ? trimmed.toLowerCase()[0] : 'u';
         var accessLevel = (letter === 's') ? 'sysop' : 'user';
         w.accessLevel = accessLevel;
-        w.step = 'persistent';
-        _wizardAutoAdvance();
+        if (MEMORY_ONLY) {
+          // Memory-only server: all drives are temporary; skip persistence question
+          var crAccess = driveCreate(w.driveName, 'console', false, w.accessLevel);
+          if (crAccess.success) {
+            var accStr = (w.accessLevel === 'sysop') ? 'Sysop only' : 'User access';
+            process.stdout.write('\n\u2713 Created memory drive \'' + w.driveName + '\' with ' + accStr + '.\n');
+          } else {
+            process.stdout.write('\n\u2717 Error: ' + crAccess.error + '\n');
+          }
+          _createWizard = null;
+          process.stdout.write('\n> ');
+        } else {
+          w.step = 'persistent';
+          _wizardAutoAdvance();
+        }
         break;
       }
 
@@ -1658,14 +1670,6 @@ if (process.stdin.isTTY) {
           if (w.persistent) {
             process.stdout.write('\u2713 Drive file: ' + path.join(DATA_DIR, w.driveName + '.json') + '\n');
           }
-          // Persist the server config (server name + data directory)
-          var existingCfg = loadServerConfig();
-          saveServerConfig({
-            serverName:    SERVER_NAME,
-            dataDirectory: DATA_DIR,
-            created:       existingCfg.created || new Date().toISOString(),
-            lastStarted:   new Date().toISOString()
-          });
         } else {
           process.stdout.write('\n\u2717 Error: ' + cr.error + '\n');
         }
@@ -1682,6 +1686,12 @@ if (process.stdin.isTTY) {
     var lines = _stdinBuf.split('\n');
     _stdinBuf = lines.pop();
     lines.forEach(function (line) {
+      // Startup wizard takes priority over everything else
+      if (_startupWizard) {
+        _startupWizardStep(line);
+        return;
+      }
+
       // While the creation wizard is active, feed all input to it
       if (_createWizard) {
         _wizardStep(line);
@@ -1802,9 +1812,10 @@ if (process.stdin.isTTY) {
         case 'help':
           process.stdout.write(
             'Server console commands:\n' +
-            '  create [data-dir] [server-name] [drive-name] [S|U] [P|T]\n' +
+            '  create [drive-name] [S|U] [P|T]\n' +
             '                      - Create a new drive (interactive wizard)\n' +
             '                        Arguments match question order; omit any to be prompted.\n' +
+            '                        In memory-only mode all drives are temporary.\n' +
             '  list                - List all drives with type and access level\n' +
             '  delete <name>       - Delete a drive (no drive mounted) or a file (drive mounted)\n' +
             '  perms <drive> <file> [RNDW]  - View or set file permissions\n' +
@@ -1832,28 +1843,87 @@ if (process.stdin.isTTY) {
   });
 }
 
+// ── Server initialization ─────────────────────────────────────────────────────
 
-server.listen(PORT, function () {
-  if (process.stdin.isTTY) {
-    process.stdout.write('Server console ready. Type "help" for commands.\n');
-  }
-  if (REGISTRY_URL) {
-    getPublicIp(function (err, ip) {
-      if (err || !ip) {
-        _publicIp = null;
-      } else {
-        _publicIp = ip;
-      }
-      registerWithRegistry(function (regErr) {
-        var regStatus = regErr ? 'Failed' : 'Connected';
-        displayStartupBanner(_publicIp, regStatus, _serverId);
-        startHeartbeat();
+// Complete server startup: save config, load drives, start HTTP listener.
+function _proceedWithStartup() {
+  var now = new Date().toISOString();
+  var existingCfg = loadServerConfig();
+  saveServerConfig({
+    serverName:    SERVER_NAME,
+    dataDirectory: MEMORY_ONLY ? null : DATA_DIR,
+    memoryOnly:    MEMORY_ONLY,
+    created:       existingCfg.created || now,
+    lastStarted:   now
+  });
+
+  loadDrives();
+
+  server.listen(PORT, function () {
+    if (REGISTRY_URL) {
+      getPublicIp(function (err, ip) {
+        _publicIp = (err || !ip) ? null : ip;
+        registerWithRegistry(function (regErr) {
+          var regStatus = regErr ? 'Failed' : 'Connected';
+          displayStartupBanner(_publicIp, regStatus, _serverId);
+          startHeartbeat();
+          if (process.stdin.isTTY) { process.stdout.write('\n> '); }
+        });
       });
-    });
-  } else {
-    displayStartupBanner(null, 'Disabled', null);
+    } else {
+      displayStartupBanner(null, 'Disabled', null);
+      if (process.stdin.isTTY) { process.stdout.write('\n> '); }
+    }
+  });
+}
+
+// Determine whether this is the first startup (no saved server config anywhere).
+function _isFirstStartup() {
+  var configPaths = [
+    path.join(DATA_DIR, SERVER_CONFIG_FILE),
+    path.join(process.cwd(), SERVER_CONFIG_FILE)
+  ];
+  return !configPaths.some(function (p) {
+    try { return fs.existsSync(p); } catch (e) { return false; }
+  });
+}
+
+// Load saved config and apply to globals (CLI args take precedence).
+function _applyServerConfig() {
+  var cfg = loadServerConfig();
+  if (cfg.dataDirectory && !_cliDataDir) { DATA_DIR = cfg.dataDirectory; }
+  if (cfg.serverName    && !_cliName)    { SERVER_NAME = cfg.serverName; }
+  if (cfg.memoryOnly    && !_cliDataDir) { MEMORY_ONLY = cfg.memoryOnly; }
+  return cfg;
+}
+
+// Entry point: ask for identity on first TTY startup, otherwise proceed directly.
+(function _initializeServer() {
+  // If both CLI args are provided, merge with any existing config and start directly
+  if (_cliName && _cliDataDir) {
+    _applyServerConfig(); // load saved fields (e.g. 'created') before overwriting
+    _proceedWithStartup();
+    return;
   }
-});
+
+  // If a saved config exists, load it and start directly
+  if (!_isFirstStartup()) {
+    _applyServerConfig();
+    _proceedWithStartup();
+    return;
+  }
+
+  // First startup without a TTY: use defaults and proceed silently
+  if (!process.stdin.isTTY) {
+    _proceedWithStartup();
+    return;
+  }
+
+  // First startup with a TTY: run the identity wizard before starting HTTP
+  process.stdout.write('\nQandyland Player Server\n\n');
+  _startupWizard = { step: 'server_name' };
+  _startupWizardPrompt();
+})();
 
 // Graceful shutdown: remove this server from registry
 process.on('SIGINT', function () {
