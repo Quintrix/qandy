@@ -1495,6 +1495,49 @@ async function hostMessageHandler(ev) {
               .catch(function (err) { dosXmitQdos(_dosIframe, d.id, 'serverList', false, err && err.message ? err.message : String(err)); });
             break;
           }
+          case 'serverDiscovery': {
+            var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+            if (typeof serverDiscovery !== 'function') { dosXmitQdos(_dosIframe, d.id, 'serverDiscovery', false, 'host: serverDiscovery not available'); break; }
+            Promise.resolve().then(function () { return serverDiscovery(); })
+              .then(function (result) { dosXmitQdos(_dosIframe, d.id, 'serverDiscovery', true, result); })
+              .catch(function (err) { dosXmitQdos(_dosIframe, d.id, 'serverDiscovery', false, err && err.message ? err.message : String(err)); });
+            break;
+          }
+          case 'serverConnect': {
+            var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+            var _srvName = (typeof d.name === 'undefined' || d.name === null) ? '' : String(d.name).trim();
+            if (typeof serverConnect !== 'function') { dosXmitQdos(_dosIframe, d.id, 'serverConnect', false, 'host: serverConnect not available'); break; }
+            Promise.resolve().then(function () { return serverConnect(_srvName); })
+              .then(function (result) { dosXmitQdos(_dosIframe, d.id, 'serverConnect', true, result); })
+              .catch(function (err) { dosXmitQdos(_dosIframe, d.id, 'serverConnect', false, err && err.message ? err.message : String(err)); });
+            break;
+          }
+          case 'serverStatus': {
+            var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+            try {
+              var _statusFn = (typeof serverStatus === 'function') ? serverStatus
+                : (typeof serverInfo === 'function') ? function () { return JSON.stringify(serverInfo(), null, 2); }
+                : null;
+              if (!_statusFn) { dosXmitQdos(_dosIframe, d.id, 'serverStatus', false, 'host: serverStatus not available'); break; }
+              var _statusResult = _statusFn();
+              dosXmitQdos(_dosIframe, d.id, 'serverStatus', true, _statusResult);
+            } catch (_statusErr) {
+              dosXmitQdos(_dosIframe, d.id, 'serverStatus', false, _statusErr && _statusErr.message ? _statusErr.message : String(_statusErr));
+            }
+            break;
+          }
+          case 'serverSetUrl': {
+            var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+            var _newUrl = (typeof d.url === 'undefined' || d.url === null) ? '' : String(d.url).trim();
+            if (typeof serverSetUrl !== 'function') { dosXmitQdos(_dosIframe, d.id, 'serverSetUrl', false, 'host: serverSetUrl not available'); break; }
+            try {
+              var _urlResult = serverSetUrl(_newUrl);
+              dosXmitQdos(_dosIframe, d.id, 'serverSetUrl', true, _urlResult);
+            } catch (_urlErr) {
+              dosXmitQdos(_dosIframe, d.id, 'serverSetUrl', false, _urlErr && _urlErr.message ? _urlErr.message : String(_urlErr));
+            }
+            break;
+          }
           case 'dosMount': {
             var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
             try {

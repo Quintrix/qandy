@@ -21,9 +21,10 @@
 
 'use strict';
 
-var http  = require('http');
-var path  = require('path');
-var fs    = require('fs');
+var http   = require('http');
+var https  = require('https');
+var path   = require('path');
+var fs     = require('fs');
 var crypto = require('crypto');
 
 // ── Configuration ─────────────────────────────────────────────────────────────
@@ -34,6 +35,127 @@ var MAX_FILE_BYTES = 1024 * 1024;   // 1 MB per file
 var MAX_DRIVE_FILES = 1000;
 var SESSION_COOKIE = 'qsession';
 var VALID_NAME_RE  = /^(?!\.)[A-Za-z0-9 \-_.()+=!]+$/;
+
+// ── Server discovery / registry ───────────────────────────────────────────────
+// Configurable via command-line: node qandyland.js [port] [--name "..."] [--registry "url"] [--maxPlayers N]
+var SERVER_NAME = 'Qandyland Server';
+var REGISTRY_URL = 'https://qandy.vercel.app/api/servers';
+var MAX_PLAYERS = 100;
+var _serverId = null;          // assigned by registry on first POST
+var _publicIp = null;          // detected once on startup
+var _heartbeatTimer = null;
+
+// Parse extended command-line arguments
+(function () {
+  var args = process.argv.slice(2);
+  for (var i = 0; i < args.length; i++) {
+    if (args[i] === '--name'       && args[i + 1]) { SERVER_NAME  = args[++i]; }
+    if (args[i] === '--registry'   && args[i + 1]) { REGISTRY_URL = args[++i]; }
+    if (args[i] === '--maxPlayers' && args[i + 1]) { MAX_PLAYERS  = parseInt(args[++i], 10) || 100; }
+    if (args[i] === '--no-registry') { REGISTRY_URL = ''; }
+  }
+})();
+
+// Detect public IP via ipify.org (plain HTTP JSON API)
+function getPublicIp(callback) {
+  https.get('https://api.ipify.org?format=json', function (res) {
+    var data = '';
+    res.on('data', function (chunk) { data += chunk; });
+    res.on('end', function () {
+      try {
+        var obj = JSON.parse(data);
+        callback(null, obj.ip || null);
+      } catch (e) {
+        callback(e, null);
+      }
+    });
+  }).on('error', function (e) {
+    callback(e, null);
+  });
+}
+
+// Build server info object for the registry
+function buildServerInfo() {
+  return {
+    id:         _serverId,
+    name:       SERVER_NAME,
+    host:       _publicIp || '127.0.0.1',
+    port:       PORT,
+    games:      Object.keys(drives),
+    players:    0,            // active player count not tracked server-side; clients may update via heartbeat
+    maxPlayers: MAX_PLAYERS
+  };
+}
+
+// POST server info to the registry; stores returned id for future heartbeats
+function registerWithRegistry(callback) {
+  if (!REGISTRY_URL) return;
+  var info = buildServerInfo();
+  var body = JSON.stringify(info);
+  try {
+    var url = new URL(REGISTRY_URL);
+    var isHttps = url.protocol === 'https:';
+    var options = {
+      hostname: url.hostname,
+      port:     url.port || (isHttps ? 443 : 80),
+      path:     url.pathname + url.search,
+      method:   'POST',
+      headers:  { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
+    };
+    var mod = isHttps ? https : http;
+    var req = mod.request(options, function (res) {
+      var d = '';
+      res.on('data', function (c) { d += c; });
+      res.on('end', function () {
+        try {
+          var obj = JSON.parse(d);
+          if (obj && obj.id) { _serverId = obj.id; }
+          if (typeof callback === 'function') callback(null, obj);
+        } catch (e) {
+          if (typeof callback === 'function') callback(e, null);
+        }
+      });
+    });
+    req.on('error', function (e) {
+      if (typeof callback === 'function') callback(e, null);
+    });
+    req.write(body);
+    req.end();
+  } catch (e) {
+    if (typeof callback === 'function') callback(e, null);
+  }
+}
+
+// Send DELETE to registry when the server shuts down
+function deregisterFromRegistry() {
+  if (!REGISTRY_URL || !_serverId) return;
+  try {
+    var url = new URL(REGISTRY_URL + '?id=' + encodeURIComponent(_serverId));
+    var isHttps = url.protocol === 'https:';
+    var options = {
+      hostname: url.hostname,
+      port:     url.port || (isHttps ? 443 : 80),
+      path:     url.pathname + url.search,
+      method:   'DELETE',
+      headers:  { 'Content-Length': 0 }
+    };
+    var mod = isHttps ? https : http;
+    var req = mod.request(options, function () {});
+    req.on('error', function (e) { console.warn('Deregister request failed:', e.message || String(e)); });
+    req.end();
+  } catch (e) { console.warn('deregisterFromRegistry error:', e.message || String(e)); }
+}
+
+// Start heartbeat interval (every 5 minutes)
+function startHeartbeat() {
+  if (!REGISTRY_URL) return;
+  if (_heartbeatTimer) clearInterval(_heartbeatTimer);
+  _heartbeatTimer = setInterval(function () {
+    registerWithRegistry(function (err) {
+      if (err) { console.warn('Registry heartbeat failed:', err.message || String(err)); }
+    });
+  }, 5 * 60 * 1000);
+}
 
 // ── In-memory storage ─────────────────────────────────────────────────────────
 //
@@ -636,27 +758,11 @@ function handleQandyland(req, res) {
 // ── HTTP server ───────────────────────────────────────────────────────────────
 
 var server = http.createServer(function (req, res) {
-  // CORS: allow same-machine origins (localhost / 127.0.0.1 / ::1) and
-  // null origins from file:// protocol pages.
-  // Reconstruct the canonical origin from matched components rather than
-  // reflecting user-supplied input, to satisfy CORS-with-credentials rules.
-  var originHeader = req.headers['origin'] || '';
-  var originMatch  = /^(https?):\/\/(localhost|127\.0\.0\.1|\[::1\])(:(\d+))?$/.exec(originHeader);
-  var allowedOrigin = originMatch
-    ? (originMatch[1] + '://' + originMatch[2] + (originMatch[3] || ''))
-    : (originHeader === 'null' ? 'null' : null);
-
-  if (allowedOrigin) {
-    res.setHeader('Access-Control-Allow-Origin',      allowedOrigin);
-    res.setHeader('Access-Control-Allow-Methods',     'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers',     'Content-Type');
-    res.setHeader('Vary', 'Origin');
-    // Credentials (session cookies) are only meaningful for same-machine HTTP
-    // origins, not for null/file:// origins where cookies are not sent.
-    if (originMatch) {
-      res.setHeader('Access-Control-Allow-Credentials', 'true'); // lgtm[js/cors-misconfiguration-for-credentials]
-    }
-  }
+  // CORS: allow all origins without credentials (server stores in-memory disposable data;
+  // session ownership is best-effort and session cookies don't work cross-origin anyway).
+  res.setHeader('Access-Control-Allow-Origin',  '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') {
     res.setHeader('Access-Control-Max-Age', '86400');
@@ -682,4 +788,36 @@ var server = http.createServer(function (req, res) {
 server.listen(PORT, function () {
   console.log('Qandyland server running at http://localhost:' + PORT + '/');
   console.log('POST to http://localhost:' + PORT + '/qandyland.js');
+
+  if (REGISTRY_URL) {
+    getPublicIp(function (err, ip) {
+      if (err || !ip) {
+        console.warn('Could not detect public IP (' + (err ? err.message : 'no IP returned') + ').');
+        console.warn('Registry will use 127.0.0.1. Update --registry or use --no-registry to suppress.');
+      } else {
+        _publicIp = ip;
+        console.log('Public IP detected: ' + ip);
+      }
+      registerWithRegistry(function (regErr, regResult) {
+        if (regErr) {
+          console.warn('Registry registration failed:', regErr.message || String(regErr));
+        } else {
+          console.log('Registered with registry as "' + SERVER_NAME + '" (id: ' + _serverId + ')');
+        }
+        startHeartbeat();
+      });
+    });
+  }
+});
+
+// Graceful shutdown: remove this server from registry
+process.on('SIGINT', function () {
+  deregisterFromRegistry();
+  if (_heartbeatTimer) clearInterval(_heartbeatTimer);
+  process.exit(0);
+});
+process.on('SIGTERM', function () {
+  deregisterFromRegistry();
+  if (_heartbeatTimer) clearInterval(_heartbeatTimer);
+  process.exit(0);
 });

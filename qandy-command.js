@@ -295,6 +295,22 @@ function command_js() {
       case "sexists":
         print(await qdosServerExists(f) + "\n");
         return;
+      case "serverlist":
+        print(await qdosServerDiscovery());
+        return;
+      case "serverconnect":
+        print(await qdosServerConnect(f));
+        return;
+      case "serverstatus":
+        print(await qdosServerStatus());
+        return;
+      case "surl":
+        if (f) {
+          print(await qdosServerSetUrl(f) + "\n");
+        } else {
+          print(await qdosServerStatus());
+        }
+        return;
       default:
         //if (GUEST) {
           evalCode(cmd);
@@ -792,6 +808,74 @@ function command_js() {
     });
   }
 
+  async function qdosServerDiscovery() {
+    if (typeof HOST !== 'undefined' && HOST) {
+      try {
+        var res = await Promise.resolve().then(function () { return serverDiscovery(); });
+        return _normalizeResult(res) + '\n';
+      } catch (e) {
+        return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+      }
+    }
+    return qdosXmitDos('serverDiscovery', {}).then(function (result) {
+      return _normalizeResult(result) + '\n';
+    }).catch(function (e) {
+      return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+    });
+  }
+
+  async function qdosServerConnect(serverName) {
+    var name = (typeof serverName === 'string') ? serverName.trim() : '';
+    if (typeof HOST !== 'undefined' && HOST) {
+      try {
+        var res = await Promise.resolve().then(function () { return serverConnect(name); });
+        return _normalizeResult(res) + '\n';
+      } catch (e) {
+        return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+      }
+    }
+    return qdosXmitDos('serverConnect', { name: name }).then(function (result) {
+      return _normalizeResult(result) + '\n';
+    }).catch(function (e) {
+      return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+    });
+  }
+
+  async function qdosServerStatus() {
+    if (typeof HOST !== 'undefined' && HOST) {
+      try {
+        var res = (typeof serverStatus === 'function')
+          ? serverStatus()
+          : ((typeof serverInfo === 'function') ? JSON.stringify(serverInfo(), null, 2) : 'unavailable');
+        return _normalizeResult(res) + '\n';
+      } catch (e) {
+        return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+      }
+    }
+    return qdosXmitDos('serverStatus', {}).then(function (result) {
+      return _normalizeResult(result) + '\n';
+    }).catch(function (e) {
+      return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+    });
+  }
+
+  async function qdosServerSetUrl(url) {
+    var newUrl = (typeof url === 'string') ? url.trim() : '';
+    if (typeof HOST !== 'undefined' && HOST) {
+      try {
+        var res = (typeof serverSetUrl === 'function') ? serverSetUrl(newUrl) : newUrl;
+        return _normalizeResult(res);
+      } catch (e) {
+        return 'Error: ' + (e && e.message ? e.message : String(e));
+      }
+    }
+    return qdosXmitDos('serverSetUrl', { url: newUrl }).then(function (result) {
+      return _normalizeResult(result);
+    }).catch(function (e) {
+      return 'Error: ' + (e && e.message ? e.message : String(e));
+    });
+  }
+
   async function qdosDelete(filename, timeoutMs) {
     var valid=filename.trim()
     valid=qdosValidateFilename(filename);
@@ -897,6 +981,10 @@ function command_js() {
   window.qdosServerExists = qdosServerExists;
   window.qdosServerDir = qdosServerDir;
   window.qdosServerList = qdosServerList;
+  window.qdosServerDiscovery = qdosServerDiscovery;
+  window.qdosServerConnect = qdosServerConnect;
+  window.qdosServerStatus = qdosServerStatus;
+  window.qdosServerSetUrl = qdosServerSetUrl;
 
   // In GUEST mode, expose server* globals so scripts can call them directly.
   // (In HOST mode, qandy-dos.js loads later and sets the real server* functions.)
@@ -913,6 +1001,10 @@ function command_js() {
     window.serverExists = qdosServerExists;
     window.serverDir = qdosServerDir;
     window.serverList = qdosServerList;
+    window.serverDiscovery = qdosServerDiscovery;
+    window.serverConnect = qdosServerConnect;
+    window.serverStatus = qdosServerStatus;
+    window.serverSetUrl = qdosServerSetUrl;
   }
 
   // Signal that command.js is ready
