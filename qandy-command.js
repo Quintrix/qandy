@@ -250,6 +250,51 @@ function command_js() {
           print("Input \'sysop\' for access\n");
         }
         return;
+      case "screate":
+        print(await qdosServerCreate(f, {}));
+        return;
+      case "smount":
+        print(await qdosServerMount(f));
+        return;
+      case "ssave":
+        print(await qdosServerSave(f, d));
+        return;
+      case "sload":
+        print(await qdosServerLoad(f));
+        return;
+      case "sdelete":
+        print(await qdosServerDelete(f));
+        return;
+      case "srename":
+        print(await qdosServerRename(f, d));
+        return;
+      case "smkdir":
+        print(await qdosServerMkDir(f));
+        return;
+      case "smd":
+        print(await qdosServerMkDir(f));
+        return;
+      case "schdir":
+        print(await qdosServerChDir(f));
+        return;
+      case "scd":
+        print(await qdosServerChDir(f));
+        return;
+      case "srmdir":
+        print(await qdosServerRmDir(f));
+        return;
+      case "srd":
+        print(await qdosServerRmDir(f));
+        return;
+      case "sdir":
+        print(await qdosServerDir(f, d));
+        return;
+      case "sls":
+        print(await qdosServerList(f));
+        return;
+      case "sexists":
+        print(await qdosServerExists(f) + "\n");
+        return;
       default:
         //if (GUEST) {
           evalCode(cmd);
@@ -520,6 +565,233 @@ function command_js() {
     }
   };
 
+  // ── Server storage qdos wrappers ─────────────────────────────────────────────
+  // HOST: calls server* functions from qandy-dos.js directly.
+  // GUEST: sends message to host message handler via qdosXmitDos.
+
+  function _qdosServerValidateDrive(name) {
+    if (typeof name !== 'string' && typeof name !== 'number') return null;
+    var s = String(name).trim();
+    if (!s || s.length > 64) return null;
+    if (!/^[A-Za-z0-9_-]+$/.test(s)) return null;
+    return s;
+  }
+
+  async function qdosServerCreate(driveName, options) {
+    var name = _qdosServerValidateDrive(driveName);
+    if (!name) return 'Error: invalid drive name\n';
+    if (typeof HOST !== 'undefined' && HOST) {
+      try {
+        var res = await Promise.resolve().then(function () { return serverCreate(name, options); });
+        return _normalizeResult(res) + '\n';
+      } catch (e) {
+        return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+      }
+    }
+    return qdosXmitDos('serverCreate', { name: name, options: options }).then(function (result) {
+      return _normalizeResult(result) + '\n';
+    }).catch(function (e) {
+      return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+    });
+  }
+
+  async function qdosServerMount(driveName) {
+    var name = _qdosServerValidateDrive(driveName);
+    if (!name) return 'Error: invalid drive name\n';
+    if (typeof HOST !== 'undefined' && HOST) {
+      try {
+        var res = await Promise.resolve().then(function () { return serverMount(name); });
+        return _normalizeResult(res) + '\n';
+      } catch (e) {
+        return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+      }
+    }
+    return qdosXmitDos('serverMount', { name: name }).then(function (result) {
+      return _normalizeResult(result) + '\n';
+    }).catch(function (e) {
+      return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+    });
+  }
+
+  async function qdosServerMkDir(name, options) {
+    var valid = (typeof qdosValidateFilename === 'function') ? qdosValidateFilename(name) : (typeof name === 'string' ? name.trim() : null);
+    if (!valid) return 'Error: invalid directory name\n';
+    if (typeof HOST !== 'undefined' && HOST) {
+      try {
+        var res = await Promise.resolve().then(function () { return serverMkDir(valid, options); });
+        return _normalizeResult(res) + '\n';
+      } catch (e) {
+        return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+      }
+    }
+    return qdosXmitDos('serverMkDir', { name: valid, options: options }).then(function (result) {
+      return _normalizeResult(result) + '\n';
+    }).catch(function (e) {
+      return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+    });
+  }
+
+  async function qdosServerChDir(name) {
+    var valid = (name === '..' || name === '') ? (name || '') :
+      ((typeof qdosValidateFilename === 'function') ? qdosValidateFilename(name) : (typeof name === 'string' ? name.trim() : null));
+    if (typeof HOST !== 'undefined' && HOST) {
+      try {
+        var res = await Promise.resolve().then(function () { return serverChDir(valid || ''); });
+        return _normalizeResult(res) + '\n';
+      } catch (e) {
+        return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+      }
+    }
+    return qdosXmitDos('serverChDir', { name: valid || '' }).then(function (result) {
+      return _normalizeResult(result) + '\n';
+    }).catch(function (e) {
+      return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+    });
+  }
+
+  async function qdosServerRmDir(name) {
+    var valid = (typeof qdosValidateFilename === 'function') ? qdosValidateFilename(name) : (typeof name === 'string' ? name.trim() : null);
+    if (!valid) return 'Error: invalid directory name\n';
+    if (typeof HOST !== 'undefined' && HOST) {
+      try {
+        var res = await Promise.resolve().then(function () { return serverRmDir(valid); });
+        return _normalizeResult(res) + '\n';
+      } catch (e) {
+        return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+      }
+    }
+    return qdosXmitDos('serverRmDir', { name: valid }).then(function (result) {
+      return _normalizeResult(result) + '\n';
+    }).catch(function (e) {
+      return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+    });
+  }
+
+  async function qdosServerSave(filename, data) {
+    var valid = (typeof qdosValidateFilename === 'function') ? qdosValidateFilename(filename) : (typeof filename === 'string' ? filename.trim() : null);
+    if (!valid) return 'Error: invalid filename\n';
+    var content = String(data == null ? '' : data);
+    if (typeof HOST !== 'undefined' && HOST) {
+      try {
+        var res = await Promise.resolve().then(function () { return serverSave(valid, content); });
+        return _normalizeResult(res) + '\n';
+      } catch (e) {
+        return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+      }
+    }
+    return qdosXmitDos('serverSave', { name: valid, content: content }).then(function (result) {
+      return _normalizeResult(result) + '\n';
+    }).catch(function (e) {
+      return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+    });
+  }
+
+  async function qdosServerLoad(filename, timeoutMs) {
+    var valid = (typeof qdosValidateFilename === 'function') ? qdosValidateFilename(filename) : (typeof filename === 'string' ? filename.trim() : null);
+    if (!valid) return Promise.reject(new Error('invalid filename'));
+    if (typeof HOST !== 'undefined' && HOST) {
+      try {
+        var res = await Promise.resolve().then(function () { return serverLoad(valid); });
+        return _normalizeResult(res);
+      } catch (e) {
+        return Promise.reject(new Error((e && e.message) ? e.message : String(e)));
+      }
+    }
+    return qdosXmitDos('serverLoad', { name: valid }, timeoutMs).then(function (result) {
+      return _normalizeResult(result);
+    });
+  }
+
+  async function qdosServerDelete(filename) {
+    var valid = (typeof qdosValidateFilename === 'function') ? qdosValidateFilename(filename) : (typeof filename === 'string' ? filename.trim() : null);
+    if (!valid) return 'Error: invalid filename\n';
+    if (typeof HOST !== 'undefined' && HOST) {
+      try {
+        var res = await Promise.resolve().then(function () { return serverDelete(valid); });
+        return _normalizeResult(res) + '\n';
+      } catch (e) {
+        return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+      }
+    }
+    return qdosXmitDos('serverDelete', { name: valid }).then(function (result) {
+      return _normalizeResult(result) + '\n';
+    }).catch(function (e) {
+      return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+    });
+  }
+
+  async function qdosServerRename(file, dest) {
+    var validSrc = (typeof qdosValidateFilename === 'function') ? qdosValidateFilename(file) : (typeof file === 'string' ? file.trim() : null);
+    var validDest = (typeof qdosValidateFilename === 'function') ? qdosValidateFilename(dest) : (typeof dest === 'string' ? dest.trim() : null);
+    if (!validSrc || !validDest) return 'Error: invalid filename(s)\n';
+    if (typeof HOST !== 'undefined' && HOST) {
+      try {
+        var res = await Promise.resolve().then(function () { return serverRename(validSrc, validDest); });
+        return _normalizeResult(res) + '\n';
+      } catch (e) {
+        return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+      }
+    }
+    return qdosXmitDos('serverRename', { name: validSrc, dest: validDest }).then(function (result) {
+      return _normalizeResult(result) + '\n';
+    }).catch(function (e) {
+      return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+    });
+  }
+
+  async function qdosServerExists(filename) {
+    var valid = (typeof qdosValidateFilename === 'function') ? qdosValidateFilename(filename) : (typeof filename === 'string' ? filename.trim() : null);
+    if (!valid) return false;
+    if (typeof HOST !== 'undefined' && HOST) {
+      try {
+        var res = await Promise.resolve().then(function () { return serverExists(valid); });
+        return !!res;
+      } catch (e) {
+        return false;
+      }
+    }
+    return qdosXmitDos('serverExists', { name: valid }).then(function (result) {
+      if (typeof result === 'boolean') return result;
+      if (typeof result === 'string') { var s = result.trim().toLowerCase(); return s === 'true' || s === '1'; }
+      return !!result;
+    }).catch(function () { return false; });
+  }
+
+  async function qdosServerDir(pattern, switches) {
+    var validPattern = (typeof pattern === 'string') ? pattern.trim() : '';
+    var validSwitches = (typeof switches === 'string') ? switches.trim() : '';
+    if (typeof HOST !== 'undefined' && HOST) {
+      try {
+        var res = await Promise.resolve().then(function () { return serverDir(validPattern, validSwitches); });
+        return _normalizeResult(res) + '\n';
+      } catch (e) {
+        return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+      }
+    }
+    return qdosXmitDos('serverDir', { pattern: validPattern, switches: validSwitches }).then(function (result) {
+      return _normalizeResult(result) + '\n';
+    }).catch(function (e) {
+      return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+    });
+  }
+
+  async function qdosServerList(pattern) {
+    var validPattern = (typeof pattern === 'string') ? pattern.trim() : '';
+    if (typeof HOST !== 'undefined' && HOST) {
+      try {
+        var res = await Promise.resolve().then(function () { return serverList(validPattern); });
+        return _normalizeResult(res) + '\n';
+      } catch (e) {
+        return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+      }
+    }
+    return qdosXmitDos('serverList', { pattern: validPattern }).then(function (result) {
+      return _normalizeResult(result) + '\n';
+    }).catch(function (e) {
+      return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
+    });
+  }
+
   async function qdosDelete(filename, timeoutMs) {
     var valid=filename.trim()
     valid=qdosValidateFilename(filename);
@@ -610,7 +882,39 @@ function command_js() {
   window.qdosRmDir = qdosRmDir;
   window.qdosValidateFilename = qdosValidateFilename;
   window._normalizeResult = _normalizeResult;
-  window._pending = _pending;  
+  window._pending = _pending;
+
+  // expose qdosServer* wrappers
+  window.qdosServerCreate = qdosServerCreate;
+  window.qdosServerMount = qdosServerMount;
+  window.qdosServerMkDir = qdosServerMkDir;
+  window.qdosServerChDir = qdosServerChDir;
+  window.qdosServerRmDir = qdosServerRmDir;
+  window.qdosServerSave = qdosServerSave;
+  window.qdosServerLoad = qdosServerLoad;
+  window.qdosServerDelete = qdosServerDelete;
+  window.qdosServerRename = qdosServerRename;
+  window.qdosServerExists = qdosServerExists;
+  window.qdosServerDir = qdosServerDir;
+  window.qdosServerList = qdosServerList;
+
+  // In GUEST mode, expose server* globals so scripts can call them directly.
+  // (In HOST mode, qandy-dos.js loads later and sets the real server* functions.)
+  if (typeof GUEST !== 'undefined' && GUEST) {
+    window.serverCreate = qdosServerCreate;
+    window.serverMount = qdosServerMount;
+    window.serverMkDir = qdosServerMkDir;
+    window.serverChDir = qdosServerChDir;
+    window.serverRmDir = qdosServerRmDir;
+    window.serverSave = qdosServerSave;
+    window.serverLoad = qdosServerLoad;
+    window.serverDelete = qdosServerDelete;
+    window.serverRename = qdosServerRename;
+    window.serverExists = qdosServerExists;
+    window.serverDir = qdosServerDir;
+    window.serverList = qdosServerList;
+  }
+
   // Signal that command.js is ready
   if (typeof window.qandySignalReady === 'function') {
     window.qandySignalReady('command_js');

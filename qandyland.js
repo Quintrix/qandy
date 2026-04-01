@@ -636,26 +636,30 @@ function handleQandyland(req, res) {
 // ── HTTP server ───────────────────────────────────────────────────────────────
 
 var server = http.createServer(function (req, res) {
-  // CORS: only allow same-machine origins (localhost / 127.0.0.1 / ::1).
+  // CORS: allow same-machine origins (localhost / 127.0.0.1 / ::1) and
+  // null origins from file:// protocol pages.
   // Reconstruct the canonical origin from matched components rather than
   // reflecting user-supplied input, to satisfy CORS-with-credentials rules.
   var originHeader = req.headers['origin'] || '';
   var originMatch  = /^(https?):\/\/(localhost|127\.0\.0\.1|\[::1\])(:(\d+))?$/.exec(originHeader);
   var allowedOrigin = originMatch
     ? (originMatch[1] + '://' + originMatch[2] + (originMatch[3] || ''))
-    : null;
+    : (originHeader === 'null' ? 'null' : null);
 
   if (allowedOrigin) {
     res.setHeader('Access-Control-Allow-Origin',      allowedOrigin);
     res.setHeader('Access-Control-Allow-Methods',     'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers',     'Content-Type');
-    // allowedOrigin is restricted to localhost/127.0.0.1/::1 by the regex above.
-    // Credentials are required for HttpOnly session cookies to work.
-    res.setHeader('Access-Control-Allow-Credentials', 'true'); // lgtm[js/cors-misconfiguration-for-credentials]
     res.setHeader('Vary', 'Origin');
+    // Credentials (session cookies) are only meaningful for same-machine HTTP
+    // origins, not for null/file:// origins where cookies are not sent.
+    if (originMatch) {
+      res.setHeader('Access-Control-Allow-Credentials', 'true'); // lgtm[js/cors-misconfiguration-for-credentials]
+    }
   }
 
   if (req.method === 'OPTIONS') {
+    res.setHeader('Access-Control-Max-Age', '86400');
     res.writeHead(204);
     return res.end();
   }

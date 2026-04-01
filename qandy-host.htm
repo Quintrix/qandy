@@ -1363,6 +1363,138 @@ async function hostMessageHandler(ev) {
               });
             break;
           }
+          case 'serverCreate': {
+            var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+            var driveName = (typeof d.name === 'undefined' || d.name === null) ? '' : String(d.name).trim();
+            if (!driveName || !/^[A-Za-z0-9_-]+$/.test(driveName) || driveName.length > 64) {
+              dosXmitQdos(_dosIframe, d.id, 'serverCreate', false, 'invalid drive name'); break;
+            }
+            if (typeof serverCreate !== 'function') { dosXmitQdos(_dosIframe, d.id, 'serverCreate', false, 'host: serverCreate not available'); break; }
+            Promise.resolve().then(function () { return serverCreate(driveName, d.options); })
+              .then(function (result) { dosXmitQdos(_dosIframe, d.id, 'serverCreate', true, result === undefined ? true : result); })
+              .catch(function (err) { dosXmitQdos(_dosIframe, d.id, 'serverCreate', false, err && err.message ? err.message : String(err)); });
+            break;
+          }
+          case 'serverMount': {
+            var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+            var driveName = (typeof d.name === 'undefined' || d.name === null) ? '' : String(d.name).trim();
+            if (!driveName || !/^[A-Za-z0-9_-]+$/.test(driveName) || driveName.length > 64) {
+              dosXmitQdos(_dosIframe, d.id, 'serverMount', false, 'invalid drive name'); break;
+            }
+            if (typeof serverMount !== 'function') { dosXmitQdos(_dosIframe, d.id, 'serverMount', false, 'host: serverMount not available'); break; }
+            Promise.resolve().then(function () { return serverMount(driveName); })
+              .then(function (result) { dosXmitQdos(_dosIframe, d.id, 'serverMount', true, result === undefined ? true : result); })
+              .catch(function (err) { dosXmitQdos(_dosIframe, d.id, 'serverMount', false, err && err.message ? err.message : String(err)); });
+            break;
+          }
+          case 'serverMkDir': {
+            var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+            var fname = (typeof d.name === 'undefined' || d.name === null) ? '' : String(d.name).trim();
+            var validName = (typeof validateGuestFilename === 'function') ? validateGuestFilename(fname) : null;
+            if (!validName) { dosXmitQdos(_dosIframe, d.id, 'serverMkDir', false, 'invalid directory name'); break; }
+            if (typeof serverMkDir !== 'function') { dosXmitQdos(_dosIframe, d.id, 'serverMkDir', false, 'host: serverMkDir not available'); break; }
+            Promise.resolve().then(function () { return serverMkDir(validName, d.options); })
+              .then(function (result) { dosXmitQdos(_dosIframe, d.id, 'serverMkDir', true, result === undefined ? true : result); })
+              .catch(function (err) { dosXmitQdos(_dosIframe, d.id, 'serverMkDir', false, err && err.message ? err.message : String(err)); });
+            break;
+          }
+          case 'serverChDir': {
+            var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+            var fname = (typeof d.name === 'undefined' || d.name === null) ? '' : String(d.name).trim();
+            if (typeof serverChDir !== 'function') { dosXmitQdos(_dosIframe, d.id, 'serverChDir', false, 'host: serverChDir not available'); break; }
+            Promise.resolve().then(function () { return serverChDir(fname); })
+              .then(function (result) { dosXmitQdos(_dosIframe, d.id, 'serverChDir', true, result === undefined ? '' : result); })
+              .catch(function (err) { dosXmitQdos(_dosIframe, d.id, 'serverChDir', false, err && err.message ? err.message : String(err)); });
+            break;
+          }
+          case 'serverRmDir': {
+            var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+            var fname = (typeof d.name === 'undefined' || d.name === null) ? '' : String(d.name).trim();
+            var validName = (typeof validateGuestFilename === 'function') ? validateGuestFilename(fname) : null;
+            if (!validName) { dosXmitQdos(_dosIframe, d.id, 'serverRmDir', false, 'invalid directory name'); break; }
+            if (typeof serverRmDir !== 'function') { dosXmitQdos(_dosIframe, d.id, 'serverRmDir', false, 'host: serverRmDir not available'); break; }
+            Promise.resolve().then(function () { return serverRmDir(validName); })
+              .then(function (result) { dosXmitQdos(_dosIframe, d.id, 'serverRmDir', true, result === undefined ? true : result); })
+              .catch(function (err) { dosXmitQdos(_dosIframe, d.id, 'serverRmDir', false, err && err.message ? err.message : String(err)); });
+            break;
+          }
+          case 'serverSave': {
+            var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+            var fname = (typeof d.name === 'undefined' || d.name === null) ? '' : String(d.name).trim();
+            var validName = (typeof validateGuestFilename === 'function') ? validateGuestFilename(fname) : null;
+            if (!validName) { dosXmitQdos(_dosIframe, d.id, 'serverSave', false, 'invalid filename'); break; }
+            if (typeof serverSave !== 'function') { dosXmitQdos(_dosIframe, d.id, 'serverSave', false, 'host: serverSave not available'); break; }
+            var content = (typeof d.content === 'undefined' || d.content === null) ? '' : String(d.content);
+            Promise.resolve().then(function () { return serverSave(validName, content); })
+              .then(function (result) { dosXmitQdos(_dosIframe, d.id, 'serverSave', true, result === undefined ? true : result); })
+              .catch(function (err) { dosXmitQdos(_dosIframe, d.id, 'serverSave', false, err && err.message ? err.message : String(err)); });
+            break;
+          }
+          case 'serverLoad': {
+            var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+            var fname = (typeof d.name === 'undefined' || d.name === null) ? '' : String(d.name).trim();
+            var validName = (typeof validateGuestFilename === 'function') ? validateGuestFilename(fname) : null;
+            if (!validName) { dosXmitQdos(_dosIframe, d.id, 'serverLoad', false, 'invalid filename'); break; }
+            if (typeof serverLoad !== 'function') { dosXmitQdos(_dosIframe, d.id, 'serverLoad', false, 'host: serverLoad not available'); break; }
+            Promise.resolve().then(function () { return serverLoad(validName); })
+              .then(function (result) { dosXmitQdos(_dosIframe, d.id, 'serverLoad', true, result === null ? null : result); })
+              .catch(function (err) { dosXmitQdos(_dosIframe, d.id, 'serverLoad', false, err && err.message ? err.message : String(err)); });
+            break;
+          }
+          case 'serverDelete': {
+            var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+            var fname = (typeof d.name === 'undefined' || d.name === null) ? '' : String(d.name).trim();
+            var validName = (typeof validateGuestFilename === 'function') ? validateGuestFilename(fname) : null;
+            if (!validName) { dosXmitQdos(_dosIframe, d.id, 'serverDelete', false, 'invalid filename'); break; }
+            if (typeof serverDelete !== 'function') { dosXmitQdos(_dosIframe, d.id, 'serverDelete', false, 'host: serverDelete not available'); break; }
+            Promise.resolve().then(function () { return serverDelete(validName); })
+              .then(function (result) { dosXmitQdos(_dosIframe, d.id, 'serverDelete', true, result === undefined ? true : result); })
+              .catch(function (err) { dosXmitQdos(_dosIframe, d.id, 'serverDelete', false, err && err.message ? err.message : String(err)); });
+            break;
+          }
+          case 'serverRename': {
+            var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+            var src = (typeof d.name === 'undefined' || d.name === null) ? '' : String(d.name).trim();
+            var dest = (typeof d.dest === 'undefined' || d.dest === null) ? '' : String(d.dest).trim();
+            var validSrc = (typeof validateGuestFilename === 'function') ? validateGuestFilename(src) : null;
+            var validDest = (typeof validateGuestFilename === 'function') ? validateGuestFilename(dest) : null;
+            if (!validSrc || !validDest) { dosXmitQdos(_dosIframe, d.id, 'serverRename', false, 'invalid filename(s)'); break; }
+            if (typeof serverRename !== 'function') { dosXmitQdos(_dosIframe, d.id, 'serverRename', false, 'host: serverRename not available'); break; }
+            Promise.resolve().then(function () { return serverRename(validSrc, validDest); })
+              .then(function (result) { dosXmitQdos(_dosIframe, d.id, 'serverRename', true, result === undefined ? true : result); })
+              .catch(function (err) { dosXmitQdos(_dosIframe, d.id, 'serverRename', false, err && err.message ? err.message : String(err)); });
+            break;
+          }
+          case 'serverExists': {
+            var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+            var fname = (typeof d.name === 'undefined' || d.name === null) ? '' : String(d.name).trim();
+            var validName = (typeof validateGuestFilename === 'function') ? validateGuestFilename(fname) : null;
+            if (!validName) { dosXmitQdos(_dosIframe, d.id, 'serverExists', false, 'invalid filename'); break; }
+            if (typeof serverExists !== 'function') { dosXmitQdos(_dosIframe, d.id, 'serverExists', false, 'host: serverExists not available'); break; }
+            Promise.resolve().then(function () { return serverExists(validName); })
+              .then(function (result) { dosXmitQdos(_dosIframe, d.id, 'serverExists', true, !!result); })
+              .catch(function (err) { dosXmitQdos(_dosIframe, d.id, 'serverExists', false, err && err.message ? err.message : String(err)); });
+            break;
+          }
+          case 'serverDir': {
+            var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+            var pattern = validateGuestPattern((typeof d.pattern === 'undefined' || d.pattern === null) ? '' : String(d.pattern));
+            var switches = validateGuestSwitches((typeof d.switches === 'undefined' || d.switches === null) ? '' : String(d.switches));
+            if (typeof serverDir !== 'function') { dosXmitQdos(_dosIframe, d.id, 'serverDir', false, 'host: serverDir not available'); break; }
+            Promise.resolve().then(function () { return serverDir(pattern, switches); })
+              .then(function (result) { dosXmitQdos(_dosIframe, d.id, 'serverDir', true, result); })
+              .catch(function (err) { dosXmitQdos(_dosIframe, d.id, 'serverDir', false, err && err.message ? err.message : String(err)); });
+            break;
+          }
+          case 'serverList': {
+            var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+            var pattern = validateGuestPattern((typeof d.pattern === 'undefined' || d.pattern === null) ? '' : String(d.pattern));
+            if (typeof serverList !== 'function') { dosXmitQdos(_dosIframe, d.id, 'serverList', false, 'host: serverList not available'); break; }
+            Promise.resolve().then(function () { return serverList(pattern); })
+              .then(function (result) { dosXmitQdos(_dosIframe, d.id, 'serverList', true, result); })
+              .catch(function (err) { dosXmitQdos(_dosIframe, d.id, 'serverList', false, err && err.message ? err.message : String(err)); });
+            break;
+          }
           case 'dosMount': {
             var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
             try {
