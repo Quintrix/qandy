@@ -1,3 +1,24 @@
+
+//
+// ──── Qandy Disk Operating System ─────────────────────────────────────────────────────
+//
+
+/**
+ *   SECURITY MODEL:
+ * 
+ *   HOST (sysop):
+ *    - Can execute scripts from mounted drives (File Access API - user-granted)
+ *    - Cannot execute scripts from localStorage (virtual drive) 
+ *    - Trust boundary: User has explicitly consented via File Access API
+ *  
+ *   GUEST (user sandbox, iframe):
+ *    - Can ONLY execute scripts from localStorage
+ *    - Cannot access File Access API
+ *    - Cannot access mounted drives
+ *    - Fully isolated by iframe boundary
+ *    - Trust boundary: Only what HOST puts in localStorage
+ */
+
 var DOS = true;
 var DOS = true;
 var DEVICE = 'none';
@@ -1600,16 +1621,16 @@ var DEVICE = 'none';
   }
 
   global.dosfdisk = async function () {
-    print("\n[-bwhite][black]     localStorage:     [-black][white]\n");
+    print("\n [-bwhite][black] local://                     [-black][white]\n\n");
     try {
       if (typeof navigator !== 'undefined' && navigator.storage && typeof navigator.storage.estimate === 'function') {
         var est = await navigator.storage.estimate();
         var used = (est && est.usage) ? est.usage : 0;
         var quota = (est && est.quota) ? est.quota : 0;
         var free = Math.max(0, quota - used);
-        print(" size: " + formatFileSize(quota) + "\n");
-        print(" used: " + formatFileSize(used) + "\n");
-        print(" free: " + formatFileSize(free) + "\n");
+        print("  size: " + formatFileSize(quota) + "\n");
+        print("  used: " + formatFileSize(used) + "\n");
+        print("  free: " + formatFileSize(free) + "\n");
       } else if (hasLocalStorage) {
         var used = _calcLocalStorage();
         print(" size: unknown\n");
@@ -1623,8 +1644,8 @@ var DEVICE = 'none';
       print(" size: unknown\n");
       print(" used: " + formatFileSize(used) + "\n");
     }
-  
     await dosInstall();
+    return "done";    
   };
 
   function getLoadProtocol() { try {  var p = (location && location.protocol) ? String(location.protocol) : ''; return p.replace(':', '') || 'unknown'; } catch (e) { return 'unknown'; }}
@@ -1632,56 +1653,143 @@ var DEVICE = 'none';
   function isHttpProtocol() {var p = getLoadProtocol(); return p === 'http' || p === 'https'; }
   function getBaseURL() { try { return new URL('.', location.href).href; } catch (e) { return location.href; }}
  
+  // Fetch a file from the server and return { text, serverTs } or null on failure.
+  // serverTs is in yyyymmddhhmmss format, sourced from the HTTP Last-Modified header.
+    
   async function dosInstallFetch(file) {
     try {
-      if (dosExists(file)) { print("exists\n"); return true; }
       const url = new URL(file, location.href).href;
       const resp = await fetch(url, { cache: 'no-store' });
-      if (!resp.ok) { print("error (" + resp.status + ")\n"); return false; }
+      if (!resp.ok) return null;
       const text = await resp.text();
-      const saveRes = await dosSave(file, text);
-      if (saveRes === true) {
-        print("installed\n"); return true;
-      } else {
-        print("save failed\n"); return false;
-      }
+      var lastMod = resp.headers.get('Last-Modified');
+      if (!lastMod) return null;
+      var serverTs = _tsFromDate(new Date(lastMod));
+      if (!serverTs || serverTs.length !== 14) return null;
+      return { text: text, serverTs: serverTs };
     } catch (err) {
-      print("error: " + String(err) + "\n"); return false;
+      return null;
     }
   }
 
+  // Save a file to localStorage with a specific timestamp (used to preserve server timestamps).
+  async function _installFile(file, text, ts) {
+    var fname = _normName(file);
+    var fbase = _baseName(fname);
+    if (_hasWildcards(fbase)) return false;
+    var fv = _validateBase(fbase);
+    if (!fv.ok) return false;
+    var canonical = fbase;
+    var dev = global.DEVICE;
+    var res = await _save(dev, canonical, text);
+    if (res === 'Error: Disk Full' || res === false) return false;
+    var size = _utf8len(text);
+    var manifest = _loadManifest();
+    var found = _findEntryFlexible(manifest, fname);
+    if (found) {
+      found.entry.size = size;
+      found.entry.timestamp = ts;
+    } else {
+      manifest.push({ name: canonical, size: size, timestamp: ts });
+    }
+    var mres = _saveManifest(manifest);
+    if (mres === 'Error: Disk Full') return false;
+    return true;
+  }
+
   window.dosInstall = async function() {
+ 	
     if (!_readManifestRaw()) {
       try {
         localStorage.setItem(LOCAL_PREFIX + MANIFEST_KEY, MANIFEST_KEY + '|27|' + _timestamp() + "\n");
         print("\nlocalStorage has been formatted\n\n");
+        return true;
       } catch (e) {
         print("Error: Disk Full\n\n");
         return false;
-     }
-    } 
-  
-    if (isHttpProtocol()) {
-      print("Installing Qandy:\n\n");
-      print("  ansi.js: ");
-      await dosInstallFetch("ansi.js");
-      print("  ascii.js: ");
-      await dosInstallFetch("ascii.js");
-      print("  keydown.js: ");
-      await dosInstallFetch("keydown.js");
-      print("  piano.js: ");
-      await dosInstallFetch("piano.js");
-      print("  svga.js: ");
-      await dosInstallFetch("svga.js");
-      print("\nInstallation Complete.\n\n");
-      return true;
-    } else if (isFileProtocol()) {
+      }
+    }
+
+    if (!FILE==true) {
       print("\nCannot install from file://\n");
       print("Use DOS to copy .js files to\n");
       print("localStorage.\n\n");
       return false;
     }
-  };
+
+    print("\nChecking system files:\n\n");
+
+    var fileData = [];
+    var filesToUpdate = [];
+    var manifest = _loadManifest();
+
+    for (var i = 0; i < JSfiles.length; i++) {
+      var result = await dosInstallFetch(JSfiles[i]);
+      if (!result || !result.serverTs) { print("  "+JSfiles[i]+" \x1b[91m» failed\x1b[0m\n"); continue; }
+      var localEntry = _findEntryFlexible(manifest, JSfiles[i]);
+      var localTs = localEntry ? localEntry.entry.timestamp : null;
+      var isNew = !localEntry;
+      var isUpToDate = localTs && result.serverTs === localTs;
+      fileData.push({
+        file: JSfiles[i],
+        text: result.text,
+        serverTs: result.serverTs,
+        isNew: isNew,
+        isUpToDate: isUpToDate
+      });
+
+      if (isUpToDate) {
+        print("  " + JSfiles[i]+" \x1b[97m» ok\x1b[0m\n");
+      } else {
+        print("  " + JSfiles[i]+" \x1b[92m» new\x1b[0m\n");
+        filesToUpdate.push(fileData[fileData.length - 1]);
+      }
+    }
+
+    // If all files are up-to-date, exit
+    if (filesToUpdate.length === 0) {
+      print("\n\nSystem files up-to-date.\n\n");
+      return true;
+    }
+
+    print("\n" + filesToUpdate.length + " file" + (filesToUpdate.length === 1 ? "" : "s") + " need updating.\n");
+    print("Update files now? "); CURMORE=0;
+    var answer = await inkey();
+    if (answer.toUpperCase() !== 'Y') { print("\n\nInput 'fdisk' to update\n\n"); return false; }
+    
+    print("\n\n");
+    var successCount = 0;
+    var failCount = 0;
+    for (var i = 0; i < filesToUpdate.length; i++) {
+      var fd = filesToUpdate[i];
+      try {
+        if (dosExists(fd.file)) { await dosDelete(fd.file); }
+        var ts = fd.serverTs || _timestamp();
+        var installed = await _installFile(fd.file, fd.text, ts);
+        if (installed) {
+          print("  " + fd.file + " \x1b[92m» updated\x1b[0m\n");
+          successCount++;
+        } else {
+          print("  " + fd.file + " \x1b[91m» failed\x1b[0m\n");
+          failCount++;
+        }
+      } catch (err) {
+        print("  " + fd.file + " \x1b[91m» failed\x1b[0m\n");
+        failCount++;
+      }
+    }
+
+    // Summary
+    print("\n");
+    if (successCount > 0) {
+      print(successCount + " file" + (successCount === 1 ? "" : "s") + " updated");
+      if (failCount > 0) { print(", " + failCount + " failed"); }
+      print(".\n\n");
+    } else if (failCount > 0) {
+      print("\n" + failCount + " file" + (failCount === 1 ? "" : "s") + " failed.\n\n");
+    }
+    return;
+  }
 
   if (dosExists("dir.sys")) {} else {  
     print("localStorage not formated,\n");

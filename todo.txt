@@ -1,15 +1,15 @@
 
     clipboard device?
-    
+
+    implement gfx.js tileset engine
 
     move ctrl and alt to beside caps
     fix missing space label
     add insert/delete to alt keyboard   
+    
     add total size and number of files to localDir())
-    format ascii.js/ascii2.js chart
     add insert/delete underline/block mode
-    implement gfx.js tileset engine
-    mouse.js driver
+    mouse.js driver    
     overhaul command_js
 
        ascii.js - improve output
