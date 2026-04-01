@@ -1019,6 +1019,44 @@ function matchPattern(name, pattern) {
   }
 }
 
+// ── Server console formatting helpers ─────────────────────────────────────────
+
+// Convert compact timestamp "20260401143020" → "2026-04-01 14:30:20"
+function _formatTimestampShort(ts) {
+  if (!ts || ts.length < 14) return (ts || '(unknown)');
+  return ts.slice(0, 4) + '-' + ts.slice(4, 6) + '-' + ts.slice(6, 8) +
+         ' ' + ts.slice(8, 10) + ':' + ts.slice(10, 12) + ':' + ts.slice(12, 14);
+}
+
+// Convert compact timestamp "20260401143020" → "April 1, 2026 at 2:30:20 PM"
+function _formatTimestampHuman(ts) {
+  if (!ts || ts.length < 14) return (ts || '(unknown)');
+  var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
+                'July', 'August', 'September', 'October', 'November', 'December'];
+  var mo = parseInt(ts.slice(4, 6), 10) - 1;
+  var dy = parseInt(ts.slice(6, 8), 10);
+  var yr = ts.slice(0, 4);
+  var hr = parseInt(ts.slice(8, 10), 10);
+  var mn = parseInt(ts.slice(10, 12), 10);
+  var sc = parseInt(ts.slice(12, 14), 10);
+  if (mo < 0 || mo > 11 || isNaN(dy) || isNaN(hr) || isNaN(mn) || isNaN(sc)) return ts;
+  var ampm = hr >= 12 ? 'PM' : 'AM';
+  var hr12 = hr % 12 || 12;
+  return (MONTHS[mo] || '?') + ' ' + dy + ', ' + yr + ' at ' +
+         hr12 + ':' + String(mn).padStart(2, '0') + ':' + String(sc).padStart(2, '0') + ' ' + ampm;
+}
+
+// Format 4-bit permission string with labels: "RNDW" → "RNDW (Read/Name/Delete/Write)"
+function _formatPermissionsHuman(perms) {
+  var p = (perms || '----');
+  var parts = [];
+  if (p[0] === 'R') parts.push('Read');
+  if (p[1] === 'N') parts.push('Name');
+  if (p[2] === 'D') parts.push('Delete');
+  if (p[3] === 'W') parts.push('Write');
+  return p + (parts.length ? ' (' + parts.join('/') + ')' : ' (none)');
+}
+
 // ── Request dispatcher ────────────────────────────────────────────────────────
 
 function respond(res, obj) {
@@ -1180,6 +1218,166 @@ if (process.stdin.isTTY) {
   // null = not in wizard; otherwise an object tracking the current step.
   var _createWizard = null;
 
+  // Navigation state for QDOS-style drive inspection commands
+  var _serverMountedDrive = null;
+  var _serverCwd = '/';
+
+  // ── QDOS navigation command handlers ────────────────────────────────────────
+
+  function _handleMount(name) {
+    if (!name) { process.stdout.write('Usage: mount <drive>\n'); return; }
+    var n = normName(name);
+    if (!drives[n]) { process.stdout.write('Error: drive "' + n + '" not found.\n'); return; }
+    _serverMountedDrive = n;
+    _serverCwd = '/';
+    process.stdout.write('Mounted: server://' + n + '/\n');
+  }
+
+  function _handleDir() {
+    if (!_serverMountedDrive) { process.stdout.write('No drive mounted. Use: mount <drive>\n'); return; }
+    var drive = drives[_serverMountedDrive];
+    var dir   = (_serverCwd || '/').replace(/^\//, '').replace(/\/$/, '');
+    process.stdout.write('Directory of server://' + _serverMountedDrive + (_serverCwd || '/') + '\n\n');
+
+    // Subdirectories in current directory
+    var dirPrefix = dir ? (dir + '/') : '';
+    var subDirs   = Object.keys(drive.dirs || {}).filter(function (d) {
+      if (!d.startsWith(dirPrefix)) return false;
+      var rel = d.substring(dirPrefix.length);
+      return rel && rel.indexOf('/') < 0;
+    });
+    for (var di = 0; di < subDirs.length; di++) {
+      process.stdout.write('  <DIR>  ' + subDirs[di].substring(dirPrefix.length) + '\n');
+    }
+
+    // Files in current directory – sysop context sees all entries with full metadata
+    var dirEntries = drive.manifest.filter(function (e) {
+      if (e.name === MANIFEST_KEY) return false;
+      var base  = resolveName('/', e.name).replace(/\/$/, '');
+      var slash = base.lastIndexOf('/');
+      var fileDir = slash >= 0 ? base.substring(0, slash) : '';
+      return fileDir === dir;
+    });
+    var fileCount = 0;
+    for (var fi = 0; fi < dirEntries.length; fi++) {
+      var fe   = dirEntries[fi];
+      var fnb  = baseName(fe.name);
+      var fsz  = formatBytes(fe.size || 0);
+      var fts  = _formatTimestampShort(fe.timestamp);
+      var sess = (fe.session || 'PUBLIC').slice(0, 8);
+      var perm = fe.permissions || '----';
+      var fown = fe.owner || '';
+      process.stdout.write(
+        '  ' + fnb.padEnd(14) + ' ' + fsz.padStart(6) + '  ' + fts + '  ' +
+        sess.padEnd(10) + ' ' + perm + '  ' + fown + '\n'
+      );
+      fileCount++;
+    }
+    process.stdout.write('\n' + fileCount + ' file(s)\n');
+  }
+
+  function _handleLs() {
+    if (!_serverMountedDrive) { process.stdout.write('No drive mounted. Use: mount <drive>\n'); return; }
+    var drive   = drives[_serverMountedDrive];
+    var dir     = (_serverCwd || '/').replace(/^\//, '').replace(/\/$/, '');
+    var lsPrefix = dir ? (dir + '/') : '';
+
+    // Subdirectories
+    var lsDirs = Object.keys(drive.dirs || {}).filter(function (d) {
+      if (!d.startsWith(lsPrefix)) return false;
+      var rel = d.substring(lsPrefix.length);
+      return rel && rel.indexOf('/') < 0;
+    });
+    for (var li = 0; li < lsDirs.length; li++) {
+      process.stdout.write(lsDirs[li].substring(lsPrefix.length) + '/\n');
+    }
+
+    // Files
+    var lsEntries = drive.manifest.filter(function (e) {
+      if (e.name === MANIFEST_KEY) return false;
+      var base  = resolveName('/', e.name).replace(/\/$/, '');
+      var slash = base.lastIndexOf('/');
+      var fileDir = slash >= 0 ? base.substring(0, slash) : '';
+      return fileDir === dir;
+    });
+    for (var lj = 0; lj < lsEntries.length; lj++) {
+      process.stdout.write(baseName(lsEntries[lj].name) + '\n');
+    }
+  }
+
+  function _handleMkdir(name) {
+    if (!name) { process.stdout.write('Usage: mkdir <name>\n'); return; }
+    if (!_serverMountedDrive) { process.stdout.write('No drive mounted. Use: mount <drive>\n'); return; }
+    var mkr = dirMake(_serverMountedDrive, _serverCwd, name, 'console');
+    if (mkr.success) {
+      process.stdout.write('Created directory: ' + name + '/\n');
+    } else {
+      process.stdout.write('Error: ' + mkr.error + '\n');
+    }
+  }
+
+  function _handleChdir(name) {
+    if (!_serverMountedDrive) { process.stdout.write('No drive mounted. Use: mount <drive>\n'); return; }
+    var cdr = dirChange(_serverMountedDrive, _serverCwd, name || '/', 'console');
+    if (cdr.success) {
+      _serverCwd = cdr.cwd;
+      process.stdout.write(cdr.result + '\n');
+    } else {
+      process.stdout.write('Error: ' + cdr.error + '\n');
+    }
+  }
+
+  function _handleRmdir(name) {
+    if (!name) { process.stdout.write('Usage: rmdir <name>\n'); return; }
+    if (!_serverMountedDrive) { process.stdout.write('No drive mounted. Use: mount <drive>\n'); return; }
+    var rmr = dirRemove(_serverMountedDrive, _serverCwd, name, 'console', 'sysop');
+    if (rmr.success) {
+      process.stdout.write('Removed directory: ' + name + '/\n');
+    } else {
+      process.stdout.write('Error: ' + rmr.error + '\n');
+    }
+  }
+
+  function _handleFileDelete(name) {
+    if (!name) { process.stdout.write('Usage: delete <filename>\n'); return; }
+    var fdr = fileDelete(_serverMountedDrive, _serverCwd, name, 'console', 'sysop');
+    if (fdr.success) {
+      process.stdout.write('Deleted: ' + name + '\n');
+    } else {
+      process.stdout.write('Error: ' + fdr.error + '\n');
+    }
+  }
+
+  function _handleRename(arg) {
+    if (!arg) { process.stdout.write('Usage: rename <name>=<newname>\n'); return; }
+    if (!_serverMountedDrive) { process.stdout.write('No drive mounted. Use: mount <drive>\n'); return; }
+    var eqIdx = arg.indexOf('=');
+    if (eqIdx < 0) { process.stdout.write('Usage: rename <name>=<newname>\n'); return; }
+    var rnSrc = arg.slice(0, eqIdx).trim();
+    var rnDst = arg.slice(eqIdx + 1).trim();
+    if (!rnSrc || !rnDst) { process.stdout.write('Usage: rename <name>=<newname>\n'); return; }
+    var rnr = fileRename(_serverMountedDrive, _serverCwd, rnSrc, rnDst, 'console', 'sysop');
+    if (rnr.success) {
+      process.stdout.write('Renamed: ' + rnSrc + ' \u2192 ' + rnDst + '\n');
+    } else {
+      process.stdout.write('Error: ' + rnr.error + '\n');
+    }
+  }
+
+  function _handleExamine(name) {
+    if (!name) { process.stdout.write('Usage: exam <filename>\n'); return; }
+    if (!_serverMountedDrive) { process.stdout.write('No drive mounted. Use: mount <drive>\n'); return; }
+    var exEntry = _findEntry(drives[_serverMountedDrive].manifest, name);
+    if (!exEntry) { process.stdout.write('Error: file "' + name + '" not found.\n'); return; }
+    var exNb = baseName(exEntry.name);
+    process.stdout.write('File: '        + exNb + '\n');
+    process.stdout.write('Size: '        + (exEntry.size || 0) + ' bytes\n');
+    process.stdout.write('Created: '     + _formatTimestampHuman(exEntry.timestamp) + '\n');
+    process.stdout.write('Owner Token: ' + (exEntry.session || '(none)') +
+                         ' (' + (exEntry.owner || '(none)') + ')\n');
+    process.stdout.write('Permissions: ' + _formatPermissionsHuman(exEntry.permissions) + '\n');
+  }
+
   function _wizardPrompt(msg) {
     process.stdout.write(msg);
   }
@@ -1296,20 +1494,61 @@ if (process.stdin.isTTY) {
           break;
         }
 
+        case 'mount':
+          _handleMount(arg);
+          break;
+
+        case 'dir':
+          _handleDir();
+          break;
+
+        case 'ls':
+          _handleLs();
+          break;
+
+        case 'mkdir':
+          _handleMkdir(arg);
+          break;
+
+        case 'cd':
+        case 'chdir':
+          _handleChdir(arg);
+          break;
+
+        case 'rmdir':
+          _handleRmdir(arg);
+          break;
+
+        case 'rename':
+          _handleRename(arg);
+          break;
+
+        case 'exam':
+        case 'examine':
+          _handleExamine(arg);
+          break;
+
         case 'delete':
-          if (!arg) { process.stdout.write('Usage: delete <name>\n'); break; }
-          var dn = normName(arg);
-          if (!drives[dn]) {
-            process.stdout.write('Error: drive "' + dn + '" not found.\n');
+          if (_serverMountedDrive) {
+            // File delete within the mounted drive (sysop has full access)
+            if (!arg) { process.stdout.write('Usage: delete <filename>\n'); break; }
+            _handleFileDelete(arg);
           } else {
-            process.stdout.write('Warning: All data on drive "' + dn + '" will be permanently lost.\n');
-            var wasPersistent = drives[dn].persistent;
-            delete drives[dn];
-            if (wasPersistent) {
-              // Remove the per-drive file
-              try { fs.unlinkSync(dn + '.json'); } catch (e) { /* ignore */ }
+            // Drive delete when no drive is mounted (existing behaviour)
+            if (!arg) { process.stdout.write('Usage: delete <name>\n'); break; }
+            var dn = normName(arg);
+            if (!drives[dn]) {
+              process.stdout.write('Error: drive "' + dn + '" not found.\n');
+            } else {
+              process.stdout.write('Warning: All data on drive "' + dn + '" will be permanently lost.\n');
+              var wasPersistent = drives[dn].persistent;
+              delete drives[dn];
+              if (wasPersistent) {
+                // Remove the per-drive file
+                try { fs.unlinkSync(dn + '.json'); } catch (e) { /* ignore */ }
+              }
+              process.stdout.write('Drive "' + dn + '" deleted.\n');
             }
-            process.stdout.write('Drive "' + dn + '" deleted.\n');
           }
           break;
 
@@ -1341,8 +1580,17 @@ if (process.stdin.isTTY) {
             'Server console commands:\n' +
             '  create              - Create a new drive (interactive wizard)\n' +
             '  list                - List all drives with type and access level\n' +
-            '  delete <name>       - Delete a drive and its data\n' +
+            '  delete <name>       - Delete a drive (no drive mounted) or a file (drive mounted)\n' +
             '  perms <drive> <file> [RNDW]  - View or set file permissions\n' +
+            '\nNavigation commands (mount a drive first):\n' +
+            '  mount <drive>       - Mount a drive for navigation\n' +
+            '  dir                 - Directory listing with full metadata\n' +
+            '  ls                  - Simple file/directory listing\n' +
+            '  cd <name>           - Change directory (.. = parent, / = root)\n' +
+            '  mkdir <name>        - Create a directory\n' +
+            '  rmdir <name>        - Remove an empty directory\n' +
+            '  rename <old>=<new>  - Rename a file\n' +
+            '  exam <name>         - Examine file metadata in detail\n' +
             '  help                - Show this help\n' +
             '\nPermission string format: RNDW\n' +
             '  R = guest can Read   N = guest sees Name in listings\n' +
