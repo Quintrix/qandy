@@ -8,11 +8,16 @@
 // Usage: node qandyland.js [port]
 // Default port: 8080
 //
-// Security: Session-based ownership via HTTP-only cookies.
-//           Data is in-memory only – not persisted to disk.
+// Security: Access-level permission system (O/S/U/G).
+//           Drives persist to drives.json between restarts.
+//           Only the server console can create/delete drives.
+//
+// Permission levels (read/write): O=Owner, S=Sysop, U=User, G=Guest
+//   O/O - server-only  |  S/S - sysop only  |  U/U - users
+//   G/G - public       |  U/G - user read, guest write  (etc.)
 //
 // Request format (POST /qandyland.js, Content-Type: application/json):
-//   { "method": "create|mount|mkdir|chdir|rmdir|save|load|delete|rename|exists|dir|list",
+//   { "method": "mount|mkdir|chdir|rmdir|save|load|delete|rename|exists|dir|list",
 //     "drive": "thewall",  "cwd": "/",  "name": "...", ... }
 //
 // Response format:
@@ -35,6 +40,39 @@ var MAX_FILE_BYTES = 1024 * 1024;   // 1 MB per file
 var MAX_DRIVE_FILES = 1000;
 var SESSION_COOKIE = 'qsession';
 var VALID_NAME_RE  = /^(?!\.)[A-Za-z0-9 \-_.()+=!]+$/;
+var DRIVES_FILE    = path.join(__dirname, 'drives.json');
+
+// ── Access level permission system ────────────────────────────────────────────
+// O=Owner(server), S=Sysop, U=User, G=Guest.  All HTTP clients are level G.
+var ACCESS_LEVELS = { O: 4, S: 3, U: 2, G: 1 };
+var PERM_RE = /^[OSUG]\/[OSUG]$/;
+var CLIENT_LEVEL = 'G';  // HTTP clients are always treated as Guest
+
+function validPerm(p) {
+  return typeof p === 'string' && PERM_RE.test(p);
+}
+
+// Returns true when userLevel meets or exceeds the requiredLevel
+function hasAccessLevel(userLevel, requiredLevel) {
+  return (ACCESS_LEVELS[userLevel] || 0) >= (ACCESS_LEVELS[requiredLevel] || 99);
+}
+
+// Check read or write access against drive permissions
+function checkDriveAccess(drive, userLevel, action) {
+  var perms = (drive && drive.permissions) || 'G/G';
+  var parts = perms.split('/');
+  var required = action === 'write' ? parts[1] : parts[0];
+  return hasAccessLevel(userLevel, required);
+}
+
+// Check read or write access against a file entry's permissions
+// Falls back to drive permissions when the file has no explicit permissions
+function checkFileAccess(entry, drive, userLevel, action) {
+  var perms = (entry && entry.permissions) || (drive && drive.permissions) || 'G/G';
+  var parts = perms.split('/');
+  var required = action === 'write' ? parts[1] : parts[0];
+  return hasAccessLevel(userLevel, required);
+}
 
 // ── Server discovery / registry ───────────────────────────────────────────────
 // Configurable via command-line: node qandyland.js [port] [--name "..."] [--registry "url"] [--maxPlayers N]
@@ -161,28 +199,103 @@ function startHeartbeat() {
 
 // ── Request logging ───────────────────────────────────────────────────────────
 
+// Column widths for aligned one-line log output
+var COL_CLIENT  = 15;
+var COL_ACTION  = 9;
+var COL_DRIVE   = 8;
+var COL_FILE    = 12;
+var COL_SESSION = 9;
+
 function logRequest(req, method, drive, name, result) {
-  var ts  = new Date().toISOString().slice(11, 19);
-  var ip  = req.headers['x-forwarded-for'] || (req.socket && req.socket.remoteAddress) || 'unknown';
-  var ok  = result && result.success;
-  console.log('[' + ts + '] ' + ip + ' - ' + method);
-  if (drive) console.log('  Drive:    ' + drive);
-  if (name)  console.log('  File:     ' + name);
-  console.log('  Result:   ' + (ok ? 'SUCCESS' : 'FAILED'));
-  if (!ok && result && result.error) console.log('  Error:    ' + result.error);
-  console.log('  Drives:   [' + Object.keys(drives).join(', ') + ']');
+  if (!logRequest._headerShown) {
+    console.log(
+      '[TIME    ] ' +
+      'CLIENT         ' +
+      ' ACTION   ' +
+      ' DRIVE   ' +
+      ' FILE        ' +
+      ' SESSION ' +
+      'RESULT'
+    );
+    logRequest._headerShown = true;
+  }
+
+  var ts      = new Date().toISOString().slice(11, 19);
+  var ip      = req.headers['x-forwarded-for'] || (req.socket && req.socket.remoteAddress) || 'unknown';
+  var client  = (ip === '::1' || ip === '127.0.0.1') ? 'local' : ip;
+  var ok      = result && result.success;
+  var session = (result && result._session) || '';
+  var status  = ok ? 'SUCCESS' : ('FAILED' + (result && result.error ? ' ' + result.error : ''));
+
+  console.log(
+    '[' + ts + '] ' +
+    client.slice(0, COL_CLIENT).padEnd(COL_CLIENT) + ' ' +
+    (method || '').slice(0, COL_ACTION - 1).padEnd(COL_ACTION) +
+    (drive  || '-').slice(0, COL_DRIVE - 1).padEnd(COL_DRIVE)  +
+    (name   || '-').slice(0, COL_FILE - 1).padEnd(COL_FILE)    +
+    (session || '').slice(0, 8).padEnd(COL_SESSION) +
+    status
+  );
 }
 
 // ── In-memory storage ─────────────────────────────────────────────────────────
 //
 // drives[driveName] = {
-//   manifest: [{ name, size, timestamp, owner }],
+//   manifest: [{ name, size, timestamp, owner, permissions }],
 //   files:    { canonicalName: content_string },
-//   dirs:     { dirName: true },
-//   created:  timestamp_string
+//   dirs:     { dirName: { owner, created } },
+//   created:  timestamp_string,
+//   permissions: "R/W"   // drive-level access control, e.g. G/G, O/O
 // }
 //
 var drives = {};
+
+// ── Drive persistence ─────────────────────────────────────────────────────────
+
+function saveDrives() {
+  try {
+    // Serialize drives (skip file content – only structure & metadata)
+    var snapshot = {};
+    var names = Object.keys(drives);
+    for (var i = 0; i < names.length; i++) {
+      var n = names[i];
+      var d = drives[n];
+      snapshot[n] = {
+        manifest:    d.manifest,
+        files:       d.files,
+        dirs:        d.dirs,
+        created:     d.created,
+        permissions: d.permissions
+      };
+    }
+    fs.writeFileSync(DRIVES_FILE, JSON.stringify(snapshot, null, 2), 'utf8');
+  } catch (e) {
+    console.warn('Warning: could not save drives.json:', e.message || String(e));
+  }
+}
+
+function loadDrives() {
+  try {
+    if (!fs.existsSync(DRIVES_FILE)) return;
+    var raw = fs.readFileSync(DRIVES_FILE, 'utf8');
+    var snapshot = JSON.parse(raw);
+    var names = Object.keys(snapshot);
+    for (var i = 0; i < names.length; i++) {
+      var n = names[i];
+      var d = snapshot[n];
+      drives[n] = {
+        manifest:    Array.isArray(d.manifest)          ? d.manifest    : [],
+        files:       (d.files && typeof d.files === 'object') ? d.files : {},
+        dirs:        (d.dirs  && typeof d.dirs  === 'object') ? d.dirs  : {},
+        created:     d.created     || timestamp(),
+        permissions: validPerm(d.permissions) ? d.permissions : 'O/O'
+      };
+    }
+    console.log('Loaded ' + names.length + ' drive(s) from drives.json');
+  } catch (e) {
+    console.warn('Warning: could not load drives.json:', e.message || String(e));
+  }
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -328,23 +441,25 @@ function serveStatic(req, res) {
 
 // ── Drive operations ──────────────────────────────────────────────────────────
 
-function driveCreate(driveName, session) {
+function driveCreate(driveName, permissions) {
   var name = normName(driveName);
   var fv = validateName(name);
   if (!fv.ok) return { success: false, error: 'invalid drive name: ' + fv.reason };
   if (drives[name]) return { success: false, error: 'drive already exists' };
 
+  var perms = validPerm(permissions) ? permissions : 'O/O';
   var ts = timestamp();
   drives[name] = {
-    manifest: [],
-    files:    {},
-    dirs:     {},
-    owner:    session,
-    created:  ts
+    manifest:    [],
+    files:       {},
+    dirs:        {},
+    created:     ts,
+    permissions: perms
   };
 
   // Create the root manifest entry
   _saveManifest(name, []);
+  saveDrives();
 
   return { success: true, result: 'drive created' };
 }
@@ -372,7 +487,10 @@ function _saveManifest(driveName, entries) {
   for (var i = 0; i < entries.length; i++) {
     var e = entries[i];
     if (e.name === MANIFEST_KEY) continue;
-    lines.push(e.name + '|' + e.size + '|' + e.timestamp + '|' + (e.owner || ''));
+    lines.push(
+      e.name + '|' + e.size + '|' + e.timestamp + '|' +
+      (e.owner || '') + '|' + (e.permissions || drive.permissions || 'G/G')
+    );
   }
   var body    = lines.length ? lines.join('\n') + '\n' : '';
   var selfLine = MANIFEST_KEY + '|0|' + ts;
@@ -383,12 +501,17 @@ function _saveManifest(driveName, entries) {
 
   drive.files[MANIFEST_KEY] = full;
   drive.manifest = entries.filter(function (e) { return e.name !== MANIFEST_KEY; });
-  drive.manifest.push({ name: MANIFEST_KEY, size: utf8len(full), timestamp: ts, owner: '' });
+  drive.manifest.push({ name: MANIFEST_KEY, size: utf8len(full), timestamp: ts, owner: '', permissions: '' });
 }
 
-function fileSave(driveName, cwd, name, content, session) {
+function fileSave(driveName, cwd, name, content, userLevel) {
   var drive = drives[driveName];
   if (!drive) return { success: false, error: 'drive not mounted' };
+
+  // Drive-level write access check
+  if (!checkDriveAccess(drive, userLevel, 'write')) {
+    return { success: false, error: 'permission denied' };
+  }
 
   var fname = normName(name);
   if (!fname) return { success: false, error: 'invalid filename' };
@@ -402,8 +525,8 @@ function fileSave(driveName, cwd, name, content, session) {
   if (existing && isWriteProtected(existing.name)) {
     return { success: false, error: 'file is write-protected' };
   }
-  // Ownership check (non-public files)
-  if (existing && existing.owner && existing.owner !== session) {
+  // File-level write access check
+  if (existing && !checkFileAccess(existing, drive, userLevel, 'write')) {
     return { success: false, error: 'permission denied' };
   }
 
@@ -420,19 +543,29 @@ function fileSave(driveName, cwd, name, content, session) {
   var ts = timestamp();
   drive.files[canonical] = str;
 
+  // Inherit drive permissions for new files; preserve permissions for existing files
+  var filePerms = existing ? (existing.permissions || drive.permissions || 'G/G') : (drive.permissions || 'G/G');
+  var fileOwner = existing ? (existing.owner || '') : '';
+
   // Update manifest
   var manifest = drive.manifest.filter(function (e) {
     return e.name !== MANIFEST_KEY && baseName(normName(e.name)).toLowerCase() !== baseName(normName(fname)).toLowerCase();
   });
-  manifest.push({ name: fname, size: size, timestamp: ts, owner: session });
+  manifest.push({ name: fname, size: size, timestamp: ts, owner: fileOwner, permissions: filePerms });
   _saveManifest(driveName, manifest);
+  saveDrives();
 
   return { success: true, result: true };
 }
 
-function fileLoad(driveName, cwd, name, session) {
+function fileLoad(driveName, cwd, name, userLevel) {
   var drive = drives[driveName];
   if (!drive) return { success: false, error: 'drive not mounted' };
+
+  // Drive-level read access check
+  if (!checkDriveAccess(drive, userLevel, 'read')) {
+    return { success: false, error: 'permission denied' };
+  }
 
   var fname    = normName(name);
   if (!fname) return { success: false, error: 'invalid filename' };
@@ -441,8 +574,8 @@ function fileLoad(driveName, cwd, name, session) {
 
   if (!existing) return { success: false, error: 'file not found' };
 
-  // Private file ownership check
-  if (existing.owner && existing.owner !== session) {
+  // File-level read access check
+  if (!checkFileAccess(existing, drive, userLevel, 'read')) {
     return { success: false, error: 'permission denied' };
   }
 
@@ -452,9 +585,13 @@ function fileLoad(driveName, cwd, name, session) {
   return { success: true, content: content };
 }
 
-function fileDelete(driveName, cwd, name, session) {
+function fileDelete(driveName, cwd, name, userLevel) {
   var drive = drives[driveName];
   if (!drive) return { success: false, error: 'drive not mounted' };
+
+  if (!checkDriveAccess(drive, userLevel, 'write')) {
+    return { success: false, error: 'permission denied' };
+  }
 
   var fname    = normName(name);
   if (!fname) return { success: false, error: 'invalid filename' };
@@ -463,7 +600,7 @@ function fileDelete(driveName, cwd, name, session) {
 
   if (!existing) return { success: false, error: 'file not found' };
   if (isWriteProtected(existing.name)) return { success: false, error: 'file is write-protected' };
-  if (existing.owner && existing.owner !== session) {
+  if (!checkFileAccess(existing, drive, userLevel, 'write')) {
     return { success: false, error: 'permission denied' };
   }
 
@@ -472,13 +609,18 @@ function fileDelete(driveName, cwd, name, session) {
     return e.name !== MANIFEST_KEY && baseName(normName(e.name)).toLowerCase() !== baseName(normName(fname)).toLowerCase();
   });
   _saveManifest(driveName, manifest);
+  saveDrives();
 
   return { success: true, result: 'deleted' };
 }
 
-function fileRename(driveName, cwd, name, dest, session) {
+function fileRename(driveName, cwd, name, dest, userLevel) {
   var drive = drives[driveName];
   if (!drive) return { success: false, error: 'drive not mounted' };
+
+  if (!checkDriveAccess(drive, userLevel, 'write')) {
+    return { success: false, error: 'permission denied' };
+  }
 
   var fname = normName(name);
   var dname = normName(dest);
@@ -495,7 +637,7 @@ function fileRename(driveName, cwd, name, dest, session) {
 
   if (!existing) return { success: false, error: 'file not found' };
   if (isWriteProtected(existing.name)) return { success: false, error: 'file is write-protected' };
-  if (existing.owner && existing.owner !== session) {
+  if (!checkFileAccess(existing, drive, userLevel, 'write')) {
     return { success: false, error: 'permission denied' };
   }
   if (destExisting) return { success: false, error: 'destination already exists' };
@@ -510,13 +652,14 @@ function fileRename(driveName, cwd, name, dest, session) {
   var manifest = drive.manifest.filter(function (e) {
     return e.name !== MANIFEST_KEY && baseName(normName(e.name)).toLowerCase() !== baseName(normName(fname)).toLowerCase();
   });
-  manifest.push({ name: dname, size: existing.size, timestamp: ts, owner: existing.owner || session });
+  manifest.push({ name: dname, size: existing.size, timestamp: ts, owner: existing.owner || '', permissions: existing.permissions || drive.permissions || 'G/G' });
   _saveManifest(driveName, manifest);
+  saveDrives();
 
   return { success: true, result: 'renamed' };
 }
 
-function fileExists(driveName, cwd, name, session) {
+function fileExists(driveName, cwd, name, userLevel) {
   var drive = drives[driveName];
   if (!drive) return { success: true, exists: false };
 
@@ -525,8 +668,8 @@ function fileExists(driveName, cwd, name, session) {
   var existing  = _findEntry(drive.manifest, fname);
   if (!existing) return { success: true, exists: false };
 
-  // Privately owned files are not visible unless you own them
-  if (existing.owner && existing.owner !== session) {
+  // File is invisible if user doesn't have read access
+  if (!checkFileAccess(existing, drive, userLevel, 'read')) {
     return { success: true, exists: false };
   }
 
@@ -604,9 +747,14 @@ function dirRemove(driveName, cwd, name, session) {
   return { success: true, result: 'done' };
 }
 
-function dirList(driveName, cwd, pattern, switches, session) {
+function dirList(driveName, cwd, pattern, switches, userLevel) {
   var drive = drives[driveName];
   if (!drive) return { success: false, error: 'drive not mounted' };
+
+  // Drive-level read access check
+  if (!checkDriveAccess(drive, userLevel, 'read')) {
+    return { success: false, error: 'permission denied' };
+  }
 
   var showHidden = (switches || '').indexOf('a') >= 0;
   var dir   = (cwd || '/').replace(/^\//, '').replace(/\/$/, '');
@@ -635,7 +783,7 @@ function dirList(driveName, cwd, pattern, switches, session) {
   var entries = drive.manifest.filter(function (e) {
     if (e.name === MANIFEST_KEY) return showHidden;
     if (!showHidden && isHidden(e.name)) return false;
-    if (e.owner && e.owner !== session) return false;
+    if (!checkFileAccess(e, drive, userLevel, 'read')) return false;
     var base = resolveName('/', e.name).replace(/\/$/, '');
     var slash = base.lastIndexOf('/');
     var fileDir = slash >= 0 ? base.substring(0, slash) : '';
@@ -648,7 +796,12 @@ function dirList(driveName, cwd, pattern, switches, session) {
     if (pattern && !matchPattern(nb, pattern)) continue;
     var ts  = e.timestamp || '';
     var sz  = String(e.size);
-    lines.push('  ' + ts + '  ' + sz.padStart(8) + '  ' + e.name + '\n');
+    var perms = e.permissions || drive.permissions || 'G/G';
+    var owner = e.owner || '';
+    lines.push(
+      '  ' + ts + '  ' + sz.padStart(8) + '  ' +
+      e.name.padEnd(16) + '  ' + perms.padEnd(5) + '  ' + owner + '\n'
+    );
   }
 
   lines.push('\n');
@@ -657,16 +810,20 @@ function dirList(driveName, cwd, pattern, switches, session) {
   return { success: true, listing: lines.join('') };
 }
 
-function fileList(driveName, cwd, pattern, session) {
+function fileList(driveName, cwd, pattern, userLevel) {
   var drive = drives[driveName];
   if (!drive) return { success: false, error: 'drive not mounted' };
+
+  if (!checkDriveAccess(drive, userLevel, 'read')) {
+    return { success: false, error: 'permission denied' };
+  }
 
   var dir   = (cwd || '/').replace(/^\//, '').replace(/\/$/, '');
   var names = [];
 
   var entries = drive.manifest.filter(function (e) {
     if (e.name === MANIFEST_KEY) return false;
-    if (e.owner && e.owner !== session) return false;
+    if (!checkFileAccess(e, drive, userLevel, 'read')) return false;
     var base = resolveName('/', e.name).replace(/\/$/, '');
     var slash = base.lastIndexOf('/');
     var fileDir = slash >= 0 ? base.substring(0, slash) : '';
@@ -722,14 +879,19 @@ function handleQandyland(req, res) {
     var name   = normName(pkt.name  || '');
     var dest   = normName(pkt.dest  || '');
     var content = pkt.content != null ? String(pkt.content) : '';
-    var options = pkt.options || {};
     var pattern = normName(pkt.pattern || '');
     var switches = normName(pkt.switches || '');
+
+    // All HTTP clients are treated as Guest level
+    var userLevel = CLIENT_LEVEL;
 
     var result;
     switch (method) {
       case 'create':
-        result = driveCreate(name || drive, session);
+        result = {
+          success: false,
+          error: 'Drive creation restricted to server administrator. Use the server console.'
+        };
         logRequest(req, method, name || drive, '', result);
         return respond(res, result);
 
@@ -739,27 +901,27 @@ function handleQandyland(req, res) {
         return respond(res, result);
 
       case 'save':
-        result = fileSave(drive, cwd, name, content, session);
+        result = fileSave(drive, cwd, name, content, userLevel);
         logRequest(req, method, drive, name, result);
         return respond(res, result);
 
       case 'load':
-        result = fileLoad(drive, cwd, name, session);
+        result = fileLoad(drive, cwd, name, userLevel);
         logRequest(req, method, drive, name, result);
         return respond(res, result);
 
       case 'delete':
-        result = fileDelete(drive, cwd, name, session);
+        result = fileDelete(drive, cwd, name, userLevel);
         logRequest(req, method, drive, name, result);
         return respond(res, result);
 
       case 'rename':
-        result = fileRename(drive, cwd, name, dest, session);
+        result = fileRename(drive, cwd, name, dest, userLevel);
         logRequest(req, method, drive, name, result);
         return respond(res, result);
 
       case 'exists':
-        result = fileExists(drive, cwd, name, session);
+        result = fileExists(drive, cwd, name, userLevel);
         logRequest(req, method, drive, name, result);
         return respond(res, result);
 
@@ -779,12 +941,12 @@ function handleQandyland(req, res) {
         return respond(res, result);
 
       case 'dir':
-        result = dirList(drive, cwd, pattern, switches, session);
+        result = dirList(drive, cwd, pattern, switches, userLevel);
         logRequest(req, method, drive, pattern, result);
         return respond(res, result);
 
       case 'list':
-        result = fileList(drive, cwd, pattern, session);
+        result = fileList(drive, cwd, pattern, userLevel);
         logRequest(req, method, drive, pattern, result);
         return respond(res, result);
 
@@ -796,6 +958,121 @@ function handleQandyland(req, res) {
   }).catch(function (err) {
     respond(res, { success: false, error: 'server error: ' + err.message });
   });
+}
+
+// ── Server console commands ───────────────────────────────────────────────────
+
+function showServerHelp() {
+  console.log('');
+  console.log('Server console commands:');
+  console.log('  create <name> [perms]  Create a drive  (default perms: O/O)');
+  console.log('  list                   List all drives with permissions');
+  console.log('  delete <name>          Delete a drive');
+  console.log('  perms <name>           Show drive permissions');
+  console.log('  help                   Show this help');
+  console.log('');
+  console.log('Permission format: R/W  where R=read level, W=write level');
+  console.log('  O=Owner  S=Sysop  U=User  G=Guest');
+  console.log('  Examples: O/O  S/S  U/U  G/G  S/U  U/G');
+  console.log('');
+}
+
+function handleServerCreate(driveName, permissions) {
+  if (!driveName) {
+    console.log('Usage: create <drive-name> [permissions]');
+    console.log('       create thewall G/G');
+    return;
+  }
+  var perms = permissions || 'O/O';
+  if (!validPerm(perms)) {
+    console.log('✗ Invalid permissions "' + perms + '". Use format like O/O, S/S, U/G, G/G');
+    return;
+  }
+  var result = driveCreate(driveName, perms);
+  if (result.success) {
+    console.log('✓ Drive \'' + driveName + '\' created with ' + perms + ' permissions');
+  } else {
+    console.log('✗ ' + result.error);
+  }
+}
+
+function handleServerList() {
+  var names = Object.keys(drives);
+  if (names.length === 0) {
+    console.log('  (no drives)');
+    return;
+  }
+  console.log('');
+  console.log('  Drive            Perms   Files    Size      Created');
+  console.log('  ───────────────────────────────────────────────────────');
+  for (var i = 0; i < names.length; i++) {
+    var n  = names[i];
+    var d  = drives[n];
+    var fc = (d.manifest || []).filter(function (e) { return e.name !== MANIFEST_KEY; }).length;
+    var fk = 0;
+    var fkeys = Object.keys(d.files || {});
+    for (var j = 0; j < fkeys.length; j++) {
+      if (fkeys[j] !== MANIFEST_KEY) fk += utf8len(d.files[fkeys[j]]);
+    }
+    var kb = (fk / 1024).toFixed(1) + 'KB';
+    var perms = d.permissions || 'O/O';
+    console.log(
+      '  ' + n.padEnd(16) + ' ' + perms.padEnd(7) +
+      String(fc).padStart(5) + '    ' + kb.padEnd(9) + ' ' + (d.created || '')
+    );
+  }
+  console.log('');
+}
+
+function handleServerDelete(driveName) {
+  if (!driveName) {
+    console.log('Usage: delete <drive-name>');
+    return;
+  }
+  var name = normName(driveName);
+  if (!drives[name]) {
+    console.log('✗ Drive \'' + name + '\' not found');
+    return;
+  }
+  delete drives[name];
+  saveDrives();
+  console.log('✓ Drive \'' + name + '\' deleted');
+}
+
+function handleServerPerms(driveName) {
+  if (!driveName) {
+    console.log('Usage: perms <drive-name>');
+    return;
+  }
+  var name = normName(driveName);
+  var d = drives[name];
+  if (!d) {
+    console.log('✗ Drive \'' + name + '\' not found');
+    return;
+  }
+  var perms = d.permissions || 'O/O';
+  var parts = perms.split('/');
+  var levelName = { O: 'Owner', S: 'Sysop', U: 'User', G: 'Guest' };
+  console.log('');
+  console.log('Drive: ' + name);
+  console.log('  Permissions: ' + perms);
+  console.log('  Read:  ' + (levelName[parts[0]] || parts[0]) + ' level and above');
+  console.log('  Write: ' + (levelName[parts[1]] || parts[1]) + ' level and above');
+  console.log('');
+}
+
+function processServerCommand(cmd) {
+  var parts = cmd.trim().split(/\s+/);
+  var command = (parts[0] || '').toLowerCase();
+  switch (command) {
+    case 'create': handleServerCreate(parts[1], parts[2]); break;
+    case 'list':   handleServerList();                      break;
+    case 'delete': handleServerDelete(parts[1]);            break;
+    case 'perms':  handleServerPerms(parts[1]);             break;
+    case 'help':   showServerHelp();                        break;
+    default:
+      console.log('Unknown command "' + command + '". Type "help" for commands.');
+  }
 }
 
 // ── HTTP server ───────────────────────────────────────────────────────────────
@@ -841,27 +1118,81 @@ var server = http.createServer(function (req, res) {
 });
 
 server.listen(PORT, function () {
-  console.log('Qandyland server running at http://localhost:' + PORT + '/');
-  console.log('POST to http://localhost:' + PORT + '/qandyland.js');
+  // Load persisted drives before showing banner
+  loadDrives();
+
+  // ── Startup banner ────────────────────────────────────────────────────────
+  var ipStr      = (_publicIp || '(detecting...)').padEnd(20);
+  var portStr    = String(PORT).padEnd(20);
+  var regStatus  = REGISTRY_URL ? 'Enabled' : 'Disabled';
+  var line       = '║ %-28s  %-29s║';
+  var width      = 64;
+  var border     = '═'.repeat(width - 2);
+
+  function bannerLine(left, right) {
+    var l = (left  || '').padEnd(28);
+    var r = (right || '').padEnd(29);
+    return '║ ' + l + '  ' + r + '║';
+  }
+
+  console.log('╔' + border + '╗');
+  console.log('║' + '                    QANDYLAND SERVER                         '.slice(0, width - 2) + '║');
+  console.log('╠' + border + '╣');
+  console.log(bannerLine('Port: ' + PORT,           'Public IP: ' + (_publicIp || 'detecting...')));
+  console.log(bannerLine('Registry: ' + regStatus,  'Server ID: ' + (_serverId || 'pending')));
+  console.log('║' + ' '.repeat(width - 2) + '║');
+  console.log('║  Available Drives:' + ' '.repeat(width - 21) + '║');
+
+  var driveNames = Object.keys(drives);
+  if (driveNames.length === 0) {
+    console.log('║    (no drives created yet)' + ' '.repeat(width - 29) + '║');
+  } else {
+    for (var di = 0; di < driveNames.length; di++) {
+      var dn  = driveNames[di];
+      var dd  = drives[dn];
+      var fc  = (dd.manifest || []).filter(function (e) { return e.name !== MANIFEST_KEY; }).length;
+      var fk  = 0;
+      var fkeys = Object.keys(dd.files || {});
+      for (var fj = 0; fj < fkeys.length; fj++) {
+        if (fkeys[fj] !== MANIFEST_KEY) fk += utf8len(dd.files[fkeys[fj]]);
+      }
+      var kb   = (fk / 1024).toFixed(1) + 'KB';
+      var perms = dd.permissions || 'O/O';
+      var info  = ('  • ' + dn + '   ' + perms + '  (' + fc + ' files, ' + kb + ')').padEnd(width - 2);
+      console.log('║' + info + '║');
+    }
+  }
+
+  console.log('║' + ' '.repeat(width - 2) + '║');
+  console.log('║  Ready for connections...' + ' '.repeat(width - 28) + '║');
+  console.log('║  Type \'help\' for server commands' + ' '.repeat(width - 36) + '║');
+  console.log('╚' + border + '╝');
+  console.log('');
 
   if (REGISTRY_URL) {
     getPublicIp(function (err, ip) {
-      if (err || !ip) {
-        console.warn('Could not detect public IP (' + (err ? err.message : 'no IP returned') + ').');
-        console.warn('Registry will use 127.0.0.1. Update --registry or use --no-registry to suppress.');
-      } else {
-        _publicIp = ip;
-        console.log('Public IP detected: ' + ip);
-      }
-      registerWithRegistry(function (regErr, regResult) {
+      if (!err && ip) { _publicIp = ip; }
+      registerWithRegistry(function (regErr) {
         if (regErr) {
           console.warn('Registry registration failed:', regErr.message || String(regErr));
-        } else {
-          console.log('Registered with registry as "' + SERVER_NAME + '" (id: ' + _serverId + ')' +
-            ' drives=[' + Object.keys(drives).join(', ') + ']');
         }
         startHeartbeat();
       });
+    });
+  }
+
+  // ── Server console (stdin commands) ──────────────────────────────────────
+  if (process.stdin.isTTY || !process.stdin.isTTY) {
+    process.stdin.setEncoding('utf8');
+    process.stdin.on('readable', function () {
+      var chunk = process.stdin.read();
+      if (chunk !== null) {
+        var lines = chunk.split(/\r?\n/);
+        for (var li = 0; li < lines.length; li++) {
+          var cmd = lines[li].trim();
+          if (cmd) processServerCommand(cmd);
+        }
+      }
     });
   }
 });

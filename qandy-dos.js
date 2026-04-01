@@ -1852,21 +1852,8 @@ async function _serverRequest(method, params, timeoutMs) {
 }
 
 // Server storage functions
-global.serverCreate = async function(driveName, options) {
-  var name = _normName(driveName);
-  if (!name) return 'Error: invalid drive name';
-  
-  var result = await _serverRequest('create', { name: name, options: options });
-  
-  if (!result.success) {
-    return 'Error: ' + (result.error || 'create failed');
-  }
-  
-  // Auto-mount the newly created drive
-  _serverDrive = name;
-  _serverCwd = ROOT_SEG;
-  
-  return true;
+global.serverCreate = async function(driveName) {
+  return 'Error: Drive creation restricted to server administrator. Use the server console.';
 };
 
 global.serverMount = async function(driveName) {

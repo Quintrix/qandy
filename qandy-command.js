@@ -250,9 +250,6 @@ function command_js() {
           print("Input \'sysop\' for access\n");
         }
         return;
-      case "screate":
-        print(await qdosServerCreate(f, {}));
-        return;
       case "smount":
         print(await qdosServerMount(f));
         return;
@@ -599,22 +596,8 @@ function command_js() {
     return s;
   }
 
-  async function qdosServerCreate(driveName, options) {
-    var name = _qdosServerValidateDrive(driveName);
-    if (!name) return 'Error: invalid drive name\n';
-    if (typeof HOST !== 'undefined' && HOST) {
-      try {
-        var res = await Promise.resolve().then(function () { return serverCreate(name, options); });
-        return _normalizeResult(res) + '\n';
-      } catch (e) {
-        return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
-      }
-    }
-    return qdosXmitDos('serverCreate', { name: name, options: options }).then(function (result) {
-      return _normalizeResult(result) + '\n';
-    }).catch(function (e) {
-      return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
-    });
+  async function qdosServerCreate(driveName) {
+    return 'Error: Drive creation restricted to server administrator. Use the server console.\n';
   }
 
   async function qdosServerMount(driveName) {

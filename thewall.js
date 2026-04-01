@@ -30,25 +30,17 @@
   print("\x1b[1;36m=== The Wall ===\x1b[0m\n");
   print("Connecting to server...\n");
 
-  // Try mounting an existing drive first
+  // Mount the existing drive (server owner must create it first with: create thewall G/G)
   debugLog("Attempting serverMount('" + DRIVE + "')");
   var mountResult = await serverMount(DRIVE);
   debugLog("Mount result: " + mountResult);
   if (typeof mountResult === 'string' && mountResult.indexOf('Error') === 0) {
-    // Drive doesn't exist yet – create it
-    print("Creating new wall drive...\n");
-    debugLog("Attempting serverCreate('" + DRIVE + "')");
-    var createResult = await serverCreate(DRIVE);
-    debugLog("Create result: " + createResult);
-    if (typeof createResult === 'string' && createResult.indexOf('Error') === 0) {
-      print("\x1b[91m" + createResult + "\x1b[0m\n");
-      print("Make sure qandyland.js is running:  node qandyland.js\n");
-      return;
-    }
-    print("Wall drive created.\n");
-  } else {
-    print("Connected: " + mountResult + "\n");
+    print("\x1b[91m" + mountResult + "\x1b[0m\n");
+    print("The server owner must create this drive first.\n");
+    print("In the qandyland.js console, type:  create thewall G/G\n");
+    return;
   }
+  print("Connected: " + mountResult + "\n");
 
   // ── Load existing wall content ─────────────────────────────────────────────
   print("\n\x1b[1;33m── The Wall ──────────────────\x1b[0m\n");
