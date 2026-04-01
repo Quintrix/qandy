@@ -97,7 +97,7 @@ module.exports = function handler(req, res) {
       timestamp: Date.now()
     };
 
-    return respond(res, 200, { success: true, id: id });
+    return respond(res, 200, { success: true, id: id, message: 'Server registered with ' + drives.length + (drives.length === 1 ? ' drive' : ' drives') });
   }
 
   // ── GET: list active servers ───────────────────────────────────────────────
