@@ -1796,4 +1796,903 @@ var DEVICE = 'none';
     print("input 'fdisk' to install.\n\n");
   }
 
+// ── Server Storage Functions ─────────────────────────────────────────────────
+// Add these before the closing })(window);
+
+// Server storage state
+var _serverUrl = 'http://localhost:8080/qandyland.js';
+var _serverCwd = ROOT_SEG;  // Server working directory
+var _serverDrive = null;    // Currently mounted server drive
+
+function getServerCwd() { return _serverCwd || ROOT_SEG; }
+function setServerCwd(p) {
+  _serverCwd = (typeof p === 'string' && p.length) ? String(p) : ROOT_SEG;
+}
+
+// HTTP communication with qandyland.js server
+async function _serverRequest(method, params, timeoutMs) {
+  var timeout = timeoutMs || 10000;
+  var payload = {
+    method: method,
+    drive: _serverDrive,
+    cwd: getServerCwd(),
+    timestamp: _timestamp()
+  };
+  
+  // Merge params into payload
+  if (params && typeof params === 'object') {
+    var keys = Object.keys(params);
+    for (var i = 0; i < keys.length; i++) {
+      payload[keys[i]] = params[keys[i]];
+    }
+  }
+
+  try {
+    var response = await fetch(_serverUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout ? AbortSignal.timeout(timeout) : undefined
+    });
+    
+    if (!response.ok) {
+      return { success: false, error: 'Server responded with ' + response.status };
+    }
+    
+    var result = await response.json();
+    return result;
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      return { success: false, error: 'Request timeout' };
+    }
+    return { success: false, error: 'Network error: ' + (e.message || String(e)) };
+  }
+}
+
+// Server storage functions
+global.serverCreate = async function(driveName, options) {
+  var name = _normName(driveName);
+  if (!name) return 'Error: invalid drive name';
+  
+  var result = await _serverRequest('create', { name: name, options: options });
+  
+  if (!result.success) {
+    return 'Error: ' + (result.error || 'create failed');
+  }
+  
+  // Auto-mount the newly created drive
+  _serverDrive = name;
+  _serverCwd = ROOT_SEG;
+  
+  return true;
+};
+
+global.serverMount = async function(driveName) {
+  var name = _normName(driveName);
+  if (!name) return 'Error: invalid drive name';
+  
+  var result = await _serverRequest('mount', { name: name });
+  
+  if (!result.success) {
+    return 'Error: ' + (result.error || 'mount failed');
+  }
+  
+  _serverDrive = name;
+  _serverCwd = ROOT_SEG;
+  
+  return 'server://' + name + '/';
+};
+
+global.serverMkDir = async function(name, options) {
+  if (!_serverDrive) return 'Error: no server drive mounted';
+  
+  var dirName = _normName(name);
+  if (!dirName) return 'Error: invalid directory name';
+  
+  var fv = _validateBase(dirName);
+  if (!fv.ok) return 'Error: ' + fv.reason;
+  
+  var result = await _serverRequest('mkdir', { name: dirName, options: options });
+  
+  if (!result.success) {
+    return 'Error: ' + (result.error || 'mkdir failed');
+  }
+  
+  return result.result || 'done';
+};
+
+global.serverChDir = async function(name, options) {
+  if (!_serverDrive) return 'Error: no server drive mounted';
+  
+  var dirName = String(name || '').trim();
+  
+  // Handle special cases
+  if (!dirName) {
+    return 'server://' + _serverDrive + getServerCwd();
+  }
+  
+  var result = await _serverRequest('chdir', { name: dirName, options: options });
+  
+  if (!result.success) {
+    return 'Error: ' + (result.error || 'chdir failed');
+  }
+  
+  // Update local server working directory
+  if (result.cwd) {
+    setServerCwd(result.cwd);
+  }
+  
+  return 'server://' + _serverDrive + getServerCwd();
+};
+
+global.serverRmDir = async function(name, options) {
+  if (!_serverDrive) return 'Error: no server drive mounted';
+  
+  var dirName = _normName(name);
+  if (!dirName) return 'Error: invalid directory name';
+  
+  var fv = _validateBase(dirName);
+  if (!fv.ok) return 'Error: ' + fv.reason;
+  
+  var result = await _serverRequest('rmdir', { name: dirName, options: options });
+  
+  if (!result.success) {
+    return 'Error: ' + (result.error || 'rmdir failed');
+  }
+  
+  return result.result || 'done';
+};
+
+global.serverSave = async function(name, data) {
+  if (!_serverDrive) return 'Error: no server drive mounted';
+  
+  var fname = _normName(name);
+  if (!fname) return 'Error: invalid filename';
+  
+  var fbase = _baseName(fname);
+  var fv = _validateBase(fbase);
+  if (!fv.ok) return 'Error: ' + fv.reason;
+  
+  var content = String(data == null ? '' : data);
+  
+  var result = await _serverRequest('save', { 
+    name: fname, 
+    content: content,
+    size: _utf8len(content)
+  });
+  
+  if (!result.success) {
+    return 'Error: ' + (result.error || 'save failed');
+  }
+  
+  return result.result || true;
+};
+
+global.serverLoad = async function(name) {
+  if (!_serverDrive) return 'Error: no server drive mounted';
+  
+  var fname = _normName(name);
+  if (!fname) return 'Error: invalid filename';
+  
+  var fbase = _baseName(fname);
+  var fv = _validateBase(fbase);
+  if (!fv.ok) return null;
+  
+  var result = await _serverRequest('load', { name: fname });
+  
+  if (!result.success) {
+    if (result.error && result.error.indexOf('not found') !== -1) {
+      return null;
+    }
+    return 'Error: ' + (result.error || 'load failed');
+  }
+  
+  return result.content || '';
+};
+
+global.serverDelete = async function(name) {
+  if (!_serverDrive) return 'Error: no server drive mounted';
+  
+  var fname = _normName(name);
+  if (!fname) return 'Error: invalid filename';
+  
+  var fbase = _baseName(fname);
+  var fv = _validateBase(fbase);
+  if (!fv.ok) return 'Error: ' + fv.reason;
+  
+  var result = await _serverRequest('delete', { name: fname });
+  
+  if (!result.success) {
+    return 'Error: ' + (result.error || 'delete failed');
+  }
+  
+  return result.result || 'done';
+};
+
+global.serverRename = async function(name, dest) {
+  if (!_serverDrive) return 'Error: no server drive mounted';
+  
+  var fname = _normName(name);
+  var dname = _normName(dest);
+  
+  if (!fname || !dname) return 'Error: invalid filename';
+  
+  var fv = _validateBase(_baseName(fname));
+  var dv = _validateBase(_baseName(dname));
+  if (!fv.ok) return 'Error: ' + fv.reason;
+  if (!dv.ok) return 'Error: invalid destination: ' + dv.reason;
+  
+  var result = await _serverRequest('rename', { name: fname, dest: dname });
+  
+  if (!result.success) {
+    return 'Error: ' + (result.error || 'rename failed');
+  }
+  
+  return result.result || 'done';
+};
+
+global.serverExists = async function(name) {
+  if (!_serverDrive) return false;
+  // ── Server Storage Functions ─────────────────────────────────────────────────
+// Add these before the closing })(window);
+
+// Server storage state
+var _serverUrl = 'http://localhost:8080/qandyland.js';
+var _serverCwd = ROOT_SEG;  // Server working directory
+var _serverDrive = null;    // Currently mounted server drive
+
+function getServerCwd() { return _serverCwd || ROOT_SEG; }
+function setServerCwd(p) {
+  _serverCwd = (typeof p === 'string' && p.length) ? String(p) : ROOT_SEG;
+}
+
+// HTTP communication with qandyland.js server
+async function _serverRequest(method, params, timeoutMs) {
+  var timeout = timeoutMs || 10000;
+  var payload = {
+    method: method,
+    drive: _serverDrive,
+    cwd: getServerCwd(),
+    timestamp: _timestamp()
+  };
+  
+  // Merge params into payload
+  if (params && typeof params === 'object') {
+    var keys = Object.keys(params);
+    for (var i = 0; i < keys.length; i++) {
+      payload[keys[i]] = params[keys[i]];
+    }
+  }
+
+  try {
+    var response = await fetch(_serverUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout ? AbortSignal.timeout(timeout) : undefined
+    });
+    
+    if (!response.ok) {
+      return { success: false, error: 'Server responded with ' + response.status };
+    }
+    
+    var result = await response.json();
+    return result;
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      return { success: false, error: 'Request timeout' };
+    }
+    return { success: false, error: 'Network error: ' + (e.message || String(e)) };
+  }
+}
+
+// Server storage functions
+global.serverCreate = async function(driveName, options) {
+  var name = _normName(driveName);
+  if (!name) return 'Error: invalid drive name';
+  
+  var result = await _serverRequest('create', { name: name, options: options });
+  
+  if (!result.success) {
+    return 'Error: ' + (result.error || 'create failed');
+  }
+  
+  // Auto-mount the newly created drive
+  _serverDrive = name;
+  _serverCwd = ROOT_SEG;
+  
+  return true;
+};
+
+global.serverMount = async function(driveName) {
+  var name = _normName(driveName);
+  if (!name) return 'Error: invalid drive name';
+  
+  var result = await _serverRequest('mount', { name: name });
+  
+  if (!result.success) {
+    return 'Error: ' + (result.error || 'mount failed');
+  }
+  
+  _serverDrive = name;
+  _serverCwd = ROOT_SEG;
+  
+  return 'server://' + name + '/';
+};
+
+global.serverMkDir = async function(name, options) {
+  if (!_serverDrive) return 'Error: no server drive mounted';
+  
+  var dirName = _normName(name);
+  if (!dirName) return 'Error: invalid directory name';
+  
+  var fv = _validateBase(dirName);
+  if (!fv.ok) return 'Error: ' + fv.reason;
+  
+  var result = await _serverRequest('mkdir', { name: dirName, options: options });
+  
+  if (!result.success) {
+    return 'Error: ' + (result.error || 'mkdir failed');
+  }
+  
+  return result.result || 'done';
+};
+
+global.serverChDir = async function(name, options) {
+  if (!_serverDrive) return 'Error: no server drive mounted';
+  
+  var dirName = String(name || '').trim();
+  
+  // Handle special cases
+  if (!dirName) {
+    return 'server://' + _serverDrive + getServerCwd();
+  }
+  
+  var result = await _serverRequest('chdir', { name: dirName, options: options });
+  
+  if (!result.success) {
+    return 'Error: ' + (result.error || 'chdir failed');
+  }
+  
+  // Update local server working directory
+  if (result.cwd) {
+    setServerCwd(result.cwd);
+  }
+  
+  return 'server://' + _serverDrive + getServerCwd();
+};
+
+global.serverRmDir = async function(name, options) {
+  if (!_serverDrive) return 'Error: no server drive mounted';
+  
+  var dirName = _normName(name);
+  if (!dirName) return 'Error: invalid directory name';
+  
+  var fv = _validateBase(dirName);
+  if (!fv.ok) return 'Error: ' + fv.reason;
+  
+  var result = await _serverRequest('rmdir', { name: dirName, options: options });
+  
+  if (!result.success) {
+    return 'Error: ' + (result.error || 'rmdir failed');
+  }
+  
+  return result.result || 'done';
+};
+
+global.serverSave = async function(name, data) {
+  if (!_serverDrive) return 'Error: no server drive mounted';
+  
+  var fname = _normName(name);
+  if (!fname) return 'Error: invalid filename';
+  
+  var fbase = _baseName(fname);
+  var fv = _validateBase(fbase);
+  if (!fv.ok) return 'Error: ' + fv.reason;
+  
+  var content = String(data == null ? '' : data);
+  
+  var result = await _serverRequest('save', { 
+    name: fname, 
+    content: content,
+    size: _utf8len(content)
+  });
+  
+  if (!result.success) {
+    return 'Error: ' + (result.error || 'save failed');
+  }
+  
+  return result.result || true;
+};
+
+global.serverLoad = async function(name) {
+  if (!_serverDrive) return 'Error: no server drive mounted';
+  
+  var fname = _normName(name);
+  if (!fname) return 'Error: invalid filename';
+  
+  var fbase = _baseName(fname);
+  var fv = _validateBase(fbase);
+  if (!fv.ok) return null;
+  
+  var result = await _serverRequest('load', { name: fname });
+  
+  if (!result.success) {
+    if (result.error && result.error.indexOf('not found') !== -1) {
+      return null;
+    }
+    return 'Error: ' + (result.error || 'load failed');
+  }
+  
+  return result.content || '';
+};
+
+global.serverDelete = async function(name) {
+  if (!_serverDrive) return 'Error: no server drive mounted';
+  
+  var fname = _normName(name);
+  if (!fname) return 'Error: invalid filename';
+  
+  var fbase = _baseName(fname);
+  var fv = _validateBase(fbase);
+  if (!fv.ok) return 'Error: ' + fv.reason;
+  
+  var result = await _serverRequest('delete', { name: fname });
+  
+  if (!result.success) {
+    return 'Error: ' + (result.error || 'delete failed');
+  }
+  
+  return result.result || 'done';
+};
+
+global.serverRename = async function(name, dest) {
+  if (!_serverDrive) return 'Error: no server drive mounted';
+  
+  var fname = _normName(name);
+  var dname = _normName(dest);
+  
+  if (!fname || !dname) return 'Error: invalid filename';
+  
+  var fv = _validateBase(_baseName(fname));
+  var dv = _validateBase(_baseName(dname));
+  if (!fv.ok) return 'Error: ' + fv.reason;
+  if (!dv.ok) return 'Error: invalid destination: ' + dv.reason;
+  
+  var result = await _serverRequest('rename', { name: fname, dest: dname });
+  
+  if (!result.success) {
+    return 'Error: ' + (result.error || 'rename failed');
+  }
+  
+  return result.result || 'done';
+};
+
+global.serverExists = async function(name) {
+  if (!_serverDrive) return false;
+  
+  var fname = _normName(name);
+  if (!fname) return false;
+  
+  var fv = _validateBase(_baseName(fname));
+  if (!fv.ok) return false;
+  
+  var result = await _serverRequest('exists', { name: fname });
+  
+  if (!result.success) {
+    return false;
+  }
+  
+  return Boolean(result.exists);
+};
+
+global.serverDir = async function(pattern, switches) {
+  if (!_serverDrive) return 'Error: no server drive mounted';
+  
+  var result = await _serverRequest('dir', { 
+    pattern: pattern || '', 
+    switches: switches || '' 
+  });
+  
+  if (!result.success) {
+    return 'Error: ' + (result.error || 'dir failed');
+  }
+  
+  return result.listing || 'empty\n';
+};
+
+global.serverList = async function(pattern) {
+  if (!_serverDrive) return 'Error: no server drive mounted';
+  
+  var result = await _serverRequest('list', { pattern: pattern || '' });
+  
+  if (!result.success) {
+    return 'Error: ' + (result.error || 'list failed');
+  }
+  
+  return result.listing || '';
+};
+
+// Set server URL (for configuration)
+global.serverSetUrl = function(url) {
+  if (typeof url === 'string' && url.trim()) {
+    _serverUrl = url.trim();
+    return _serverUrl;
+  }
+  return _serverUrl;
+};
+
+// Get current server info
+global.serverInfo = function() {
+  return {
+    url: _serverUrl,
+    drive: _serverDrive,
+    cwd: getServerCwd(),
+    path: _serverDrive ? ('server://' + _serverDrive + getServerCwd()) : 'none'
+  };
+};
+  var fname = _normName(name);
+  if (!fname) return false;
+  
+  var fv = _validateBase(_baseName(fname));
+  if (!fv.ok) return false;
+  
+  var result = await _serverRequest('exists', { name: fname });
+  
+  if (!result.success) {
+    return false;
+  }
+  
+  return Boolean(result.exists);
+};
+
+global.serverDir = async function(pattern, switches) {
+  if (!_serverDrive) return 'Error: no server drive mounted';
+  
+  var result = await _serverRequest('dir', { 
+    pattern: pattern || '', 
+    switches: switches || '' 
+  });// ── Server Storage Functions ─────────────────────────────────────────────────
+// Add these before the closing })(window);
+
+// Server storage state
+var _serverUrl = 'http://localhost:8080/qandyland.js';
+var _serverCwd = ROOT_SEG;  // Server working directory
+var _serverDrive = null;    // Currently mounted server drive
+
+function getServerCwd() { return _serverCwd || ROOT_SEG; }
+function setServerCwd(p) {
+  _serverCwd = (typeof p === 'string' && p.length) ? String(p) : ROOT_SEG;
+}
+
+// HTTP communication with qandyland.js server
+async function _serverRequest(method, params, timeoutMs) {
+  var timeout = timeoutMs || 10000;
+  var payload = {
+    method: method,
+    drive: _serverDrive,
+    cwd: getServerCwd(),
+    timestamp: _timestamp()
+  };
+  
+  // Merge params into payload
+  if (params && typeof params === 'object') {
+    var keys = Object.keys(params);
+    for (var i = 0; i < keys.length; i++) {
+      payload[keys[i]] = params[keys[i]];
+    }
+  }
+
+  try {
+    var response = await fetch(_serverUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout ? AbortSignal.timeout(timeout) : undefined
+    });
+    
+    if (!response.ok) {
+      return { success: false, error: 'Server responded with ' + response.status };
+    }
+    
+    var result = await response.json();
+    return result;
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      return { success: false, error: 'Request timeout' };
+    }
+    return { success: false, error: 'Network error: ' + (e.message || String(e)) };
+  }
+}
+
+// Server storage functions
+global.serverCreate = async function(driveName, options) {
+  var name = _normName(driveName);
+  if (!name) return 'Error: invalid drive name';
+  
+  var result = await _serverRequest('create', { name: name, options: options });
+  
+  if (!result.success) {
+    return 'Error: ' + (result.error || 'create failed');
+  }
+  
+  // Auto-mount the newly created drive
+  _serverDrive = name;
+  _serverCwd = ROOT_SEG;
+  
+  return true;
+};
+
+global.serverMount = async function(driveName) {
+  var name = _normName(driveName);
+  if (!name) return 'Error: invalid drive name';
+  
+  var result = await _serverRequest('mount', { name: name });
+  
+  if (!result.success) {
+    return 'Error: ' + (result.error || 'mount failed');
+  }
+  
+  _serverDrive = name;
+  _serverCwd = ROOT_SEG;
+  
+  return 'server://' + name + '/';
+};
+
+global.serverMkDir = async function(name, options) {
+  if (!_serverDrive) return 'Error: no server drive mounted';
+  
+  var dirName = _normName(name);
+  if (!dirName) return 'Error: invalid directory name';
+  
+  var fv = _validateBase(dirName);
+  if (!fv.ok) return 'Error: ' + fv.reason;
+  
+  var result = await _serverRequest('mkdir', { name: dirName, options: options });
+  
+  if (!result.success) {
+    return 'Error: ' + (result.error || 'mkdir failed');
+  }
+  
+  return result.result || 'done';
+};
+
+global.serverChDir = async function(name, options) {
+  if (!_serverDrive) return 'Error: no server drive mounted';
+  
+  var dirName = String(name || '').trim();
+  
+  // Handle special cases
+  if (!dirName) {
+    return 'server://' + _serverDrive + getServerCwd();
+  }
+  
+  var result = await _serverRequest('chdir', { name: dirName, options: options });
+  
+  if (!result.success) {
+    return 'Error: ' + (result.error || 'chdir failed');
+  }
+  
+  // Update local server working directory
+  if (result.cwd) {
+    setServerCwd(result.cwd);
+  }
+  
+  return 'server://' + _serverDrive + getServerCwd();
+};
+
+global.serverRmDir = async function(name, options) {
+  if (!_serverDrive) return 'Error: no server drive mounted';
+  
+  var dirName = _normName(name);
+  if (!dirName) return 'Error: invalid directory name';
+  
+  var fv = _validateBase(dirName);
+  if (!fv.ok) return 'Error: ' + fv.reason;
+  
+  var result = await _serverRequest('rmdir', { name: dirName, options: options });
+  
+  if (!result.success) {
+    return 'Error: ' + (result.error || 'rmdir failed');
+  }
+  
+  return result.result || 'done';
+};
+
+global.serverSave = async function(name, data) {
+  if (!_serverDrive) return 'Error: no server drive mounted';
+  
+  var fname = _normName(name);
+  if (!fname) return 'Error: invalid filename';
+  
+  var fbase = _baseName(fname);
+  var fv = _validateBase(fbase);
+  if (!fv.ok) return 'Error: ' + fv.reason;
+  
+  var content = String(data == null ? '' : data);
+  
+  var result = await _serverRequest('save', { 
+    name: fname, 
+    content: content,
+    size: _utf8len(content)
+  });
+  
+  if (!result.success) {
+    return 'Error: ' + (result.error || 'save failed');
+  }
+  
+  return result.result || true;
+};
+
+global.serverLoad = async function(name) {
+  if (!_serverDrive) return 'Error: no server drive mounted';
+  
+  var fname = _normName(name);
+  if (!fname) return 'Error: invalid filename';
+  
+  var fbase = _baseName(fname);
+  var fv = _validateBase(fbase);
+  if (!fv.ok) return null;
+  
+  var result = await _serverRequest('load', { name: fname });
+  
+  if (!result.success) {
+    if (result.error && result.error.indexOf('not found') !== -1) {
+      return null;
+    }
+    return 'Error: ' + (result.error || 'load failed');
+  }
+  
+  return result.content || '';
+};
+
+global.serverDelete = async function(name) {
+  if (!_serverDrive) return 'Error: no server drive mounted';
+  
+  var fname = _normName(name);
+  if (!fname) return 'Error: invalid filename';
+  
+  var fbase = _baseName(fname);
+  var fv = _validateBase(fbase);
+  if (!fv.ok) return 'Error: ' + fv.reason;
+  
+  var result = await _serverRequest('delete', { name: fname });
+  
+  if (!result.success) {
+    return 'Error: ' + (result.error || 'delete failed');
+  }
+  
+  return result.result || 'done';
+};
+
+global.serverRename = async function(name, dest) {
+  if (!_serverDrive) return 'Error: no server drive mounted';
+  
+  var fname = _normName(name);
+  var dname = _normName(dest);
+  
+  if (!fname || !dname) return 'Error: invalid filename';
+  
+  var fv = _validateBase(_baseName(fname));
+  var dv = _validateBase(_baseName(dname));
+  if (!fv.ok) return 'Error: ' + fv.reason;
+  if (!dv.ok) return 'Error: invalid destination: ' + dv.reason;
+  
+  var result = await _serverRequest('rename', { name: fname, dest: dname });
+  
+  if (!result.success) {
+    return 'Error: ' + (result.error || 'rename failed');
+  }
+  
+  return result.result || 'done';
+};
+
+global.serverExists = async function(name) {
+  if (!_serverDrive) return false;
+  
+  var fname = _normName(name);
+  if (!fname) return false;
+  
+  var fv = _validateBase(_baseName(fname));
+  if (!fv.ok) return false;
+  
+  var result = await _serverRequest('exists', { name: fname });
+  
+  if (!result.success) {
+    return false;
+  }
+  
+  return Boolean(result.exists);
+};
+
+global.serverDir = async function(pattern, switches) {
+  if (!_serverDrive) return 'Error: no server drive mounted';
+  
+  var result = await _serverRequest('dir', { 
+    pattern: pattern || '', 
+    switches: switches || '' 
+  });
+  
+  if (!result.success) {
+    return 'Error: ' + (result.error || 'dir failed');
+  }
+  
+  return result.listing || 'empty\n';
+};
+
+global.serverList = async function(pattern) {
+  if (!_serverDrive) return 'Error: no server drive mounted';
+  
+  var result = await _serverRequest('list', { pattern: pattern || '' });
+  
+  if (!result.success) {
+    return 'Error: ' + (result.error || 'list failed');
+  }
+  
+  return result.listing || '';
+};
+
+// Set server URL (for configuration)
+global.serverSetUrl = function(url) {
+  if (typeof url === 'string' && url.trim()) {
+    _serverUrl = url.trim();
+    return _serverUrl;
+  }
+  return _serverUrl;
+};
+
+// Get current server info
+global.serverInfo = function() {
+  return {
+    url: _serverUrl,
+    drive: _serverDrive,
+    cwd: getServerCwd(),
+    path: _serverDrive ? ('server://' + _serverDrive + getServerCwd()) : 'none'
+  };
+};
+  
+  if (!result.success) {
+    return 'Error: ' + (result.error || 'dir failed');
+  }
+  
+  return result.listing || 'empty\n';
+};
+
+global.serverList = async function(pattern) {
+  if (!_serverDrive) return 'Error: no server drive mounted';
+  
+  var result = await _serverRequest('list', { pattern: pattern || '' });
+  
+  if (!result.success) {
+    return 'Error: ' + (result.error || 'list failed');
+  }
+  
+  return result.listing || '';
+};
+
+// Set server URL (for configuration)
+global.serverSetUrl = function(url) {
+  if (typeof url === 'string' && url.trim()) {
+    _serverUrl = url.trim();
+    return _serverUrl;
+  }
+  return _serverUrl;
+};
+
+// Get current server info
+global.serverInfo = function() {
+  return {
+    url: _serverUrl,
+    drive: _serverDrive,
+    cwd: getServerCwd(),
+    path: _serverDrive ? ('server://' + _serverDrive + getServerCwd()) : 'none'
+  };
+};
+
 })(window);
