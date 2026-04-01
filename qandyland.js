@@ -169,7 +169,7 @@ function deregisterFromRegistry() {
   } catch (e) { console.warn('deregisterFromRegistry error:', e.message || String(e)); }
 }
 
-// Start heartbeat interval (every 5 minutes)
+// Start heartbeat interval (every 1 hour – conservative to preserve free-tier quota)
 function startHeartbeat() {
   if (!REGISTRY_URL) return;
   if (_heartbeatTimer) clearInterval(_heartbeatTimer);
@@ -177,7 +177,7 @@ function startHeartbeat() {
     registerWithRegistry(function (err) {
       if (err) { console.warn('Registry heartbeat failed:', err.message || String(err)); }
     });
-  }, 5 * 60 * 1000);
+  }, 60 * 60 * 1000); // 1 hour
 }
 
 // ── Request logging ───────────────────────────────────────────────────────────
