@@ -1538,6 +1538,25 @@ async function hostMessageHandler(ev) {
             }
             break;
           }
+          case 'serverInfo': {
+            var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+            try {
+              if (typeof serverInfo !== 'function') { dosXmitQdos(_dosIframe, d.id, 'serverInfo', false, 'host: serverInfo not available'); break; }
+              var _infoResult = serverInfo();
+              dosXmitQdos(_dosIframe, d.id, 'serverInfo', true, _infoResult);
+            } catch (_infoErr) {
+              dosXmitQdos(_dosIframe, d.id, 'serverInfo', false, _infoErr && _infoErr.message ? _infoErr.message : String(_infoErr));
+            }
+            break;
+          }
+          case 'serverDrives': {
+            var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+            if (typeof serverDrives !== 'function') { dosXmitQdos(_dosIframe, d.id, 'serverDrives', false, 'host: serverDrives not available'); break; }
+            Promise.resolve().then(function () { return serverDrives(); })
+              .then(function (result) { dosXmitQdos(_dosIframe, d.id, 'serverDrives', true, result); })
+              .catch(function (err) { dosXmitQdos(_dosIframe, d.id, 'serverDrives', false, err && err.message ? err.message : String(err)); });
+            break;
+          }
           case 'dosMount': {
             var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
             try {

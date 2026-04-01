@@ -6,7 +6,7 @@
 // the list to discover available servers.
 //
 // POST /api/servers  – register / refresh a server entry
-//   Body: { id, name, host, port, games, players, maxPlayers }
+//   Body: { id, name, host, port, drives, uptime, version }
 //   Returns: { success: true, id }
 //
 // GET  /api/servers  – list active servers (stale entries auto-removed)
@@ -75,22 +75,25 @@ module.exports = function handler(req, res) {
     var name = (typeof body.name === 'string') ? body.name.trim().slice(0, 64) : 'Unnamed Server';
     var host = (typeof body.host === 'string') ? body.host.trim().slice(0, 64) : '';
     var port = (typeof body.port === 'number') ? body.port : (parseInt(body.port, 10) || 8080);
-    var games = Array.isArray(body.games) ? body.games.slice(0, 20).map(String) : [];
-    var players = (typeof body.players === 'number') ? body.players : (parseInt(body.players, 10) || 0);
-    var maxPlayers = (typeof body.maxPlayers === 'number') ? body.maxPlayers : (parseInt(body.maxPlayers, 10) || 100);
+    // Accept 'drives' (new field) with fallback to legacy 'games' field
+    var drives = Array.isArray(body.drives) ? body.drives.slice(0, 50).map(String)
+               : Array.isArray(body.games)  ? body.games.slice(0, 50).map(String)
+               : [];
+    var uptime  = (typeof body.uptime  === 'number') ? body.uptime  : (parseInt(body.uptime,  10) || 0);
+    var version = (typeof body.version === 'string') ? body.version.trim().slice(0, 16) : '';
 
     if (!host) {
       return respond(res, 400, { success: false, error: 'host is required' });
     }
 
     servers[id] = {
-      id: id,
-      name: name,
-      host: host,
-      port: port,
-      games: games,
-      players: players,
-      maxPlayers: maxPlayers,
+      id:      id,
+      name:    name,
+      host:    host,
+      port:    port,
+      drives:  drives,
+      uptime:  uptime,
+      version: version,
       timestamp: Date.now()
     };
 
