@@ -25,47 +25,39 @@
   function rule() { return '='.repeat(LINE_WIDTH); }
 
   // ── Example: How to query the registry for compatible servers ───────────────
-  async function discoverServers() {
-    var servers = [];
-
-    try {
-      var response = await fetch(REGISTRY_URL);
-      var registryServers = await response.json();
-
-      // Example: Filtering servers by drive availability
-      var compatible = registryServers.filter(function(s) {
-        return s.drives && s.drives.includes(RUN);
-      });
-      servers = servers.concat(compatible);
-    } catch (e) {
-      print('// Registry unavailable, checking localhost only...\n');
-    }
-
-    // Example: Fallback to localhost for development
-    // Always ping localhost – it may be hidden from the registry
-    try {
-      var localResponse = await fetch('http://localhost:8080/status');
-      var localStatus   = await localResponse.json();
-      if (localStatus.drives && localStatus.drives.includes(RUN)) {
-        // Only add if not already returned by the registry
-        var hasLocal = servers.some(function(s) {
-          return s.host === 'localhost' || s.host === '127.0.0.1';
-        });
-        if (!hasLocal) {
-          servers.push({
-            name:   'Local Server',
-            host:   'localhost',
-            port:   8080,
-            drives: localStatus.drives
-          });
-        }
-      }
-    } catch (e) {
-      // Localhost not available – that's fine
-    }
-
-    return servers;
+// Replace discoverServers() function with:
+async function discoverServers() {
+  var serverText = await qdosServerDiscovery();
+  
+  if (serverText.indexOf('Error:') === 0) {
+    print('// Registry unavailable\n');
+    return [];
   }
+  
+  var servers = [];
+  var lines = serverText.split('\n');
+  
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (line.startsWith('- ') && line.indexOf('(') !== -1) {
+      // Parse: "- Qandyland (qandy.vercel.app:443) - thewall.js,chat.js"
+      var nameEnd = line.indexOf(' (');
+      var hostStart = nameEnd + 2;
+      var hostEnd = line.indexOf(')', hostStart);
+      var drivesStart = line.indexOf(' - ', hostEnd) + 3;
+      
+      var name = line.substring(2, nameEnd);
+      var hostPort = line.substring(hostStart, hostEnd);
+      var drives = line.substring(dI'm not opposed to returning an array itself if there is an easy retro-like way to do so.rivesStart).split(',').map(s => s.trim());
+      
+      if (drives.includes(RUN)) {
+        servers.push({ name: name, hostPort: hostPort, drives: drives });
+      }
+    }
+  }
+  
+  return servers;
+}
 
   // ── Example: Building server connection URLs ────────────────────────────────
   function serverUrl(server) {
@@ -110,14 +102,19 @@
 
   // ── Connect to the selected server drive ────────────────────────────────────
   // Example: How to mount a remote drive by name
-  print('\nConnecting to ' + selected.name + '...\n');
+print('\nConnecting to ' + selected.name + '...\n');
 
-  var mountResult = await serverMount(RUN);
-  if (typeof mountResult === 'string' && mountResult.indexOf('Error') === 0) {
-    print('Error: drive \'' + RUN + '\' not found on ' + selected.name + '.\n');
-    print('Ask the server admin to run:  create ' + RUN + '\n');
-    return;
-  }
+var connectResult = await qdosServerConnect(selected.name);
+if (connectResult.indexOf('Error:') === 0) {
+  print(connectResult);
+  return;
+}
+
+var mountResult = await qdosServerMount(RUN);
+if (mountResult.indexOf('Error:') === 0) {
+  print('Error: drive \'' + RUN + '\' not found on ' + selected.name + '.\n');
+  return;
+}
 
   // ── Load and display the wall (no timestamps – 32-char width is tight) ──────
   print('\n' + rule() + '\n');
@@ -144,7 +141,7 @@
   // ── Ask the user if they want to add a message ──────────────────────────────
   var answer = await input('Add message? (y/n): ');
   if (!answer || answer.trim().toLowerCase() !== 'y') {
-    print('Goodbye!\n');
+    print('Goodbye!\n\n');
     return;
   }
 
