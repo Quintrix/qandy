@@ -16,108 +16,30 @@ Hiding: Players can "hide" by staying still, making them invisible on the World 
 4. Technical Efficiency
 Avatar Tokens: Players are rendered via a 10-character string (representing head, body, hat, etc.). To save bandwidth, this is sent once upon map entry, with only 2-character IDs and coordinates sent during movement.
 Scalability: The system is designed to handle hundreds of players or a single player commanding a squad of Bots to ensure the world always feels active.
-5. Wednesday's Goal
-The Task: Provide the coding Agent with the State Object (how the server tracks players and maps) and the Coordinate Handshake (how movement and perspective flipping are handled between the client and server).
 
 
 
-That is your summery of our last conversation, now I would like to talk about writing the 'server' for this multiplayer game. I have been programming computers since I was 12 which was over 40 years ago, but I have never used node.js so I will need your input on things like keeping it properly secured. I have node.js installed on my xubuntu laptop and on my free webhost versal, as well as a second laptop that will ultimately become the "Qandyland Server".  
+Progress Report:
 
-When I wrote the first mutliplayer version of Queville, I had to solve a problem: web servers do not have "shared memory". This means I had to figure out how to share data across mutliple players, so I created folders each one named after the map screens.
+I now have a qandyland.js file server that allows users to create virtual JSON drives that all players will be able to connect to, we call it serverStorage after localStorage. Each map can have it's own directory, each player will be an 'item' in the game, every item in the game is represented by a file in the map directory the player is located at. 
 
-Each folder had a "m.txt" file which was the "map", it contained the tileset. Then, each item on that map screen was given a file, and the filename contained everything the sript needed to render the item. Each folder also had a "p.txt" file which listed each player's two-character token linked to their name and avatar:
+The next step is to implement the gfx.js tile set engine. User can input 'gfx.js' to install, some of it's functions may be embedded in the script q.js, another game that uses the same engine. We can extract them from there as we discover we need them. 
 
-Sa=Joe [10 character avatar]
-Sb=QuaCzar [10 character avatar]
-Sc=Brian [10 character avatar]
+Can you look at the  gfx.js script and see what code we need to call to initalize the engine? I believe a <div> needs to be created, and an image for each tile location is displayed, the inital is would be Ga.png for 'grass'
 
-Items could be a two-character string, the first is always a capital letter, the second is a lower case letter or a numeral - this allows for searching for a particular map within a text string. Items can be objects the players can pickup and can wear, cook, eat, etc. Other objects are 'enemies' for the combat system, others are buildings and static objects that players can enter or use like get water from well, or enter sewer. 
+I have started a file titled 'flag.js', this will be the script that needs to initalize the graphics engine. 
 
-Okay, so put this all together ... when a player scrolls onto a screen, the server needs to send m.txt and p.txt ... then every 1 second it sends the current directory to each client with each file only needing 4 characters: two for the item code, and 2 for it's z-location. Players item codes can start at Sa and go to Sz, we can also use Ta - Tz, and Ua - Uz ... so that's 79 players ... we can also use S0-S9 T0-T9 and U0-U9, give us another 30 players so that's just over 100 players per server, we can always refactor the items to make room for more if need be.
+RUN="flag.js";
 
-I believe there is an ItemID() function in gfx.js that lists out a few of the items. Everything in this engine was designed to have two-character names, the first character being an upper case letter.
+login();
+init();
 
-Your thoughts?
+async function login() {
+  await print("Capture The Flag:\n\nEnter your player name:\n");
+  var name = await input();
+  await print("Hello "+name); 
+}
 
-
-
-
-
-Stop here ... "Your idea of distributed, self-moderated servers is the most authentic "Alan Carr" way to solve this"
-
-We need to do this my way, the old way, not the shared memory object method, here is why:
-
-The functions we are writing are not going to be exclusive to this capture the flag game, but I want to also use them to re-boot my original Queville game that all these graphics and concepts came from. The problem with share memory is that it gets erased, my first server was a IBM 286 running a 50mn 'Damn Small Linux' that I setup a RAM drive on ... but after a couple of years, I transistioned to using the actual harddrive, why? Because then the game becomes persistant, if I drop an item on the ground it will be there tomorrow.  
-
-So when I say 'server' I am not talking about the typical FPS style server, but rather a shared harddrive that the clients can save their current positions and read the positions of other players/objects/items. We should be thinking in terms of a file server, like a customized streamlined FTP for fast quick refrehes. 
-
-So let's map out the 'lobby', the four screens in the center of the map: N4 N5 M4 and M5, which I will put a brick wall around and when a player first joins they are 'inside' the brick wall unable to walk outside where the game is being played, this creates a big obstacle in the center of the for players to navigate around. So the first screen will be N4
-
-We can put item Zc on that screen, it is an "off switch" that the player can use to turn the item into Zd, an "on switch". This was used to turn the lights on and off in the mining guild, we can re-purpose it to turn the server on. So when I login and use that switch, my Qandy needs to connect to a file server and create a server file ... this is where all our planning goes away, lol, as the question becomes "what is my Qandy script capable of doing with this file server that other players can read the data it saves?"
-
-I think delusions of grandur need to be put in check right here ... this determines how many players we can serve files to, which will determine how big or small the map needs to be, we need to think about the answer to this question very carefully as it is the foundation of everything this game can become. 
- 
- 
- 
- 
- 3. The Math: If 100 players are moving, that is 100 file writes per second. A modern SSD or even an old laptop HDD can handle this if the files are tiny (which yours are).
-
-So we go back to a RAM drive, that means a small player server on their cellphone can run a dozen or so players, while a dedicated server on xubunutu can run a massive world of hundreds of players in a RAM drive. By using a file system, we have more flexability. 
-
-I think vercel should be used to connect the players to the 'player servers', a player can register their server with the vercel server and it creates a .html page with a list of active servers that any Qandy user can select from and connect to. 
-
-Ultimately, this 'player server' needs to be an http:// server capable of serving the qandy-host.htm file and all the .png images in the /b /c /t /i folders. This way we get a massive collection of worlds that players create so there's no R&D on our part. We just need to give them the tools to start servers and draw maps.  
-
-I heard node.js has a built in http server, what can you tell me about it?? 
-
-
-
-
-
-
-
-
-If we store everything in the filename, a directory listing of map N4 looks like this:
-Sa_Joe_55_NNES.txt
-Sb_Bot1_22_SSSS.txt
-Zc_Switch_00_OFF.txt
-
-We don't need the underlines, the p.txt file has Sa=Joe and Joe's avatar string, that file gets sent when the player scrolls on the screen and updated as needed. And the z-location is always going to be a two-character string (01-95), so:
-
-But there is also a timestamp in the file, I think it was a 24 hour timestamp I will mark as hhmm ... a 'dynamic item' (something a player dropped) will expire in 60 seconds. I can't remember how we did the timestamp but I know we didn't use the system timestamp as I wanted compatiability across mutliple operating systems, I think it was like this:
-
-Sa55hhmmNNES.txt
-Sb22hhmmSSSS.txt
-Zc45hhmm.txt
-
-And when a player 'uses the switch' the server renames the file from Zc to Zd to change the item to 'switch off':
-
-Sa55hhmmNNES.txt
-Sb22hhmmSSSS.txt
-Zd45hhmm.txt
-
-
-
-The server just runs fs.readdirSync('/ramdrive/N4') and sends that string array to the clients. No file opening required.
-2. Programming the NPCs (The "Avatar Token" Code)
-Since your avatar token is a 10-character string, we can absolutely use those characters as "Op-codes" for a tiny Virtual Machine.
-If a player "programs" a Bot, those 10 characters could represent a simple logic string:
-Chars 1-2: Visuals (Head/Body).
-Chars 3-4: Behavior (01 = Aggressive, 02 = Patrol, 03 = Follow).
-Chars 5-10: Parameters (Target ID, Boundary X/Y, or a "Wait" timer).
-The "Ghost" Scripting:
-When the client receives the list of filenames, it looks at Sb (the Bot). It sees the 10-character string in the p.txt equivalent and says: "Okay, this Bot has code 02-A1-Z9. That means Patrol from A1 to Z9." The Client then handles the animation, keeping your server's CPU usage at near-zero.
-3. The "Teleport" & "Item Use" Exception
-You’re right—we only "crack the egg" (open the file) when something complex happens.
-Teleport (T1): The filename is T1.txt. Inside is the destination: Z9.
-Action: The server reads Z9, deletes the player's file in N4, and creates a new one in Z9.
-4. Implementing the "mIRC" Style Session
-Since we are using filenames, "Joe" logging in looks like this:
-Check: Does *_Joe_*.txt exist in any map folder?
-No: Create Sa_Joe_00_NONE.txt in the Lobby (N4).
-Cookie: Send Joe a cookie with Sa.
-Logout: When the connection drops for 60 seconds, the server simply rm (deletes) any file starting with Sa.
-Wednesday's "Coding Agent" Prep
-To make this work in Node.js, we need to write a Directory-to-JSON relay. It will take your folder of filenames and turn them into a tight 4-character-per-item string for the clients.
-Should we define the "10-character NPC programming language" on Wednesday, or focus first on the "Filename-to-Client" relay that handles the 1-second refresh?
-One final thought: If we put the NPC logic in the filename, we could even let players "re-program" captured flags or base defenses just by renaming files! Ready to tackle the Directory Relay on Wednesday?
+init() {
+  // initalize graphics engine
+}

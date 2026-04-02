@@ -126,8 +126,8 @@ function input(l) {
   if (l.length<3) {
    print("Name must be at least three characters.<br>Enter your name:<br>");
   } else {
-   if (l.substring(0,2)=="NPC") {
-    print("Name cannot start with NPC.<br>Enter your name:<br>");
+   if (l.substring(0,2)=="BOT") {
+    print("Name cannot start with BOT.<br>Enter your name:<br>");
    } else {
     PName=l;
     //mode="gfx";

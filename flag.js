@@ -7,8 +7,3 @@ async function init() {
   await print("Hello "+name); 
 }
 
-function keydown(keyCode, event) {
-}
-
-function keyup(keyCode, event) {
-}
