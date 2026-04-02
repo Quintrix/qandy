@@ -27,6 +27,9 @@ var DEVICE = 'none';
   'use strict';
 
   // ── Constants ────────────────────────────────────────────────────────────
+  
+  var _registryUrl = 'https://qandy.vercel.app/api/servers'; // Default registry
+
   var LOCAL_PREFIX = 'qandy:file:';
   var MANIFEST_KEY = '_dir.sys!';
   var MAX_NAME_BYTES = 255;
@@ -35,7 +38,7 @@ var DEVICE = 'none';
   var SEP = '/';
   var ROOT_SEG = '/';
   var _cwd = ROOT_SEG;
-
+  
   var _echoStore = Object.create(null);
   var _harddriveHandle = null;
   var _clipboard = null;
@@ -2226,3 +2229,4 @@ global.serverDrives = async function() {
 };
 
 })(window);
+
