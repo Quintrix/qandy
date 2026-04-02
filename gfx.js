@@ -4,6 +4,25 @@
 // <div id="pop" class="pop" onMouseOver='PopUpVis="visible";' onMouseOut='PopUpVis=PForce; PUV=setTimeout("document.getElementById(\"pop\").style.visibility=PopUpVis;",100);'></div>
 //
 
+var PopUpVis = "hidden"; // current target visibility
+var PForce = "hidden";   // forced visibility on mouseout in your original code
+var PUV;                 // timeout id (used to clear/set the timeout)
+
+const popup = document.createElement('div');
+popup.id = 'pop';
+popup.className = 'pop';
+popup.style.visibility = PopUpVis;
+popup.addEventListener('mouseover', () => {
+  PopUpVis = "visible";
+  popup.style.visibility = PopUpVis;
+});
+popup.addEventListener('mouseout', () => {
+  PopUpVis = PForce;
+  clearTimeout(PUV);
+  PUV = setTimeout(() => { popup.style.visibility = PopUpVis; }, 100);
+});
+document.body.appendChild(popup);
+
 function tiles() {
   let topOffset = 50;   // historic layout: top = 50 + y*32
   let leftOffset = 54;  // historic layout: left = 54 + x*32

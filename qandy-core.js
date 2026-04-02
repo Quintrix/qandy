@@ -13,24 +13,29 @@ function qandy_js() {
 
   // Fast-path: if a user script (not qandy.js) is running and defines keydown(),
   // deliver the event directly to that function for lowest latency.
+  // BUT: if input() is waiting for line input, fall through to button() instead.
   if (typeof RUN !== 'undefined' && RUN !== "qandy.js" && typeof keydown === 'function') {
-    var kdEvent = event || {};
-    // populate minimal useful fields without allocating new objects where possible
-    if (!kdEvent.key) {
-      try { kdEvent.key = k || l || String.fromCharCode(b || 0); } catch (e) { kdEvent.key = ''; }
+    var _pendingInput = window.QandyKeyboard ? QandyKeyboard._pendingState() : null;
+    if (!_pendingInput) {
+      var kdEvent = event || {};
+      // populate minimal useful fields without allocating new objects where possible
+      if (!kdEvent.key) {
+        try { kdEvent.key = k || l || String.fromCharCode(b || 0); } catch (e) { kdEvent.key = ''; }
+      }
+      // Ensure modifier fields reflect current host flags if event didn't have them
+      kdEvent.shiftKey = !!(kdEvent.shiftKey || shift);
+      kdEvent.ctrlKey  = !!(kdEvent.ctrlKey  || ctrl);
+      kdEvent.altKey   = !!(kdEvent.altKey   || alt);
+      kdEvent.source = kdEvent.source || 'physical';
+      try {
+        keydown(b, kdEvent);
+      } catch (err) {
+        console.error("script keydown() threw:", err);
+      }
+      pokeCursorOn();
+      return;
     }
-    // Ensure modifier fields reflect current host flags if event didn't have them
-    kdEvent.shiftKey = !!(kdEvent.shiftKey || shift);
-    kdEvent.ctrlKey  = !!(kdEvent.ctrlKey  || ctrl);
-    kdEvent.altKey   = !!(kdEvent.altKey   || alt);
-    kdEvent.source = kdEvent.source || 'physical';
-    try {
-      keydown(b, kdEvent);
-    } catch (err) {
-      console.error("script keydown() threw:", err);
-    }
-    pokeCursorOn();
-    return;
+    // input() is pending - fall through to normal line input processing below
   }
 
   // MAP special keys first
@@ -653,9 +658,9 @@ window.press=function(event) {
       }
     }
     
-    if (keyboard==true) {
-      window.button(event.keyCode, event);
-    } else {
+    // Check if input() is waiting for line input - if so, fall through to button()
+    var _pendingPress = window.QandyKeyboard ? QandyKeyboard._pendingState() : null;
+    if (!_pendingPress) {
       try {
         keydown(remappedKeyCode, event);  // ← Pass remapped keyCode
       } catch (err) {
@@ -670,6 +675,7 @@ window.press=function(event) {
       // if (altVirtual) { altVirtual = false; alt = altPhysical ? 1 : 0; var elAk=document.getElementById(kid+"alt"); if (elAk) { elAk.style.backgroundColor = alt ? modifierFlagBgColor : modifierFlagBgColorOff; elAk.style.color = alt ? modifierFlagFgColor : modifierFlagFgColorOff; } if (typeof updateKeyLabels === 'function') updateKeyLabels(); }
       return;
     }
+    // input() is pending - fall through to button() for line input processing
   }
   // Default host behavior: highlight and send to emulator button()
   highlightKey(k);
