@@ -48,7 +48,7 @@ async function discoverServers() {
       
       var name = line.substring(2, nameEnd);
       var hostPort = line.substring(hostStart, hostEnd);
-      var drives = line.substring(dI'm not opposed to returning an array itself if there is an easy retro-like way to do so.rivesStart).split(',').map(s => s.trim());
+      var drives = line.substring(drivesStart).split(',').map(s => s.trim());
       
       if (drives.includes(RUN)) {
         servers.push({ name: name, hostPort: hostPort, drives: drives });
