@@ -16,7 +16,7 @@ var PY=7;
 var PZ=(PY*(mapx+1))+PX;
 var walk=-1;
 var Que="";
-
+ 
 var TMode=0;
 var TFill="";
 
@@ -34,6 +34,8 @@ script=document.createElement('script');
 script.src="world.js";
 script.onload=Begin;
 document.head.appendChild(script);
+
+//Begin();
 
 async function Begin() {
  PName=localStorage.getItem('PName'); 
