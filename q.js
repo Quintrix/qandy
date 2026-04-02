@@ -32,38 +32,18 @@ var drop=[];
 
 script=document.createElement('script');
 script.src="world.js";
-script.onload=Begin;
-script.onerror=Begin;
 document.head.appendChild(script);
 
-async function Begin() {
- PName=await qdosLoad('player-name'); 
- if (PName) {
-  PObj=await qdosLoad('player-obj'); 
-  PWear=await qdosLoad('player-wear'); 
-  PInv=await qdosLoad('player-inv'); 
-  PMap=await qdosLoad('player-map'); 
-  PZ=await qdosLoad('player-z'); PZ=parseInt(PZ);
-  PY=Math.floor(PZ/(mapx+1)); PX=PZ-(PY*(mapx+1)); 
-  PForce="hidden"; mode="gfx";
-  document.getElementById("txt").style.left = "350px"; 
-  await LMap(PMap); char(PName,PObj,PZ); 
-  keyon=1; mainloop();
-  print("\nWelcome to Queville!\n\n");
-  pop(PName+" Logged In.");
- } else {
-  await login();
- }
-}
+login();
 
 async function login() {
- print("\nWelcome to Queville\n\nEnter your name:\n");
+ print("\nWelcome to Queville\n\nEnter your player name:\n");
  while (true) {
   var l = await input();
   if (l.length<3) {
-   print("Name must be at least three characters.<br>Enter your name:<br>");
+   print("Name must be at least three characters.<br>Enter your player name:<br>");
   } else if (l.substring(0,3).toUpperCase()==="BOT") {
-   print("Name cannot start with BOT.<br>Enter your name:<br>");
+   print("Name cannot start with BOT.<br>Enter your player name:<br>");
   } else {
    PName=l;
    PForce="visible";
