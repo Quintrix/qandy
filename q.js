@@ -35,7 +35,7 @@ script.src="world.js";
 script.onload=Begin;
 document.head.appendChild(script);
 
-function Begin() {
+async function Begin() {
  PName=localStorage.getItem('PName'); 
  if (PName) {
   PObj=localStorage.getItem('PObj'); 
@@ -51,7 +51,31 @@ function Begin() {
   print("\nWelcome to Queville!\n\n");
   pop(PName+" Logged In.");
  } else {
-  login(); function login() { print("\nWelcome to Queville\n\nEnter your name:\n"); }
+  await login();
+ }
+}
+
+async function login() {
+ print("\nWelcome to Queville\n\nEnter your name:\n");
+ while (true) {
+  var l = await input();
+  if (l.length<3) {
+   print("Name must be at least three characters.<br>Enter your name:<br>");
+  } else if (l.substring(0,3).toUpperCase()==="BOT") {
+   print("Name cannot start with BOT.<br>Enter your name:<br>");
+  } else {
+   PName=l;
+   PForce="visible";
+   NewChar("");
+   LMap(PMap);
+   cls();
+   print("Latest Updates:\n\n");
+   print("Wear Sysop Hat to access Sysop Menu and Sysop Help.\n\n");
+   print("Type /help for list of Sysop commands.\n\n");
+   print("Type /help [command] for help on that command.\n\n");
+   print("Have Fun!<p>Press [ESC] Key:");
+   break;
+  }
  }
 }
 
