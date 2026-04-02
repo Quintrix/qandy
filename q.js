@@ -55,7 +55,7 @@ function Begin() {
  }
 }
 
-function input(l) {
+function oldinput(l) {
  k=1; if (PName) {
   if (PWear.indexOf("La")>-1) {
   	if (l.charAt(0)=="/") {
@@ -126,6 +126,7 @@ function input(l) {
   if (l.length<3) {
    print("Name must be at least three characters.<br>Enter your name:<br>");
   } else {
+  	// make this BOT check upper or lower case, bot is reserved for bot participants
    if (l.substring(0,2)=="BOT") {
     print("Name cannot start with BOT.<br>Enter your name:<br>");
    } else {

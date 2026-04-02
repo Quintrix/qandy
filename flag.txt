@@ -24,22 +24,3 @@ Progress Report:
 I now have a qandyland.js file server that allows users to create virtual JSON drives that all players will be able to connect to, we call it serverStorage after localStorage. Each map can have it's own directory, each player will be an 'item' in the game, every item in the game is represented by a file in the map directory the player is located at. 
 
 The next step is to implement the gfx.js tile set engine. User can input 'gfx.js' to install, some of it's functions may be embedded in the script q.js, another game that uses the same engine. We can extract them from there as we discover we need them. 
-
-Can you look at the  gfx.js script and see what code we need to call to initalize the engine? I believe a <div> needs to be created, and an image for each tile location is displayed, the inital is would be Ga.png for 'grass'
-
-I have started a file titled 'flag.js', this will be the script that needs to initalize the graphics engine. 
-
-RUN="flag.js";
-
-login();
-init();
-
-async function login() {
-  await print("Capture The Flag:\n\nEnter your player name:\n");
-  var name = await input();
-  await print("Hello "+name); 
-}
-
-init() {
-  // initalize graphics engine
-}
