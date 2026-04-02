@@ -38,25 +38,23 @@ login();
 
 async function login() {
  print("\nWelcome to Queville\n\nEnter your player name:\n");
- while (true) {
-  var l = await input();
-  if (l.length<3) {
-   print("Name must be at least three characters.<br>Enter your player name:<br>");
-  } else if (l.substring(0,3).toUpperCase()==="BOT") {
-   print("Name cannot start with BOT.<br>Enter your player name:<br>");
-  } else {
-   PName=l;
-   PForce="visible";
-   NewChar("");
-   await LMap(PMap);
-   cls();
-   print("Latest Updates:\n\n");
-   print("Wear Sysop Hat to access Sysop Menu and Sysop Help.\n\n");
-   print("Type /help for list of Sysop commands.\n\n");
-   print("Type /help [command] for help on that command.\n\n");
-   print("Have Fun!<p>Press [ESC] Key:");
-   break;
-  }
+ keyboard==false;
+ var l = await input();
+ if (l.length<3) {
+  print("Name must be at least three characters.<br>Enter your player name:<br>");
+ } else if (l.substring(0,3).toUpperCase()==="BOT") {
+  print("Name cannot start with BOT.<br>Enter your player name:<br>");
+ } else {
+  PName=l;
+  PForce="visible";
+  NewChar("");
+  await LMap(PMap);
+  cls();
+  print("Latest Updates:\n\n");
+  print("Wear Sysop Hat to access Sysop Menu and Sysop Help.\n\n");
+  print("Type /help for list of Sysop commands.\n\n");
+  print("Type /help [command] for help on that command.\n\n");
+  print("Have Fun!<p>Press [ESC] Key:");
  }
 }
 
@@ -561,7 +559,7 @@ function SaveMap() {
  document.body.removeChild(MCode);
 }
 
-function keydown(k) {
+function oldkeydown(k) {
  // Handle ESC key to toggle between text and graphics screen
  if (k=="esc") {
   if (mode==="txt") {
@@ -902,3 +900,31 @@ async function Quit(a) {
  }
  pop(PUP);
 }
+
+maps["Ce"]="UaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUa..";
+maps["Cj"]="UaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUbAaAaAaAaAaAaUaAcGaGaGaGaGaGaUaAcGaGaGaGaGaGaUaAcGaGaGaGaGaGaUaAcGaGaGaGaGaGaUaAcGaGaGaGaGaGa..";
+maps["Ck"]="UaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUbAaAaAaUcUaUaUaAcDcGaDdAdUaUaUaAcGaBaGaAfUcUaUaAcGaBaGaGaAdUaUbAeGaBaGaGaAfAaAcGaGaBaGaGaGaGaAcGaGaBeBgGaRcGaAcGaGaGaBaFkRaGaAcGaGaGaBeBgFlGaAeGbGaGaGaBaGaGa..Zm2783Zf36..Ze74Fl";
+sign["Ck"]="Queville";
+maps["C1"]="UgUgUhUaUaUaUhUhUbAaAaAaAaAaUcUgAcCfCbCbCbCgAfUcAcCeCaCaCaCaCgAdAcCeCaCaCaCaCcAdAcCeCaCaCaCaCcAdAcCeCaCaCaCaCcAdAcCeCaCaCaCaCcAdAeChCdCaCaCdCiAfGaGaFlCeCcFkGaGaYmYaYlCeCcYmYaYlGbGaGaCeCcGaGbGb..Yb27..Zi51..Zh45..Bd46..Cg58..";
+maps["Cl"]="UaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaAaAaAaAaAaAaUcUaGaGaGaGaGaGaAfUcGaGaGaGaGaGaGaScGaGaGaGaGaGaGaSgGaGaGaGaGaGaGaScGaGaGaGaBaGaGaSg..";
+maps["Di"]="XfXbXaXbXaXbXaXbXdGaGaGaGaGaGaGaXcGaHaHaHaHaHaGaXdGaHaHaHaHaHaGaXcGaHaHaHaHaHaGaXdGaHaHaHaHaHaGaXcGaHaHaHaHaHaGaXdGaHaHaHaHaHaGaXcGaHaHaHaHaHaGaXdGaHaHaHaHaHaGaXcGaHaHaHaHaHaGaXdGaGaGaGaGaGaGa..";
+maps["Dj"]="XbXeAfAaAaAaAaAaGaXdGaFaFaFaFaFaGaXdGaGaGaFaFaFaGaXfXbXeGaGaGaFaGaGaGaGaGaGaGaGaGaGaGaGaGaGaBfBbGaGaGaGaGaBfBdGaGaGaGaGaFaBaGaGaGaBkBbBbBbBhGaGaGaGaGaFaFaBaGaGaGaGaGaGaFaBaGaRbGaGaGaGaGaBaGaRa..Ye51..";
+maps["Dk"]="GbGbGaGaGaBaGaGaGbGbGaGaGaBaGaGaGbGaGaGbGaBaGaGaGbGaGaGaGaBaFiGaGaGaGaGaFkBiBbBbBbBbBbBbBbBdGaGaGaGaFkGaGbGaGaGaGaGaGaGaGaGaRbGaGaGaGaGaGaRbRaRbGaRbGaRbRbRaRbRaRbRaRbRaRaRbRaRbRaRbRaRbRbRaRbRa..Ab26..";
+maps["D1"]="IlIcIcIcIcIcIcImIcIlIcIcIcIcImIcIcIcIpInInInIoIcIcIcIoIcIcIcIoIcIcIcIoIcIcIcIoIcIcIcIoIcIcIcIoIcIcIcIoIcIcIcIoIcIcIcIoIcIcIcIoIcIcHpInInInInHmIcIcHoIcIcIcIcHnIcHpIcIcIcIcIcIcHmHoIcIcIcIcIcIcHn..";
+maps["Dl"]="GaGaGaGaBaGaGaScGaGaGaGaBaGaGaScGaFgGaGaBaGbGaGaGaGaGaGbBaGbGbGaBbBbBbBbBcBbBbBbGaGaGbGbBaGbGaGaGaGaGaGaBaGaGaGaGaFeGaGaBaGaGaSbRbGaFeGaBaScSeGaRaRbGaGaBaGaScSeRbRaGaGaBaSbGaScRaRbGaGaBaGaGaSc..";
+maps["Dm"]="UaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaAaAaAaAaUcUaUaUaGaCfCbCgAdUaUaUaBbCaCaCcAdUaUaUaGaCeCaCcAdGjUaUaGaCeCaCcAdUaUaUaGaCeCaCcAfAaAaAaGaCeCaCaCbCgGaSgGaChCdCdCdCiScSdSbSbSbSbSbSbSgSdSdSdSdSdSdSdSdSd..Zg44GaZg45GaZi58..Cg67..";
+maps["Eh"]="UaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUa..";
+maps["Ei"]="XdGaGaGaGaGaGaGaXcGaGaCfCbCgGaGgXdGaCfCaCaCaCgGaXcGaCeCaCaCaCaCbXdGaCeCaCaCaCaCaXcGaCeCaCaCaCaCaXdGaChCaCaCaCaCaXcGaGaChCdCdCdCdXdGaGgGaGaGaGaGaXcGaGaGaGaGaGaGaXdGaGaGaGaGaGaGaXfXbXaXbXaXbXaXb..Yc28..Zi45..";
+maps["Ej"]="GaGaGaGaGaBaGaRaGgGaGaGaGaBaGaRbGaGaGaGaGaBaGaRaCbCgGaGaGaBaGaRbCaCaCgGaGaBaGaRaCaCaCcGaGaBaGaRbCaCaCiGaGaBaGaRaCdCiGaGaGaBaGaRbGaGaGaGaGaBaGaRaGaGaGaGaGaBaGaRbGaGaGaGaGaBaGaRaXbXeGaGaGaBaGaRb..Cg75..";
+maps["Ek"]="RaRbRaRbRbRaRbRaRbRaRbRaRaRbRaGaRaRbRaGaGaRaGaRbRbRaGaGaGaGaRbRaRaGaGaGaGaGaRaRbRbRbGaGaGaGaGaRaRaRaGaGaGaGaGaRbRbGaGaGaGaGaGaRaRaRbGaGaGaGaGaRbRbRaGaGaGaGaRbRaRaGaRbGaGaRbRaRbRbRbRaRbRbRaRbRa..Yi5252";
+maps["E1"]="GaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGa..";
+maps["El"]="RaRbGaGaBaGaGaScGaRaRbGaBaGaGaScRbGaRaGaBaGaSbGaRaRbGaGaBaGaGaGaRbRaGaGaBiBbBbBbRaRbGaGaBaGaGaGaRbRaRbGaBaGaGaGaRaRbRaGaBaGaGaGaRbRaGaGaBaGaGaGaRaGaGaGaBaGaSbFkRbGaGaGaBaGaGaScRaRbGaGaBaGaGaSc..";
+maps["Em"]="ScSdSdSdSdSdSdSdScSdSdSdSdSdSdSdGaSfSbSfSiSdSdSdGaGaFkScSeSbSiSdBbBgGaGaGaGaScSdGaBeBgDcGaDdScSdGaFkBeBbBbBlScSdGaGaSbGaGbGbScSdGaScSdShSbSbSgSdFkSgSdSdSdSdSdSdScSdSdSdSdSdSdSdScSdSdSdSdSdSdSd..Zm4449";
+maps["E3"]="GaGaGaGaGaGaGaScGaCfCbCbCbCbCgScGaCeCaCaCaCaCiScGaCeCaCaCaCcGaScGaCeCaCaCaCcScSdCbCaCaCaCaCcScSdCdCaCaCaCaCcScSdGaCeCaCaCaCcScSdGaCeCaCaCdCiScSdGaChCdCiGgSbSgSdGaSbSbSbSgSdSdSdScSdSdSdSdSdSdSd..La20..Lb19..Lc18..Ad60..";
+maps["Fi"]="XfXbXaXbXaXbXaXbUdAgGaGaGaGaGaGaUaAcGaGaGaGaGaGaUaUdAgGaGaGaGaGaUaUaAcGaGaGaGaGaUaUaAcDcGaDdGgGaUaUaAcGaBnGaGaGaUaUaUdAgBeBbBbBbUaUaUaAcGaGaGaGaUaUaUaUdAbAbAbAbUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUa..Zm4491";
+maps["F/"]="GaGaFgFgFgGaGaGaFgFgFgYbYaYaYaYdYeYaYaYkCaCaCaYdYeCaCaCaCaCaCaYdYeCaCaCaCaCaCaYdYeCaCaCaCaCaCaYdYeCaCaCaCaCaCaYdYeCaCaCaCaCaCaYdYeCaCaCaCaCaCaYdYeCaCaCaCaCaCaYdYmYaCeCaCcYaYaYlGaGaCeCaCcGaGaGa..Zf93..";
+sign["F/"]="Oakland";
+maps["Fj"]="GaGaGaGaGaBaGaGaGaGaGaGaGaBaGaGaGaGaGaGaBfBdGaGaGaGaGaGaBaGaGaGaGaGaGaGaBaGaGaGaGaGaGaGaBiBbBbBbGaBfBbBbBdGaGaGaBbBdGaGaGaGaGaGaGaGaGaGaGaGaGaGaAbAbAbAbAbAbAbAbUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUa..";
+maps["Fk"]="RbRbRaRbRbRaRbRaRaRaRbRaRaRbRaRbGaGaRaGaGaRaGaRaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaBbBbBbBbBbBbBbBbGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaGaAbAbAbAbAbAbAbAbUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUa..";
+maps["Fl"]="RaRbGaGaBaGaGaSgRbRaGaFaBaGaScSdRaGaFaFaBaGaScSdGaFaFaBfBdGaSgSdFaFaBfBdGbSgSdSdBbBbBdGbGaScSdSdFaGaGbGbGaSgSdSdGaGaGaGbScSdSdSdGaGaGaGaSgSdSdSdGaGaGaSbSiSdSdSdSbSbSgSdSdSdSdSdSdSdSdSdSdSdSdSd..Ze66Ck";
+maps["Fm"]="SdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSdSd..";
