@@ -12,7 +12,8 @@
  *    - Trust boundary: User has explicitly consented via File Access API
  *  
  *   GUEST (user sandbox, iframe):
- *    - Can ONLY execute scripts from localStorage
+ *    - Can ONLY execute scripts from 
+localStorage
  *    - Cannot access File Access API
  *    - Cannot access mounted drives
  *    - Fully isolated by iframe boundary
@@ -42,6 +43,7 @@ var DEVICE = 'none';
   var _echoStore = Object.create(null);
   var _harddriveHandle = null;
   var _clipboard = null;
+
 
   // ── Utility Functions ────────────────────────────────────────────────────
   function _utf8len(s) {

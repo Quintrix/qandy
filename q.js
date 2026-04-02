@@ -1,5 +1,4 @@
-
-run="queville.js"; allowScriptESC=true;
+RUN="queville.js"; 
 
 var now=new Date(); function pad(num) { return num.toString().padStart(2, '0'); }
 
