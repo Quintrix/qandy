@@ -472,6 +472,29 @@ function command_js() {
     });
   }
 
+  async function qdosSave(filename, content, timeoutMs) {
+    var valid = (typeof qdosValidateFilename === 'function') ? qdosValidateFilename(filename) :
+                (typeof filename === 'string' ? filename.trim() : null);
+    if (!valid) return Promise.reject(new Error('invalid filename'));
+    var data = String(content == null ? '' : content);
+    if (typeof HOST !== 'undefined' && HOST) {
+      var saver = (typeof localSave === 'function') ? localSave : (typeof dosSave === 'function' ? dosSave : null);
+      if (!saver) return Promise.reject(new Error('Error: DOS not available'));
+      try {
+        var res = await Promise.resolve().then(function () { return saver(valid, data); });
+        if (typeof _normalizeResult === 'function') res = _normalizeResult(res);
+        else if (res === null || typeof res === 'undefined') res = true;
+        else res = String(res);
+        return res;
+      } catch (e) {
+        return Promise.reject(new Error((e && e.message) ? e.message : String(e)));
+      }
+    }
+    return qdosXmitDos('localSave', { file: valid, data: data }, timeoutMs).then(function (result) {
+      return result;
+    });
+  }
+
   async function qdosRename(file, dest, timeoutMs) {
     var validSrc = qdosValidateFilename(file); 
     var validDest = qdosValidateFilename(dest); 
@@ -961,7 +984,8 @@ function command_js() {
   window.qdosScript = qdosScript;
   window.qdosDir = qdosDir;
   window.qdosList = qdosList; 
-  window.qdosLoad = qdosLoad; 
+  window.qdosLoad = qdosLoad;
+  window.qdosSave = qdosSave;
   window.qdosDelete = qdosDelete;
   window.qdosRename = qdosRename; 
   window.qdosMount = qdosMount;
@@ -983,6 +1007,7 @@ function command_js() {
   window.qdosDir = qdosDir;
   window.qdosList = qdosList;
   window.qdosLoad = qdosLoad;
+  window.qdosSave = qdosSave;
   window.qdosDelete = qdosDelete;
   window.qdosRename = qdosRename;
   window.qdosMount = qdosMount;

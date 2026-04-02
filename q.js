@@ -33,22 +33,21 @@ var drop=[];
 script=document.createElement('script');
 script.src="world.js";
 script.onload=Begin;
+script.onerror=Begin;
 document.head.appendChild(script);
 
-//Begin();
-
 async function Begin() {
- PName=localStorage.getItem('PName'); 
+ PName=await qdosLoad('player-name'); 
  if (PName) {
-  PObj=localStorage.getItem('PObj'); 
-  PWear=localStorage.getItem('PWear'); 
-  PInv=localStorage.getItem('PInv'); 
-  PMap=localStorage.getItem('PMap'); 
-  PZ=localStorage.getItem('PZ'); PZ=parseInt(PZ);
+  PObj=await qdosLoad('player-obj'); 
+  PWear=await qdosLoad('player-wear'); 
+  PInv=await qdosLoad('player-inv'); 
+  PMap=await qdosLoad('player-map'); 
+  PZ=await qdosLoad('player-z'); PZ=parseInt(PZ);
   PY=Math.floor(PZ/(mapx+1)); PX=PZ-(PY*(mapx+1)); 
   PForce="hidden"; mode="gfx";
   document.getElementById("txt").style.left = "350px"; 
-  LMap(PMap); char(PName,PObj,PZ); 
+  await LMap(PMap); char(PName,PObj,PZ); 
   keyon=1; mainloop();
   print("\nWelcome to Queville!\n\n");
   pop(PName+" Logged In.");
@@ -69,7 +68,7 @@ async function login() {
    PName=l;
    PForce="visible";
    NewChar("");
-   LMap(PMap);
+   await LMap(PMap);
    cls();
    print("Latest Updates:\n\n");
    print("Wear Sysop Hat to access Sysop Menu and Sysop Help.\n\n");
@@ -317,7 +316,7 @@ function StepHere(a) {
   }}
 }
 
-function LMap(a) {
+async function LMap(a) {
  if (maps[a]) {} else { maps[a]="UaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUa.."; }
  gfx(maps[a]);
  items=[]; if (maps[a].length>194) { ilist=maps[a].substring(194).match(/.{1,6}/g); }
@@ -340,12 +339,14 @@ function LMap(a) {
  }
  RefDItems();
  if (PName && PObj) { 
-  localStorage.setItem('PName', PName);
-  localStorage.setItem('PObj', PObj);
-  localStorage.setItem('PWear', PWear);
-  localStorage.setItem('PInv', PInv);
-  localStorage.setItem('PMap', PMap);
-  localStorage.setItem('PZ', PZ);
+  try {
+   await qdosSave('player-name', PName);
+   await qdosSave('player-obj', PObj);
+   await qdosSave('player-wear', PWear);
+   await qdosSave('player-inv', PInv);
+   await qdosSave('player-map', PMap);
+   await qdosSave('player-z', String(PZ));
+  } catch(e) {}
  }
  return maps[a];
 }
@@ -500,7 +501,7 @@ function XCity(a,b) {
  for (b=0;b<ilist.length;b++) {
   if (ilist[b].substring(0,2)=="Zm") { PZ=parseInt(ilist[b].substring(2,4)); PY=Math.floor(PZ/(mapx+1)); PX=PZ-(PY*(mapx+1)); }
  }
- localStorage.setItem('PZ', PZ);
+ qdosSave('player-z', String(PZ)).catch(function(){});
  char(PName,PObj,PZ);
 }
 
@@ -681,7 +682,7 @@ function ClickItem(a) {
    }
   }   
   if (i=="Zm") { EraseAll(); a=PMap.charCodeAt(0); b=PMap.charCodeAt(1); if (b>96&&b<123) { PMap=String.fromCharCode(a)+String.fromCharCode(b-58); } if (d>-1&&d<96) { PZ=parseInt(d); PY=Math.floor(PZ/(mapx+1)); PX=PZ-(PY*(mapx+1)); } AllowScroll=0; LMap(PMap); char(PName,PObj,PZ); }
-  if (i=="Ze") { EraseAll(); PMap=d; LMap(PMap); for (b=0;b<ilist.length;b++) { if (ilist[b].substring(0,2)=="Ze") { PZ=parseInt(ilist[b].substring(2,4)); PY=Math.floor(PZ/(mapx+1)); PX=PZ-(PY*(mapx+1)); localStorage.setItem('PZ', PZ); }} char(PName,PObj,PZ); }
+  if (i=="Ze") { EraseAll(); PMap=d; LMap(PMap); for (b=0;b<ilist.length;b++) { if (ilist[b].substring(0,2)=="Ze") { PZ=parseInt(ilist[b].substring(2,4)); PY=Math.floor(PZ/(mapx+1)); PX=PZ-(PY*(mapx+1)); qdosSave('player-z', String(PZ)).catch(function(){}); }} char(PName,PObj,PZ); }
   if (i=="Zf") { pop(sign[PMap]); }
   if (i=="Zg") { if (d!="..") { Fish(a); }}
   if (i=="Yb") {
@@ -710,7 +711,7 @@ function Teleport(a) {
  for (b=0;b<ilist.length;b++) {
   if (ilist[b].substring(0,2)=="Ze") {
   	PZ=parseInt(ilist[b].substring(2,4)); PY=Math.floor(PZ/(mapx+1)); PX=PZ-(PY*(mapx+1));
-  	localStorage.setItem('PZ', PZ);
+  	qdosSave('player-z', String(PZ)).catch(function(){});
   }
  }
  char(PName,PObj,PZ);
@@ -906,17 +907,17 @@ function Fish(a) {
  alert("fishing");
 }
 
-function Quit(a) {
+async function Quit(a) {
  if (a==0) {
   PUP="This will delete<br>you localSession.<p>Are you sure?<p>";
   PUP=PUP+"<a href=\"javascript:Quit(1);\">Yes, Quit Game</a>";
  } else {
-  localStorage.removeItem('PName');
-  localStorage.removeItem('PObj');
-  localStorage.removeItem('PWear');
-  localStorage.removeItem('PInv');
-  localStorage.removeItem('PMap');
-  localStorage.removeItem('PZ');
+  await qdosDelete('player-name');
+  await qdosDelete('player-obj');
+  await qdosDelete('player-wear');
+  await qdosDelete('player-inv');
+  await qdosDelete('player-map');
+  await qdosDelete('player-z');
   stimer=setTimeout('location.reload();',1000);
  }
  pop(PUP);
