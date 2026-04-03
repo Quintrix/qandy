@@ -1,9 +1,4 @@
 
-//
-// script needs to create this div
-// <div id="pop" class="pop" onMouseOver='PopUpVis="visible";' onMouseOut='PopUpVis=PForce; PUV=setTimeout("document.getElementById(\"pop\").style.visibility=PopUpVis;",100);'></div>
-//
-
 var PopAlign = "click"; // "center", "click"
 var PopUpVis = "hidden"; // current target visibility
 var PForce = "hidden";   // forced visibility on mouseout in your original code
