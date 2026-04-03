@@ -92,9 +92,9 @@ function gfx(scr) {
  }
 }
 
-function hpop() { document.getElementById("pop").style.visibility="hidden"; }
+window.hpop=function() { document.getElementById("pop").style.visibility="hidden"; }
 
-function pop(htm) {
+window.pop=function(htm) {
   const popup = document.getElementById("pop");
   popup.innerHTML = "<p>" + htm;
   
@@ -131,10 +131,10 @@ function pop(htm) {
           PopY = TopYPos + 384 - popupHeight;
         }
         if (PopX < TopXPos) PopX = TopXPos;
-        if (PopY < TopYPos) PopY = TopYPos;
       } else {
         // Fallback to center if no click location
         PopX = TopXPos + ((256 - popupWidth) / 2);
+        if (PopY < TopYPos) PopY = TopYPos;
         PopY = TopYPos + ((384 - popupHeight) / 2);
       }
       break;
@@ -215,56 +215,7 @@ function char(C,O,Z) {
  }
 }
 
-function ItemID(I) {
- switch (I) {
-  case "Aa": return "Travel Boots"; break;
-  case "Ab": return "Hiking Boots"; break;
-  case "Ac": return "Swamp Boots"; break;
-  case "Ad": return "Mountain Boots"; break;
-  case "Ae": return "Lava Boots"; break;
-  case "Bd": return "Bucket"; break;
-  case "Be": return "Lantern"; break;
-  case "Cg": return "Log"; break;
-  case "Ek": return "Bucket of Tar"; break;
-  case "El": return "Bucket of Water"; break;
-  case "Fa": return "Tomato"; break;
-  case "Fb": return "Tomatoes"; break;
-  case "Fc": return "Tomatoes"; break;
-  case "Fd": return "Tomatoes"; break;
-  case "Jc": return "Candy"; break;
-  case "Ka": return "Plant"; break;
-  case "Kf": return "Bread"; break;
-  case "La": return "DevTeam Hat"; break;
-  case "Lb": return "Player Hat"; break;
-  case "Lc": return "Player Hat"; break;
-  case "Ld": return "Red Bandana"; break;
-  case "Lg": return "Blue Bandana"; break;
-  case "Ma": return "Cylon Helmet"; break;
-  case "Mb": return "Cylon Helmet"; break;
-  case "Md": return "Mask"; break;
-  case "Ob": return "Shield"; break; 
-  case "Pj": return "Sword"; break;
-  case "Re": return "Medicine"; break;
-   
-  case "Va": return "Spider"; break;
-  case "Vb": return "Mosquito"; break;
-  case "Vc": return "Scorpion"; break;
-  case "Vd": return "Fire Ant"; break;
-  case "Yb": return "Cart"; break;
-  case "Yc": return "Furnace"; break;
-  case "Ye": return "Seeds"; break;
-  case "Yi": return "Goblin Village"; break;  
-  case "Ze": return "Teleport"; break
-  case "Zf": return "Sign"; break
-  case "Zg": return "Pier"; break  
-  case "Zi": return "Fire Pit"; break;  
-  case "Zj": return "Fire"; break;
-  case "Zh": return "Well"; break;
-  case "Zm": return "City"; break
- } 
-}
-
-function dispatchZClick(z, clickedElement) {
+window.dispatchZClick=function(z, clickedElement) {
   // Store the clicked location for popup positioning
   window.lastClickedZ = z;
   
@@ -335,4 +286,3 @@ async function LMap(a) {
  }
  return maps[a];
 }
-
