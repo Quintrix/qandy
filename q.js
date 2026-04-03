@@ -2,6 +2,8 @@ RUN="queville.js";
 
 var now=new Date(); function pad(num) { return num.toString().padStart(2, '0'); }
 
+var mode="txt"; // old qandy.htm used this as a global, new qandy.htm does not use it 
+
 var AllowScroll=1;
 var ALlowMove=1;
 
@@ -136,7 +138,7 @@ function oldinput(l) {
     print("Name cannot start with BOT.<br>Enter your name:<br>");
    } else {
     PName=l;
-    //mode="gfx";
+    mode="gfx";
     PForce="visible";
     NewChar("");
     LMap(PMap);
@@ -594,6 +596,21 @@ function keydown(k) {
  if (k=="right") { walk=PZ+1; }
  if (k=="up") { walk=PZ-(mapx+1); }
  if (k=="down") { walk=PZ+(mapx+1); }
+
+ if (k=="esc") {
+  if (mode==="txt") {
+   mode="gfx";
+   document.getElementById("txt").style.top = "50px";
+   document.getElementById("txt").style.left = "350px";
+  } else {
+   mode = "txt";
+   document.getElementById("txt").style.top = "50px";
+   document.getElementById("txt").style.left = "54px";
+  }
+ }
+
+
+ 
 }
 
 function MenuTile(z) {
