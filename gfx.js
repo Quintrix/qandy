@@ -7,6 +7,52 @@ var PUV;                 // timeout id (used to clear/set the timeout)
 var mapx=7;
 var mapy=11;
 
+// Initialization state tracking
+window._gfxInitialized = false;
+window._gfxInitializing = false;
+
+// Load a script dynamically and return a Promise
+window._gfxLoadScript = function(src) {
+  return new Promise(function(resolve, reject) {
+    if (document.querySelector('script[src="' + src + '"]')) { resolve(); return; }
+    var s = document.createElement('script');
+    s.src = src;
+    s.onload = resolve;
+    s.onerror = function() { console.warn('gfx: could not load ' + src); resolve(); };
+    document.head.appendChild(s);
+  });
+};
+
+// Initialize the graphics system: load sub-modules then render tiles
+window.initializeGfx = async function() {
+  if (window._gfxInitialized) { return; }
+  if (window._gfxInitializing) {
+    // Wait for the in-progress initialization to finish
+    while (window._gfxInitializing) { await new Promise(function(r){ setTimeout(r, 50); }); }
+    return;
+  }
+  window._gfxInitializing = true;
+  try {
+    await window._gfxLoadScript('gfx-itemid.js');
+    await window._gfxLoadScript('world.js');
+    window.tiles();
+    window._gfxInitialized = true;
+  } catch(e) {
+    console.error('gfx: initialization error', e);
+  } finally {
+    window._gfxInitializing = false;
+  }
+};
+
+// Auto-initialize when gfx.js is first loaded
+(function() {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function() { window.initializeGfx(); });
+  } else {
+    window.initializeGfx();
+  }
+})();
+
 const style = document.createElement('style');
 style.textContent = `
 .pop { position:absolute; top:260; left:190; z-index:249;
@@ -36,14 +82,13 @@ popup.addEventListener('mouseout', () => {
 });
 document.body.appendChild(popup);
 
-function tiles() {
+window.tiles = function() {
   // Use the host's map dimensions, but the tile count is mapx+1, mapy+1
   const tileCountX = (typeof mapx !== 'undefined') ? mapx + 1 : 7;
   const tileCountY = (typeof mapy !== 'undefined') ? mapy + 1 : 11;
-   
 
-  let topOffset = 50;   
-  let leftOffset = 54;  
+  let topOffset = 50;
+  let leftOffset = 54;
 
   // remove any existing tiles
   let cleanupIndex = 0;
@@ -59,7 +104,7 @@ function tiles() {
     for (let x=0; x < tileCountX; x++, z++) {
       const t=document.createElement('img');
       t.id = 'T' + z;
-      t.src = 't/Ga.png';  
+      t.src = 't/Ga.png';
       t.style.height = '32px';
       t.style.width = '32px';
       t.className = 'tile';
@@ -72,17 +117,9 @@ function tiles() {
       document.body.appendChild(t);
     }
   }
-}
- 
+};
 
-// run tiles() once DOM is ready (device layout is fixed, so one-time placement is fine)
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', tiles);
-} else {
-  tiles();
-}
-
-function gfx(scr) { 
+window.gfx = function(scr) { 
  a=0;
  for (b=0; b<=mapy; b++) { 
   for (c=0; c<=mapx; c++) {
@@ -149,7 +186,7 @@ window.pop=function(htm) {
   popup.style.left = PopX + "px";
 }
 
-function char(C,O,Z) {
+window.char = function(C,O,Z) {
  let y=Math.floor(Z/(mapx+1)); let x=Z-(y*(mapx+1)); y--;
  idface="cf"+C; idbody="cb"+C; idwpn="cw"+C; idarm="ca"+C; idhat="ch"+C;
  face=""; body=""; wpn=""; arm=""; hat="";
@@ -251,7 +288,7 @@ window.dispatchZClick=function(z, clickedElement) {
   }
 }
 
-async function LMap(a) {
+window.LoadMap = async function(a) {
  if (maps[a]) {} else { maps[a]="UaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUa.."; }
  gfx(maps[a]);
  items=[]; if (maps[a].length>194) { ilist=maps[a].substring(194).match(/.{1,6}/g); }
@@ -286,3 +323,6 @@ async function LMap(a) {
  }
  return maps[a];
 }
+
+// Backwards compatibility alias
+window.LMap = window.LoadMap;

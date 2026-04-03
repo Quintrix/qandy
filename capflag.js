@@ -15,51 +15,46 @@ login();
 
 async function login() {
   await print("Capture The Flag:\n\n");
+  await print("Enter your player name:\n");
 
   var name = await input();
 
-  if (name.length<3) {
+  if (name.length < 3) {
     print("Name must be at least three characters.<br>Enter your player name:\n");
+    login();
   } else {
     // ## make this BOT check upper or lower case, name bot is reserved for bot participants
-    if (l.substring(0,2)=="BOT") {
+    if (name.toUpperCase().substring(0, 3) == "BOT") {
       print("Name cannot start with BOT.\nEnter your player name:\n");
+      login();
     } else {
-      PName=l;
-      mode="gfx";
-      PForce="visible";
-      NewChar("");
-      LMap(PMap);
       PName = name;
-      init();
+      mode = "gfx";
+      PForce = "visible";
+      await init();
+      NewChar("");
+      // ## display list of discovered servers
+      // ## ask user which server to connect to
+      // ## attempt to connect to server
     }
   }
-  // ## display list of discovered servers
-  // ## ask user which server to connect to
-  // ## attempt to connect to server
-  // ## init() once connected
 }
 
-init();
-NewChar();
-
 async function init() {
-  await qdosScript("gfx.js");
-  if (window.tiles && typeof tiles === 'function') { tiles(); }
-  // ## render initial map (all tile Ga for grass), currently not working
-  var mapData = "Ga".repeat(104);
-  if (window.gfx && typeof gfx === 'function') {
-    gfx(mapData);
+  try {
+    await qdosScript("gfx.js");
+    if (window.initializeGfx) { await window.initializeGfx(); }
+  } catch(e) {
+    console.error("capflag: graphics initialization error", e);
   }
   // move text screen out of the way so user can see gfx
   document.getElementById('txt').style.top = '50px';
   document.getElementById('txt').style.left = '350px';
-  // ## get player to select avatar, code for this is in q.js
 }
 
-function NewChar(a) {
+window.NewChar = function(a) {
 if (typeof a==="undefined") { a=""; }
-  PopForce="visible";
+  PForce="visible";
   if (a=="M") {
     // Male character selection
     PUP="Select Character:<p>";
@@ -94,10 +89,10 @@ if (typeof a==="undefined") { a=""; }
     char(PName,PObj,PZ); 
     PForce="hidden"; 
     hpop(); 
-    mainloop();
+    if (typeof window.mainloop === 'function') { window.mainloop(); }
   } else {  	
     // Initial gender selection
     PX=2; PY=9; PZ=(PY*(mapx+1))+PX;
     pop("<p>Male or Female?<br><a href=\"javascript:NewChar(\'M\');\"><img src=\"c/B1.png\" height=128 width=64></a> &nbsp; <a href=\"javascript:NewChar(\'F\');\"><img src=\"c/F5.png\" height=128 width=64></a><p>");
   }
-}
+};
