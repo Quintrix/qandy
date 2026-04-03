@@ -12,7 +12,6 @@ window._gfxInitialized = false;
 window._gfxInitializing = false;
 window._gfxInitQueue = []; // Pending callbacks waiting for initialization
 
-// Initialize the graphics system: load sub-modules then render tiles
 window.gfxInit = async function() {
   if (window._gfxInitialized) { return; }
   if (window._gfxInitializing) {
@@ -267,6 +266,156 @@ window.dispatchZClick=function(z, clickedElement) {
     window.zclick(z, event);
   }
 }
+
+// In qandy-gfx.js
+window.gfxConnect = async function() {
+  try {
+    // 1. Server Discovery & Selection
+    await print("Discovering servers...\n");
+    var servers = await qdosServerDiscovery();
+    await print(servers);
+    
+    await print("Enter server to connect to (or press Enter for localhost):\n");
+    var serverChoice = await input();
+    
+    if (serverChoice.trim() === "") serverChoice = "localhost:8080";
+    
+    // 2. Connect to chosen server
+    await print("Connecting to " + serverChoice + "...\n");
+    var result = await qdosServerConnect(serverChoice);
+    if (result.includes("Error")) {
+      throw new Error("Failed to connect: " + result);
+    }
+    
+    // 3. Check if game world exists, create if needed
+    var worldExists = await checkWorldExists();
+    if (!worldExists) {
+      await print("Creating new game world...\n");
+      await gfxBigBang();
+    }
+    
+    // 4. Download and load config files
+    await print("Loading world configuration...\n");
+    await loadWorldConfig();
+    
+    // 5. Render starting map location (default: A1)
+    await print("Rendering starting location...\n");
+    var startMap = "A1";
+    await renderMap(startMap);
+    
+    // 6. Avatar selection
+    var avatar = await selectAvatar();
+    
+    // 7. Create player file on server
+    await print("Joining the world...\n");
+    var startZ = 23; // Center of map
+    await createPlayerOnServer(avatar, startMap, startZ);
+    
+    // 8. Render player on map
+    char(PName, avatar, startZ);
+    
+    await print("Connected successfully!\n");
+    
+  } catch (error) {
+    await print("Connection failed: " + error.message + "\n");
+    throw error;
+  }
+}
+
+async function checkWorldExists() {
+  try {
+    var result = await qdosServerExists("capflag.js/A1/a.txt");
+    return result === true;
+  } catch (e) {
+    return false;
+  }
+}
+
+async function loadWorldConfig() {
+  try {
+    // Load essential config files
+    var aConfig = await qdosServerLoad("capflag.js/A1/a.txt");
+    var mTiles = await qdosServerLoad("capflag.js/A1/m.txt");
+    
+    // Store globally for gfx engine
+    window.worldConfig = aConfig;
+    window.currentMapData = mTiles;
+    
+  } catch (error) {
+    throw new Error("Failed to load world config: " + error.message);
+  }
+}
+
+async function renderMap(mapId) {
+  try {
+    // Load map tile data
+    var mapData = await qdosServerLoad("capflag.js/" + mapId + "/m.txt");
+    
+    // Initialize graphics if not done
+    if (!gfxInitialized) {
+      await initializeGfx();
+    }
+    
+    // Render the tiles
+    gfx(mapData);
+    
+    // Load and render any existing items on this map
+    await renderMapItems(mapId);
+    
+  } catch (error) {
+    throw new Error("Failed to render map: " + error.message);
+  }
+}
+
+async function renderMapItems(mapId) {
+  try {
+    // Get directory listing for this map
+    var items = await qdosServerList("capflag.js/" + mapId + "/");
+    
+    // Filter for item files (two-char codes + position + .json)
+    var itemFiles = items.split('\n').filter(f => 
+      f.length > 6 && f.endsWith('.json') && 
+      f.match(/^[A-Z][a-z]\d+\.json$/)
+    );
+    
+    // Render each item
+    for (var file of itemFiles) {
+      await renderItem(mapId, file);
+    }
+    
+  } catch (error) {
+    console.warn("Failed to render items:", error.message);
+  }
+}
+
+async function createPlayerOnServer(avatar, mapId, zPos) {
+  try {
+    var playerData = {
+      name: PName,
+      avatar: avatar,
+      map: mapId,
+      position: zPos,
+      created: Date.now()
+    };
+    
+    // Create player file in map directory
+    var playerFile = "capflag.js/" + mapId + "/player_" + PName + ".json";
+    await qdosServerSave(playerFile, JSON.stringify(playerData));
+    
+    // Add player to map's player list
+    var players = await qdosServerLoad("capflag.js/" + mapId + "/p.txt");
+    if (players && !players.includes(PName)) {
+      players += (players ? "," : "") + PName;
+      await qdosServerSave("capflag.js/" + mapId + "/p.txt", players);
+    }
+    
+  } catch (error) {
+    throw new Error("Failed to create player on server: " + error.message);
+  }
+}
+
+
+
 
 window.LoadMap = async function(a) {
  if (maps[a]) {} else { maps[a]="UaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUa.."; }
