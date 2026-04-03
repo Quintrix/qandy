@@ -570,9 +570,9 @@ function video_js() {
     
     while (idx < str.length) {
       var ch = str.charAt(idx);
-      if (CURANSI && (ch === '\x1b' || ch === '\e')) {
+      if (CURANSI && ch === '\x1b') {
         var rest = str.slice(idx);
-        var m = /^[\x1b\e]\[([0-9;]*)?([@A-Za-z])/.exec(rest);
+        var m = /^\x1b\[([0-9;]*)?([@A-Za-z])/.exec(rest);
         if (m) { handleCSI(m[1] || '', m[2]); idx += m[0].length; }
         else { idx++; }
         continue;
@@ -713,9 +713,9 @@ function video_js() {
 
       while (state.idx < state.str.length && state.charsEmitted < charsAllowed) {
         var ch = state.str.charAt(state.idx);
-        if (CURANSI && (ch === '\x1b' || ch === '\e')) {
+        if (CURANSI && ch === '\x1b') {
           var rest = state.str.slice(state.idx);
-          var m = /^[\x1b\e]\[([0-9;]*)?([@A-Za-z])/.exec(rest);
+          var m = /^\x1b\[([0-9;]*)?([@A-Za-z])/.exec(rest);
           if (m) { handleCSI(m[1] || '', m[2]); state.idx += m[0].length; } 
           else { state.idx++; }
           state.charsEmitted++;

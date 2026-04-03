@@ -1,4 +1,4 @@
-RUN="flag.js";
+RUN="capflag.js";
 
 // Global map dimensions
 var mapx = 8;
