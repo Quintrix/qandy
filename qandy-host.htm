@@ -386,6 +386,56 @@ html { -webkit-text-size-adjust: 100%; }     /* keep text size stable across zoo
 </script>
 
 <script>
+// ──── 256-color CSS palette injection ────────────────────────────────────────
+// CSS classes for the xterm 256-color palette, used with the 256+ internal
+// color offset (e.g. 256-color index n maps to ansi-fg-{256+n} / ansi-bg-{256+n}).
+(function () {
+  if (typeof document === 'undefined') return;
+  if (document.getElementById('qandy-256-css')) return;
+
+  // Standard xterm 256-color palette (colors 0-15 = ANSI system colors)
+  var palette = [
+    '#000000','#800000','#008000','#808000','#000080','#800080','#008080','#c0c0c0',
+    '#808080','#ff0000','#00ff00','#ffff00','#0000ff','#ff00ff','#00ffff','#ffffff'
+  ];
+
+  // Colors 16-231: 6x6x6 RGB cube
+  var cubeSteps = [0, 95, 135, 175, 215, 255];
+  for (var r = 0; r < 6; r++) {
+    for (var g = 0; g < 6; g++) {
+      for (var b = 0; b < 6; b++) {
+        var rh = cubeSteps[r].toString(16).padStart(2, '0');
+        var gh = cubeSteps[g].toString(16).padStart(2, '0');
+        var bh = cubeSteps[b].toString(16).padStart(2, '0');
+        palette.push('#' + rh + gh + bh);
+      }
+    }
+  }
+
+  // Colors 232-255: 24-step grayscale ramp
+  for (var i = 0; i < 24; i++) {
+    var v = (8 + i * 10).toString(16).padStart(2, '0');
+    palette.push('#' + v + v + v);
+  }
+
+  // Generate CSS rules using internal offset 256
+  var lines = [];
+  for (var n = 0; n < 256; n++) {
+    var hex = palette[n];
+    var code = 256 + n;
+    lines.push('.qandy-cell.ansi-fg-' + code + '{--fg:' + hex + ';color:var(--fg)}');
+    lines.push('.qandy-cell.ansi-bg-' + code + '{--bg:' + hex + ';background-color:var(--bg)}');
+  }
+
+  var style = document.createElement('style');
+  style.id = 'qandy-256-css';
+  style.textContent = lines.join('');
+  var head = document.head || document.getElementsByTagName('head')[0] || document.documentElement;
+  head.appendChild(style);
+})();
+</script>
+
+<script>
 // Define Global Variables
 // sound.js
 var SOUND=true;       // enable/disable sound card
