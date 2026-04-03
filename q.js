@@ -32,9 +32,12 @@ var maps=[];
 var sign=[];
 var drop=[]; 
 
-script=document.createElement('script');
-script.src="world.js";
-document.head.appendChild(script);
+qdosScript("gfx.js");
+qdosScript("world.js");
+
+//script=document.createElement('script');
+//script.src="world.js";
+//document.head.appendChild(script);
 
 login();
 
@@ -297,41 +300,6 @@ function StepHere(a) {
     MoveToX=a-(MoveToY*(MapSizeX+1));
   }}
 }
-
-async function LMap(a) {
- if (maps[a]) {} else { maps[a]="UaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUa.."; }
- gfx(maps[a]);
- items=[]; if (maps[a].length>194) { ilist=maps[a].substring(194).match(/.{1,6}/g); }
- for (b=0;b<ilist.length;b++) {
-  i=ilist[b].substring(0,2);
-  z=ilist[b].substring(2,4);
-  d=ilist[b].substring(4,6);
-  y=Math.floor(z/(mapx+1));
-  x=z-(y*(mapx+1));
-  c=document.createElement("img");
-  c.id="i"+b;
-  c.src="i/"+ilist[b].substring(0,2)+".png";
-  c.style.position="absolute";
-  c.style.top=32+20+(y*32)+"px";
-  c.style.left=(32+22+(x*32))+"px";
-  c.style.zIndex="120";
-  c.onload=function() { this.style.top=parseInt(this.style.top)-(this.height-32)+"px"; this.style.left=parseInt(this.style.left)-(this.width-32)+"px"; }
-  c.onmousedown=new Function("MenuItem("+(z)+",this.parentNode)");
-  document.body.appendChild(c);
- }
- RefDItems();
- if (PName && PObj) { 
-  try {
-   await qdosSave('player-name', PName);
-   await qdosSave('player-obj', PObj);
-   await qdosSave('player-wear', PWear);
-   await qdosSave('player-inv', PInv);
-   await qdosSave('player-map', PMap);
-   await qdosSave('player-z', String(PZ));
-  } catch(e) {}
- }
- return maps[a];
-}
  
 function RefDItems() {
  if (drop[PMap]) {
@@ -364,7 +332,7 @@ function RefDItems() {
      c.style.top=32+20+(y*32)+"px";
      c.style.left=(32+22+(x*32))+"px";
      c.onload=function() { this.style.top=parseInt(this.style.top)-(this.height-32)+"px"; this.style.left=parseInt(this.style.left)-(this.width-32)+"px"; }
-     c.onmousedown=new Function("MenuItem("+(z)+")");
+     (function(itemZ){c.onmousedown=function(){dispatchZClick(parseInt(itemZ,10),this);};})(z);
      document.body.appendChild(c);
     }
    }
@@ -625,8 +593,14 @@ function keydown(key, event) {
   if (k === 'down') { walk = PZ + (mapx + 1); }
 }
 
-function MenuTile(z) {
- if (PObj) { hpop(); walk=z; }
+function zclick(z, event) {
+ if (event.detail.itemType === 'character') {
+  MenuChar(z);
+ } else if (event.detail.itemType === 'item' || event.detail.itemType === 'droppedItem') {
+  MenuItem(z);
+ } else {
+  if (PObj) { hpop(); walk = z; }
+ }
 }
 
 function MenuItem(IZ) {
