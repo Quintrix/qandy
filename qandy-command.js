@@ -161,28 +161,11 @@ function command_js() {
     d=d.replace(/\s+/g, ' ').trim();
 
     if (c.endsWith('.js')) {
-      if (HOST) {
-        f=0; for (let i=0; i<JSfiles.length; i++) {
-          const JSfile=JSfiles[i];
-          if (c===JSfile) {
-          	f=1;
-            var js=document.createElement('script');
-            js.id=JSfile;
-            js.src=JSfile;
-            document.head.appendChild(js);
-          }
-        }
-        if (f<1) { print("Command not found.\n"); } 
-        return;
-      }
-      if (GUEST) {
-        // only execute scripts from localStorage
-        var res = await qdosScript(c);
-        if (res === true) {} else {
-          print(String(res) + "\n");
-        } 
-        return;
-      }
+      var res = await qdosScript(c);
+      if (res === true) {} else {
+        print(String(res) + "\n");
+      } 
+      return;
     }
 
     switch (c) {
@@ -348,7 +331,21 @@ function command_js() {
   var _pending = window.__qandy_pending;
 
   async function qdosScript(name) {
-    if (typeof HOST !== 'undefined' && HOST) { return "Error: input 'user' to run scripts"; }
+    if (typeof HOST !== 'undefined' && HOST) {
+      f=0; for (let i=0; i<JSfiles.length; i++) {
+        const JSfile=JSfiles[i];
+        if (name===JSfile) {
+          f=1;
+          var js=document.createElement('script');
+          js.id=JSfile;
+          js.src=JSfile;
+          document.head.appendChild(js);
+        }
+      }
+      if (f<1) { return "Error: file not found"; }
+      return true;
+    } 
+    
     var nm = (typeof name === 'string') ? name.trim() : '';
     if (!nm) return "Error: invalid filename";
     function _isValid(n) {
