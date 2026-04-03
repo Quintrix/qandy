@@ -541,9 +541,9 @@ function video_js() {
             else if (p === 24) { CURATTR &= ~(window.ATTR_UNDERLINE || 0x0010); }
             else if (p === 25) { CURATTR &= ~(window.ATTR_BLINK    || 0x0020); }
             else if (p === 27) { CURATTR &= ~(window.ATTR_INVERSE  || 0x0001); }
-            else if (p === 38 && pi + 2 < params.length && params[pi + 1] === 5) { CURFG = 256 + params[pi + 2]; pi += 2; }
+            else if (p === 38 && pi + 2 < params.length && params[pi + 1] === 5) { var c38 = params[pi + 2] & 0xff; CURFG = 256 + c38; pi += 2; }
             else if (p === 39) { CURFG = 37; }
-            else if (p === 48 && pi + 2 < params.length && params[pi + 1] === 5) { CURBG = 256 + params[pi + 2]; pi += 2; }
+            else if (p === 48 && pi + 2 < params.length && params[pi + 1] === 5) { var c48 = params[pi + 2] & 0xff; CURBG = 256 + c48; pi += 2; }
             else if (p === 49) { CURBG = 40; }
             else if (p >= 30 && p <= 37)   { CURFG = p; }
             else if (p >= 90 && p <= 97)   { CURFG = p; }
@@ -654,11 +654,11 @@ function video_js() {
               case 7: CURATTR = (CURATTR | (window.ATTR_INVERSE || 0x0001)); break;
               case 27: CURATTR &= ~(window.ATTR_INVERSE || 0x0001); break;
               case 38:
-                if (pi + 2 < params.length && params[pi + 1] === 5) { CURFG = 256 + params[pi + 2]; pi += 2; }
+                if (pi + 2 < params.length && params[pi + 1] === 5) { CURFG = 256 + (params[pi + 2] & 0xff); pi += 2; }
                 break;
               case 39: CURFG = 37; break;
               case 48:
-                if (pi + 2 < params.length && params[pi + 1] === 5) { CURBG = 256 + params[pi + 2]; pi += 2; }
+                if (pi + 2 < params.length && params[pi + 1] === 5) { CURBG = 256 + (params[pi + 2] & 0xff); pi += 2; }
                 break;
               case 49: CURBG = 40; break;
               default:

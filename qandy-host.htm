@@ -429,7 +429,7 @@ html { -webkit-text-size-adjust: 100%; }     /* keep text size stable across zoo
 
   var style = document.createElement('style');
   style.id = 'qandy-256-css';
-  style.textContent = lines.join('');
+  style.textContent = lines.join('\n');
   var head = document.head || document.getElementsByTagName('head')[0] || document.documentElement;
   head.appendChild(style);
 })();
