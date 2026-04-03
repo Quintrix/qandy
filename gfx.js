@@ -10,15 +10,16 @@ var mapy=11;
 // Initialization state tracking
 window._gfxInitialized = false;
 window._gfxInitializing = false;
+window._gfxInitQueue = []; // Pending callbacks waiting for initialization
 
 // Load a script dynamically and return a Promise
 window._gfxLoadScript = function(src) {
   return new Promise(function(resolve, reject) {
-    if (document.querySelector('script[src="' + src + '"]')) { resolve(); return; }
+    if (Array.from(document.scripts).some(function(s) { return s.src === src || s.getAttribute('src') === src; })) { resolve(); return; }
     var s = document.createElement('script');
     s.src = src;
     s.onload = resolve;
-    s.onerror = function() { console.warn('gfx: could not load ' + src); resolve(); };
+    s.onerror = function() { console.warn('gfx: could not load ' + src + ' - continuing with reduced functionality'); resolve(); };
     document.head.appendChild(s);
   });
 };
@@ -27,9 +28,8 @@ window._gfxLoadScript = function(src) {
 window.initializeGfx = async function() {
   if (window._gfxInitialized) { return; }
   if (window._gfxInitializing) {
-    // Wait for the in-progress initialization to finish
-    while (window._gfxInitializing) { await new Promise(function(r){ setTimeout(r, 50); }); }
-    return;
+    // Queue a promise that resolves when current initialization completes
+    return new Promise(function(resolve) { window._gfxInitQueue.push(resolve); });
   }
   window._gfxInitializing = true;
   try {
@@ -41,6 +41,9 @@ window.initializeGfx = async function() {
     console.error('gfx: initialization error', e);
   } finally {
     window._gfxInitializing = false;
+    // Resolve all queued callers
+    var queue = window._gfxInitQueue.splice(0);
+    for (var i = 0; i < queue.length; i++) { queue[i](); }
   }
 };
 

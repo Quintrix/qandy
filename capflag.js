@@ -21,12 +21,12 @@ async function login() {
 
   if (name.length < 3) {
     print("Name must be at least three characters.<br>Enter your player name:\n");
-    login();
+    await login();
   } else {
     // ## make this BOT check upper or lower case, name bot is reserved for bot participants
-    if (name.toUpperCase().substring(0, 3) == "BOT") {
+    if (name.toUpperCase().substring(0, 3) === "BOT") {
       print("Name cannot start with BOT.\nEnter your player name:\n");
-      login();
+      await login();
     } else {
       PName = name;
       mode = "gfx";
