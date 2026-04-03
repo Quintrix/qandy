@@ -9,7 +9,7 @@ var PForce = "hidden";   // forced visibility on mouseout in your original code
 var PUV;                 // timeout id (used to clear/set the timeout)
 
 var mapx=7;
-var maxy=11;
+var mapy=11;
 
 const popup = document.createElement('div');
 popup.id = 'pop';
@@ -56,11 +56,8 @@ function tiles() {
       t.style.top = (topOffset + y * 32) + 'px';
       t.style.left = (leftOffset + x * 32) + 'px';
       t.style.zIndex = '10';
-      t.onclick = function() { 
-        if (typeof MenuTile === 'function') {
-          MenuTile(z); 
-        }
-      };
+      const tileZ = z;
+      t.onclick = function() { dispatchZClick(tileZ, t); };
       document.body.appendChild(t);
     }
   }
@@ -118,7 +115,7 @@ function pop(htm) {
 }
 
 function char(C,O,Z) {
- Y=Math.floor(Z/(mapx+1)); X=Z-(Y*(mapx+1)); Y--;
+ let y=Math.floor(Z/(mapx+1)); let x=Z-(y*(mapx+1)); y--;
  idface="cf"+C; idbody="cb"+C; idwpn="cw"+C; idarm="ca"+C; idhat="ch"+C;
  face=""; body=""; wpn=""; arm=""; hat="";
 
@@ -134,29 +131,29 @@ function char(C,O,Z) {
 
  if (document.getElementById("cb"+C)) {
   e=document.getElementById("cb"+C).src="c/"+body+".png";
-  e=document.getElementById("cb"+C).style.top=32+22+(Y*32)+"px";
-  e=document.getElementById("cb"+C).style.left=(32+22+(X*32))+"px";
+  e=document.getElementById("cb"+C).style.top=32+22+(y*32)+"px";
+  e=document.getElementById("cb"+C).style.left=(32+22+(x*32))+"px";
  } else {
-  chr=document.createElement("img");
+  let chr=document.createElement("img");
   chr.id="cb"+C; chr.src="c/"+body+".png";
   chr.className="char";  
   chr.style.position="absolute"; chr.style.height=64; chr.style.width=32;
-  chr.style.top=32+22+(Y*32)+"px"; chr.style.left=(32+22+(X*32))+"px";
-  chr.onclick=function() { chr.onmousedown=new Function("ClickChar("+(PZ)+",this.parentNode)"); }
+  chr.style.top=32+22+(y*32)+"px"; chr.style.left=(32+22+(x*32))+"px";
+  chr.onclick=(function(charZ){return function(){dispatchZClick(charZ,this);};})(Z);
   chr.style.zIndex="150";  
   document.body.appendChild(chr);
  }
  if (document.getElementById("cf"+C)) {
   e=document.getElementById("cf"+C).src="c/"+face+".png";
-  e=document.getElementById("cf"+C).style.top=32+22+(Y*32)+"px";
-  e=document.getElementById("cf"+C).style.left=(32+22+(X*32))+"px";
+  e=document.getElementById("cf"+C).style.top=32+22+(y*32)+"px";
+  e=document.getElementById("cf"+C).style.left=(32+22+(x*32))+"px";
  } else {
-  chr=document.createElement("img");
+  let chr=document.createElement("img");
   chr.id="cf"+C; chr.src="c/"+face+".png";
   chr.className="char";  
   chr.style.position="absolute"; chr.style.height=64; chr.style.width=32;
-  chr.style.top=32+22+(Y*32)+"px"; chr.style.left=(32+22+(X*32))+"px";
-  chr.onclick=function() { chr.onmousedown=new Function("ClickChar("+(PZ)+",this.parentNode)"); }
+  chr.style.top=32+22+(y*32)+"px"; chr.style.left=(32+22+(x*32))+"px";
+  chr.onclick=(function(charZ){return function(){dispatchZClick(charZ,this);};})(Z);
   chr.style.zIndex="151";
   document.body.appendChild(chr);
  }
@@ -166,81 +163,15 @@ function char(C,O,Z) {
  if (hat) {
   if (document.getElementById("ch"+C)) {
    e=document.getElementById("ch"+C).src="c/"+hat+".png";
-   e=document.getElementById("ch"+C).style.top=32+22+(Y*32)+"px";
-   e=document.getElementById("ch"+C).style.left=(32+22+(X*32))+"px";
+   e=document.getElementById("ch"+C).style.top=32+22+(y*32)+"px";
+   e=document.getElementById("ch"+C).style.left=(32+22+(x*32))+"px";
   } else {
-   chr=document.createElement("img");
+   let chr=document.createElement("img");
    chr.id="ch"+C; chr.src="c/"+hat+".png";
    chr.className="char";  
    chr.style.position="absolute"; chr.style.height=64; chr.style.width=32;
-   chr.style.top=32+22+(Y*32)+"px"; chr.style.left=(32+22+(X*32))+"px";
-   chr.onclick=function() { chr.onmousedown=new Function("ClickChar("+(PZ)+",this.parentNode)"); }
-   chr.style.zIndex="152";
-   document.body.appendChild(chr);
-  } 
- } else {
-  if (document.getElementById("ch"+PName)) { document.getElementById("ch"+PName).remove(); } 
- }
-}
-
-function char(C,O,Z) {
- Y=Math.floor(Z/(mapx+1)); X=Z-(Y*(mapx+1)); Y--;
- idface="cf"+C; idbody="cb"+C; idwpn="cw"+C; idarm="ca"+C; idhat="ch"+C;
- face=""; body=""; wpn=""; arm=""; hat="";
-
- if (O.indexOf("A")>-1) { face="A"+O.charAt(O.indexOf("A")+1); }
- if (O.indexOf("B")>-1) { face="B"+O.charAt(O.indexOf("B")+1); }
- if (O.indexOf("E")>-1) { face="E"+O.charAt(O.indexOf("E")+1); }
- if (O.indexOf("F")>-1) { face="F"+O.charAt(O.indexOf("F")+1); }
-
- if (O.indexOf("C")>-1) { body="C"+O.charAt(O.indexOf("C")+1); }
- if (O.indexOf("D")>-1) { body="D"+O.charAt(O.indexOf("D")+1); }
- if (O.indexOf("G")>-1) { body="G"+O.charAt(O.indexOf("G")+1); }
- if (O.indexOf("H")>-1) { body="H"+O.charAt(O.indexOf("H")+1); }
-
- if (document.getElementById("cb"+C)) {
-  e=document.getElementById("cb"+C).src="c/"+body+".png";
-  e=document.getElementById("cb"+C).style.top=32+22+(Y*32)+"px";
-  e=document.getElementById("cb"+C).style.left=(32+22+(X*32))+"px";
- } else {
-  chr=document.createElement("img");
-  chr.id="cb"+C; chr.src="c/"+body+".png";
-  chr.className="char";  
-  chr.style.position="absolute"; chr.style.height=64; chr.style.width=32;
-  chr.style.top=32+22+(Y*32)+"px"; chr.style.left=(32+22+(X*32))+"px";
-  chr.onclick=function() { chr.onmousedown=new Function("ClickChar("+(PZ)+",this.parentNode)"); }
-  chr.style.zIndex="150";  
-  document.body.appendChild(chr);
- }
- if (document.getElementById("cf"+C)) {
-  e=document.getElementById("cf"+C).src="c/"+face+".png";
-  e=document.getElementById("cf"+C).style.top=32+22+(Y*32)+"px";
-  e=document.getElementById("cf"+C).style.left=(32+22+(X*32))+"px";
- } else {
-  chr=document.createElement("img");
-  chr.id="cf"+C; chr.src="c/"+face+".png";
-  chr.className="char";  
-  chr.style.position="absolute"; chr.style.height=64; chr.style.width=32;
-  chr.style.top=32+22+(Y*32)+"px"; chr.style.left=(32+22+(X*32))+"px";
-  chr.onclick=function() { chr.onmousedown=new Function("ClickChar("+(PZ)+",this.parentNode)"); }
-  chr.style.zIndex="151";
-  document.body.appendChild(chr);
- }
-
- if (O.indexOf("I")>-1) { hat="I"+O.charAt(O.indexOf("I")+1); }
- if (O.indexOf("J")>-1) { hat="J"+O.charAt(O.indexOf("J")+1); }
- if (hat) {
-  if (document.getElementById("ch"+C)) {
-   e=document.getElementById("ch"+C).src="c/"+hat+".png";
-   e=document.getElementById("ch"+C).style.top=32+22+(Y*32)+"px";
-   e=document.getElementById("ch"+C).style.left=(32+22+(X*32))+"px";
-  } else {
-   chr=document.createElement("img");
-   chr.id="ch"+C; chr.src="c/"+hat+".png";
-   chr.className="char";  
-   chr.style.position="absolute"; chr.style.height=64; chr.style.width=32;
-   chr.style.top=32+22+(Y*32)+"px"; chr.style.left=(32+22+(X*32))+"px";
-   chr.onclick=function() { chr.onmousedown=new Function("ClickChar("+(PZ)+",this.parentNode)"); }
+   chr.style.top=32+22+(y*32)+"px"; chr.style.left=(32+22+(x*32))+"px";
+   chr.onclick=(function(charZ){return function(){dispatchZClick(charZ,this);};})(Z);
    chr.style.zIndex="152";
    document.body.appendChild(chr);
   } 
@@ -298,11 +229,32 @@ function ItemID(I) {
  } 
 }
 
-function ClickTile(Z) {
- Y=Math.floor(Z/mapx); X=Z-(Y*mapx); 
- if (run) { MenuTile(Z); }
-}
-
-function ClickChar(Z) {
- if (run) { MenuChar(Z); }
+function dispatchZClick(z, clickedElement) {
+ let y = Math.floor(z / (mapx + 1)); let x = z - (y * (mapx + 1));
+ let itemType = 'tile';
+ if (clickedElement) {
+  if (clickedElement.className === 'char') {
+   itemType = 'character';
+  } else if (clickedElement.id && clickedElement.id.charAt(0) === 'i' &&
+             clickedElement.id.length > 1 && !isNaN(parseInt(clickedElement.id.charAt(1), 10))) {
+   itemType = 'item';
+  } else if (clickedElement.id && clickedElement.id.charAt(0) === 'd' &&
+             clickedElement.id.length > 1 && !isNaN(parseInt(clickedElement.id.charAt(1), 10))) {
+   itemType = 'droppedItem';
+  }
+ }
+ const event = new CustomEvent('zclick', {
+  detail: {
+   z: z,
+   x: x,
+   y: y,
+   itemType: itemType,
+   itemData: {},
+   clickedElement: clickedElement
+  }
+ });
+ document.dispatchEvent(event);
+ if (typeof window.zclick === 'function') {
+  window.zclick(z, event);
+ }
 }

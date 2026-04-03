@@ -316,7 +316,7 @@ async function LMap(a) {
   c.style.left=(32+22+(x*32))+"px";
   c.style.zIndex="120";
   c.onload=function() { this.style.top=parseInt(this.style.top)-(this.height-32)+"px"; this.style.left=parseInt(this.style.left)-(this.width-32)+"px"; }
-  c.onmousedown=new Function("MenuItem("+(z)+",this.parentNode)");
+  (function(itemZ){c.onmousedown=function(){dispatchZClick(parseInt(itemZ,10),this);};})(z);
   document.body.appendChild(c);
  }
  RefDItems();
@@ -364,7 +364,7 @@ function RefDItems() {
      c.style.top=32+20+(y*32)+"px";
      c.style.left=(32+22+(x*32))+"px";
      c.onload=function() { this.style.top=parseInt(this.style.top)-(this.height-32)+"px"; this.style.left=parseInt(this.style.left)-(this.width-32)+"px"; }
-     c.onmousedown=new Function("MenuItem("+(z)+")");
+     (function(itemZ){c.onmousedown=function(){dispatchZClick(parseInt(itemZ,10),this);};})(z);
      document.body.appendChild(c);
     }
    }
@@ -625,8 +625,14 @@ function keydown(key, event) {
   if (k === 'down') { walk = PZ + (mapx + 1); }
 }
 
-function MenuTile(z) {
- if (PObj) { hpop(); walk=z; }
+function zclick(z, event) {
+ if (event.detail.itemType === 'character') {
+  MenuChar(z);
+ } else if (event.detail.itemType === 'item' || event.detail.itemType === 'droppedItem') {
+  MenuItem(z);
+ } else {
+  if (PObj) { hpop(); walk = z; }
+ }
 }
 
 function MenuItem(IZ) {
