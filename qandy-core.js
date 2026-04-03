@@ -567,7 +567,7 @@ window.press=function(event) {
       if (l) l.dataset._flash = '';
     } catch (e) { /* ignore */ }
 
-    // Ensure label updates
+    // Ensure lab.pressel updates
     if (typeof updateKeyLabels === 'function') updateKeyLabels();
 
     // If we just turned it off, explicitly unhighlight the element (clear inline styles)

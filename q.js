@@ -563,54 +563,66 @@ function SaveMap() {
  document.body.removeChild(MCode);
 }
 
-function keydown(k) {
- // Handle ESC key to toggle between text and graphics screen
- if (k=="esc") {
-  if (mode==="txt") {
-   mode="gfx";
-   document.getElementById("txt").style.left = "350px";
+function keydown(key, event) {
+  // Handle both old format (string) and new format (event object)
+  let k;
+  if (typeof event === 'string') {
+    // Old format - direct key string
+    k = event;
   } else {
-   mode="txt";
-   document.getElementById("txt").style.left = "54px";
-  }
-  return; // Don't process further
- }
- 
- if (TMode) {
-  if (k.length==1) {
-   a=k.charCodeAt(0)
-   if (a>64&&a<91) {
-    maps[PMap]=maps[PMap].slice(0,PZ*2)+k+maps[PMap].slice((PZ*2)+1,maps[PMap].length);
-    LMap(PMap);  
-   } else {
-    if (a>96&&a<123) {
-     maps[PMap]=maps[PMap].slice(0,(PZ*2)+1)+k+maps[PMap].slice((PZ*2)+2,maps[PMap].length);
-     LMap(PMap);	
+    // New format - event object
+    k = event.key.toLowerCase();
+    
+    // Map special keys to expected format
+    switch(event.key) {
+      case 'Escape': k = 'esc'; break;
+      case 'ArrowLeft': k = 'left'; break;
+      case 'ArrowRight': k = 'right'; break;
+      case 'ArrowUp': k = 'up'; break;
+      case 'ArrowDown': k = 'down'; break;
+      case 'Enter': k = 'enter'; break;
     }
-   }
   }
-  if (k=="enter") { TileMode(); }
- }
- 
- if (k=="left") { walk=PZ-1; }
- if (k=="right") { walk=PZ+1; }
- if (k=="up") { walk=PZ-(mapx+1); }
- if (k=="down") { walk=PZ+(mapx+1); }
-
- if (k=="esc") {
-  if (mode==="txt") {
-   mode="gfx";
-   document.getElementById("txt").style.top = "50px";
-   document.getElementById("txt").style.left = "350px";
-  } else {
-   mode = "txt";
-   document.getElementById("txt").style.top = "50px";
-   document.getElementById("txt").style.left = "54px";
+  
+  // Handle ESC key to toggle between text and graphics screen
+  if (k === 'esc') {
+    if (mode === 'txt') {
+      mode = 'gfx';
+      document.getElementById('txt').style.top = '50px';
+      document.getElementById('txt').style.left = '350px';
+    } else {
+      mode = 'txt';
+      document.getElementById('txt').style.top = '50px';
+      document.getElementById('txt').style.left = '54px';
+    }
+    return; // Don't process further
   }
- }
-
-
- 
+  
+  // Tile editor mode
+  if (TMode) {
+    if (k.length === 1) {
+      const charCode = k.charCodeAt(0);
+      if (charCode > 64 && charCode < 91) {
+        // Uppercase letters - update first character of tile
+        maps[PMap] = maps[PMap].slice(0, PZ * 2) + k + maps[PMap].slice((PZ * 2) + 1, maps[PMap].length);
+        LMap(PMap);
+      } else if (charCode > 96 && charCode < 123) {
+        // Lowercase letters - update second character of tile
+        maps[PMap] = maps[PMap].slice(0, (PZ * 2) + 1) + k + maps[PMap].slice((PZ * 2) + 2, maps[PMap].length);
+        LMap(PMap);
+      }
+    }
+    if (k === 'enter') {
+      TileMode();
+    }
+    return; // Don't process movement in tile mode
+  }
+  
+  // Movement controls
+  if (k === 'left') { walk = PZ - 1; }
+  if (k === 'right') { walk = PZ + 1; }
+  if (k === 'up') { walk = PZ - (mapx + 1); }
+  if (k === 'down') { walk = PZ + (mapx + 1); }
 }
 
 function MenuTile(z) {

@@ -8,6 +8,9 @@ var PopUpVis = "hidden"; // current target visibility
 var PForce = "hidden";   // forced visibility on mouseout in your original code
 var PUV;                 // timeout id (used to clear/set the timeout)
 
+var mapx=7;
+var maxy=11;
+
 const popup = document.createElement('div');
 popup.id = 'pop';
 popup.className = 'pop';
@@ -24,10 +27,14 @@ popup.addEventListener('mouseout', () => {
 document.body.appendChild(popup);
 
 function tiles() {
-  let topOffset = 50;   // historic layout: top = 50 + y*32
-  let leftOffset = 54;  // historic layout: left = 54 + x*32
+  // Use the host's map dimensions, but the tile count is mapx+1, mapy+1
+  const tileCountX = (typeof mapx !== 'undefined') ? mapx + 1 : 7;
+  const tileCountY = (typeof mapy !== 'undefined') ? mapy + 1 : 11;
+  
+  let topOffset = 50;   
+  let leftOffset = 54;  
 
-  // remove any existing tiles to avoid duplicates (safe if called multiple times)
+  // remove any existing tiles
   let cleanupIndex = 0;
   while (true) {
     const old = document.getElementById('T' + cleanupIndex);
@@ -36,26 +43,24 @@ function tiles() {
     cleanupIndex++;
   }
 
-  // create and absolutely position tiles once
-  for (let z=0, y=0; y<=H; y++) {
-    for (let x=0; x<=W; x++, z++) {
+  // create tiles: 0 to mapx = mapx+1 tiles, 0 to mapy = mapy+1 tiles
+  for (let z=0, y=0; y < tileCountY; y++) {
+    for (let x=0; x < tileCountX; x++, z++) {
       const t=document.createElement('img');
       t.id = 'T' + z;
-      t.src = 't/Ga.png';
-      t.height = "32px";
-      t.width = "32px";
+      t.src = 't/Ga.png';  
+      t.style.height = '32px';
+      t.style.width = '32px';
       t.className = 'tile';
       t.style.position = 'absolute';
-      t.style.top = (topOffset + y *32) + 'px';
-      t.style.left = (leftOffset + x *32) + 'px';
+      t.style.top = (topOffset + y * 32) + 'px';
+      t.style.left = (leftOffset + x * 32) + 'px';
       t.style.zIndex = '10';
-      // capture index in closure
-      //(function(index) {
-      //  t.onmousedown = function (evt) {
-      //    try { ClickTile(index, this.parentNode); }
-      //    catch (e) { console.error('ClickTile error', e); }
-      //  };
-      //})(z);
+      t.onclick = function() { 
+        if (typeof MenuTile === 'function') {
+          MenuTile(z); 
+        }
+      };
       document.body.appendChild(t);
     }
   }
@@ -68,7 +73,16 @@ if (document.readyState === 'loading') {
   tiles();
 }
 
-function gfx(scr) { a=0; for (b=0; b<=mapy; b++) { for (c=0; c<=mapx; c++) { e=document.getElementById("T"+a).src="t/"+scr.charAt(a*2)+scr.charAt((a*2)+1)+".png"; a++; }}}
+function gfx(scr) { 
+ a=0;
+ for (b=0; b<=mapy; b++) { 
+  for (c=0; c<=mapx; c++) {
+  	 e=document.getElementById("T"+a).src="t/"+scr.charAt(a*2)+scr.charAt((a*2)+1)+".png";
+  	 a++;
+  }
+ }
+}
+
 function hpop() { document.getElementById("pop").style.visibility="hidden"; }
 function pop(htm) {
  e=document.getElementById("pop").innerHTML="<p>"+htm;
