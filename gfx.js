@@ -139,7 +139,7 @@ function char(C,O,Z) {
   chr.className="char";  
   chr.style.position="absolute"; chr.style.height=64; chr.style.width=32;
   chr.style.top=32+22+(y*32)+"px"; chr.style.left=(32+22+(x*32))+"px";
-  chr.onclick=(function(charZ){return function(){dispatchZClick(charZ,this);};})(Z);
+  chr.onclick=function(){dispatchZClick(Z,this);};
   chr.style.zIndex="150";  
   document.body.appendChild(chr);
  }
@@ -153,7 +153,7 @@ function char(C,O,Z) {
   chr.className="char";  
   chr.style.position="absolute"; chr.style.height=64; chr.style.width=32;
   chr.style.top=32+22+(y*32)+"px"; chr.style.left=(32+22+(x*32))+"px";
-  chr.onclick=(function(charZ){return function(){dispatchZClick(charZ,this);};})(Z);
+  chr.onclick=function(){dispatchZClick(Z,this);};
   chr.style.zIndex="151";
   document.body.appendChild(chr);
  }
@@ -171,7 +171,7 @@ function char(C,O,Z) {
    chr.className="char";  
    chr.style.position="absolute"; chr.style.height=64; chr.style.width=32;
    chr.style.top=32+22+(y*32)+"px"; chr.style.left=(32+22+(x*32))+"px";
-   chr.onclick=(function(charZ){return function(){dispatchZClick(charZ,this);};})(Z);
+   chr.onclick=function(){dispatchZClick(Z,this);};
    chr.style.zIndex="152";
    document.body.appendChild(chr);
   } 
