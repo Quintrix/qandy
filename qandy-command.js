@@ -299,7 +299,8 @@ function command_js() {
         return;
       default:
         //if (GUEST) {
-          evalCode(cmd);
+         
+ evalCode(cmd);
           pokeCursorOn();
           LINE=""; CURP = 0;
           LINEX = CURX; LINEY = CURY;
