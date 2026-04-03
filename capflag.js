@@ -1,10 +1,8 @@
 RUN="capflag.js";
 
-// Global map dimensions
+// Global variables needed by gfx.js
 var mapx = 8;
 var mapy = 12;
-
-// Global variables needed by gfx.js
 var mode = "gfx";
 var PName = "";
 var PX = 3;
@@ -16,7 +14,14 @@ var PForce = "hidden";
 login();
 
 async function login() {
-  await print("Capture The Flag:\n\nEnter player name:\n");
+  await print("Capture The Flag:\n\n");
+
+  // ## ask player their name
+  // ## display list of discovered servers
+  // ## ask user which server to connect to
+  // ## attempt to connect to server
+  // ## init() once connected
+
   var name = await input();
   await print("Hello " + name);
   PName = name;
@@ -24,60 +29,14 @@ async function login() {
 }
 
 async function init() {
-  // Inject CSS styles
-  const style = document.createElement('style');
-  style.textContent = `
-    #pop {
-      position: absolute;
-      background: white;
-      border: 2px solid black;
-      padding: 10px;
-      width: 256px;
-      max-height: 384px;
-      overflow: auto;
-      font-family: monospace;
-      box-shadow: 0 0 10px rgba(0,0,0,0.3);
-    }
-
-    .tile {
-      image-rendering: pixelated;
-      image-rendering: -moz-crisp-edges;
-      cursor: pointer;
-      display: block;
-    }
-
-    .char {
-      position: absolute;
-      cursor: pointer;
-    }
-  `;
-  document.head.appendChild(style);
-  
-  // Create the pop div for UI overlays
-  var popDiv = document.createElement('div');
-  popDiv.id = "pop";
-  popDiv.style.visibility = PopUpVis;
-  popDiv.style.zIndex = "200";
-  popDiv.onmouseover = function() { 
-    PopUpVis = "visible"; 
-  };
-  popDiv.onmouseout = function() { 
-    PopUpVis = PForce;
-    setTimeout(() => {
-      document.getElementById("pop").style.visibility = PopUpVis;
-    }, 100);
-  };
-  document.body.appendChild(popDiv);
-  
-  // Initialize tiles if gfx.js is loaded
-  if (window.tiles && typeof tiles === 'function') {
-    tiles();
-  }
-  
+  if (window.tiles && typeof tiles === 'function') { tiles(); }
   // Render initial map (all grass)
+  // currently not working
   var mapData = "Ga".repeat(104);
   if (window.gfx && typeof gfx === 'function') {
-    alert("here "+mapData);
     gfx(mapData);
   }
+  // move text screen out of the way so user can see gfx
+  document.getElementById('txt').style.top = '50px';
+  document.getElementById('txt').style.left = '350px';
 }
