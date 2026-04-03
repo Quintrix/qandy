@@ -12,20 +12,8 @@ window._gfxInitialized = false;
 window._gfxInitializing = false;
 window._gfxInitQueue = []; // Pending callbacks waiting for initialization
 
-// Load a script dynamically and return a Promise
-window._gfxLoadScript = function(src) {
-  return new Promise(function(resolve, reject) {
-    if (Array.from(document.scripts).some(function(s) { return s.src === src || s.getAttribute('src') === src; })) { resolve(); return; }
-    var s = document.createElement('script');
-    s.src = src;
-    s.onload = resolve;
-    s.onerror = function() { console.warn('gfx: could not load ' + src + ' - continuing with reduced functionality'); resolve(); };
-    document.head.appendChild(s);
-  });
-};
-
 // Initialize the graphics system: load sub-modules then render tiles
-window.initializeGfx = async function() {
+window.gfxInit = async function() {
   if (window._gfxInitialized) { return; }
   if (window._gfxInitializing) {
     // Queue a promise that resolves when current initialization completes
@@ -33,57 +21,46 @@ window.initializeGfx = async function() {
   }
   window._gfxInitializing = true;
   try {
-    await window._gfxLoadScript('gfx-itemid.js');
-    await window._gfxLoadScript('world.js');
+    await qdosScript('gfx-itemid.js');
     window.tiles();
     window._gfxInitialized = true;
   } catch(e) {
-    console.error('gfx: initialization error', e);
+    console.error('Error: gfxInit()', e);
   } finally {
     window._gfxInitializing = false;
     // Resolve all queued callers
     var queue = window._gfxInitQueue.splice(0);
     for (var i = 0; i < queue.length; i++) { queue[i](); }
   }
-};
+  const style = document.createElement('style');
+  style.textContent = `
+  .pop { position:absolute; top:260; left:190; z-index:249;
+         font-family: arial; font-size: 14px; weight: bold;
+         color: navy; background-color: #999; visibility:hidden;
+         text-align: center;
+         padding-top: 0px; padding-bottom: 0px;  
+         padding-right: 4px; padding-left: 4px; }
+  .tile { position: absolute; top: 0px; left: 0px; }
+  .item { position: absolute; top: 0px; left: 0px; }
+  .char { position: absolute; top: 0px; left: 0px; }
+  `;
+  document.head.appendChild(style);
 
-// Auto-initialize when gfx.js is first loaded
-(function() {
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function() { window.initializeGfx(); });
-  } else {
-    window.initializeGfx();
-  }
-})();
-
-const style = document.createElement('style');
-style.textContent = `
-.pop { position:absolute; top:260; left:190; z-index:249;
-       font-family: arial; font-size: 14px; weight: bold;
-       color: navy; background-color: #999; visibility:hidden;
-       text-align: center;
-       padding-top: 0px; padding-bottom: 0px;  
-       padding-right: 4px; padding-left: 4px; }
-.tile { position: absolute; top: 0px; left: 0px; }
-.item { position: absolute; top: 0px; left: 0px; }
-.char { position: absolute; top: 0px; left: 0px; }
-`;
-document.head.appendChild(style);
-
-const popup = document.createElement('div');
-popup.id = 'pop';
-popup.className = 'pop';
-popup.style.visibility = PopUpVis;
-popup.addEventListener('mouseover', () => {
-  PopUpVis = "visible";
+  const popup = document.createElement('div');
+  popup.id = 'pop';
+  popup.className = 'pop';
   popup.style.visibility = PopUpVis;
-});
-popup.addEventListener('mouseout', () => {
-  PopUpVis = PForce;
-  clearTimeout(PUV);
-  PUV = setTimeout(() => { popup.style.visibility = PopUpVis; }, 100);
-});
-document.body.appendChild(popup);
+  popup.addEventListener('mouseover', () => {
+    PopUpVis = "visible";
+    popup.style.visibility = PopUpVis;
+  });
+  popup.addEventListener('mouseout', () => {
+    PopUpVis = PForce;
+    clearTimeout(PUV);
+    PUV = setTimeout(() => { popup.style.visibility = PopUpVis; }, 100);
+  });
+  document.body.appendChild(popup);
+};
 
 window.tiles = function() {
   // Use the host's map dimensions, but the tile count is mapx+1, mapy+1
