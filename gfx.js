@@ -294,6 +294,7 @@ window.gfxServers = async function() {
   }
 };
 
+// add support for passing server if already known, if no known server sent then display server list
 window.gfxConnect = async function() {
   try {
     await print("\nQandyland Servers:\n\n");
@@ -329,6 +330,13 @@ window.gfxConnect = async function() {
     var proto = 'http';
     try { proto = new URL(_registryUrl).protocol.replace(':', ''); } catch (e) {}
     _serverUrl = proto + '://' + s.host + ':' + s.port + '/qandyland.js';
+
+    var drive="gfx.js";
+    var mapString="A1A2A3A4A5A6A7A8B1B2B3B4B5B6B7N8C1C2C3C4C5C6C7V8D1D2D3D4D5D6D7D8E1E2E3E4E5E6E7E8F1F2F3F4F5F6F7F8G1G2G3G4G5G6G7G8H1H2H3H4H5H6H7H8I1I2I3IAUAIAIAI8J1J2J3J4J5J6J7J8K1K2K3K4K5K6K7K8L1L2L3L4L5L6L7L8";
+    var lobbyMap="F4";
+    var isRound=false;
+    var res = await gfxCreation(drive, mapString, lobbyMap, isRound);
+    await print(res);
 
     await print("Connected successfully!\n");
     return 'Connected to ' + s.name + ' at ' + s.host + ':' + s.port + '\n';
@@ -469,20 +477,12 @@ window.LoadMap = async function(a) {
  return maps[a];
 }
 
-print("\nQuintrix and Crew Software\nMultiplayer Graphics Engine\n\n");
-
-// ── gfxBigBang() – Call the server's bigbang() world-creation function ────────
-//
-// Called by gfxCreation() scripts to set up a multiplayer world on qandyland.js.
-//
 //   drive     – server drive to build world on (e.g. "gfx.js")
 //   mapString – topology string, e.g. "A1A2A3B1B2B3"
 //   lobbyMap  – 2-char map ID where all players start, e.g. "A1"
 //   isRound   – true if world edges wrap (A↔Z, 1↔9); false for flat world
-//
-// On success returns { maps: [...], lobby: "A1" }.
-// On failure throws an Error with the server's error message.
-window.gfxBigBang = async function(drive, mapString, lobbyMap, isRound) {
+
+window.gfxCreation = async function(drive, mapString, lobbyMap, isRound) {
   if (!drive)     throw new Error('gfxBigBang: drive is required');
   if (!mapString) throw new Error('gfxBigBang: mapString is required');
   if (!lobbyMap)  throw new Error('gfxBigBang: lobbyMap is required');
@@ -513,6 +513,8 @@ window.gfxBigBang = async function(drive, mapString, lobbyMap, isRound) {
     throw new Error('gfxBigBang: ' + (e.message || String(e)));
   }
 };
+
+print("\nQuintrix and Crew Software\nMultiplayer Graphics Engine\n\n");
 
 // Backwards compatibility alias
 window.LMap = window.LoadMap;
