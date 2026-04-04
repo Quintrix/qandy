@@ -471,5 +471,48 @@ window.LoadMap = async function(a) {
 
 print("\nQuintrix and Crew Software\nMultiplayer Graphics Engine\n\n");
 
+// ── gfxBigBang() – Call the server's bigbang() world-creation function ────────
+//
+// Called by gfxCreation() scripts to set up a multiplayer world on qandyland.js.
+//
+//   drive     – server drive to build world on (e.g. "gfx.js")
+//   mapString – topology string, e.g. "A1A2A3B1B2B3"
+//   lobbyMap  – 2-char map ID where all players start, e.g. "A1"
+//   isRound   – true if world edges wrap (A↔Z, 1↔9); false for flat world
+//
+// On success returns { maps: [...], lobby: "A1" }.
+// On failure throws an Error with the server's error message.
+window.gfxBigBang = async function(drive, mapString, lobbyMap, isRound) {
+  if (!drive)     throw new Error('gfxBigBang: drive is required');
+  if (!mapString) throw new Error('gfxBigBang: mapString is required');
+  if (!lobbyMap)  throw new Error('gfxBigBang: lobbyMap is required');
+
+  var payload = {
+    method:    'bigbang',
+    drive:     String(drive),
+    mapString: String(mapString),
+    lobbyMap:  String(lobbyMap),
+    isRound:   isRound === true || isRound === 'true'
+  };
+
+  try {
+    var response = await fetch(_serverUrl, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload)
+    });
+    if (!response.ok) {
+      throw new Error('Server error: ' + response.status);
+    }
+    var result = await response.json();
+    if (!result.success) {
+      throw new Error(result.error || 'bigbang failed');
+    }
+    return result;
+  } catch (e) {
+    throw new Error('gfxBigBang: ' + (e.message || String(e)));
+  }
+};
+
 // Backwards compatibility alias
 window.LMap = window.LoadMap;
