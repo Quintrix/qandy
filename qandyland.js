@@ -1030,6 +1030,14 @@ function calculateLegalMoves(currentMap, mapsSet, isRound) {
 
 // Main bigbang function: create all world directories and files on a drive.
 function bigbang(driveName, mapString, lobbyMap, isRound, session) {
+	
+  console.log('🚀 BIGBANG DEBUG:');
+  console.log('  driveName:', driveName);
+  console.log('  mapString:', mapString);
+  console.log('  lobbyMap:', lobbyMap);
+  console.log('  isRound:', isRound);
+  console.log('  session:', session);	
+	
   var drive = drives[driveName];
   if (!drive) return { success: false, error: 'drive not mounted: ' + driveName };
 

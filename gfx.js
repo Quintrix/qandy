@@ -499,7 +499,6 @@ window.LoadMap = async function(a) {
 //   isRound   – true if world edges wrap (A↔Z, 1↔9); false for flat world
 
 window.gfxCreation = async function(drive, mapString, lobbyMap, isRound) {
-	alert(mapString);
   if (!drive)     throw new Error('gfxBigBang: drive is required');
   if (!mapString) throw new Error('gfxBigBang: mapString is required');
   if (!lobbyMap)  throw new Error('gfxBigBang: lobbyMap is required');
