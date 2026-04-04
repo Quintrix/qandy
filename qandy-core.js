@@ -819,6 +819,9 @@ window.press=function(event) {
     CURX=0; CURY=0; LINEX=0; LINEY=0;
     pokeCursorOn();
   }
+  
+  // sleep(ms) or window.sleep(ms)
+  window.sleep = ms => new Promise(res => setTimeout(res, ms));
 
   window.print=function(t) {
     // do your color tag replacements first

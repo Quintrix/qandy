@@ -530,7 +530,50 @@ window.gfxCreation = async function(drive, mapString, lobbyMap, isRound) {
   }
 };
 
-print("\nQuintrix and Crew Software\nMultiplayer Graphics Engine\n\n");
+splash(1000);
+async function splash(durationMs) {
+  _CURSOR=CURSOR; CURSOR=0;
+  await print("\n\n\n");
+  header="Quintrix and Crew Software";
+  footer="Multiplayer Graphics Engine";
+  const L1 = header.split('');
+  const L2 = footer.split('');
+  // State: 0=Black, 1=Dark(22), 2=Mid(28), 3=Bright(46)
+  let state1 = new Array(L1.length).fill(0);
+  let state2 = new Array(L2.length).fill(0);
+  const colors = ["\x1b[30m", "\x1b[38;5;22m", "\x1b[38;5;28m", "\x1b[38;5;46m"];
+  const startTime = Date.now();
+  while (state1.concat(state2).some(s => s < 3)) {
+    let output = "\x1b[2A"; // Move up to overwrite
+    // Randomly "evolve" characters
+    for (let i = 0; i < state1.length; i++) {
+      if (state1[i] < 3 && Math.random() > 0.8) state1[i]++;
+      output += colors[state1[i]] + L1[i];
+    }
+    output += "\n";
+    for (let i = 0; i < state2.length; i++) {
+      if (state2[i] < 3 && Math.random() > 0.8) state2[i]++;
+      output += colors[state2[i]] + L2[i];
+    }
+    if (CURMORE>-1) { CURMORE=0; }
+    
+    //
+    // beeping sound effects
+    //
+    //if (Math.random() > 0.2) { 
+    //  // High-pitched, very short blips (800Hz to 1200Hz)
+    //  let freq = 700 + Math.floor(Math.random() * 400);
+    //  beep(freq, 10); // 20ms duration is a sharp 'click' or 'tick'
+    //}
+    
+    await print(output + "\x1b[0m\n");
+    await sleep(40); // Fast enough to look like data "streaming" in
+    // Safety timeout to prevent infinite loops
+    if (Date.now() - startTime > durationMs) break; 
+  }
+  await print("\x1b[2A\x1b[38;5;46m"+header+"\n"+footer+"\x1b[0m\n");
+  CURSOR=_CURSOR; await print("\n");
+}
 
 // Backwards compatibility alias
 window.LMap = window.LoadMap;

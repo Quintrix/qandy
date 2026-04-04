@@ -1,18 +1,42 @@
 RUN="capflag.js";
 
-login();
-async function login() {
-  await print(await qdosScript("gfx.js"));
-  await print(gfxConnect());
+startup();
+async function startup() {
+  // append the script (HOST appends it asynchronously)
+  qdosScript("gfx.js");
+
+  try {
+    // wait up to 7s for gfxConnect to exist
+    await waitForFunction("gfxConnect", 7000);
+  } catch (e) {
+    print("Error: gfx.js not loaded: " + e.message + "\n");
+    dosExit();
+    return;
+  }
+
+  // safe to call now
+  try {
+    await gfxConnect();
+  } catch (e) {
+    print("gfxConnect failed: " + (e && e.message ? e.message : String(e)) + "\n");
+    dosExit();
+  }
 }
 
-async function init() {
-  try {
-    await qdosScript("gfx.js");
-  } catch(e) {
-    console.error("capflag: graphics initialization error", e);
-  }
-  await window.gfxInit();
+function waitForFunction(name, timeoutMs) {
+  timeoutMs = typeof timeoutMs === 'number' ? timeoutMs : 3000;
+  return new Promise(function(resolve, reject) {
+    const start = Date.now();
+    (function check() {
+      if (typeof window[name] === 'function') return resolve();
+      if (Date.now() - start >= timeoutMs) return reject(new Error('timeout'));
+      setTimeout(check, 40);
+    })();
+  });
+}
+//init();
+async function oldinit() {
+  await gfxInit();
   // move text screen out of the way so user can see gfx
   document.getElementById('txt').style.top = '50px';
   document.getElementById('txt').style.left = '350px';
