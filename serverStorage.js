@@ -484,7 +484,7 @@
 
   function _qdosXmit(command, params, timeoutMs) {
     if (typeof window.qdosXmitDos === 'function') return window.qdosXmitDos(command, params, timeoutMs);
-    return Promise.reject(new Error('qdosXmitDos not available'));
+    return Promise.reject(new Error('qdosXmitDos not available - ensure qandy-command.js is loaded'));
   }
 
   function _qdosValidateFilename(name) {
@@ -506,7 +506,7 @@
     if (!name) return 'Error: invalid drive name\n';
     if (typeof HOST !== 'undefined' && HOST) {
       try {
-        var res = await Promise.resolve().then(function () { return global.serverMount(name); });
+        var res = await global.serverMount(name);
         return _qdosNormalizeResult(res) + '\n';
       } catch (e) {
         return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
@@ -524,7 +524,7 @@
     if (!valid) return 'Error: invalid directory name\n';
     if (typeof HOST !== 'undefined' && HOST) {
       try {
-        var res = await Promise.resolve().then(function () { return global.serverMkDir(valid, options); });
+        var res = await global.serverMkDir(valid, options);
         return _qdosNormalizeResult(res) + '\n';
       } catch (e) {
         return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
@@ -541,7 +541,7 @@
     var valid = (name === '..' || name === '') ? (name || '') : _qdosValidateFilename(name);
     if (typeof HOST !== 'undefined' && HOST) {
       try {
-        var res = await Promise.resolve().then(function () { return global.serverChDir(valid || ''); });
+        var res = await global.serverChDir(valid || '');
         return _qdosNormalizeResult(res) + '\n';
       } catch (e) {
         return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
@@ -559,7 +559,7 @@
     if (!valid) return 'Error: invalid directory name\n';
     if (typeof HOST !== 'undefined' && HOST) {
       try {
-        var res = await Promise.resolve().then(function () { return global.serverRmDir(valid); });
+        var res = await global.serverRmDir(valid);
         return _qdosNormalizeResult(res) + '\n';
       } catch (e) {
         return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
@@ -578,7 +578,7 @@
     var content = String(data == null ? '' : data);
     if (typeof HOST !== 'undefined' && HOST) {
       try {
-        var res = await Promise.resolve().then(function () { return global.serverSave(valid, content); });
+        var res = await global.serverSave(valid, content);
         return _qdosNormalizeResult(res) + '\n';
       } catch (e) {
         return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
@@ -596,7 +596,7 @@
     if (!valid) return Promise.reject(new Error('invalid filename'));
     if (typeof HOST !== 'undefined' && HOST) {
       try {
-        var res = await Promise.resolve().then(function () { return global.serverLoad(valid); });
+        var res = await global.serverLoad(valid);
         return _qdosNormalizeResult(res);
       } catch (e) {
         return Promise.reject(new Error((e && e.message) ? e.message : String(e)));
@@ -612,7 +612,7 @@
     if (!valid) return 'Error: invalid filename\n';
     if (typeof HOST !== 'undefined' && HOST) {
       try {
-        var res = await Promise.resolve().then(function () { return global.serverDelete(valid); });
+        var res = await global.serverDelete(valid);
         return _qdosNormalizeResult(res) + '\n';
       } catch (e) {
         return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
@@ -631,7 +631,7 @@
     if (!validSrc || !validDest) return 'Error: invalid filename(s)\n';
     if (typeof HOST !== 'undefined' && HOST) {
       try {
-        var res = await Promise.resolve().then(function () { return global.serverRename(validSrc, validDest); });
+        var res = await global.serverRename(validSrc, validDest);
         return _qdosNormalizeResult(res) + '\n';
       } catch (e) {
         return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
@@ -649,7 +649,7 @@
     if (!valid) return false;
     if (typeof HOST !== 'undefined' && HOST) {
       try {
-        var res = await Promise.resolve().then(function () { return global.serverExists(valid); });
+        var res = await global.serverExists(valid);
         return !!res;
       } catch (e) {
         return false;
@@ -667,7 +667,7 @@
     var validSwitches = (typeof switches === 'string') ? switches.trim() : '';
     if (typeof HOST !== 'undefined' && HOST) {
       try {
-        var res = await Promise.resolve().then(function () { return global.serverDir(validPattern, validSwitches); });
+        var res = await global.serverDir(validPattern, validSwitches);
         return _qdosNormalizeResult(res) + '\n';
       } catch (e) {
         return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
@@ -684,7 +684,7 @@
     var validPattern = (typeof pattern === 'string') ? pattern.trim() : '';
     if (typeof HOST !== 'undefined' && HOST) {
       try {
-        var res = await Promise.resolve().then(function () { return global.serverList(validPattern); });
+        var res = await global.serverList(validPattern);
         return _qdosNormalizeResult(res) + '\n';
       } catch (e) {
         return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
@@ -700,7 +700,7 @@
   global.qdosServerDiscovery = async function() {
     if (typeof HOST !== 'undefined' && HOST) {
       try {
-        var res = await Promise.resolve().then(function () { return global.serverDiscovery(); });
+        var res = await global.serverDiscovery();
         return _qdosNormalizeResult(res) + '\n';
       } catch (e) {
         return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
@@ -717,7 +717,7 @@
     var name = (typeof serverName === 'string') ? serverName.trim() : '';
     if (typeof HOST !== 'undefined' && HOST) {
       try {
-        var res = await Promise.resolve().then(function () { return global.serverConnect(name); });
+        var res = await global.serverConnect(name);
         return _qdosNormalizeResult(res) + '\n';
       } catch (e) {
         return 'Error: ' + (e && e.message ? e.message : String(e)) + '\n';
