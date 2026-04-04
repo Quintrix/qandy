@@ -7,6 +7,9 @@ var PUV;                 // timeout id (used to clear/set the timeout)
 var mapx=7;
 var mapy=11;
 
+var _serverUrl = 'http://localhost:8080/qandyland.js';
+var _registryUrl = 'https://qandy.vercel.app/api/servers';
+
 // Initialization state tracking
 window._gfxInitialized = false;
 window._gfxInitializing = false;
@@ -267,60 +270,73 @@ window.dispatchZClick=function(z, clickedElement) {
   }
 }
 
-// In qandy-gfx.js
+window.gfxServers = async function() {
+  var url = _registryUrl;
+  if (!url) return { error: 'Error: no registry URL configured' };
+  try {
+    var response = await fetch(url, { method: 'GET' });
+    if (!response.ok) return { error: 'Error: registry responded with ' + response.status };
+    var data = await response.json();
+    if (!data.success) return { error: 'Error: ' + (data.error || 'registry request failed') };
+    var list = data.servers || [];
+    if (list.length === 0) {
+      return { list: [], formatted: 'No servers available\n' };
+    }
+    var out = 'Available Servers:\n\n';
+    for (var i = 0; i < list.length; i++) {
+      var s = list[i];
+      var drives = (s.drives && s.drives.length) ? s.drives.join(',') : 'none';
+      out += i +' '+ s.name+'\n';
+    }
+    return { list: list, formatted: out };
+  } catch (e) {
+    return { error: 'Error: ' + (e.message || String(e)) };
+  }
+};
+
 window.gfxConnect = async function() {
   try {
-    // 1. Server Discovery & Selection
-    await print("Discovering servers...\n");
-    var servers = await qdosServerDiscovery();
-    await print(servers);
-    
+    await print("\nQandyland Servers:\n\n");
+    var res = await gfxServers();
+
+    if (res.error) {
+      await print(res.error + "\n");
+      throw new Error(res.error);
+    }
+
+    // print formatted listing (res.formatted) and keep the actual array in res.list
+    await print(res.formatted);
+
     await print("Enter server to connect to (or press Enter for localhost):\n");
-    var serverChoice = await input();
-    
-    if (serverChoice.trim() === "") serverChoice = "localhost:8080";
-    
-    // 2. Connect to chosen server
-    await print("Connecting to " + serverChoice + "...\n");
-    var result = await qdosServerConnect(serverChoice);
-    if (result.includes("Error")) {
-      throw new Error("Failed to connect: " + result);
+    var i = await input();
+    if (i.trim() === "") i = "localhost:8080";
+
+    var s = null;
+    // try numeric index first
+    var idx = parseInt(i, 10);
+    if (!isNaN(idx) && res.list[idx]) {
+      s = res.list[idx];
+    } else if (i.includes(':')) {
+      // treat as host:port input
+      var parts = i.split(':');
+      s = { name: i, host: parts[0], port: parts[1] || '8080' };
+    } else {
+      throw new Error('Invalid server selection');
     }
-    
-    // 3. Check if game world exists, create if needed
-    var worldExists = await checkWorldExists();
-    if (!worldExists) {
-      await print("Creating new game world...\n");
-      await gfxBigBang();
-    }
-    
-    // 4. Download and load config files
-    await print("Loading world configuration...\n");
-    await loadWorldConfig();
-    
-    // 5. Render starting map location (default: A1)
-    await print("Rendering starting location...\n");
-    var startMap = "A1";
-    await renderMap(startMap);
-    
-    // 6. Avatar selection
-    var avatar = await selectAvatar();
-    
-    // 7. Create player file on server
-    await print("Joining the world...\n");
-    var startZ = 23; // Center of map
-    await createPlayerOnServer(avatar, startMap, startZ);
-    
-    // 8. Render player on map
-    char(PName, avatar, startZ);
-    
+
+    await print("Connecting to " + s.host+":"+s.port+"...\n");
+
+    var proto = 'http';
+    try { proto = new URL(_registryUrl).protocol.replace(':', ''); } catch (e) {}
+    _serverUrl = proto + '://' + s.host + ':' + s.port + '/qandyland.js';
+
     await print("Connected successfully!\n");
-    
+    return 'Connected to ' + s.name + ' at ' + s.host + ':' + s.port + '\n';
   } catch (error) {
     await print("Connection failed: " + error.message + "\n");
     throw error;
   }
-}
+};
 
 async function checkWorldExists() {
   try {
@@ -452,6 +468,8 @@ window.LoadMap = async function(a) {
  }
  return maps[a];
 }
+
+print("\nQuintrix and Crew Software\nMultiplayer Graphics Engine\n\n");
 
 // Backwards compatibility alias
 window.LMap = window.LoadMap;
