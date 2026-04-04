@@ -294,6 +294,7 @@ window.gfxServers = async function() {
   }
 };
 
+// add support for passing server if already known, if no known server sent then display server list
 window.gfxConnect = async function() {
   try {
     await print("\nQandyland Servers:\n\n");
@@ -328,15 +329,38 @@ window.gfxConnect = async function() {
 
     var proto = 'http';
     try { proto = new URL(_registryUrl).protocol.replace(':', ''); } catch (e) {}
+    var proto = 'http';
     _serverUrl = proto + '://' + s.host + ':' + s.port + '/qandyland.js';
 
+    var drive="gfx.js";
+    var mapString=maps('A', 'L', 1, 8);
+    var lobbyMap="F4";
+    var isRound=false;
+
+    // trying to inject creation to create first world
+    var res = await gfxCreation(drive, mapString, lobbyMap, isRound);
+    await print(res);
+    
     await print("Connected successfully!\n");
     return 'Connected to ' + s.name + ' at ' + s.host + ':' + s.port + '\n';
   } catch (error) {
-    await print("Connection failed: " + error.message + "\n");
+    await print("Connection failed: " + error.message + " "+s.host+ "\n");
     throw error;
   }
 };
+
+function maps(startChar,endChar,startNum,endNum) {
+  const startCode = startChar.charCodeAt(0);
+  const endCode = endChar.charCodeAt(0);
+  let out = '';
+  for (let code = startCode; code <= endCode; code++) {
+    const letter = String.fromCharCode(code);
+    for (let n = startNum; n <= endNum; n++) {
+      out += letter + n;
+    }
+  }
+  return out;
+}
 
 async function checkWorldExists() {
   try {
@@ -468,6 +492,44 @@ window.LoadMap = async function(a) {
  }
  return maps[a];
 }
+
+//   drive     – server drive to build world on (e.g. "gfx.js")
+//   mapString – topology string, e.g. "A1A2A3B1B2B3"
+//   lobbyMap  – 2-char map ID where all players start, e.g. "A1"
+//   isRound   – true if world edges wrap (A↔Z, 1↔9); false for flat world
+
+window.gfxCreation = async function(drive, mapString, lobbyMap, isRound) {
+	alert(mapString);
+  if (!drive)     throw new Error('gfxBigBang: drive is required');
+  if (!mapString) throw new Error('gfxBigBang: mapString is required');
+  if (!lobbyMap)  throw new Error('gfxBigBang: lobbyMap is required');
+
+  var payload = {
+    method:    'bigbang',
+    drive:     String(drive),
+    mapString: String(mapString),
+    lobbyMap:  String(lobbyMap),
+    isRound:   isRound === true || isRound === 'true'
+  };
+
+  try {
+    var response = await fetch(_serverUrl, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload)
+    });
+    if (!response.ok) {
+      throw new Error('Server error: ' + response.status);
+    }
+    var result = await response.json();
+    if (!result.success) {
+      throw new Error(result.error || 'bigbang failed');
+    }
+    return result;
+  } catch (e) {
+    throw new Error('gfxBigBang: ' + (e.message || String(e)));
+  }
+};
 
 print("\nQuintrix and Crew Software\nMultiplayer Graphics Engine\n\n");
 

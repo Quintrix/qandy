@@ -881,6 +881,224 @@ function matchPattern(name, pattern) {
   }
 }
 
+// ── bigbang() – Procedural World Generation ──────────────────────────────────
+//
+// Creates a multiplayer world on the server from a map topology string.
+// Called by gfxCreation() scripts to set up worlds for capture-the-flag etc.
+//
+// bigbang(drive, "A1A2A3B1B2B3", "A1", true)
+//   drive     – drive name to create world on (e.g. "gfx.js")
+//   mapString – 2-char map IDs concatenated: "A1A2B1B2" → A1, A2, B1, B2
+//   lobbyMap  – map where all players spawn (must be in mapString)
+//   isRound   – if true, world edges wrap (A↔Z, 1↔9 / A↔Z for col)
+//
+// Creates server://{drive}/w/{mapId}/  for each map, with:
+//   a.txt  – lobby map ID (world alpha / entry point)
+//   m.txt  – 194-char procedural tileset string
+//   e.txt  – legal exit destinations (pre-calculated, no runtime physics needed)
+
+// Tile pool used for random map generation.
+// Weighted toward grass for open battlefield feel; includes stone, swamp, desert.
+var BIGBANG_TILE_POOL = [
+  'Ga','Ga','Ga','Ga','Ga',  // grass (most common – open terrain)
+  'Gb','Gb','Gb','Gc','Gc',  // grass variants
+  'Ra','Ra','Rb',             // rocky ground
+  'Sa','Sb','Sc','Sd',       // stone / swamp stone
+  'Ca','Cb',                  // desert / cave floor
+  'Ta','Tb'                   // swamp tiles
+];
+
+// Parse "A1A2B1B2" into ["A1","A2","B1","B2"].
+// Map ID format: first char A-Z (row), second char 1-9 or A-Z (column).
+function parseMapString(mapString) {
+  var s = normName(mapString);
+  if (!s) return { ok: false, error: 'empty map string' };
+  if (s.length % 2 !== 0) {
+    return { ok: false, error: 'map string length must be even (2 chars per map ID)' };
+  }
+
+  var maps = [];
+  var seen = {};
+  for (var i = 0; i < s.length; i += 2) {
+    var id = s.substring(i, i + 2);
+    if (!/^[A-Z][1-9A-Z]$/.test(id)) {
+      return { ok: false, error: 'invalid map ID "' + id + '" (must be A-Z then 1-9 or A-Z)' };
+    }
+    if (seen[id]) {
+      return { ok: false, error: 'duplicate map ID: ' + id };
+    }
+    seen[id] = true;
+    maps.push(id);
+  }
+  if (maps.length === 0) return { ok: false, error: 'no maps in map string' };
+  return { ok: true, maps: maps };
+}
+
+// Generate a 194-character tileset string: 96 random tiles (2 chars each) + ".."
+function getRandomTileset() {
+  var tiles = '';
+  for (var i = 0; i < 96; i++) {
+    tiles += BIGBANG_TILE_POOL[Math.floor(Math.random() * BIGBANG_TILE_POOL.length)];
+  }
+  return tiles + '..';
+}
+
+// ASCII code constants for map ID row/column boundaries.
+var BB_ROW_A = 65, BB_ROW_Z = 90;   // 'A' and 'Z'
+var BB_COL_1 = 49, BB_COL_9 = 57;   // '1' and '9'
+var BB_COL_A = 65, BB_COL_Z = 90;   // 'A' and 'Z' (letter columns)
+
+// Return the map ID of the neighbour of mapId in the given cardinal direction,
+// or null if the neighbour does not exist in mapsSet (or is out-of-bounds on a
+// flat world).  Direction: 'N'=north, 'S'=south, 'W'=west, 'E'=east.
+// mapsSet is a plain object used as a set for O(1) existence checks.
+function getNeighborMapId(mapId, direction, mapsSet, isRound) {
+  var row = mapId.charCodeAt(0);  // A-Z
+  var col = mapId.charCodeAt(1);  // 1-9 or A-Z
+
+  var newRow = row;
+  var newCol = col;
+
+  if (direction === 'N') {
+    if (row === BB_ROW_A) {    // at row 'A'
+      if (!isRound) return null;
+      newRow = BB_ROW_Z;       // wrap to 'Z'
+    } else {
+      newRow = row - 1;
+    }
+  } else if (direction === 'S') {
+    if (row === BB_ROW_Z) {    // at row 'Z'
+      if (!isRound) return null;
+      newRow = BB_ROW_A;       // wrap to 'A'
+    } else {
+      newRow = row + 1;
+    }
+  } else if (direction === 'W') {
+    if (col >= BB_COL_1 && col <= BB_COL_9) {   // col is '1'-'9'
+      if (col === BB_COL_1) {                    // at col '1'
+        if (!isRound) return null;
+        newCol = BB_COL_9;                       // wrap to '9'
+      } else {
+        newCol = col - 1;
+      }
+    } else if (col >= BB_COL_A && col <= BB_COL_Z) {  // col is 'A'-'Z'
+      if (col === BB_COL_A) {                          // at col 'A'
+        if (!isRound) return null;
+        newCol = BB_COL_Z;                             // wrap to 'Z'
+      } else {
+        newCol = col - 1;
+      }
+    } else {
+      return null;  // unexpected column character
+    }
+  } else if (direction === 'E') {
+    if (col >= BB_COL_1 && col <= BB_COL_9) {   // col is '1'-'9'
+      if (col === BB_COL_9) {                    // at col '9'
+        if (!isRound) return null;
+        newCol = BB_COL_1;                       // wrap to '1'
+      } else {
+        newCol = col + 1;
+      }
+    } else if (col >= BB_COL_A && col <= BB_COL_Z) {  // col is 'A'-'Z'
+      if (col === BB_COL_Z) {                          // at col 'Z'
+        if (!isRound) return null;
+        newCol = BB_COL_A;                             // wrap to 'A'
+      } else {
+        newCol = col + 1;
+      }
+    } else {
+      return null;  // unexpected column character
+    }
+  }
+
+  var neighborId = String.fromCharCode(newRow) + String.fromCharCode(newCol);
+  return mapsSet[neighborId] ? neighborId : null;
+}
+
+// Return a string of legal exit map IDs for currentMap (e.g. "A2B1B3C2").
+// Checks N/S/W/E neighbours in order; wrapping only when isRound is true.
+// mapsSet is a plain object used as a set for O(1) existence checks.
+function calculateLegalMoves(currentMap, mapsSet, isRound) {
+  var exits = '';
+  var dirs = ['N', 'S', 'W', 'E'];
+  for (var i = 0; i < dirs.length; i++) {
+    var neighbor = getNeighborMapId(currentMap, dirs[i], mapsSet, isRound);
+    if (neighbor) exits += neighbor;
+  }
+  return exits;
+}
+
+// Main bigbang function: create all world directories and files on a drive.
+function bigbang(driveName, mapString, lobbyMap, isRound, session) {
+  var drive = drives[driveName];
+  if (!drive) return { success: false, error: 'drive not mounted: ' + driveName };
+
+  // Parse and validate the map string.
+  var parsed = parseMapString(mapString);
+  if (!parsed.ok) return { success: false, error: parsed.error };
+  var allMaps = parsed.maps;
+
+  // Build an O(1) set for neighbour existence checks.
+  var mapsSet = {};
+  for (var k = 0; k < allMaps.length; k++) mapsSet[allMaps[k]] = true;
+
+  // Validate lobbyMap.
+  var lobby = normName(lobbyMap);
+  if (!lobby) return { success: false, error: 'lobbyMap is required' };
+  if (!mapsSet[lobby]) {
+    return { success: false, error: 'lobbyMap "' + lobby + '" not found in mapString' };
+  }
+
+  var round = (isRound === true || isRound === 'true' || isRound === 1);
+  var created = [];
+  var errors  = [];
+
+  // Ensure parent directory 'w' exists (ignore "already exists" errors).
+  var wDir = dirMake(driveName, '/', 'w', session);
+  if (!wDir.success && wDir.error !== 'directory already exists') {
+    return { success: false, error: 'failed to create /w/ directory: ' + wDir.error };
+  }
+
+  for (var i = 0; i < allMaps.length; i++) {
+    var mapId   = allMaps[i];
+    var dirPath = 'w/' + mapId;
+
+    // Create map sub-directory (idempotent: ignore "already exists").
+    var mkResult = dirMake(driveName, '/', dirPath, session);
+    if (!mkResult.success && mkResult.error !== 'directory already exists') {
+      errors.push('mkdir ' + dirPath + ': ' + mkResult.error);
+      continue;
+    }
+
+    // a.txt – lobby map ID (the alpha / entry point for the whole world).
+    var aResult = fileSave(driveName, '/', dirPath + '/a.txt', lobby, session, 'bigbang');
+    if (!aResult.success) errors.push(dirPath + '/a.txt: ' + aResult.error);
+
+    // m.txt – procedurally generated 194-char tileset.
+    var tileset = getRandomTileset();
+    var mResult = fileSave(driveName, '/', dirPath + '/m.txt', tileset, session, 'bigbang');
+    if (!mResult.success) errors.push(dirPath + '/m.txt: ' + mResult.error);
+
+    // e.txt – legal exits (pre-calculated so client needs no world-physics logic).
+    var exits   = calculateLegalMoves(mapId, mapsSet, round);
+    var eResult = fileSave(driveName, '/', dirPath + '/e.txt', exits, session, 'bigbang');
+    if (!eResult.success) errors.push(dirPath + '/e.txt: ' + eResult.error);
+
+    created.push(mapId);
+  }
+
+  if (errors.length > 0) {
+    return { success: false, error: errors.join('; '), maps: created };
+  }
+
+  return {
+    success: true,
+    result:  'World created: ' + allMaps.length + ' map' + (allMaps.length !== 1 ? 's' : ''),
+    maps:    created,
+    lobby:   lobby
+  };
+}
+
 // ── Server console formatting helpers ─────────────────────────────────────────
 
 // Convert compact timestamp "20260401143020" → "2026-04-01 14:30:20"
@@ -1001,6 +1219,15 @@ function handleQandyland(req, res) {
         result = fileList(drive, cwd, pattern, session);
         logRequest(req, method, drive, pattern, session, result);
         return respond(res, result);
+
+      case 'bigbang': {
+        var mapString  = normName(pkt.mapString  || '');
+        var lobbyMap   = normName(pkt.lobbyMap   || '');
+        var isRound    = pkt.isRound;
+        result = bigbang(drive, mapString, lobbyMap, isRound, session);
+        logRequest(req, method, drive, mapString, session, result);
+        return respond(res, result);
+      }
 
       default:
         result = { success: false, error: 'unknown method: ' + method };
