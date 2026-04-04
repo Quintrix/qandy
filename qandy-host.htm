@@ -1973,6 +1973,10 @@ async function startup() {
     s.src='qandy-dos.js';
     s.onload=function() { try { dosMount("local"); } catch (e) { print("Error: "+e+"\n"); }};
     document.head.appendChild(s);
+    var ss=document.createElement('script');
+    ss.id='serverStorage.js';
+    ss.src='serverStorage.js';
+    document.head.appendChild(ss);
     window.FILE = null; // null = untested, true = works, false = blocked
     if (window.FILE === null) {
       try {
