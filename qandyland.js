@@ -1222,7 +1222,7 @@ function _startupWizardPrompt() {
   if (!w) return;
   switch (w.step) {
     case 'server_name':
-      process.stdout.write('Server Name [' + (SERVER_NAME || 'Qandyland Server') + ']: ');
+      process.stdout.write('Server Name [' + SERVER_NAME + ']: ');
       break;
     case 'initial_drive':
       process.stdout.write('Initial drive name [capflag.js]: ');
@@ -1243,7 +1243,7 @@ function _startupWizardStep(line) {
           return;
         }
         if (!VALID_SERVER_NAME_RE.test(trimmed)) {
-          process.stdout.write('\u2717 Invalid characters. Use A\u2013Z, a\u2013z, 0\u20139, space, - _ . ( ) + =\n');
+          process.stdout.write('\u2717 Invalid characters. Use A-Z, a-z, 0-9, space, - _ . ( ) + =\n');
           _startupWizardPrompt();
           return;
         }
@@ -1752,7 +1752,8 @@ function _proceedWithStartup() {
   for (var i = 0; i < driveList.length; i++) {
     var dn = normName(driveList[i]);
     if (dn && validateName(dn).ok) {
-      driveCreate(dn, 'console', false, 'user');
+      var cr = driveCreate(dn, 'console', false, 'user');
+      if (!cr.success) { console.warn('Warning: could not create drive "' + dn + '": ' + cr.error); }
     }
   }
 
