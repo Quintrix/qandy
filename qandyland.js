@@ -184,20 +184,17 @@ function logRequest(req, method, drive, name, session, result) {
 // ── In-memory storage ─────────────────────────────────────────────────────────
 //
 // drives[driveName] = {
-//   manifest: [{ name, size, timestamp, owner, permissions, session }],
+//   manifest: [{ name, size, timestamp, owner, session }],
 //   files:    { canonicalName: content_string },
 //   dirs:     { dirName: { owner, created } },
 //   owner:    session_or_'console',
 //   created:  timestamp_string,
-//   persistent:         bool   – true saves to {name}.json in the working directory on every change
-//   accessLevel:        string – 'sysop' | 'user'
-//   defaultPermissions: string – 4-char RNDW string applied to new files
+//   persistent: bool – true saves to {name}.json in the working directory on every change
 // }
 //
 // File manifest entry fields:
-//   owner       – script name from RUN= variable (organisational label, not security)
-//   permissions – 4-char string: R=Read, N=reName, D=Delete, W=Write (guest access)
-//   session     – session token of the client that created/last-wrote the file
+//   owner   – script name from RUN= variable (organisational label)
+//   session – session token of the client that created/last-wrote the file
 //
 var drives = {};
 
@@ -233,8 +230,6 @@ function saveDrive(driveName) {
   data.version  = '2.0';
   data.created  = drive.created || new Date().toISOString();
   data.owner    = drive.owner   || 'server';
-  data.accessLevel        = drive.accessLevel        || 'user';
-  data.defaultPermissions = drive.defaultPermissions || 'RNDW';
   data.persistent = true;
   data.manifest = drive.manifest || [];
   data.files    = drive.files    || {};
@@ -270,13 +265,11 @@ function loadDrives() {
         var n = normName(info.id || f.slice(0, -5));
         if (!n || !validateName(n).ok) continue;
         drives[n] = {
-          manifest:           info.manifest           || [],
-          files:              info.files              || {},
-          dirs:               info.dirs               || {},
-          owner:              info.owner              || 'server',
-          created:            info.created            || new Date().toISOString(),
-          accessLevel:        info.accessLevel        || 'user',
-          defaultPermissions: info.defaultPermissions || 'RNDW',
+          manifest:   info.manifest           || [],
+          files:      info.files              || {},
+          dirs:       info.dirs               || {},
+          owner:      info.owner              || 'server',
+          created:    info.created            || new Date().toISOString(),
           persistent: true
         };
         loaded[n] = true;
@@ -425,38 +418,6 @@ function isHidden(name) {
   return b.charAt(0) === '_';
 }
 
-// ── Permission check ──────────────────────────────────────────────────────────
-// Determines whether a request context may perform 'action' on 'file'.
-//
-// context: 'sysop' – host machine (always has full access, like root/administrator)
-//          'user'  – guest iframe (access governed by the file's 4-bit RNDW string)
-//
-// action:  'read'   – load file content
-//          'name'   – see filename in directory listings / rename the file
-//          'delete' – remove file
-//          'write'  – create or overwrite file
-//
-// RNDW permission string (file.permissions):
-//   [0] R – guest can Read (load content)
-//   [1] N – guest can reName (rename/transform the file)
-//   [2] D – guest can Delete
-//   [3] W – guest can Write (create/overwrite)
-//   '-' in any position means the permission is denied for guests.
-//   Example: 'RNDW' = full guest access, 'R---' = read-only, '----' = no guest access
-//
-// qandyland.js (the server owner) always bypasses this check entirely.
-function canGuestAccess(file, context, action) {
-  if (context === 'sysop') return true; // Sysop always has full access
-  var perms = (file && file.permissions) || 'RNDW'; // Default: full access (backward compat)
-  switch (action) {
-    case 'read':   return perms[0] === 'R';
-    case 'name':   return perms[1] === 'N';
-    case 'delete': return perms[2] === 'D';
-    case 'write':  return perms[3] === 'W';
-  }
-  return false;
-}
-
 // Resolve a name against cwd, return canonical path (without leading /)
 function resolveName(cwd, name) {
   var base = (cwd || '/').replace(/^\//, '');  // strip leading slash
@@ -547,40 +508,23 @@ function serveStatic(req, res) {
 
 // ── Drive operations ──────────────────────────────────────────────────────────
 
-// Map a drive access level to its default file permission string.
-// sysop = no guest access, user = full access for host + guest.
-function defaultPermsForAccessLevel(accessLevel) {
-  if (accessLevel === 'sysop') return '----';
-  return 'RNDW'; // user (default): full access for host and guest
-}
-
-// persistent    – true: saved to {name}.json on disk; false: memory-only, cleared on restart
-// accessLevel   – 'sysop' | 'user' | 'public'  (drive-level gate; sysop ignores this)
-// defaultPerms  – 4-char RNDW string applied to new files created on this drive
-function driveCreate(driveName, session, persistent, accessLevel, defaultPerms) {
+// persistent – true: saved to {name}.json on disk; false: memory-only, cleared on restart
+function driveCreate(driveName, session, persistent) {
   var name = normName(driveName);
   var fv = validateName(name);
   if (!fv.ok) return { success: false, error: 'invalid drive name: ' + fv.reason };
   if (drives[name]) return { success: false, error: 'drive already exists' };
 
-  // Validate and normalise optional parameters
   var isPersistent = (persistent === true || persistent === 'true');
-  var access = (accessLevel === 'sysop') ? 'sysop' : 'user';
-  var perms = defaultPermsForAccessLevel(access);
-  if (typeof defaultPerms === 'string' && /^[R\-][N\-][D\-][W\-]$/.test(defaultPerms)) {
-    perms = defaultPerms; // Caller may supply an explicit override
-  }
 
   var ts = timestamp();
   drives[name] = {
-    manifest:           [],
-    files:              {},
-    dirs:               {},
-    owner:              session,
-    created:            ts,
-    persistent:         isPersistent,
-    accessLevel:        access,
-    defaultPermissions: perms
+    manifest:   [],
+    files:      {},
+    dirs:       {},
+    owner:      session,
+    created:    ts,
+    persistent: isPersistent
   };
 
   // Create the root manifest entry
@@ -615,7 +559,7 @@ function _saveManifest(driveName, entries) {
     if (e.name === MANIFEST_KEY) continue;
     lines.push(
       e.name + '|' + e.size + '|' + e.timestamp + '|' +
-      (e.owner || '') + '|' + (e.permissions || '----') + '|' + (e.session || '')
+      (e.owner || '') + '|' + (e.session || '')
     );
   }
   var body    = lines.length ? lines.join('\n') + '\n' : '';
@@ -627,12 +571,10 @@ function _saveManifest(driveName, entries) {
 
   drive.files[MANIFEST_KEY] = full;
   drive.manifest = entries.filter(function (e) { return e.name !== MANIFEST_KEY; });
-  drive.manifest.push({ name: MANIFEST_KEY, size: utf8len(full), timestamp: ts, owner: '', permissions: '----', session: '' });
+  drive.manifest.push({ name: MANIFEST_KEY, size: utf8len(full), timestamp: ts, owner: '', session: '' });
 }
 
-// context: 'sysop' | 'user'  (from pkt.context sent by qandy-dos.js)
-// owner:   script label from RUN= variable (organizational, not security)
-function fileSave(driveName, cwd, name, content, session, context, owner) {
+function fileSave(driveName, cwd, name, content, session, owner) {
   var drive = drives[driveName];
   if (!drive) return { success: false, error: 'drive not mounted' };
 
@@ -643,21 +585,10 @@ function fileSave(driveName, cwd, name, content, session, context, owner) {
 
   var canonical = resolveName(cwd, fname);
   var existing  = _findEntry(drive.manifest, fname);
-  var ctx = context || 'user';
 
-  // Write-protection check (always honoured, even for sysop)
+  // Write-protection check
   if (existing && isWriteProtected(existing.name)) {
     return { success: false, error: 'file is write-protected' };
-  }
-
-  // Drive-level gate: sysop-only drives reject user-context requests
-  if (ctx !== 'sysop' && drive.accessLevel === 'sysop') {
-    return { success: false, error: 'permission denied' };
-  }
-
-  // File-level permission check for user context
-  if (existing && !canGuestAccess(existing, ctx, 'write')) {
-    return { success: false, error: 'permission denied' };
   }
 
   var str  = String(content == null ? '' : content);
@@ -680,20 +611,16 @@ function fileSave(driveName, cwd, name, content, session, context, owner) {
   var ts = timestamp();
   drive.files[canonical] = str;
 
-  // Preserve existing permissions when overwriting; use drive default for new files
-  var permissions = (existing && existing.permissions) || drive.defaultPermissions || 'RNDW';
-
   // Update manifest
   var manifest = drive.manifest.filter(function (e) {
     return e.name !== MANIFEST_KEY && baseName(normName(e.name)).toLowerCase() !== baseName(normName(fname)).toLowerCase();
   });
   manifest.push({
-    name:        fname,
-    size:        size,
-    timestamp:   ts,
-    owner:       owner || session,   // script label (RUN=) or fall back to session token
-    permissions: permissions,
-    session:     session
+    name:      fname,
+    size:      size,
+    timestamp: ts,
+    owner:     owner || session,
+    session:   session
   });
   _saveManifest(driveName, manifest);
 
@@ -701,7 +628,7 @@ function fileSave(driveName, cwd, name, content, session, context, owner) {
   return { success: true, result: true };
 }
 
-function fileLoad(driveName, cwd, name, session, context) {
+function fileLoad(driveName, cwd, name, session) {
   var drive = drives[driveName];
   if (!drive) return { success: false, error: 'drive not mounted' };
 
@@ -709,19 +636,8 @@ function fileLoad(driveName, cwd, name, session, context) {
   if (!fname) return { success: false, error: 'invalid filename' };
   var canonical = resolveName(cwd, fname);
   var existing  = _findEntry(drive.manifest, fname);
-  var ctx = context || 'user';
 
   if (!existing) return { success: false, error: 'file not found' };
-
-  // Drive-level gate
-  if (ctx !== 'sysop' && drive.accessLevel === 'sysop') {
-    return { success: false, error: 'permission denied' };
-  }
-
-  // File-level permission check
-  if (!canGuestAccess(existing, ctx, 'read')) {
-    return { success: false, error: 'permission denied' };
-  }
 
   var content = drive.files[canonical];
   if (content == null) return { success: false, error: 'file not found' };
@@ -729,7 +645,7 @@ function fileLoad(driveName, cwd, name, session, context) {
   return { success: true, content: content };
 }
 
-function fileDelete(driveName, cwd, name, session, context) {
+function fileDelete(driveName, cwd, name, session) {
   var drive = drives[driveName];
   if (!drive) return { success: false, error: 'drive not mounted' };
 
@@ -737,20 +653,9 @@ function fileDelete(driveName, cwd, name, session, context) {
   if (!fname) return { success: false, error: 'invalid filename' };
   var canonical = resolveName(cwd, fname);
   var existing  = _findEntry(drive.manifest, fname);
-  var ctx = context || 'user';
 
   if (!existing) return { success: false, error: 'file not found' };
   if (isWriteProtected(existing.name)) return { success: false, error: 'file is write-protected' };
-
-  // Drive-level gate
-  if (ctx !== 'sysop' && drive.accessLevel === 'sysop') {
-    return { success: false, error: 'permission denied' };
-  }
-
-  // File-level permission check
-  if (!canGuestAccess(existing, ctx, 'delete')) {
-    return { success: false, error: 'permission denied' };
-  }
 
   delete drive.files[canonical];
   var manifest = drive.manifest.filter(function (e) {
@@ -762,7 +667,7 @@ function fileDelete(driveName, cwd, name, session, context) {
   return { success: true, result: 'deleted' };
 }
 
-function fileRename(driveName, cwd, name, dest, session, context) {
+function fileRename(driveName, cwd, name, dest, session) {
   var drive = drives[driveName];
   if (!drive) return { success: false, error: 'drive not mounted' };
 
@@ -778,20 +683,10 @@ function fileRename(driveName, cwd, name, dest, session, context) {
   var destCanonical = resolveName(cwd, dname);
   var existing      = _findEntry(drive.manifest, fname);
   var destExisting  = _findEntry(drive.manifest, dname);
-  var ctx = context || 'user';
 
   if (!existing) return { success: false, error: 'file not found' };
   if (isWriteProtected(existing.name)) return { success: false, error: 'file is write-protected' };
 
-  // Drive-level gate
-  if (ctx !== 'sysop' && drive.accessLevel === 'sysop') {
-    return { success: false, error: 'permission denied' };
-  }
-
-  // Rename requires write permission on the source
-  if (!canGuestAccess(existing, ctx, 'write')) {
-    return { success: false, error: 'permission denied' };
-  }
   if (destExisting) return { success: false, error: 'destination already exists' };
 
   var content = drive.files[srcCanonical];
@@ -805,12 +700,11 @@ function fileRename(driveName, cwd, name, dest, session, context) {
     return e.name !== MANIFEST_KEY && baseName(normName(e.name)).toLowerCase() !== baseName(normName(fname)).toLowerCase();
   });
   manifest.push({
-    name:        dname,
-    size:        existing.size,
-    timestamp:   ts,
-    owner:       existing.owner || session,
-    permissions: existing.permissions || drive.defaultPermissions || 'RNDW',
-    session:     existing.session || session
+    name:      dname,
+    size:      existing.size,
+    timestamp: ts,
+    owner:     existing.owner || session,
+    session:   existing.session || session
   });
   _saveManifest(driveName, manifest);
 
@@ -818,7 +712,7 @@ function fileRename(driveName, cwd, name, dest, session, context) {
   return { success: true, result: 'renamed' };
 }
 
-function fileExists(driveName, cwd, name, session, context) {
+function fileExists(driveName, cwd, name, session) {
   var drive = drives[driveName];
   if (!drive) return { success: true, exists: false };
 
@@ -826,18 +720,6 @@ function fileExists(driveName, cwd, name, session, context) {
   if (!fname) return { success: true, exists: false };
   var existing  = _findEntry(drive.manifest, fname);
   if (!existing) return { success: true, exists: false };
-
-  var ctx = context || 'user';
-
-  // Drive-level gate
-  if (ctx !== 'sysop' && drive.accessLevel === 'sysop') {
-    return { success: true, exists: false };
-  }
-
-  // Files not visible to guest if 'name' bit is denied
-  if (!canGuestAccess(existing, ctx, 'name')) {
-    return { success: true, exists: false };
-  }
 
   return { success: true, exists: true };
 }
@@ -886,7 +768,7 @@ function dirChange(driveName, cwd, name, session) {
   return { success: true, cwd: newCwd, result: 'server://' + driveName + newCwd };
 }
 
-function dirRemove(driveName, cwd, name, session, context) {
+function dirRemove(driveName, cwd, name, session) {
   var drive = drives[driveName];
   if (!drive) return { success: false, error: 'drive not mounted' };
 
@@ -894,18 +776,6 @@ function dirRemove(driveName, cwd, name, session, context) {
   if (!dirName) return { success: false, error: 'invalid directory name' };
   var canonical = resolveName(cwd, dirName);
   if (!drive.dirs[canonical]) return { success: false, error: 'directory not found' };
-
-  var ctx = context || 'user';
-  // Drive-level gate
-  if (ctx !== 'sysop' && drive.accessLevel === 'sysop') {
-    return { success: false, error: 'permission denied' };
-  }
-
-  var dirEntry = drive.dirs[canonical];
-  // Non-sysop may only remove dirs they created
-  if (ctx !== 'sysop' && dirEntry.owner && dirEntry.owner !== session) {
-    return { success: false, error: 'permission denied' };
-  }
 
   // Check if empty (no files or subdirs under this path)
   var prefix = canonical + '/';
@@ -922,15 +792,9 @@ function dirRemove(driveName, cwd, name, session, context) {
   return { success: true, result: 'done' };
 }
 
-function dirList(driveName, cwd, pattern, switches, session, context) {
+function dirList(driveName, cwd, pattern, switches, session) {
   var drive = drives[driveName];
   if (!drive) return { success: false, error: 'drive not mounted' };
-
-  var ctx = context || 'user';
-  // Drive-level gate
-  if (ctx !== 'sysop' && drive.accessLevel === 'sysop') {
-    return { success: false, error: 'permission denied' };
-  }
 
   var showHidden = (switches || '').indexOf('a') >= 0;
   var dir   = (cwd || '/').replace(/^\//, '').replace(/\/$/, '');
@@ -955,11 +819,10 @@ function dirList(driveName, cwd, pattern, switches, session, context) {
     lines.push('  <DIR>  ' + dname + '\n');
   }
 
-  // Files – only include entries the caller is permitted to see ('name' bit)
+  // Files – only include entries visible in the current directory
   var entries = drive.manifest.filter(function (e) {
     if (e.name === MANIFEST_KEY) return showHidden;
     if (!showHidden && isHidden(e.name)) return false;
-    if (!canGuestAccess(e, ctx, 'name')) return false;
     var base = resolveName('/', e.name).replace(/\/$/, '');
     var slash = base.lastIndexOf('/');
     var fileDir = slash >= 0 ? base.substring(0, slash) : '';
@@ -981,22 +844,15 @@ function dirList(driveName, cwd, pattern, switches, session, context) {
   return { success: true, listing: lines.join('') };
 }
 
-function fileList(driveName, cwd, pattern, session, context) {
+function fileList(driveName, cwd, pattern, session) {
   var drive = drives[driveName];
   if (!drive) return { success: false, error: 'drive not mounted' };
-
-  var ctx = context || 'user';
-  // Drive-level gate
-  if (ctx !== 'sysop' && drive.accessLevel === 'sysop') {
-    return { success: false, error: 'permission denied' };
-  }
 
   var dir   = (cwd || '/').replace(/^\//, '').replace(/\/$/, '');
   var names = [];
 
   var entries = drive.manifest.filter(function (e) {
     if (e.name === MANIFEST_KEY) return false;
-    if (!canGuestAccess(e, ctx, 'name')) return false;
     var base = resolveName('/', e.name).replace(/\/$/, '');
     var slash = base.lastIndexOf('/');
     var fileDir = slash >= 0 ? base.substring(0, slash) : '';
@@ -1052,17 +908,6 @@ function _formatTimestampHuman(ts) {
          hr12 + ':' + String(mn).padStart(2, '0') + ':' + String(sc).padStart(2, '0') + ' ' + ampm;
 }
 
-// Format 4-bit permission string with labels: "RNDW" → "RNDW (Read/reName/Delete/Write)"
-function _formatPermissionsHuman(perms) {
-  var p = (perms || '----');
-  var parts = [];
-  if (p[0] === 'R') parts.push('Read');
-  if (p[1] === 'N') parts.push('reName');
-  if (p[2] === 'D') parts.push('Delete');
-  if (p[3] === 'W') parts.push('Write');
-  return p + (parts.length ? ' (' + parts.join('/') + ')' : ' (none)');
-}
-
 // ── Request dispatcher ────────────────────────────────────────────────────────
 
 function respond(res, obj) {
@@ -1093,9 +938,7 @@ function handleQandyland(req, res) {
     var options = pkt.options || {};
     var pattern = normName(pkt.pattern  || '');
     var switches = normName(pkt.switches || '');
-    // Context: 'sysop' (host machine) or 'user' (guest iframe) – sent by qandy-dos.js
-    var context = (pkt.context === 'sysop') ? 'sysop' : 'user';
-    // Owner: script name from RUN= variable (organisational label, not security)
+    // Owner: script name from RUN= variable (organisational label)
     var owner = normName(pkt.owner || '');
 
     var result;
@@ -1110,27 +953,27 @@ function handleQandyland(req, res) {
         return respond(res, result);
 
       case 'save':
-        result = fileSave(drive, cwd, name, content, session, context, owner);
+        result = fileSave(drive, cwd, name, content, session, owner);
         logRequest(req, method, drive, name, session, result);
         return respond(res, result);
 
       case 'load':
-        result = fileLoad(drive, cwd, name, session, context);
+        result = fileLoad(drive, cwd, name, session);
         logRequest(req, method, drive, name, session, result);
         return respond(res, result);
 
       case 'delete':
-        result = fileDelete(drive, cwd, name, session, context);
+        result = fileDelete(drive, cwd, name, session);
         logRequest(req, method, drive, name, session, result);
         return respond(res, result);
 
       case 'rename':
-        result = fileRename(drive, cwd, name, dest, session, context);
+        result = fileRename(drive, cwd, name, dest, session);
         logRequest(req, method, drive, name, session, result);
         return respond(res, result);
 
       case 'exists':
-        result = fileExists(drive, cwd, name, session, context);
+        result = fileExists(drive, cwd, name, session);
         logRequest(req, method, drive, name, session, result);
         return respond(res, result);
 
@@ -1145,17 +988,17 @@ function handleQandyland(req, res) {
         return respond(res, result);
 
       case 'rmdir':
-        result = dirRemove(drive, cwd, name, session, context);
+        result = dirRemove(drive, cwd, name, session);
         logRequest(req, method, drive, name, session, result);
         return respond(res, result);
 
       case 'dir':
-        result = dirList(drive, cwd, pattern, switches, session, context);
+        result = dirList(drive, cwd, pattern, switches, session);
         logRequest(req, method, drive, pattern, session, result);
         return respond(res, result);
 
       case 'list':
-        result = fileList(drive, cwd, pattern, session, context);
+        result = fileList(drive, cwd, pattern, session);
         logRequest(req, method, drive, pattern, session, result);
         return respond(res, result);
 
@@ -1311,7 +1154,7 @@ if (process.stdin.isTTY) {
       process.stdout.write('  <DIR>  ' + subDirs[di].substring(dirPrefix.length) + '\n');
     }
 
-    // Files in current directory – sysop context sees all entries with full metadata
+    // Files in current directory
     var dirEntries = drive.manifest.filter(function (e) {
       if (e.name === MANIFEST_KEY) return false;
       var base  = resolveName('/', e.name).replace(/\/$/, '');
@@ -1326,11 +1169,10 @@ if (process.stdin.isTTY) {
       var fsz  = formatBytes(fe.size || 0);
       var fts  = _formatTimestampShort(fe.timestamp);
       var sess = (fe.session || 'PUBLIC').slice(0, 8);
-      var perm = fe.permissions || '----';
       var fown = fe.owner || '';
       process.stdout.write(
         '  ' + fnb.padEnd(14) + ' ' + fsz.padStart(6) + '  ' + fts + '  ' +
-        sess.padEnd(10) + ' ' + perm + '  ' + fown + '\n'
+        sess.padEnd(10) + '  ' + fown + '\n'
       );
       fileCount++;
     }
@@ -1391,7 +1233,7 @@ if (process.stdin.isTTY) {
   function _handleRmdir(name) {
     if (!name) { process.stdout.write('Usage: rmdir <name>\n'); return; }
     if (!_serverMountedDrive) { process.stdout.write('No drive mounted. Use: mount <drive>\n'); return; }
-    var rmr = dirRemove(_serverMountedDrive, _serverCwd, name, 'console', 'sysop');
+    var rmr = dirRemove(_serverMountedDrive, _serverCwd, name, 'console');
     if (rmr.success) {
       process.stdout.write('Removed directory: ' + name + '/\n');
     } else {
@@ -1401,7 +1243,7 @@ if (process.stdin.isTTY) {
 
   function _handleFileDelete(name) {
     if (!name) { process.stdout.write('Usage: delete <filename>\n'); return; }
-    var fdr = fileDelete(_serverMountedDrive, _serverCwd, name, 'console', 'sysop');
+    var fdr = fileDelete(_serverMountedDrive, _serverCwd, name, 'console');
     if (fdr.success) {
       process.stdout.write('Deleted: ' + name + '\n');
     } else {
@@ -1417,7 +1259,7 @@ if (process.stdin.isTTY) {
     var rnSrc = arg.slice(0, eqIdx).trim();
     var rnDst = arg.slice(eqIdx + 1).trim();
     if (!rnSrc || !rnDst) { process.stdout.write('Usage: rename <name>=<newname>\n'); return; }
-    var rnr = fileRename(_serverMountedDrive, _serverCwd, rnSrc, rnDst, 'console', 'sysop');
+    var rnr = fileRename(_serverMountedDrive, _serverCwd, rnSrc, rnDst, 'console');
     if (rnr.success) {
       process.stdout.write('Renamed: ' + rnSrc + ' \u2192 ' + rnDst + '\n');
     } else {
@@ -1436,7 +1278,6 @@ if (process.stdin.isTTY) {
     process.stdout.write('Created: '     + _formatTimestampHuman(exEntry.timestamp) + '\n');
     process.stdout.write('Owner Token: ' + (exEntry.session || '(none)') +
                          ' (' + (exEntry.owner || '(none)') + ')\n');
-    process.stdout.write('Permissions: ' + _formatPermissionsHuman(exEntry.permissions) + '\n');
   }
 
   function _wizardPrompt(msg) {
@@ -1469,7 +1310,7 @@ if (process.stdin.isTTY) {
 
   // Start the interactive drive-creation wizard.
   // preArgs: optional array of pre-supplied positional arguments matching question order:
-  //   [0] drive name, [1] access level, [2] persistence
+  //   [0] drive name, [1] persistence
   function _startCreateWizard(preArgs) {
     var driveNames = Object.keys(drives);
     var defaultDrive = driveNames.length === 0 ? 'ctf-game' : 'new-drive';
@@ -1483,7 +1324,7 @@ if (process.stdin.isTTY) {
   function _wizardAutoAdvance() {
     var w = _createWizard;
     if (!w) return;
-    var argIdx = { drive_name: 0, access_level: 1, persistent: 2 };
+    var argIdx = { drive_name: 0, persistent: 1 };
     var idx = argIdx[w.step];
     if (idx !== undefined && idx < w.args.length) {
       // Echo the pre-supplied value and process it as if the user typed it
@@ -1503,12 +1344,6 @@ if (process.stdin.isTTY) {
       case 'drive_name':
         _wizardPrompt('Input name of drive to create [' + w.defaultDrive + ']: ');
         break;
-      case 'access_level':
-        process.stdout.write('Who can access this drive:\n');
-        process.stdout.write('  [S] Sysop only (host machine)\n');
-        process.stdout.write('  [U] User access (host + guest)\n');
-        _wizardPrompt('Default [U]: ');
-        break;
       case 'persistent':
         _wizardPrompt('[P]ersistent or [T]emporary data? [T]: ');
         break;
@@ -1522,9 +1357,6 @@ if (process.stdin.isTTY) {
     switch (w.step) {
       case 'drive_name':
         process.stdout.write('Drive name: ' + val + '\n');
-        break;
-      case 'access_level':
-        process.stdout.write('Access level: ' + val + '\n');
         break;
       case 'persistent':
         process.stdout.write('Persistence: ' + val + '\n');
@@ -1540,28 +1372,18 @@ if (process.stdin.isTTY) {
     switch (w.step) {
       case 'drive_name':
         w.driveName = trimmed || w.defaultDrive;
-        w.step = 'access_level';
-        _wizardAutoAdvance();
-        break;
-
-      case 'access_level': {
-        var letter = trimmed ? trimmed.toLowerCase()[0] : 'u';
-        var accessLevel = (letter === 's') ? 'sysop' : 'user';
-        w.accessLevel = accessLevel;
         w.step = 'persistent';
         _wizardAutoAdvance();
         break;
-      }
 
       case 'persistent': {
         var persInput = trimmed.toLowerCase();
         // 'p' or 'persistent' → persistent; anything else (t, temporary, Enter) → temporary
         w.persistent = (persInput === 'p' || persInput === 'persistent');
-        var cr = driveCreate(w.driveName, 'console', w.persistent, w.accessLevel);
+        var cr = driveCreate(w.driveName, 'console', w.persistent);
         if (cr.success) {
-          var typeStr   = w.persistent ? 'persistent' : 'temporary (memory)';
-          var accessStr = (w.accessLevel === 'sysop') ? 'Sysop only' : 'User access';
-          process.stdout.write('\n\u2713 Created ' + typeStr + ' drive \'' + w.driveName + '\' with ' + accessStr + '.\n');
+          var typeStr = w.persistent ? 'persistent' : 'temporary (memory)';
+          process.stdout.write('\n\u2713 Created ' + typeStr + ' drive \'' + w.driveName + '\'.\n');
           if (w.persistent) {
             process.stdout.write('\u2713 Drive file: ' + path.join(process.cwd(), w.driveName + '.json') + '\n');
           }
@@ -1614,8 +1436,7 @@ if (process.stdin.isTTY) {
               var d = drives[n];
               var stats = calculateDriveStats(d);
               var typeLabel  = d.persistent ? 'persistent' : 'memory';
-              var accessLabel = d.accessLevel === 'sysop' ? 'sysop' : 'user';
-              process.stdout.write('  ' + n + '  [' + typeLabel + ', ' + accessLabel + ']' +
+              process.stdout.write('  ' + n + '  [' + typeLabel + ']' +
                 '  ' + stats.fileCount + ' file(s), ' + formatBytes(stats.totalSize) + '\n');
             });
           }
@@ -1680,38 +1501,14 @@ if (process.stdin.isTTY) {
           }
           break;
 
-        case 'perms':
-          if (!arg) { process.stdout.write('Usage: perms <drive> <file> [RNDW]\n'); break; }
-          var permParts = arg.split(/\s+/);
-          var permDrive = normName(permParts[0] || '');
-          var permFile  = normName(permParts[1] || '');
-          var newPerms  = normName(permParts[2] || '');
-          if (!drives[permDrive]) { process.stdout.write('Error: drive "' + permDrive + '" not found.\n'); break; }
-          var permEntry = _findEntry(drives[permDrive].manifest, permFile);
-          if (!permEntry) { process.stdout.write('Error: file "' + permFile + '" not found.\n'); break; }
-          if (newPerms) {
-            if (!/^[R\-][N\-][D\-][W\-]$/.test(newPerms)) {
-              process.stdout.write('Error: permissions must be a 4-char string like "RNDW" or "RN--".\n'); break;
-            }
-            permEntry.permissions = newPerms;
-            var mf = drives[permDrive].manifest.filter(function (e) { return e.name !== MANIFEST_KEY; });
-            _saveManifest(permDrive, mf);
-            if (drives[permDrive].persistent) saveDrive(permDrive);
-            process.stdout.write('Permissions for "' + permFile + '" set to ' + newPerms + '\n');
-          } else {
-            process.stdout.write('"' + permFile + '" permissions: ' + (permEntry.permissions || '----') + '\n');
-          }
-          break;
-
         case 'help':
           process.stdout.write(
             'Server console commands:\n' +
-            '  create [drive-name] [S|U] [P|T]\n' +
+            '  create [drive-name] [P|T]\n' +
             '                      - Create a new drive (interactive wizard)\n' +
             '                        Arguments match question order; omit any to be prompted.\n' +
-            '  list                - List all drives with type and access level\n' +
+            '  list                - List all drives with type\n' +
             '  delete <name>       - Delete a drive (no drive mounted) or a file (drive mounted)\n' +
-            '  perms <drive> <file> [RNDW]  - View or set file permissions\n' +
             '\nNavigation commands (mount a drive first):\n' +
             '  mount <drive>       - Mount a drive for navigation\n' +
             '  dir                 - Directory listing with full metadata\n' +
@@ -1721,11 +1518,7 @@ if (process.stdin.isTTY) {
             '  rmdir <name>        - Remove an empty directory\n' +
             '  rename <old>=<new>  - Rename a file\n' +
             '  exam <name>         - Examine file metadata in detail\n' +
-            '  help                - Show this help\n' +
-            '\nPermission string format: RNDW\n' +
-            '  R = guest can Read   N = guest can reName (rename/transform)\n' +
-            '  D = guest can Delete W = guest can Write\n' +
-            '  Use - to deny:  R--- = read-only   ---- = sysop only   RNDW = full access\n'
+            '  help                - Show this help\n'
           );
           break;
 
@@ -1752,7 +1545,7 @@ function _proceedWithStartup() {
   for (var i = 0; i < driveList.length; i++) {
     var dn = normName(driveList[i]);
     if (dn && validateName(dn).ok) {
-      var cr = driveCreate(dn, 'console', false, 'user');
+      var cr = driveCreate(dn, 'console', false);
       if (!cr.success) { console.warn('Warning: could not create drive "' + dn + '": ' + cr.error); }
     }
   }
