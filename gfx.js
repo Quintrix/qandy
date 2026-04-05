@@ -279,41 +279,9 @@ window.gfxServers = async function() {
     var response = await fetch(url, { method: 'GET' });
     if (!response.ok) return { error: 'Error: registry responded with ' + response.status };
     var data = await response.json();
-    if (!data.success) return { error: 'Error: ' + (data.error || 'registry request failed') };
-    var list = data.servers || [];
-
-    // Default localhost entry placed first (allow duplicates from registry)
-    var localhost = { name: 'localhost', host: 'localhost', port: '8080', drives: [] };
-
-    // Probe local server for drives (short timeout). If it replies with status.drives, fill drives.
-    try {
-      const ac = new AbortController();
-      const timeout = setTimeout(() => ac.abort(), 800); // 800ms probe timeout
-      const statusRes = await fetch('http://localhost:8080/status', { method: 'GET', signal: ac.signal });
-      clearTimeout(timeout);
-      if (statusRes.ok) {
-        try {
-          const status = await statusRes.json();
-          if (status && Array.isArray(status.drives)) localhost.drives = status.drives;
-        } catch (e) { /* ignore JSON parse errors; leave drives empty */ }
-      }
-    } catch (e) {
-      /* no local server or timed out — leave localhost.drives empty */
-    }
-
-    var servers = [localhost].concat(list);
-
-    // Build formatted listing (index matches servers array)
-    var out = '';
-    for (var i = 0; i < servers.length; i++) {
-      var s = servers[i];
-      var label = s.name || (s.host + ':' + (s.port || '8080'));
-      var drives = (s.drives && s.drives.length) ? ' - ' + s.drives.join(',') : '';
-      out += i + '. ' + label + drives + '\n';
-    }
-
-    if (!out) out = 'No servers available\n';
-    return { list: servers, formatted: out };
+    // Validate shape minimally
+    if (!data || !Array.isArray(data.servers)) return { error: 'Error: invalid registry format' };
+    return data; // e.g. { success: true, servers: [ ... ] }
   } catch (e) {
     return { error: 'Error: ' + (e.message || String(e)) };
   }
