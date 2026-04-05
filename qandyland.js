@@ -1409,6 +1409,9 @@ if (process.stdin.isTTY) {
       if (e.name === MANIFEST_KEY) return false;
       var slash = e.name.lastIndexOf('/');
       var fileDir = slash >= 0 ? e.name.substring(0, slash) : '';
+
+console.log("[debug] name=", e.name, "fileDir=", fileDir, "dir=", dir);
+ 
       return fileDir === dir;
     });
     var fileCount = 0;
