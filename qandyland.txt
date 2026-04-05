@@ -1,13 +1,86 @@
-create — (restricted; server-console-only; returns error to clients)
-mount
-save
-load
-delete
-rename
-exists
-mkdir
-chdir
-rmdir
-dir — directory listing (detailed)
-list — file listing (names)
-bigbang — world generation helper
+
+
+                           
+                             qandyland.js
+                ────────────────────────────────────────
+                
+                           Qandyland Server 
+
+                      Multiplayer Graphics Engine
+                     for the Qandy Pocket Computer
+
+                ────────────────────────────────────────
+
+
+    Server Console Commands: 
+
+    create [drive-name] [P|T] — create a new drive via wizard
+    
+                         list — list drives
+    
+                 delete <name> — delete a drive when no drive mounted, or
+                                 delete <filename> when a drive is mounted
+
+            mount [drive-name] — mount a drive for navigation
+
+                 dir [options] — directory listing with full metadata
+                 
+                            ls — simple list of filenames
+                            
+             cd / chdir <name> — change directory
+
+                  mkdir <name> — make directory
+
+                  rmdir <name> — remove empty directory
+
+            rename <old>=<new> — rename file
+
+         exam / examine <name> — examine file metadata
+
+             delete <filename> — delete file when drive mounted
+             
+    serverstorage [drive-name] — internal storage debug summary, shows
+                                    directories, files, content preview
+
+                          help — show help text
+
+
+
+                ────────────────────────────────────────
+                
+                     serverStorage POST Messages 
+                     
+                ────────────────────────────────────────
+
+    mount — mount new drive
+    save - save file
+    load - load file
+    delete
+    rename
+    exists
+    mkdir
+    chdir
+    rmdir
+    dir — directory listing (detailed)
+    list — file listing (names)
+    bigbang — world generation helper
+
+
+Qandyland
+Quintrix and Crew Software
+Multiplayer Graphics Engine
+
+
+
+
+We are working with qandyland.js, a node.js JSON drive server that can be used to save gamestates, chatroom, and instant messages in what we call serverStorage that mimics localStorage. It has terminal DOS-like commands to naviagate the drives, and an HTTP message system to serve and save files.
+
+The startup sequence currently asks for server name and then offers to create a JSON drive, I want to change that so it automatically starts up a memory-only drive named 'gfx.js' and calls it 'Qandyland Server' ... this way the server starts with no required user input letting us call it "easy" and brag "no installation required".
+
+To do this, we need to remove all "start up wizard" code and hardcode. How do we go about this task?
+
+
+3. Add an 'exit' command to exit the server and request confirmation, currently the only known was to exit is CTRL-C. 
+
+4. Remove the current "BIGBANG DEBUG:" as the bigbang is now working and we no longer need that debug code.
+
