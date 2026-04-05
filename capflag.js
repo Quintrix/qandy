@@ -1,5 +1,7 @@
 RUN="capflag.js";
 
+var gfxConnected = null;
+
 if (typeof window.GFX === "undefined") window.GFX = 0;
 
 qdosScript("gfx.js");
@@ -26,28 +28,55 @@ window.flagConnect = async function() {
   try {
     await print("\n");
     await print ("\x1b[97m\x1b[101mQandyland Servers:\x1b[40m\x1b[37m\n\n");
-    await flagServers("gfx.js");
 
-    await print("Connecting to " + s.host+":"+s.port+"...\n");
+    // Properly capture server selection
+    gfxConnected = await flagServers("gfx.js");
+    if (!gfxConnected) {
+      await print("Server selection cancelled.\n");
+      return 'Connection cancelled';
+    }
 
+    await print("Connecting to " + gfxConnected.host+":"+gfxConnected.port+"...\n");
+
+    // Fix protocol detection - localhost should use HTTP
     var proto = 'http';
-    try { proto = new URL(_registryUrl).protocol.replace(':', ''); } catch (e) {}
-    var proto = 'http';
-    _serverUrl = proto + '://' + s.host + ':' + s.port + '/qandyland.js';
+    if (gfxConnected.host !== 'localhost' && gfxConnected.host !== '127.0.0.1') {
+      try { proto = new URL(_registryUrl).protocol.replace(':', ''); } catch (e) { proto = 'http'; }
+    }
+    _serverUrl = proto + '://' + gfxConnected.host + ':' + gfxConnected.port + '/qandyland.js';
 
-    var drive="gfx.js";
-    var mapString=maps('A', 'L', 1, 8);
-    var lobbyMap="F4";
-    var isRound=false;
+    // Check if world exists before creating
+    var worldExists = false;
+    try {
+      var testResult = await checkWorldExists();
+      worldExists = testResult === true;
+    } catch (e) {
+      worldExists = false;
+    }
 
-    // trying to inject creation to create first world
-    var res = await gfxCreation(drive, mapString, lobbyMap, isRound);
-    await print(res);
-    
+    if (!worldExists) {
+      await print("No world found. Creating new world...\n");
+
+      var drive = "gfx.js";
+      var mapString = maps('A', 'L', 1, 8);
+      var lobbyMap = "F4";
+      var isRound = false;
+
+      var res = await gfxCreation(drive, mapString, lobbyMap, isRound);
+      await print("World creation result: " + JSON.stringify(res) + "\n");
+    } else {
+      await print("Existing world found, loading...\n");
+      try {
+        await loadWorldConfig();
+      } catch (e) {
+        await print("Warning: Could not load world config: " + e.message + "\n");
+      }
+    }
+
     await print("Connected successfully!\n");
-    return 'Connected to ' + s.name + ' at ' + s.host + ':' + s.port + '\n';
+    return 'Connected to ' + gfxConnected.name + ' at ' + gfxConnected.host + ':' + gfxConnected.port + '\n';
   } catch (error) {
-    await print("Connection failed: " + error.message + " "+(typeof s !== 'undefined' && s ? s.host : '')+ "\n");
+    await print("Connection failed: " + error.message + " " + (gfxConnected ? gfxConnected.host : '') + "\n");
     throw error;
   }
 };
