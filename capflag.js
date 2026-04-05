@@ -4,6 +4,8 @@ var gfxConnected = null;
 
 if (typeof window.GFX === "undefined") window.GFX = 0;
 
+var gfxConnected = null;
+
 qdosScript("gfx.js");
 startup();
 
