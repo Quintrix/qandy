@@ -184,7 +184,7 @@ function logRequest(req, method, drive, name, session, result) {
 //
 // drives[driveName] = {
 //   manifest: [{ name, size, timestamp, owner, session }],
-//              Directory tokens are stored as { name: "<path>", size: 0, timestamp }
+//              Directory tokens are stored as { name: "<path>", size: 0, timestamp, owner: '', session }
 //              matching the qandy-dos.js localStorage manifest format.
 //   files:    { canonicalName: content_string },
 //   owner:    session_or_'console',
@@ -814,7 +814,7 @@ function dirMake(driveName, cwd, name, session) {
   }
 
   var newManifest = drive.manifest.slice();
-  newManifest.push({ name: dirToken, size: 0, timestamp: timestamp(), owner: session || '', session: '' });
+  newManifest.push({ name: dirToken, size: 0, timestamp: timestamp(), owner: '', session: session || '' });
   _saveManifest(driveName, newManifest);
   if (drive.persistent) saveDrive(driveName);
   return { success: true, result: 'done' };
