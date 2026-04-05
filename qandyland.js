@@ -1,4 +1,5 @@
 //
+//
 // ──── Qandyland Server ────────────────────────────────────────────────────────
 //
 // Node.js HTTP server for shared file storage on persistent JSON "drives"
@@ -806,7 +807,15 @@ function dirChange(driveName, cwd, name, session) {
     return { success: true, cwd: newCwd, result: 'server://' + driveName + newCwd };
   }
 
+  // Resolve then normalize canonical key: remove leading/trailing slashes
   var canonical = resolveName(cwd, dirName);
+  canonical = String(canonical || '').replace(/^\/+|\/+$/g, '');
+
+  // If canonical becomes empty -> root
+  if (canonical === '') {
+    return { success: true, cwd: '/', result: 'server://' + driveName + '/' };
+  }
+
   if (!drive.dirs[canonical]) return { success: false, error: 'directory not found' };
 
   var newCwd = '/' + canonical + '/';
@@ -819,6 +828,7 @@ function dirRemove(driveName, cwd, name, session) {
 
   var dirName   = normName(name);
   if (!dirName) return { success: false, error: 'invalid directory name' };
+
   var canonical = resolveName(cwd, dirName);
   if (!drive.dirs[canonical]) return { success: false, error: 'directory not found' };
 
