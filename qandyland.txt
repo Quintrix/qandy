@@ -1,0 +1,13 @@
+create — (restricted; server-console-only; returns error to clients)
+mount
+save
+load
+delete
+rename
+exists
+mkdir
+chdir
+rmdir
+dir — directory listing (detailed)
+list — file listing (names)
+bigbang — world generation helper

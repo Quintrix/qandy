@@ -59,9 +59,7 @@ var _cliName     = null;
 (function () {
   var args = process.argv.slice(2);
   for (var i = 0; i < args.length; i++) {
-    if (args[i] === '--name'       && args[i + 1]) { SERVER_NAME  = args[++i]; _cliName    = SERVER_NAME; }
     if (args[i] === '--registry'   && args[i + 1]) { REGISTRY_URL = args[++i]; }
-    if (args[i] === '--maxPlayers' && args[i + 1]) { MAX_PLAYERS  = parseInt(args[++i], 10) || 100; }
     if (args[i] === '--no-registry') { REGISTRY_URL = ''; }
   }
 })();
@@ -249,38 +247,85 @@ function saveDrives() {
   }
 }
 
-function loadDrives() {
-  var loaded = {};
+// Safely load a single drive file from DATA_DIR named {driveName}.json
+// options: { force: boolean }  // force=true will overwrite an existing in-memory drive
+// Returns { success: true, drive: '<id>' } or { success: false, error: '...' }
+function loadDrive(driveName, options) {
+  options = options || {};
+  var force = !!options.force;
 
-  // Load per-drive JSON files from DATA_DIR (new format: {driveName}.json with DRIVE_FILE_MARKER)
+  if (!driveName) return { success: false, error: 'missing drive name' };
+
+  // Normalize input, strip common suffixes and whitespace
+  var raw = normName(driveName);
+  // Allow callers to pass 'gfx', 'gfx.json' or 'gfx.js' -> normalize to 'gfx'
+  var candidate = raw.replace(/\.json$/i, '').replace(/\.js$/i, '');
+
+  // Validate logical drive name: must pass existing validateName()
+  var v = validateName(candidate);
+  if (!v.ok) return { success: false, error: 'invalid drive name: ' + v.reason };
+
+  var driveId = candidate; // canonical id to use in memory and for filename
+  var filename = driveId + '.json';
+  var filePath = path.join(DATA_DIR, filename);
+
   try {
-    var dataDirFiles = fs.readdirSync(DATA_DIR);
-    for (var i = 0; i < dataDirFiles.length; i++) {
-      var f = dataDirFiles[i];
-      if (!f.endsWith('.json')) continue;
-      try {
-        var content = fs.readFileSync(path.join(DATA_DIR, f), 'utf8');
-        var info = JSON.parse(content);
-        if (!info[DRIVE_FILE_MARKER]) continue; // Skip non-drive JSON files
-        var n = normName(info.id || f.slice(0, -5));
-        if (!n || !validateName(n).ok) continue;
-        drives[n] = {
-          manifest:   info.manifest           || [],
-          files:      info.files              || {},
-          dirs:       info.dirs               || {},
-          owner:      info.owner              || 'server',
-          created:    info.created            || new Date().toISOString(),
-          persistent: true
-        };
-        loaded[n] = true;
-      } catch (e) {
-        // Skip files that are not valid drive JSON
-      }
+    // Resolve and ensure path is inside DATA_DIR (prevent traversal)
+    var resolved = path.resolve(filePath);
+    var dataDirResolved = path.resolve(DATA_DIR) + path.sep;
+    if (!resolved.startsWith(dataDirResolved)) {
+      return { success: false, error: 'invalid drive path' };
     }
-  } catch (e) {
-    // DATA_DIR not yet created or unreadable – fine, drives will be empty
-  }
 
+    // lstat to detect symlinks and ensure it's a regular file
+    var lst;
+    try {
+      lst = fs.lstatSync(resolved);
+    } catch (e) {
+      return { success: false, error: 'drive file not found' };
+    }
+    if (!lst.isFile()) return { success: false, error: 'drive file not found' };
+    if (lst.isSymbolicLink()) return { success: false, error: 'refuse to load symlinked drive file' };
+
+    // Size check to avoid OOM; tune as needed. Use safe upper bound.
+    var MAX_DRIVE_FILE_BYTES = Math.max(MAX_TOTAL_DRIVE_SIZE * 2, 10 * 1024 * 1024); // at least 10 MB
+    if (lst.size > MAX_DRIVE_FILE_BYTES) return { success: false, error: 'drive file too large' };
+
+    // Read and parse
+    var rawText = fs.readFileSync(resolved, 'utf8');
+    var info = JSON.parse(rawText);
+
+    // Verify this is a qandy drive file
+    if (!info[DRIVE_FILE_MARKER]) return { success: false, error: 'not a drive JSON (marker missing)' };
+
+    // Validate internal id (if present)
+    var innerId = normName(info.id || driveId).replace(/\.json$/i, '').replace(/\.js$/i, '');
+    var idv = validateName(innerId);
+    if (!idv.ok) return { success: false, error: 'invalid drive id inside file: ' + idv.reason }
+
+    // Use canonical id from file if it differs but normalize to the same naming rules
+    var finalId = innerId;
+
+    // If a drive is already loaded and force is not given, refuse to overwrite
+    if (drives[finalId] && !force) {
+      return { success: false, error: 'drive already loaded in memory (use force to overwrite)' };
+    }
+
+    // Load into memory (persistent flag true because it came from disk)
+    drives[finalId] = {
+      manifest:   info.manifest           || [],
+      files:      info.files              || {},
+      dirs:       info.dirs               || {},
+      owner:      info.owner              || 'server',
+      created:    info.created            || new Date().toISOString(),
+      persistent: true
+    };
+
+    // Optionally return stats (not saved to qandyland.json by default)
+    return { success: true, drive: finalId };
+  } catch (e) {
+    return { success: false, error: 'failed to load drive: ' + (e && e.message ? e.message : String(e)) };
+  }
 }
 
 // Load server configuration from the working directory.
@@ -1031,12 +1076,12 @@ function calculateLegalMoves(currentMap, mapsSet, isRound) {
 // Main bigbang function: create all world directories and files on a drive.
 function bigbang(driveName, mapString, lobbyMap, isRound, session) {
 	
-  console.log('🚀 BIGBANG DEBUG:');
-  console.log('  driveName:', driveName);
-  console.log('  mapString:', mapString);
-  console.log('  lobbyMap:', lobbyMap);
-  console.log('  isRound:', isRound);
-  console.log('  session:', session);	
+  //console.log('🚀 BIGBANG DEBUG:');
+  //console.log('  driveName:', driveName);
+  //console.log('  mapString:', mapString);
+  //console.log('  lobbyMap:', lobbyMap);
+  //console.log('  isRound:', isRound);
+  //console.log('  session:', session);	
 	
   var drive = drives[driveName];
   if (!drive) return { success: false, error: 'drive not mounted: ' + driveName };
@@ -1173,6 +1218,21 @@ function handleQandyland(req, res) {
         logRequest(req, method, name || drive, '', session, { success: false, error: 'restricted' });
         return respond(res, { success: false, error: 'Drive creation restricted to server administrator. Use the server console.' });
 
+      case 'loaddrive': {
+        if (!arg) { process.stdout.write('Usage: loaddrive <drive-name> [--force]\n'); break; }
+        var parts = arg.split(/\s+/);
+        var name = parts[0];
+        var force = parts.indexOf('--force') >= 0;
+        var res = loadDrive(name, { force: force });
+        if (res.success) {
+          var stats = calculateDriveStats(drives[res.drive]);
+          process.stdout.write('Loaded drive: server://' + res.drive + '/  (' + stats.fileCount + ' files, ' + formatBytes(stats.totalSize) + ')\n');
+        } else {
+          process.stdout.write('Error loading drive: ' + res.error + '\n');
+        }
+        break;
+      }
+      
       case 'mount':
         result = driveMount(name || drive, session);
         logRequest(req, method, name || drive, '', session, result);
@@ -1293,60 +1353,6 @@ var server = http.createServer(function (req, res) {
 
 // State for the first-startup identity wizard (server name + data directory).
 // null = not in wizard; otherwise an object tracking the current step.
-var _startupWizard = null;
-
-function _startupWizardPrompt() {
-  var w = _startupWizard;
-  if (!w) return;
-  switch (w.step) {
-    case 'server_name':
-      process.stdout.write('Server Name [' + SERVER_NAME + ']: ');
-      break;
-    case 'initial_drive':
-      process.stdout.write('Initial drive name [capflag.js]: ');
-      break;
-  }
-}
-
-function _startupWizardStep(line) {
-  var w = _startupWizard;
-  var trimmed = line.trim();
-
-  switch (w.step) {
-    case 'server_name': {
-      if (trimmed) {
-        if (trimmed.length > MAX_SERVER_NAME_LEN) {
-          process.stdout.write('\u2717 Server name must be ' + MAX_SERVER_NAME_LEN + ' characters or fewer.\n');
-          _startupWizardPrompt();
-          return;
-        }
-        if (!VALID_SERVER_NAME_RE.test(trimmed)) {
-          process.stdout.write('\u2717 Invalid characters. Use A-Z, a-z, 0-9, space, - _ . ( ) + =\n');
-          _startupWizardPrompt();
-          return;
-        }
-        SERVER_NAME = trimmed;
-      }
-      w.step = 'initial_drive';
-      _startupWizardPrompt();
-      break;
-    }
-
-    case 'initial_drive': {
-      var driveName = trimmed || 'capflag.js';
-      var fv = validateName(driveName);
-      if (!fv.ok) {
-        process.stdout.write('\u2717 Invalid drive name: ' + fv.reason + '\n');
-        _startupWizardPrompt();
-        return;
-      }
-      saveServerConfig({ serverName: SERVER_NAME, drives: [driveName] });
-      _startupWizard = null;
-      _proceedWithStartup();
-      break;
-    }
-  }
-}
 
 // ── Server console (stdin) command processing ─────────────────────────────────
 
@@ -1638,17 +1644,6 @@ if (process.stdin.isTTY) {
     var lines = _stdinBuf.split('\n');
     _stdinBuf = lines.pop();
     lines.forEach(function (line) {
-      // Startup wizard takes priority over everything else
-      if (_startupWizard) {
-        _startupWizardStep(line);
-        return;
-      }
-
-      // While the creation wizard is active, feed all input to it
-      if (_createWizard) {
-        _wizardStep(line);
-        return;
-      }
 
       var trimmed = line.trim();
       if (!trimmed) return;
@@ -1853,13 +1848,10 @@ if (process.stdin.isTTY) {
 // Complete server startup: create blank drives from config, start HTTP listener.
 function _proceedWithStartup() {
   var cfg = loadServerConfig();
-  var driveList = (cfg.drives && Array.isArray(cfg.drives) && cfg.drives.length > 0)
-    ? cfg.drives
-    : ['capflag.js'];
-
-  // Save config (only safe fields: serverName and drives list, no path information)
-  saveServerConfig({ serverName: SERVER_NAME, drives: driveList });
-
+  var driveList = (cfg.drives && Array.isArray(cfg.drives) && cfg.drives.length > 0) ? cfg.drives : ['gfx'];
+  
+//@@  
+  
   // Create blank memory-only drives from config (drives always start empty on restart)
   for (var i = 0; i < driveList.length; i++) {
     var dn = normName(driveList[i]);
@@ -1905,30 +1897,9 @@ function _applyServerConfig() {
 
 // Entry point: ask for identity on first TTY startup, otherwise proceed directly.
 (function _initializeServer() {
-  // If name was provided via CLI, skip the wizard
-  if (_cliName) {
-    _applyServerConfig();
-    _proceedWithStartup();
-    return;
-  }
-
-  // If a saved config exists, load it and start directly
-  if (!_isFirstStartup()) {
-    _applyServerConfig();
-    _proceedWithStartup();
-    return;
-  }
-
-  // First startup without a TTY: use defaults and proceed silently
-  if (!process.stdin.isTTY) {
-    _proceedWithStartup();
-    return;
-  }
-
-  // First startup with a TTY: run the identity wizard before starting HTTP
-  process.stdout.write('\nQandyland Player Server\n\n');
-  _startupWizard = { step: 'server_name' };
-  _startupWizardPrompt();
+  _applyServerConfig();
+  if (!SERVER_NAME) SERVER_NAME = 'Qandyland Server';
+  _proceedWithStartup();
 })();
 
 // Graceful shutdown: remove this server from registry

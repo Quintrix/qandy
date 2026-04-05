@@ -32,13 +32,13 @@ window.flagConnect = async function() {
     await print ("\x1b[97m\x1b[101mQandyland Servers:\x1b[40m\x1b[37m\n\n");
 
     // Properly capture server selection
-    gfxConnected = await flagServers("gfx.js");
+    gfxConnected = await flagServers("gfx");
     if (!gfxConnected) {
       await print("Server selection cancelled.\n");
       return 'Connection cancelled';
     }
 
-    await print("Connecting to " + gfxConnected.host+":"+gfxConnected.port+"...\n");
+    await print("\nConnecting "+gfxConnected.host+":"+gfxConnected.port+"...");
 
     // Fix protocol detection - localhost should use HTTP
     var proto = 'http';
@@ -57,25 +57,29 @@ window.flagConnect = async function() {
     }
 
     if (!worldExists) {
-      await print("No world found. Creating new world...\n");
+      await print("\nNo world found.\nCreating new world...\n");
 
-      var drive = "gfx.js";
+      var drive = "gfx";
       var mapString = maps('A', 'L', 1, 8);
       var lobbyMap = "F4";
       var isRound = false;
 
       var res = await gfxCreation(drive, mapString, lobbyMap, isRound);
-      await print("World creation result: " + JSON.stringify(res) + "\n");
+      //
+      //  need to process this data and format results
+      //  await print("World creation result: " + JSON.stringify(res) + "\n");
+      //
     } else {
-      await print("Existing world found, loading...\n");
+      await print("\nLoading world...");
       try {
         await loadWorldConfig();
       } catch (e) {
-        await print("Warning: Could not load world config: " + e.message + "\n");
+        await print("\nError: loadWorldConfig " + e.message + "\n");
       }
     }
 
-    await print("Connected successfully!\n");
+    await print("\nConnected!\n");
+    // return server connected to here
     return 'Connected to ' + gfxConnected.name + ' at ' + gfxConnected.host + ':' + gfxConnected.port + '\n';
   } catch (error) {
     await print("Connection failed: " + error.message + " " + (gfxConnected ? gfxConnected.host : '') + "\n");
@@ -84,10 +88,10 @@ window.flagConnect = async function() {
 };
 
 // flagServers.js
-// opts: { driveFilter='gfx.js', prompt, defaultIndex=0, allowCancel=true }
+// opts: { driveFilter='gfx', prompt, defaultIndex=0, allowCancel=true }
 async function flagServers(opts) {
   opts = opts || {};
-  const driveFilter = opts.driveFilter || 'gfx.js';
+  const driveFilter = opts.driveFilter || 'gfx';
   const prompt = opts.prompt || "Server [0]? ";
   const defaultIndex = (typeof opts.defaultIndex === 'number') ? opts.defaultIndex : 0;
   const allowCancel = (opts.allowCancel === false) ? false : true;
@@ -160,7 +164,7 @@ async function flagServers(opts) {
 }
 
 async function flagCreate() {
-  var drive="gfx.js";
+  var drive="gfx";
   var mapString="A1A2A3A4A5A6A7A8B1B2B3B4B5B6B7N8C1C2C3C4C5C6C7V8D1D2D3D4D5D6D7D8E1E2E3E4E5E6E7E8F1F2F3F4F5F6F7F8G1G2G3G4G5G6G7G8H1H2H3H4H5H6H7H8I1I2I3IAUAIAIAI8J1J2J3J4J5J6J7J8K1K2K3K4K5K6K7K8L1L2L3L4L5L6L7L8";
   var lobbyMap="F4";
   var isRound=false;
