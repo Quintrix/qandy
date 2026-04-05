@@ -184,8 +184,9 @@ function logRequest(req, method, drive, name, session, result) {
 //
 // drives[driveName] = {
 //   manifest: [{ name, size, timestamp, owner, session }],
+//              Directory tokens are stored as { name: "<path>", size: 0, timestamp, owner: '', session }
+//              matching the qandy-dos.js localStorage manifest format.
 //   files:    { canonicalName: content_string },
-//   dirs:     { dirName: { owner, created } },
 //   owner:    session_or_'console',
 //   created:  timestamp_string,
 //   persistent: bool – true saves to {name}.json in the working directory on every change
@@ -232,7 +233,6 @@ function saveDrive(driveName) {
   data.persistent = true;
   data.manifest = drive.manifest || [];
   data.files    = drive.files    || {};
-  data.dirs     = drive.dirs     || {};
   data.stats    = calculateDriveStats(drive);
   var filePath = path.join(DATA_DIR, driveName + '.json');
   fs.writeFile(filePath, JSON.stringify(data, null, 2), function (err) {
@@ -313,10 +313,27 @@ function loadDrive(driveName, options) {
     }
 
     // Load into memory (persistent flag true because it came from disk)
+    var loadedManifest = info.manifest || [];
+
+    // Migrate legacy drive.dirs entries to manifest directory tokens
+    var legacyDirs = info.dirs || {};
+    var legacyDirKeys = Object.keys(legacyDirs);
+    for (var dmi = 0; dmi < legacyDirKeys.length; dmi++) {
+      var legacyKey = legacyDirKeys[dmi];
+      var legacyToken = '<' + legacyKey + '>';
+      var tokenExists = false;
+      for (var tmj = 0; tmj < loadedManifest.length; tmj++) {
+        if (loadedManifest[tmj] && loadedManifest[tmj].name === legacyToken) { tokenExists = true; break; }
+      }
+      if (!tokenExists) {
+        var legacyInfo = legacyDirs[legacyKey] || {};
+        loadedManifest.push({ name: legacyToken, size: 0, timestamp: legacyInfo.created || '', owner: legacyInfo.owner || '', session: '' });
+      }
+    }
+
     drives[finalId] = {
-      manifest:   info.manifest           || [],
+      manifest:   loadedManifest,
       files:      info.files              || {},
-      dirs:       info.dirs               || {},
       owner:      info.owner              || 'server',
       created:    info.created            || new Date().toISOString(),
       persistent: true
@@ -567,7 +584,6 @@ function driveCreate(driveName, session, persistent) {
   drives[name] = {
     manifest:   [],
     files:      {},
-    dirs:       {},
     owner:      session,
     created:    ts,
     persistent: isPersistent
@@ -780,9 +796,26 @@ function dirMake(driveName, cwd, name, session) {
   if (!fv.ok) return { success: false, error: fv.reason };
 
   var canonical = resolveName(cwd, dirName);
-  if (drive.dirs[canonical]) return { success: false, error: 'directory already exists' };
+  canonical = String(canonical || '').replace(/\/+$/, '');
+  var dirToken = '<' + canonical + '>';
 
-  drive.dirs[canonical] = { owner: session, created: timestamp() };
+  if (drive.manifest.some(function (e) { return e && e.name === dirToken; })) {
+    return { success: false, error: 'directory already exists' };
+  }
+
+  // For nested directories, ensure parent exists
+  var slashIdx = canonical.lastIndexOf('/');
+  if (slashIdx > 0) {
+    var parent = canonical.substring(0, slashIdx);
+    var parentToken = '<' + parent + '>';
+    if (!drive.manifest.some(function (e) { return e && e.name === parentToken; })) {
+      return { success: false, error: 'parent directory not found' };
+    }
+  }
+
+  var newManifest = drive.manifest.slice();
+  newManifest.push({ name: dirToken, size: 0, timestamp: timestamp(), owner: '', session: session || '' });
+  _saveManifest(driveName, newManifest);
   if (drive.persistent) saveDrive(driveName);
   return { success: true, result: 'done' };
 }
@@ -816,7 +849,9 @@ function dirChange(driveName, cwd, name, session) {
     return { success: true, cwd: '/', result: 'server://' + driveName + '/' };
   }
 
-  if (!drive.dirs[canonical]) return { success: false, error: 'directory not found' };
+  if (!drive.manifest.some(function (e) { return e && e.name === '<' + canonical + '>'; })) {
+    return { success: false, error: 'directory not found' };
+  }
 
   var newCwd = '/' + canonical + '/';
   return { success: true, cwd: newCwd, result: 'server://' + driveName + newCwd };
@@ -838,19 +873,28 @@ function dirRemove(driveName, cwd, name, session) {
     return { success: true, cwd: '/', result: 'server://' + driveName + '/' };
   }
 
-  if (!drive.dirs[canonical]) return { success: false, error: 'directory not found' };
+  var dirToken = '<' + canonical + '>';
+  if (!drive.manifest.some(function (e) { return e && e.name === dirToken; })) {
+    return { success: false, error: 'directory not found' };
+  }
 
   // Check if empty (no files or subdirs under this path)
   var prefix = canonical + '/';
   var hasChildren = drive.manifest.some(function (e) {
-    return e.name !== MANIFEST_KEY && e.name.indexOf(prefix) === 0;
-  }) || Object.keys(drive.dirs).some(function (d) {
-    return d !== canonical && d.indexOf(prefix) === 0;
+    if (!e || e.name === MANIFEST_KEY || e.name === dirToken) return false;
+    // Sub-directory tokens: <canonical/...>
+    if (e.name.charAt(0) === '<') {
+      var inner = e.name.substring(1, e.name.length - 1);
+      return inner.indexOf(prefix) === 0;
+    }
+    // File entries
+    return e.name.indexOf(prefix) === 0;
   });
 
   if (hasChildren) return { success: false, error: 'directory not empty' };
 
-  delete drive.dirs[canonical];
+  var newManifest = drive.manifest.filter(function (e) { return !e || e.name !== dirToken; });
+  _saveManifest(driveName, newManifest);
   if (drive.persistent) saveDrive(driveName);
   return { success: true, result: 'done' };
 }
@@ -867,16 +911,19 @@ function dirList(driveName, cwd, pattern, switches, session) {
   lines.push('Directory of server://' + driveName + (cwd || '/') + '\n');
   lines.push('\n');
 
-  // Subdirectories
+  // Subdirectories – find manifest tokens of the form <dirPrefix + name>
   var dirPrefix = dir ? (dir + '/') : '';
-  var subDirs   = Object.keys(drive.dirs).filter(function (d) {
-    if (!d.startsWith(dirPrefix)) return false;
-    var rel = d.substring(dirPrefix.length);
+  var subDirs = drive.manifest.filter(function (e) {
+    if (!e || !e.name || e.name.charAt(0) !== '<') return false;
+    var inner = e.name.substring(1, e.name.length - 1);
+    if (inner.indexOf(dirPrefix) !== 0) return false;
+    var rel = inner.substring(dirPrefix.length);
     return rel && rel.indexOf('/') < 0;
   });
 
   for (var i = 0; i < subDirs.length; i++) {
-    var dname = subDirs[i].substring(dirPrefix.length);
+    var inner = subDirs[i].name.substring(1, subDirs[i].name.length - 1);
+    var dname = inner.substring(dirPrefix.length);
     if (!showHidden && isHidden(dname)) continue;
     if (pattern && !matchPattern(dname, pattern)) continue;
     lines.push('  <DIR>  ' + dname + '\n');
@@ -884,12 +931,12 @@ function dirList(driveName, cwd, pattern, switches, session) {
 
   // Files – only include entries visible in the current directory
   var entries = drive.manifest.filter(function (e) {
+    if (!e || !e.name) return false;
     if (e.name === MANIFEST_KEY) return showHidden;
+    if (e.name.charAt(0) === '<') return false; // skip directory tokens
     if (!showHidden && isHidden(e.name)) return false;
-    // Check the file's directory path relative to root
-    var filePath = e.name;
-    var slash = filePath.lastIndexOf('/');
-    var fileDir = slash >= 0 ? filePath.substring(0, slash) : '';
+    var slash = e.name.lastIndexOf('/');
+    var fileDir = slash >= 0 ? e.name.substring(0, slash) : '';
     return fileDir === dir;
   });
 
@@ -916,7 +963,9 @@ function fileList(driveName, cwd, pattern, session) {
   var names = [];
 
   var entries = drive.manifest.filter(function (e) {
+    if (!e || !e.name) return false;
     if (e.name === MANIFEST_KEY) return false;
+    if (e.name.charAt(0) === '<') return false; // skip directory tokens
     var slash = e.name.lastIndexOf('/');
     var fileDir = slash >= 0 ? e.name.substring(0, slash) : '';
     return fileDir === dir;
@@ -1393,25 +1442,27 @@ if (process.stdin.isTTY) {
     var dir   = (_serverCwd || '/').replace(/^\//, '').replace(/\/$/, '');
     process.stdout.write('Directory of server://' + _serverMountedDrive + (_serverCwd || '/') + '\n\n');
 
-    // Subdirectories in current directory
+    // Subdirectories from manifest tokens
     var dirPrefix = dir ? (dir + '/') : '';
-    var subDirs   = Object.keys(drive.dirs || {}).filter(function (d) {
-      if (!d.startsWith(dirPrefix)) return false;
-      var rel = d.substring(dirPrefix.length);
+    var subDirs = drive.manifest.filter(function (e) {
+      if (!e || !e.name || e.name.charAt(0) !== '<') return false;
+      var inner = e.name.substring(1, e.name.length - 1);
+      if (inner.indexOf(dirPrefix) !== 0) return false;
+      var rel = inner.substring(dirPrefix.length);
       return rel && rel.indexOf('/') < 0;
     });
     for (var di = 0; di < subDirs.length; di++) {
-      process.stdout.write('  <DIR>  ' + subDirs[di].substring(dirPrefix.length) + '\n');
+      var inner = subDirs[di].name.substring(1, subDirs[di].name.length - 1);
+      process.stdout.write('  <DIR>  ' + inner.substring(dirPrefix.length) + '\n');
     }
 
     // Files in current directory
     var dirEntries = drive.manifest.filter(function (e) {
+      if (!e || !e.name) return false;
       if (e.name === MANIFEST_KEY) return false;
+      if (e.name.charAt(0) === '<') return false;
       var slash = e.name.lastIndexOf('/');
       var fileDir = slash >= 0 ? e.name.substring(0, slash) : '';
-
-console.log("[debug] name=", e.name, "fileDir=", fileDir, "dir=", dir);
- 
       return fileDir === dir;
     });
     var fileCount = 0;
@@ -1437,19 +1488,24 @@ console.log("[debug] name=", e.name, "fileDir=", fileDir, "dir=", dir);
     var dir     = (_serverCwd || '/').replace(/^\//, '').replace(/\/$/, '');
     var lsPrefix = dir ? (dir + '/') : '';
 
-    // Subdirectories
-    var lsDirs = Object.keys(drive.dirs || {}).filter(function (d) {
-      if (!d.startsWith(lsPrefix)) return false;
-      var rel = d.substring(lsPrefix.length);
+    // Subdirectories from manifest tokens
+    var lsDirs = drive.manifest.filter(function (e) {
+      if (!e || !e.name || e.name.charAt(0) !== '<') return false;
+      var inner = e.name.substring(1, e.name.length - 1);
+      if (inner.indexOf(lsPrefix) !== 0) return false;
+      var rel = inner.substring(lsPrefix.length);
       return rel && rel.indexOf('/') < 0;
     });
     for (var li = 0; li < lsDirs.length; li++) {
-      process.stdout.write(lsDirs[li].substring(lsPrefix.length) + '/\n');
+      var inner = lsDirs[li].name.substring(1, lsDirs[li].name.length - 1);
+      process.stdout.write(inner.substring(lsPrefix.length) + '/\n');
     }
 
     // Files
     var lsEntries = drive.manifest.filter(function (e) {
+      if (!e || !e.name) return false;
       if (e.name === MANIFEST_KEY) return false;
+      if (e.name.charAt(0) === '<') return false;
       var slash = e.name.lastIndexOf('/');
       var fileDir = slash >= 0 ? e.name.substring(0, slash) : '';
       return fileDir === dir;
@@ -1653,6 +1709,9 @@ console.log("[debug] name=", e.name, "fileDir=", fileDir, "dir=", dir);
           }
 
           var stats = calculateDriveStats(drive);
+          var dirTokens = (drive.manifest || []).filter(function(e) {
+            return e && e.name && e.name.charAt(0) === '<';
+          });
           process.stdout.write('\n' + '='.repeat(60) + '\n');
           process.stdout.write('DRIVE STORAGE DEBUG: ' + driveName + '\n');
           process.stdout.write('='.repeat(60) + '\n');
@@ -1660,20 +1719,19 @@ console.log("[debug] name=", e.name, "fileDir=", fileDir, "dir=", dir);
           process.stdout.write('Owner: ' + (drive.owner || 'none') + '\n');
           process.stdout.write('Created: ' + (drive.created || 'unknown') + '\n');
           process.stdout.write('Files: ' + stats.fileCount + ' (' + formatBytes(stats.totalSize) + ')\n');
-          process.stdout.write('Directories: ' + Object.keys(drive.dirs || {}).length + '\n');
+          process.stdout.write('Directories: ' + dirTokens.length + '\n');
           process.stdout.write('\n');
 
-          // Directories (show directory structure)
-          var dirKeys = Object.keys(drive.dirs || {});
-          if (dirKeys.length > 0) {
-            process.stdout.write('DIRECTORIES (' + dirKeys.length + '):\n');
-            for (var i = 0; i < dirKeys.length; i++) {
-              var key = dirKeys[i];
-              var info = drive.dirs[key];
-              var keyTrunc = key.length > 45 ? key.substring(0, 42) + '...' : key;
-              var created = (info.created || '').substring(0, 14);
-              var owner = (info.owner || 'none').substring(0, 10);
-              process.stdout.write('  ' + keyTrunc.padEnd(45) + ' | ' + created.padEnd(14) + ' | ' + owner + '\n');
+          // Directories from manifest tokens
+          if (dirTokens.length > 0) {
+            process.stdout.write('DIRECTORIES (' + dirTokens.length + '):\n');
+            for (var i = 0; i < dirTokens.length; i++) {
+              var dtEntry = dirTokens[i];
+              var dtName = (dtEntry.name || '');
+              var dtTrunc = dtName.length > 45 ? dtName.substring(0, 42) + '...' : dtName;
+              var dtTs = (dtEntry.timestamp || '').substring(0, 14);
+              var dtOwner = (dtEntry.owner || 'none').substring(0, 10);
+              process.stdout.write('  ' + dtTrunc.padEnd(45) + ' | ' + dtTs.padEnd(14) + ' | ' + dtOwner + '\n');
             }
             process.stdout.write('\n');
           }
