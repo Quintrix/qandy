@@ -829,6 +829,16 @@ function dirRemove(driveName, cwd, name, session) {
   var dirName   = normName(name);
   if (!dirName) return { success: false, error: 'invalid directory name' };
 
+  // Resolve then normalize canonical key: remove leading/trailing slashes
+  var canonical = resolveName(cwd, dirName);
+  canonical = String(canonical || '').replace(/^\/+|\/+$/g, '');
+
+  // If canonical becomes empty -> root
+  if (canonical === '') {
+    return { success: true, cwd: '/', result: 'server://' + driveName + '/' };
+  }
+
+
   var canonical = resolveName(cwd, dirName);
   if (!drive.dirs[canonical]) return { success: false, error: 'directory not found' };
 
@@ -878,9 +888,10 @@ function dirList(driveName, cwd, pattern, switches, session) {
   var entries = drive.manifest.filter(function (e) {
     if (e.name === MANIFEST_KEY) return showHidden;
     if (!showHidden && isHidden(e.name)) return false;
-    var base = resolveName('/', e.name).replace(/\/$/, '');
-    var slash = base.lastIndexOf('/');
-    var fileDir = slash >= 0 ? base.substring(0, slash) : '';
+    // Check the file's directory path relative to root
+    var filePath = e.name;
+    var slash = filePath.lastIndexOf('/');
+    var fileDir = slash >= 0 ? filePath.substring(0, slash) : '';
     return fileDir === dir;
   });
 
@@ -1359,19 +1370,10 @@ var server = http.createServer(function (req, res) {
   serveStatic(req, res);
 });
 
-// ── Startup wizard (module scope – must be accessible from _initializeServer) ──
-
-// State for the first-startup identity wizard (server name + data directory).
-// null = not in wizard; otherwise an object tracking the current step.
-
 // ── Server console (stdin) command processing ─────────────────────────────────
 
 if (process.stdin.isTTY) {
   process.stdin.setEncoding('utf8');
-
-  // State for the Alpine Linux-style interactive drive creation wizard.
-  // null = not in wizard; otherwise an object tracking the current step.
-  var _createWizard = null;
 
   // Navigation state for QDOS-style drive inspection commands
   var _serverMountedDrive = null;
@@ -1557,34 +1559,6 @@ if (process.stdin.isTTY) {
       }
     }
     return tokens;
-  }
-
-  // Start the interactive drive-creation wizard.
-  // preArgs: optional array of pre-supplied positional arguments matching question order:
-  //   [0] drive name, [1] persistence
-  function _startCreateWizard(preArgs) {
-    var driveNames = Object.keys(drives);
-    var defaultDrive = driveNames.length === 0 ? 'ctf-game' : 'new-drive';
-    _createWizard = { step: 'drive_name', args: preArgs || [], defaultDrive: defaultDrive };
-    process.stdout.write('\n');
-    // Auto-advance through any pre-supplied args
-    _wizardAutoAdvance();
-  }
-
-  // If the current wizard step has a pre-supplied arg, consume it; otherwise prompt.
-  function _wizardAutoAdvance() {
-    var w = _createWizard;
-    if (!w) return;
-    var argIdx = { drive_name: 0, persistent: 1 };
-    var idx = argIdx[w.step];
-    if (idx !== undefined && idx < w.args.length) {
-      // Echo the pre-supplied value and process it as if the user typed it
-      var val = w.args[idx];
-      _wizardEchoStep(val);
-      _wizardStep(val);
-    } else {
-      _wizardShowPrompt();
-    }
   }
 
   // Print the prompt for the current wizard step.
