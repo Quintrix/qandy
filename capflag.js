@@ -1,73 +1,89 @@
 RUN="capflag.js";
 
+if (typeof window.GFX === "undefined") window.GFX = 0;
+
+qdosScript("gfx.js");
 startup();
-async function startup() {
-  // append the script (HOST appends it asynchronously)
-  qdosScript("gfx.js");
 
-  try {
-    // wait up to 7s for gfxConnect to exist
-    await waitForFunction("gfxConnect", 7000);
-  } catch (e) {
-    print("Error: gfx.js not loaded: " + e.message + "\n");
-    dosExit();
+var ts=3000;
+setTimeout(function() { startup(); },200);
+
+function startup(){
+  if (GFX==0) {
+  	 console.log(ts);
+  	 ts=ts-200;
+  	 if (ts>0) { 
+      setTimeout(function() { 
+        startup();
+      },200);
+    }
     return;
+  } else {
+    flagConnect();
   }
+}
 
-  // safe to call now
+window.flagConnect = async function() {
   try {
-    await gfxConnect();
-  } catch (e) {
-    print("gfxConnect failed: " + (e && e.message ? e.message : String(e)) + "\n");
-    dosExit();
+    await print("\n");
+    print ("\x1b[97m\x1b[101mQandyland Servers:\x1b[40m\x1b[37m\n\n");
+    var res = await gfxServers();
+
+    if (res.error) {
+      await print(res.error + "\n");
+      throw new Error(res.error);
+    }
+
+    // print formatted listing (res.formatted) and keep the actual array in res.list
+    await print(res.formatted);
+
+    await print("\nConnect to which server [0]? ");
+    var i = await input();
+    if (i.trim() === "") i = "localhost:8080";
+
+    var s = null;
+    // try numeric index first
+    var idx = parseInt(i, 10);
+    if (!isNaN(idx) && res.list[idx]) {
+      s = res.list[idx];
+    } else if (i.includes(':')) {
+      // treat as host:port input
+      var parts = i.split(':');
+      s = { name: i, host: parts[0], port: parts[1] || '8080' };
+    } else {
+      throw new Error('Invalid server selection');
+    }
+
+    await print("Connecting to " + s.host+":"+s.port+"...\n");
+
+    var proto = 'http';
+    try { proto = new URL(_registryUrl).protocol.replace(':', ''); } catch (e) {}
+    var proto = 'http';
+    _serverUrl = proto + '://' + s.host + ':' + s.port + '/qandyland.js';
+
+    var drive="gfx.js";
+    var mapString=maps('A', 'L', 1, 8);
+    var lobbyMap="F4";
+    var isRound=false;
+
+    // trying to inject creation to create first world
+    var res = await gfxCreation(drive, mapString, lobbyMap, isRound);
+    await print(res);
+    
+    await print("Connected successfully!\n");
+    return 'Connected to ' + s.name + ' at ' + s.host + ':' + s.port + '\n';
+  } catch (error) {
+    await print("Connection failed: " + error.message + " "+(typeof s !== 'undefined' && s ? s.host : '')+ "\n");
+    throw error;
   }
-}
+};
 
-function waitForFunction(name, timeoutMs) {
-  timeoutMs = typeof timeoutMs === 'number' ? timeoutMs : 3000;
-  return new Promise(function(resolve, reject) {
-    const start = Date.now();
-    (function check() {
-      if (typeof window[name] === 'function') return resolve();
-      if (Date.now() - start >= timeoutMs) return reject(new Error('timeout'));
-      setTimeout(check, 40);
-    })();
-  });
-}
-//init();
-async function oldinit() {
-  await gfxInit();
-  // move text screen out of the way so user can see gfx
-  document.getElementById('txt').style.top = '50px';
-  document.getElementById('txt').style.left = '350px';
-  NewChar();
-}
 
-//window.gfxServers = async function() {
-//  var url = _registryUrl;
-//  if (!url) return 'Error: no registry URL configured';
-//  try {
-//    var response = await fetch(url, { method: 'GET' });
-//    if (!response.ok) {
-//      return 'Error: registry responded with ' + response.status;
-//    }
-//    var data = await response.json();
-//    if (!data.success) {
-//      return 'Error: ' + (data.error || 'registry request failed');
-//    }
-//    var list = data.servers || [];
-//    if (list.length === 0) return 'No servers available\n';
-//    var out = 'Available Servers:\n';
-//    for (var i = 0; i < list.length; i++) {
-//      var s = list[i];
-//      var drives = (s.drives && s.drives.length) ? s.drives.join(',') : 'none';
-//      out += '- ' + s.name + ' (' + s.host + ':' + s.port + ')' +
-//             ' - ' + drives + '\n';
-//    }
-//  } catch (e) {
-//    return 'Error: ' + (e.message || String(e));
-//  }
-//};
+
+
+
+
+
 
 async function flagCreate() {
   var drive="gfx.js";

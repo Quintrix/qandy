@@ -1,4 +1,6 @@
 
+window.GFX = 0; // set to true when gfx.js ready to use
+
 var PopAlign = "click"; // "center", "click"
 var PopUpVis = "hidden"; // current target visibility
 var PForce = "hidden";   // forced visibility on mouseout in your original code
@@ -279,73 +281,41 @@ window.gfxServers = async function() {
     var data = await response.json();
     if (!data.success) return { error: 'Error: ' + (data.error || 'registry request failed') };
     var list = data.servers || [];
-    if (list.length === 0) {
-      return { list: [], formatted: 'No servers available\n' };
+
+    // Default localhost entry placed first (allow duplicates from registry)
+    var localhost = { name: 'localhost', host: 'localhost', port: '8080', drives: [] };
+
+    // Probe local server for drives (short timeout). If it replies with status.drives, fill drives.
+    try {
+      const ac = new AbortController();
+      const timeout = setTimeout(() => ac.abort(), 800); // 800ms probe timeout
+      const statusRes = await fetch('http://localhost:8080/status', { method: 'GET', signal: ac.signal });
+      clearTimeout(timeout);
+      if (statusRes.ok) {
+        try {
+          const status = await statusRes.json();
+          if (status && Array.isArray(status.drives)) localhost.drives = status.drives;
+        } catch (e) { /* ignore JSON parse errors; leave drives empty */ }
+      }
+    } catch (e) {
+      /* no local server or timed out — leave localhost.drives empty */
     }
-    var out = 'Available Servers:\n\n';
-    for (var i = 0; i < list.length; i++) {
-      var s = list[i];
-      var drives = (s.drives && s.drives.length) ? s.drives.join(',') : 'none';
-      out += i +' '+ s.name+'\n';
+
+    var servers = [localhost].concat(list);
+
+    // Build formatted listing (index matches servers array)
+    var out = '';
+    for (var i = 0; i < servers.length; i++) {
+      var s = servers[i];
+      var label = s.name || (s.host + ':' + (s.port || '8080'));
+      var drives = (s.drives && s.drives.length) ? ' - ' + s.drives.join(',') : '';
+      out += i + '. ' + label + drives + '\n';
     }
-    return { list: list, formatted: out };
+
+    if (!out) out = 'No servers available\n';
+    return { list: servers, formatted: out };
   } catch (e) {
     return { error: 'Error: ' + (e.message || String(e)) };
-  }
-};
-
-// add support for passing server if already known, if no known server sent then display server list
-window.gfxConnect = async function() {
-  try {
-    await print("\nQandyland Servers:\n\n");
-    var res = await gfxServers();
-
-    if (res.error) {
-      await print(res.error + "\n");
-      throw new Error(res.error);
-    }
-
-    // print formatted listing (res.formatted) and keep the actual array in res.list
-    await print(res.formatted);
-
-    await print("Enter server to connect to (or press Enter for localhost):\n");
-    var i = await input();
-    if (i.trim() === "") i = "localhost:8080";
-
-    var s = null;
-    // try numeric index first
-    var idx = parseInt(i, 10);
-    if (!isNaN(idx) && res.list[idx]) {
-      s = res.list[idx];
-    } else if (i.includes(':')) {
-      // treat as host:port input
-      var parts = i.split(':');
-      s = { name: i, host: parts[0], port: parts[1] || '8080' };
-    } else {
-      throw new Error('Invalid server selection');
-    }
-
-    await print("Connecting to " + s.host+":"+s.port+"...\n");
-
-    var proto = 'http';
-    try { proto = new URL(_registryUrl).protocol.replace(':', ''); } catch (e) {}
-    var proto = 'http';
-    _serverUrl = proto + '://' + s.host + ':' + s.port + '/qandyland.js';
-
-    var drive="gfx.js";
-    var mapString=maps('A', 'L', 1, 8);
-    var lobbyMap="F4";
-    var isRound=false;
-
-    // trying to inject creation to create first world
-    var res = await gfxCreation(drive, mapString, lobbyMap, isRound);
-    await print(res);
-    
-    await print("Connected successfully!\n");
-    return 'Connected to ' + s.name + ' at ' + s.host + ':' + s.port + '\n';
-  } catch (error) {
-    await print("Connection failed: " + error.message + " "+s.host+ "\n");
-    throw error;
   }
 };
 
@@ -556,16 +526,12 @@ async function splash(durationMs) {
       output += colors[state2[i]] + L2[i];
     }
     if (CURMORE>-1) { CURMORE=0; }
-    
-    //
     // beeping sound effects
-    //
     //if (Math.random() > 0.2) { 
     //  // High-pitched, very short blips (800Hz to 1200Hz)
     //  let freq = 700 + Math.floor(Math.random() * 400);
     //  beep(freq, 10); // 20ms duration is a sharp 'click' or 'tick'
     //}
-    
     await print(output + "\x1b[0m\n");
     await sleep(40); // Fast enough to look like data "streaming" in
     // Safety timeout to prevent infinite loops
@@ -573,6 +539,7 @@ async function splash(durationMs) {
   }
   await print("\x1b[2A\x1b[38;5;46m"+header+"\n"+footer+"\x1b[0m\n");
   CURSOR=_CURSOR; await print("\n");
+  window.GFX=1;
 }
 
 // Backwards compatibility alias
