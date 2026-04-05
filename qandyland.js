@@ -1657,6 +1657,90 @@ if (process.stdin.isTTY) {
       var arg   = allTokens.slice(1).join(' ');
 
       switch (cmd) {
+        case 'serverstorage': {
+          var driveName = arg || _serverMountedDrive;
+          if (!driveName) {
+            process.stdout.write('Usage: serverstorage [drive-name]\n');
+            process.stdout.write('       serverstorage          (shows current mounted drive)\n');
+            break;
+          }
+  
+          var drive = drives[driveName];
+          if (!drive) {
+            process.stdout.write('Error: drive "' + driveName + '" not found.\n');
+            var availableDrives = Object.keys(drives);
+            if (availableDrives.length > 0) {
+              process.stdout.write('Available drives: ' + availableDrives.join(', ') + '\n');
+            }
+            break;
+          }
+
+          var stats = calculateDriveStats(drive);
+          process.stdout.write('\n' + '='.repeat(60) + '\n');
+          process.stdout.write('DRIVE STORAGE DEBUG: ' + driveName + '\n');
+          process.stdout.write('='.repeat(60) + '\n');
+          process.stdout.write('Type: ' + (drive.persistent ? 'persistent' : 'memory-only') + '\n');
+          process.stdout.write('Owner: ' + (drive.owner || 'none') + '\n');
+          process.stdout.write('Created: ' + (drive.created || 'unknown') + '\n');
+          process.stdout.write('Files: ' + stats.fileCount + ' (' + formatBytes(stats.totalSize) + ')\n');
+          process.stdout.write('Directories: ' + Object.keys(drive.dirs || {}).length + '\n');
+          process.stdout.write('\n');
+
+          // Directories (show directory structure)
+          var dirKeys = Object.keys(drive.dirs || {});
+          if (dirKeys.length > 0) {
+            process.stdout.write('DIRECTORIES (' + dirKeys.length + '):\n');
+            for (var i = 0; i < dirKeys.length; i++) {
+              var key = dirKeys[i];
+              var info = drive.dirs[key];
+              var keyTrunc = key.length > 45 ? key.substring(0, 42) + '...' : key;
+              var created = (info.created || '').substring(0, 14);
+              var owner = (info.owner || 'none').substring(0, 10);
+              process.stdout.write('  ' + keyTrunc.padEnd(45) + ' | ' + created.padEnd(14) + ' | ' + owner + '\n');
+            }
+            process.stdout.write('\n');
+          }
+
+          // Files (show file paths and content preview)
+          var fileKeys = Object.keys(drive.files || {});
+          if (fileKeys.length > 0) {
+            process.stdout.write('FILES (' + fileKeys.length + '):\n');
+            for (var j = 0; j < fileKeys.length; j++) {
+              var fkey = fileKeys[j];
+              var content = drive.files[fkey] || '';
+              var keyTrunc = fkey.length > 35 ? fkey.substring(0, 32) + '...' : fkey;
+              var size = utf8len(content);
+              var contentTrunc = content.length > 40 ? content.substring(0, 37) + '...' : content;
+              // Replace control characters for display
+              contentTrunc = contentTrunc.replace(/[\r\n\t]/g, function(c) {
+                return c === '\r' ? '\\r' : c === '\n' ? '\\n' : '\\t';
+              });
+              process.stdout.write('  ' + keyTrunc.padEnd(35) + ' | ' + 
+              String(size).padStart(6) + 'b | ' + contentTrunc + '\n');
+            }
+            process.stdout.write('\n');
+          }
+
+          // Manifest entries (detailed view)
+          if (drive.manifest && drive.manifest.length > 0) {
+            process.stdout.write('MANIFEST ENTRIES (' + drive.manifest.length + '):\n');
+            for (var k = 0; k < drive.manifest.length; k++) {
+              var entry = drive.manifest[k];
+              var name = (entry.name || '').padEnd(30);
+              var size = String(entry.size || 0).padStart(8);
+              var timestamp = (entry.timestamp || '').substring(0, 14);
+              var owner = (entry.owner || 'none').substring(0, 12);
+              var session = (entry.session || 'none').substring(0, 8);
+              process.stdout.write('  ' + name + ' | ' + size + 'b | ' + 
+                timestamp + ' | ' + owner.padEnd(12) + ' | ' + session + '\n');
+            }
+            process.stdout.write('\n');
+          }
+
+          process.stdout.write('='.repeat(60) + '\n');
+          break;
+        }      	
+      	
         case 'create':
           _startCreateWizard(allTokens.slice(1));
           break;
