@@ -466,7 +466,7 @@ function isHidden(name) {
 
 // Resolve a name against cwd, return canonical path (without leading /)
 function resolveName(cwd, name) {
-  var base = (cwd || '/').replace(/^\//, '');  // strip leading slash
+  var base = (cwd || '/').replace(/^\//, '').replace(/\/$/, '');  // strip leading and trailing slashes
   var n = normName(name);
   if (n.indexOf('/') >= 0) {
     // Has path component – resolve relative to root
@@ -838,8 +838,6 @@ function dirRemove(driveName, cwd, name, session) {
     return { success: true, cwd: '/', result: 'server://' + driveName + '/' };
   }
 
-
-  var canonical = resolveName(cwd, dirName);
   if (!drive.dirs[canonical]) return { success: false, error: 'directory not found' };
 
   // Check if empty (no files or subdirs under this path)
@@ -919,9 +917,8 @@ function fileList(driveName, cwd, pattern, session) {
 
   var entries = drive.manifest.filter(function (e) {
     if (e.name === MANIFEST_KEY) return false;
-    var base = resolveName('/', e.name).replace(/\/$/, '');
-    var slash = base.lastIndexOf('/');
-    var fileDir = slash >= 0 ? base.substring(0, slash) : '';
+    var slash = e.name.lastIndexOf('/');
+    var fileDir = slash >= 0 ? e.name.substring(0, slash) : '';
     return fileDir === dir;
   });
 
@@ -1410,9 +1407,8 @@ if (process.stdin.isTTY) {
     // Files in current directory
     var dirEntries = drive.manifest.filter(function (e) {
       if (e.name === MANIFEST_KEY) return false;
-      var base  = resolveName('/', e.name).replace(/\/$/, '');
-      var slash = base.lastIndexOf('/');
-      var fileDir = slash >= 0 ? base.substring(0, slash) : '';
+      var slash = e.name.lastIndexOf('/');
+      var fileDir = slash >= 0 ? e.name.substring(0, slash) : '';
       return fileDir === dir;
     });
     var fileCount = 0;
@@ -1451,9 +1447,8 @@ if (process.stdin.isTTY) {
     // Files
     var lsEntries = drive.manifest.filter(function (e) {
       if (e.name === MANIFEST_KEY) return false;
-      var base  = resolveName('/', e.name).replace(/\/$/, '');
-      var slash = base.lastIndexOf('/');
-      var fileDir = slash >= 0 ? base.substring(0, slash) : '';
+      var slash = e.name.lastIndexOf('/');
+      var fileDir = slash >= 0 ? e.name.substring(0, slash) : '';
       return fileDir === dir;
     });
     for (var lj = 0; lj < lsEntries.length; lj++) {
