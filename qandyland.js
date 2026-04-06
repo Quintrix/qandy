@@ -223,9 +223,9 @@ function formatBytes(bytes) {
 }
 
 // Save a single persistent drive to {driveName}.json in the working directory
-function saveDrive(driveName) {
+function saveDrive(driveName, dir) {
   var drive = drives[driveName];
-  if (!drive || !drive.persistent) return; // Memory-only drives are never persisted
+  if (!drive || !drive.persistent) return null; // Memory-only drives are never persisted
   var data = {};
   data.id       = driveName;
   data.created  = drive.created || new Date().toISOString();
@@ -234,10 +234,12 @@ function saveDrive(driveName) {
   data.manifest = drive.manifest || [];
   data.files    = drive.files    || {};
   data.stats    = calculateDriveStats(drive);
-  var filePath = path.join(DATA_DIR, driveName+'.json');
+  var saveDir = dir ? path.resolve(dir) : DATA_DIR;
+  var filePath = path.join(saveDir, driveName+'.json');
   fs.writeFile(filePath, JSON.stringify(data, null, 2), function (err) {
     if (err) console.warn('Error: '+driveName+' '+(err.message || String(err)));
   });
+  return filePath;
 }
 
 // Kept for legacy compatibility – saves all persistent drives
@@ -1771,8 +1773,36 @@ if (process.stdin.isTTY) {
 
           process.stdout.write('='.repeat(60) + '\n');
           break;
-        }      	
-      	
+        }
+
+        case 'savedrive': {
+          var sdParts = allTokens.slice(1);
+          var sdName  = sdParts[0];
+          var sdDir   = sdParts[1] || null;
+          if (!sdName) {
+            process.stdout.write('Usage: savedrive <drive-name> [directory]\n');
+            break;
+          }
+          var sdNorm = normName(sdName);
+          if (!drives[sdNorm]) {
+            process.stdout.write('Error: drive "' + sdNorm + '" not found.\n');
+            break;
+          }
+          if (!drives[sdNorm].persistent) {
+            process.stdout.write('Error: drive "' + sdNorm + '" is memory-only and cannot be saved.\n');
+            break;
+          }
+          if (sdDir) {
+            try { fs.mkdirSync(path.resolve(sdDir), { recursive: true }); } catch (e) {
+              process.stdout.write('Error: could not create directory "' + sdDir + '": ' + (e.message || String(e)) + '\n');
+              break;
+            }
+          }
+          var sdFilePath = saveDrive(sdNorm, sdDir || null);
+          process.stdout.write('Saving drive "' + sdNorm + '" to ' + sdFilePath + '\n');
+          break;
+        }
+
         case 'create':
           _startCreateWizard(allTokens.slice(1));
           break;
@@ -1859,6 +1889,9 @@ if (process.stdin.isTTY) {
             '                      - Create a new drive (interactive wizard)\n' +
             '                        Arguments match question order; omit any to be prompted.\n' +
             '  list                - List all drives with type\n' +
+            '  savedrive <name> [dir]\n' +
+            '                      - Save drive JSON state to disk\n' +
+            '                        Saves to DATA_DIR if no directory given\n' +
             '  delete <name>       - Delete a drive (no drive mounted) or a file (drive mounted)\n' +
             '\nNavigation commands (mount a drive first):\n' +
             '  mount <drive>       - Mount a drive for navigation\n' +

@@ -42,6 +42,9 @@
     serverstorage [drive-name] — internal storage debug summary, shows
                                     directories, files, content preview
 
+ savedrive <drive-name> [dir] — save the current JSON drive state to disk
+                                    saves to qandyland.js directory if no dir given
+
                           help — show help text
 
 
