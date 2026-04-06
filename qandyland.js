@@ -35,21 +35,23 @@ var MAX_NAME_BYTES = 255;
 var MAX_TOTAL_DRIVE_SIZE = 5 * 1024 * 1024; // 5 MB per drive
 var MAX_FILE_BYTES = 32 * 1024;             // 32 KB per file
 var MAX_DRIVE_FILES = 1000;
-var SESSION_COOKIE = 'qsession';
+var SESSION_COOKIE = 'q';
 var VALID_NAME_RE        = /^(?!\.)[A-Za-z0-9 \-_.()+=!]+$/;
 var VALID_SERVER_NAME_RE = /^(?!\.)[A-Za-z0-9 \-_.()+=]+$/; // server/drive names (no !)
 var MAX_SERVER_NAME_LEN  = 24;
-var DRIVE_FILE_MARKER = '_qandy_drive';      // Marker present in all per-drive JSON files
 var SERVER_CONFIG_FILE = 'qandyland.json';   // Server config file in the working directory
 
+
+// I don't think we'll need these anymore?? 
 var DATA_DIR = process.cwd(); // Working directory used for persistent drive storage
+var MAX_PLAYERS    = 100;
 
 // ── Server discovery / registry ───────────────────────────────────────────────
+
 // Configurable via command-line: node qandyland.js [port] [--name "..."] [--registry "url"] [--maxPlayers N]
 var SERVER_NAME    = 'Qandyland Server';
 var SERVER_VERSION = '1.0';
 var REGISTRY_URL   = 'https://qandy.vercel.app/api/servers';
-var MAX_PLAYERS    = 100;
 var _serverId = null;          // assigned by registry on first POST
 var _publicIp = null;          // detected once on startup
 var _heartbeatTimer = null;
@@ -163,7 +165,7 @@ function startHeartbeat() {
     registerWithRegistry(function (err) {
       if (err) { console.warn('Registry heartbeat failed:', err.message || String(err)); }
     });
-  }, 60 * 60 * 1000); // 1 hour
+  }, 5 * 60 * 1000); // 5 minutes
 }
 
 // ── Request logging ───────────────────────────────────────────────────────────
@@ -225,18 +227,16 @@ function saveDrive(driveName) {
   var drive = drives[driveName];
   if (!drive || !drive.persistent) return; // Memory-only drives are never persisted
   var data = {};
-  data[DRIVE_FILE_MARKER] = true;
   data.id       = driveName;
-  data.version  = '2.0';
   data.created  = drive.created || new Date().toISOString();
   data.owner    = drive.owner   || 'server';
   data.persistent = true;
   data.manifest = drive.manifest || [];
   data.files    = drive.files    || {};
   data.stats    = calculateDriveStats(drive);
-  var filePath = path.join(DATA_DIR, driveName + '.json');
+  var filePath = path.join(DATA_DIR, driveName+'.json');
   fs.writeFile(filePath, JSON.stringify(data, null, 2), function (err) {
-    if (err) console.warn('Failed to save drive ' + driveName + ': ' + (err.message || String(err)));
+    if (err) console.warn('Error: '+driveName+' '+(err.message || String(err)));
   });
 }
 
@@ -295,9 +295,6 @@ function loadDrive(driveName, options) {
     // Read and parse
     var rawText = fs.readFileSync(resolved, 'utf8');
     var info = JSON.parse(rawText);
-
-    // Verify this is a qandy drive file
-    if (!info[DRIVE_FILE_MARKER]) return { success: false, error: 'not a drive JSON (marker missing)' };
 
     // Validate internal id (if present)
     var innerId = normName(info.id || driveId).replace(/\.json$/i, '').replace(/\.js$/i, '');
