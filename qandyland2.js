@@ -559,7 +559,7 @@ function driveCreate(driveName, session) {
     created: ts
   };
 
-  // Initialise the manifest with an empty entry
+  // Initialize the manifest with an empty entry
   _saveManifest(name, []);
 
   return { success: true, result: 'drive created' };
@@ -1177,7 +1177,6 @@ function respond(res, obj) {
 }
 
 function handleQandyland(req, res) {
-  getSession(req, res);
   var session = getSession(req, res);
 
   readBody(req).then(function (raw) {
