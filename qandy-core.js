@@ -585,9 +585,15 @@ window.press=function(event) {
 
   if (event.keyCode === 27) { event.preventDefault(); }
   if (event.keyCode === 16) {
-    var capsBtn = document.getElementById(kid+"caps");
-    if (capsBtn) { capsBtn.style.backgroundColor = "#444"; capsBtn.style.color = "#fff"; }
-    updateKeyLabels();
+    if (event.source === 'virtual') {
+      // Virtual SHIFT: toggle the shift lock state
+      shift = shift ? 0 : 1;
+    }
+    // Physical SHIFT: shift already set from event.shiftKey at top of press()
+    var elShift = document.getElementById(kid+"caps");
+    if (elShift) { elShift.style.backgroundColor = shift ? "#444" : ""; elShift.style.color = shift ? "#fff" : ""; }
+    if (typeof updateKeyLabels === 'function') updateKeyLabels();
+    return;
   }
   if (event.keyCode === 17) {
    if (event.source !== 'virtual') {
@@ -641,6 +647,7 @@ window.press=function(event) {
   if (typeof RUN !== 'undefined' && RUN !== "qandy.js" && typeof keydown === 'function') {
     if (!event.key) { try { event.key = String.fromCharCode(event.keyCode || 0); } catch (e) { event.key = ""; } }
     event.source = event.source || 'physical';
+    event.shiftKey = !!(event.shiftKey || shift);
     event.ctrlKey = !!(event.ctrlKey || ctrl);
     event.altKey  = !!(event.altKey  || alt);
     var remappedKeyCode = event.keyCode;
@@ -701,9 +708,11 @@ window.press=function(event) {
     }
     // Handle physical SHIFT key release (unhighlight CAPS unless caps mode is active)
     if (event.keyCode === 16) {
-      shift = 0;
-      if (typeof updateKeyLabels === 'function') updateKeyLabels();
-      if (!caps) { unhighlightKey('caps'); }
+      if (event.source !== 'virtual') {
+        shift = 0;
+        if (typeof updateKeyLabels === 'function') updateKeyLabels();
+        if (!caps) { unhighlightKey('caps'); }
+      }
       return;
     }
     // Handle physical ALT key release (unhighlight)

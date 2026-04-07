@@ -36,13 +36,13 @@ var drop=[];
 //script.src="world.js";
 //document.head.appendChild(script);
 
-qdosScript("gfx.js");
+if (typeof window.GFX === 'undefined') qdosScript("gfx.js");
 qdosScript("world.js");
 
 login();
 
 async function login() {
- await sleep(2000);
+ while (window.GFX !== 1) { await sleep(100); }
  await print("\nWelcome to Queville\n\nEnter your player name:\n");
  while (true) {
   var l = await input();
@@ -62,7 +62,10 @@ async function login() {
    await print("Type /help for list of Sysop commands.\n\n");
    await print("Type /help [command] for help on that command.\n\n");
    await print("Have Fun!\n\nPress [ESC] Key:");
-   return;
+   while (true) {
+    var cmd = await input();
+    oldinput(cmd);
+   }
   }
  }
 }
@@ -541,8 +544,6 @@ function keydown(key, event) {
     k = event;
   } else {
     // New format - event object
-    k = event.key.toLowerCase();
-    
     // Map special keys to expected format
     switch(event.key) {
       case 'Escape': k = 'esc'; break;
@@ -551,6 +552,16 @@ function keydown(key, event) {
       case 'ArrowUp': k = 'up'; break;
       case 'ArrowDown': k = 'down'; break;
       case 'Enter': k = 'enter'; break;
+      default:
+        // Apply shift state for character keys
+        if (event.shiftKey || (typeof shift !== 'undefined' && shift)) {
+          var base = event.key.toLowerCase();
+          k = (typeof shiftedKeys === 'object' && shiftedKeys.hasOwnProperty(base))
+              ? shiftedKeys[base]
+              : event.key.toUpperCase();
+        } else {
+          k = event.key.toLowerCase();
+        }
     }
   }
   
