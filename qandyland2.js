@@ -1152,6 +1152,32 @@ function bigbang(driveName, mapString, players, isRound, session) {
   };
 }
 
+// ── Secure terminal output sanitization ───────────────────────────────────────
+
+// Sanitize arbitrary file content before writing it to the server terminal.
+// Strips control characters (except \n), ANSI/VT escape sequences, and other
+// sequences that could manipulate the terminal or cause unexpected behaviour.
+function sanitizeForTerminal(content) {
+  var s = (content == null) ? '' : String(content);
+
+  // Remove ANSI/VT escape sequences: ESC followed by [ or ( or ) or other
+  // introducers, plus the rest of the sequence.
+  // Covers: CSI sequences (ESC [ ... final), OSC sequences (ESC ] ... ST/BEL),
+  // and other two-char ESC sequences.
+  s = s.replace(/\x1b\[[\x20-\x3f]*[\x40-\x7e]/g, '');  // CSI sequences (full spec)
+  s = s.replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, ''); // OSC sequences
+  s = s.replace(/\x1b[PX^_][^\x1b]*\x1b\\/g, '');     // DCS/SOS/PM/APC
+  s = s.replace(/\x1b[()][A-Za-z0-9]/g, '');           // character set designations
+  s = s.replace(/\x1b./g, '');                         // any remaining two-char ESC seq (aggressive)
+
+  // Remove all ASCII control characters except \n (0x0A).
+  // This covers NUL, BEL, BS, HT, VT, FF, CR, SO, SI, DEL, and others.
+  // eslint-disable-next-line no-control-regex
+  s = s.replace(/[\x00-\x09\x0b-\x1f\x7f]/g, '');
+
+  return s;
+}
+
 // ── Server console formatting helpers ─────────────────────────────────────────
 
 function _formatTimestampShort(ts) {
@@ -1505,6 +1531,44 @@ if (process.stdin.isTTY) {
                          ' (' + (exEntry.owner || '(none)') + ')\n');
   }
 
+  var TYPE_MAX_BYTES = 65536; // 64 KB display limit
+
+  function _handleType(name) {
+    if (!name) { process.stdout.write('Usage: type <filename>\n'); return; }
+    if (!_serverMountedDrive) { process.stdout.write('No drive mounted. Use: mount <drive>\n'); return; }
+    var canonical = resolveName(_serverCwd, normName(name));
+    var manifest = _readManifest(_serverMountedDrive);
+    var tyEntry = null;
+    for (var fi = 0; fi < manifest.length; fi++) {
+      if (manifest[fi].name === canonical) { tyEntry = manifest[fi]; break; }
+    }
+    // Fall back to basename match for convenience (e.g. user types just "p.txt")
+    if (!tyEntry) tyEntry = _findEntry(manifest, name);
+    if (!tyEntry) { process.stdout.write('Error: file "' + name + '" not found.\n'); return; }
+
+    var result = fileLoad(_serverMountedDrive, _serverCwd, tyEntry.name, 'console');
+    if (!result.success) { process.stdout.write('Error: ' + result.error + '\n'); return; }
+
+    var raw = result.content;
+    var size = (raw == null) ? 0 : String(raw).length;
+    var truncated = false;
+    var display = (raw == null) ? '' : String(raw);
+    if (display.length > TYPE_MAX_BYTES) {
+      display = display.slice(0, TYPE_MAX_BYTES);
+      truncated = true;
+    }
+    var safe = sanitizeForTerminal(display);
+
+    process.stdout.write('File: ' + tyEntry.name + '  (' + size + ' bytes)\n');
+    process.stdout.write('──── begin ────────────────────────────\n');
+    process.stdout.write(safe);
+    if (safe.length > 0 && safe[safe.length - 1] !== '\n') process.stdout.write('\n');
+    process.stdout.write('──── end ──────────────────────────────\n');
+    if (truncated) {
+      process.stdout.write('(Output truncated at ' + TYPE_MAX_BYTES + ' bytes. Full size: ' + size + ' bytes)\n');
+    }
+  }
+
   function _wizardPrompt(msg) {
     process.stdout.write(msg);
   }
@@ -1757,6 +1821,10 @@ if (process.stdin.isTTY) {
           _handleExamine(arg);
           break;
 
+        case 'type':
+          _handleType(arg);
+          break;
+
         case 'delete':
           if (_serverMountedDrive) {
             if (!arg) { process.stdout.write('Usage: delete <filename>\n'); break; }
@@ -1790,6 +1858,7 @@ if (process.stdin.isTTY) {
             '  rmdir <name>         - Remove an empty directory\n' +
             '  rename <old>=<new>   - Rename a file\n' +
             '  exam <name>          - Examine file metadata in detail\n' +
+            '  type <name>          - Display file contents safely (strips control chars)\n' +
             '  help                 - Show this help\n'
           );
           break;
