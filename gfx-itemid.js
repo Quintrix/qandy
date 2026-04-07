@@ -1,5 +1,4 @@
 window.ItemID=function(i) {
-alert("here");
 if (i=="Aa") { return "Travel Boots"; }
 if (i=="Ab") { return "Hiking Boots"; }
 if (i=="Ac") { return "Swamp Boots"; }
@@ -26,7 +25,7 @@ if (i=="Ld") { return "Red Bandana"; }
 if (i=="Le") { return "Blue Bandana"; }
 if (i=="Lf") { return "Mask"; }
 if (i=="Ma") { return "Cylon Helm"; }
-if (i=="Mb) { return "Cylon Helm"; }
+if (i=="Mb") { return "Cylon Helm"; }
 if (i=="Mc") { return "Spider"; }
 if (i=="Md") { return "Mosquito"; }
 if (i=="Me") { return "Scorpion"; }

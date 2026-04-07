@@ -47,9 +47,9 @@ async function login() {
  while (true) {
   var l = await input();
   if (l.length<3) {
-   await print("Name must be at least three characters.<br>Enter your player name:<br>");
+   await print("Name must be at least three characters.\n\nEnter your player name:\n");
   } else if (l.substring(0,3).toUpperCase()==="BOT") {
-   await print("Name cannot start with BOT.<br>Enter your player name:<br>");
+   await print("\nName cannot start with BOT.\n\nEnter your player name:\n");
   } else {
    await gfxInit();
    PName=l;
@@ -61,7 +61,7 @@ async function login() {
    await print("Wear Sysop Hat to access Sysop Menu and Sysop Help.\n\n");
    await print("Type /help for list of Sysop commands.\n\n");
    await print("Type /help [command] for help on that command.\n\n");
-   await print("Have Fun!<p>Press [ESC] Key:");
+   await print("Have Fun!\n\nPress [ESC] Key:");
    return;
   }
  }
