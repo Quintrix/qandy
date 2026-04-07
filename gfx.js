@@ -475,6 +475,7 @@ window.gfxCreation = async function(drive, mapString, lobbyMap, isRound) {
 };
 
 splash(1000);
+alert("load gfx-itemid.js");
 qdosScript("gfx-itemid.js");
 async function splash(durationMs) {
   _CURSOR=CURSOR; CURSOR=0;
