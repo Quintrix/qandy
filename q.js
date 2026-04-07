@@ -32,35 +32,38 @@ var maps=[];
 var sign=[];
 var drop=[]; 
 
-qdosScript("gfx.js");
-qdosScript("world.js");
-
 //script=document.createElement('script');
 //script.src="world.js";
 //document.head.appendChild(script);
 
+qdosScript("gfx-itemid.js");
+qdosScript("gfx.js");
+qdosScript("world.js");
+
 login();
 
 async function login() {
- print("\nWelcome to Queville\n\nEnter your player name:\n");
+ sleep(2000);
+ await print("\nWelcome to Queville\n\nEnter your player name:\n");
  while (true) {
   var l = await input();
   if (l.length<3) {
-   print("Name must be at least three characters.<br>Enter your player name:<br>");
+   await print("Name must be at least three characters.<br>Enter your player name:<br>");
   } else if (l.substring(0,3).toUpperCase()==="BOT") {
-   print("Name cannot start with BOT.<br>Enter your player name:<br>");
+   await print("Name cannot start with BOT.<br>Enter your player name:<br>");
   } else {
+   await gfxInit();
    PName=l;
    PForce="visible";
    NewChar("");
    await LMap(PMap);
    cls();
-   print("Latest Updates:\n\n");
-   print("Wear Sysop Hat to access Sysop Menu and Sysop Help.\n\n");
-   print("Type /help for list of Sysop commands.\n\n");
-   print("Type /help [command] for help on that command.\n\n");
-   print("Have Fun!<p>Press [ESC] Key:");
-   break;
+   await print("Latest Updates:\n\n");
+   await print("Wear Sysop Hat to access Sysop Menu and Sysop Help.\n\n");
+   await print("Type /help for list of Sysop commands.\n\n");
+   await print("Type /help [command] for help on that command.\n\n");
+   await print("Have Fun!<p>Press [ESC] Key:");
+   return;
   }
  }
 }

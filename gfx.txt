@@ -1,0 +1,35 @@
+
+                         server:// — serverStorage 
+                         
+         (gfx=game name) gfx drive — server://gfx/
+         
+             world map directories — server://gfx/w/
+             
+                   player manifest — server://gfx/p.txt
+                   
+                                     text flat file one entry per line populated with
+                                     qandy-style two-character ID codes with no seperators
+             
+How player manifest should work: every 'player' in the game is an 'item' and is assigned a two character item code, the file gfx-itemid.js has the 'master list' of all items ID codes, each code has a corasponding image a qandy-host.htm subdirectory 'i' (for items). Players fill the rows Sa-Sz and Ta-Tz which gives each team 26 players. 
+
+The first thing that needs to happen is capflag.js needs to ping the server for the 'lobby' map. That map will be a small map consisting of two or four (haven't figured out which yet) map screens that will have all player 'items' on them.  This means I'll need to update images from Sa-Tz to be a 'grey player' that has the shape of a player but no colors to indicate it is an 'inactive player'. 
+
+So the client itself is not considered a 'player' yet, the user will need to click on one of the 'player' items on the ground and select 'Join Game' at which point they will become that item and it will be changed from a simple one-image item into the player's rendered avatar string. The list of player's avatar strings is saved in the player manifest file at server://gfx/p.txt and is in this format: [PlayerID][head[body][hat][sword][shield]-[name] ... each of these fields (except name) is a two-character ItemID code that can all be rendered on top of each other via the 'paper doll' character engine. The /p.txt file is the full manifest for server use, each map directory will have it's own p.txt player manifest with the player's on that screen ... this way the client is only downloading the players they can 'see' (the ones on the same map screen). 
+
+The 'name' field is not to be considered 'unique', it is not an ID. All names should be pre-populated as 'Team S Player x' or 'Team T Player x' with x being their number 1-26 (a-z). We'll add a command where players can change their name in the future, let's get this working before we add bells and whistles. 
+
+To get any of this to work, we need to assemble a 'map state' string that  a single server request that can use to transmit everything the client needs to render any given map, and do so using the absolute least amount of bandwidth possible -even 1 character being server to 1 hundred players every 1 second for hours adds up into huge amounts of bandwidth. These are the map files a client will need: m.txt (tiles), e.txt which contains a list of valid exits, and p.txt (player avatars). 
+
+We know the length of m.txt so it goes first. 
+
+Next a list of exists, which is a list of valid maps an item can be moved to, this allows for server-side validation of all player movements to ensure they don't exploit a teleport cheat. Each valid exit will be two-characters (ie: w/F5/e.txt = F4F6E5G5) ... that gets added to our map string followed by a single dot '.' separator. 
+
+Finally, the list of player avatars from p.txt, because each avatar length if variable we will need a dot '.' separator between each one. So the final string with two players on the map would have: var state="[96 map tiles]F4F6E5G5.SaA1C1J0.SbE2G2I1"
+
+So when capflag.js requests to join game, it returns "[96 map tiles]F4F6E5G5.SaA1C1J0.SbE2G2I1" and then capflag.js can render the map.
+  
+
+
+
+
+

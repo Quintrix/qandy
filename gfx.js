@@ -436,6 +436,10 @@ window.LoadMap = async function(a) {
 //   lobbyMap  – 2-char map ID where all players start, e.g. "A1"
 //   isRound   – true if world edges wrap (A↔Z, 1↔9); false for flat world
 
+// A1-L8 = small game  (8 rows wide, 12 rows tall) (fits on cell phone screen)
+// A0-Z9 = big game (10 rows wide, 26 rows tall)
+// Aa-Zz = huge game (26 rows wide, 26 rows tall)
+
 window.gfxCreation = async function(drive, mapString, lobbyMap, isRound) {
   if (!drive)     throw new Error('gfxBigBang: drive is required');
   if (!mapString) throw new Error('gfxBigBang: mapString is required');
@@ -470,6 +474,7 @@ window.gfxCreation = async function(drive, mapString, lobbyMap, isRound) {
 
 splash(1000);
 async function splash(durationMs) {
+  qdosScript("gfx-itemid.js");
   _CURSOR=CURSOR; CURSOR=0;
   await print("\n\n\n");
   header="Quintrix and Crew Software";

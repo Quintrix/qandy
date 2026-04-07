@@ -47,7 +47,11 @@ window.flagConnect = async function() {
     }
     _serverUrl = proto + '://' + gfxConnected.host + ':' + gfxConnected.port + '/qandyland.js';
 
-    // Check if world exists before creating
+    gfxFetchMap("A1");
+    
+    
+    
+// Check if world exists before creating
     var worldExists = false;
     try {
       var testResult = await checkWorldExists();
