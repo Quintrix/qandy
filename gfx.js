@@ -440,6 +440,8 @@ window.LoadMap = async function(a) {
 // A0-Z9 = big game (10 rows wide, 26 rows tall)
 // Aa-Zz = huge game (26 rows wide, 26 rows tall)
 
+
+// this function is wrong, the GUEST can't use fetch()
 window.gfxCreation = async function(drive, mapString, lobbyMap, isRound) {
   if (!drive)     throw new Error('gfxBigBang: drive is required');
   if (!mapString) throw new Error('gfxBigBang: mapString is required');
@@ -473,8 +475,8 @@ window.gfxCreation = async function(drive, mapString, lobbyMap, isRound) {
 };
 
 splash(1000);
+qdosScript("gfx-itemid.js");
 async function splash(durationMs) {
-  qdosScript("gfx-itemid.js");
   _CURSOR=CURSOR; CURSOR=0;
   await print("\n\n\n");
   header="Quintrix and Crew Software";

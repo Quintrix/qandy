@@ -36,14 +36,13 @@ var drop=[];
 //script.src="world.js";
 //document.head.appendChild(script);
 
-qdosScript("gfx-itemid.js");
 qdosScript("gfx.js");
 qdosScript("world.js");
 
 login();
 
 async function login() {
- sleep(2000);
+ await sleep(2000);
  await print("\nWelcome to Queville\n\nEnter your player name:\n");
  while (true) {
   var l = await input();

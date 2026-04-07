@@ -1,4 +1,5 @@
-function ItemID(i) {
+window.ItemID=function(i) {
+alert("here");
 if (i=="Aa") { return "Travel Boots"; }
 if (i=="Ab") { return "Hiking Boots"; }
 if (i=="Ac") { return "Swamp Boots"; }
