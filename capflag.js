@@ -47,40 +47,12 @@ window.flagConnect = async function() {
     }
     _serverUrl = proto + '://' + gfxConnected.host + ':' + gfxConnected.port + '/qandyland.js';
 
-    gfxFetchMap("A1");
-    
-    
-    
-// Check if world exists before creating
-    var worldExists = false;
-    try {
-      var testResult = await checkWorldExists();
-      worldExists = testResult === true;
-    } catch (e) {
-      worldExists = false;
-    }
-
-    if (!worldExists) {
-      await print("\nNo world found.\nCreating new world...\n");
-
-      var drive = "gfx";
-      var mapString = maps('A', 'L', 1, 8);
-      var lobbyMap = "F4";
-      var isRound = false;
-
-      var res = await gfxCreation(drive, mapString, lobbyMap, isRound);
-      //
-      //  need to process this data and format results
-      //  await print("World creation result: " + JSON.stringify(res) + "\n");
-      //
-    } else {
-      await print("\nLoading world...");
-      try {
-        await loadWorldConfig();
-      } catch (e) {
-        await print("\nError: loadWorldConfig " + e.message + "\n");
-      }
-    }
+    await print("\nNo world found.\nCreating new world...\n");
+    var drive = "gfx";
+    var mapString = maps('A', 'L', 1, 8);
+    var players = ["Sa", "Sb", "Sc", "Ta", "Tb", "Tc"];
+    var isRound = false;
+    var res = await gfxCreation(drive, mapString, players, isRound);
 
     await print("\nConnected!\n");
     // return server connected to here
