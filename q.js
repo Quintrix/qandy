@@ -555,9 +555,9 @@ function keydown(key, event) {
       default:
         // Apply shift state for character keys
         if (event.shiftKey || (typeof shift !== 'undefined' && shift)) {
-          var base = event.key.toLowerCase();
-          k = (typeof shiftedKeys === 'object' && shiftedKeys.hasOwnProperty(base))
-              ? shiftedKeys[base]
+          var baseKey = event.key.toLowerCase();
+          k = (typeof shiftedKeys === 'object' && shiftedKeys.hasOwnProperty(baseKey))
+              ? shiftedKeys[baseKey]
               : event.key.toUpperCase();
         } else {
           k = event.key.toLowerCase();

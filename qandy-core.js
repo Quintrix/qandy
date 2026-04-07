@@ -590,8 +590,8 @@ window.press=function(event) {
       shift = shift ? 0 : 1;
     }
     // Physical SHIFT: shift already set from event.shiftKey at top of press()
-    var elShift = document.getElementById(kid+"caps");
-    if (elShift) { elShift.style.backgroundColor = shift ? "#444" : ""; elShift.style.color = shift ? "#fff" : ""; }
+    var capsBtn = document.getElementById(kid+"caps");
+    if (capsBtn) { capsBtn.style.backgroundColor = shift ? "#444" : ""; capsBtn.style.color = shift ? "#fff" : ""; }
     if (typeof updateKeyLabels === 'function') updateKeyLabels();
     return;
   }
