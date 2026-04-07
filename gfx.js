@@ -433,7 +433,7 @@ window.LoadMap = async function(a) {
 
 //   drive     – server drive to build world on (e.g. "gfx.js")
 //   mapString – topology string, e.g. "A1A2A3B1B2B3"
-//   lobbyMap  – 2-char map ID where all players start, e.g. "A1"
+//   players   – array of 2-char player codes, e.g. ["Sa","Sb","Ta","Tb"]
 //   isRound   – true if world edges wrap (A↔Z, 1↔9); false for flat world
 
 // A1-L8 = small game  (8 rows wide, 12 rows tall) (fits on cell phone screen)
@@ -442,16 +442,16 @@ window.LoadMap = async function(a) {
 
 
 // this function is wrong, the GUEST can't use fetch()
-window.gfxCreation = async function(drive, mapString, lobbyMap, isRound) {
-  if (!drive)     throw new Error('gfxBigBang: drive is required');
-  if (!mapString) throw new Error('gfxBigBang: mapString is required');
-  if (!lobbyMap)  throw new Error('gfxBigBang: lobbyMap is required');
+window.gfxCreation = async function(drive, mapString, players, isRound) {
+  if (!drive)                       throw new Error('gfxCreation: drive is required');
+  if (!mapString)                   throw new Error('gfxCreation: mapString is required');
+  if (!players || !players.length)  throw new Error('gfxCreation: players is required');
 
   var payload = {
     method:    'bigbang',
     drive:     String(drive),
     mapString: String(mapString),
-    lobbyMap:  String(lobbyMap),
+    players:   Array.isArray(players) ? players : [players],
     isRound:   isRound === true || isRound === 'true'
   };
 
@@ -470,7 +470,7 @@ window.gfxCreation = async function(drive, mapString, lobbyMap, isRound) {
     }
     return result;
   } catch (e) {
-    throw new Error('gfxBigBang: ' + (e.message || String(e)));
+    throw new Error('gfxCreation: ' + (e.message || String(e)));
   }
 };
 

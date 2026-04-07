@@ -974,16 +974,17 @@ function matchPattern(name, pattern) {
 // Creates a multiplayer world on the server from a map topology string.
 // Called by gfxCreation() scripts to set up worlds for capture-the-flag etc.
 //
-// bigbang(drive, "A1A2A3B1B2B3", "A1", true)
+// bigbang(drive, "A1A2A3B1B2B3", ["Sa","Sb","Ta","Tb"], true)
 //   drive     – drive name to create world on (e.g. "gfx.js")
 //   mapString – 2-char map IDs concatenated: "A1A2B1B2" → A1, A2, B1, B2
-//   lobbyMap  – map where all players spawn (must be in mapString)
+//   players   – array of 2-char player codes (uppercase letter + lowercase letter/number)
 //   isRound   – if true, world edges wrap (A↔Z, 1↔9 / A↔Z for col)
 //
 // Creates server://{drive}/w/{mapId}/  for each map, with:
-//   a.txt  – lobby map ID (world alpha / entry point)
 //   m.txt  – 194-char procedural tileset string
 //   e.txt  – legal exit destinations (pre-calculated, no runtime physics needed)
+// Creates server://{drive}/p.txt with empty player slots:
+//   Sa=\nSb=\n...
 
 var BIGBANG_TILE_POOL = [
   'Ga','Ga','Ga','Ga','Ga',
@@ -1078,7 +1079,7 @@ function calculateLegalMoves(currentMap, mapsSet, isRound) {
   return exits;
 }
 
-function bigbang(driveName, mapString, lobbyMap, isRound, session) {
+function bigbang(driveName, mapString, players, isRound, session) {
   var drive = drives[driveName];
   if (!drive) return { success: false, error: 'drive not mounted: ' + driveName };
 
@@ -1089,10 +1090,16 @@ function bigbang(driveName, mapString, lobbyMap, isRound, session) {
   var mapsSet = {};
   for (var k = 0; k < allMaps.length; k++) mapsSet[allMaps[k]] = true;
 
-  var lobby = normName(lobbyMap);
-  if (!lobby) return { success: false, error: 'lobbyMap is required' };
-  if (!mapsSet[lobby]) {
-    return { success: false, error: 'lobbyMap "' + lobby + '" not found in mapString' };
+  // Validate players list.
+  var playersList = Array.isArray(players) ? players : [];
+  if (playersList.length === 0) {
+    return { success: false, error: 'players list is required and cannot be empty' };
+  }
+  for (var p = 0; p < playersList.length; p++) {
+    var code = String(playersList[p] || '');
+    if (!/^[A-Z][a-z0-9]$/.test(code)) {
+      return { success: false, error: 'invalid player code "' + code + '" (must be uppercase letter + lowercase letter/number)' };
+    }
   }
 
   var round = (isRound === true || isRound === 'true' || isRound === 1);
@@ -1114,9 +1121,6 @@ function bigbang(driveName, mapString, lobbyMap, isRound, session) {
       continue;
     }
 
-    var aResult = fileSave(driveName, '/', dirPath + '/a.txt', lobby, session, 'bigbang');
-    if (!aResult.success) errors.push(dirPath + '/a.txt: ' + aResult.error);
-
     var tileset = getRandomTileset();
     var mResult = fileSave(driveName, '/', dirPath + '/m.txt', tileset, session, 'bigbang');
     if (!mResult.success) errors.push(dirPath + '/m.txt: ' + mResult.error);
@@ -1128,15 +1132,23 @@ function bigbang(driveName, mapString, lobbyMap, isRound, session) {
     created.push(mapId);
   }
 
+  // Create root p.txt with empty player slots.
+  var playerSlots = '';
+  for (var j = 0; j < playersList.length; j++) {
+    playerSlots += playersList[j] + '=\n';
+  }
+  var pResult = fileSave(driveName, '/', 'p.txt', playerSlots, session, 'bigbang');
+  if (!pResult.success) errors.push('p.txt: ' + pResult.error);
+
   if (errors.length > 0) {
     return { success: false, error: errors.join('; '), maps: created };
   }
 
   return {
     success: true,
-    result:  'World created: ' + allMaps.length + ' map' + (allMaps.length !== 1 ? 's' : ''),
+    result:  'World created: ' + allMaps.length + ' map' + (allMaps.length !== 1 ? 's' : '') + ', ' + playersList.length + ' player slots',
     maps:    created,
-    lobby:   lobby
+    players: playersList
   };
 }
 
@@ -1258,9 +1270,9 @@ function handleQandyland(req, res) {
 
       case 'bigbang': {
         var mapString  = normName(pkt.mapString  || '');
-        var lobbyMap   = normName(pkt.lobbyMap   || '');
+        var players    = pkt.players || [];
         var isRound    = pkt.isRound;
-        result = bigbang(drive, mapString, lobbyMap, isRound, session);
+        result = bigbang(drive, mapString, players, isRound, session);
         logRequest(req, method, drive, mapString, session, result);
         return respond(res, result);
       }
