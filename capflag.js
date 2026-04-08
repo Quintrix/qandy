@@ -15,6 +15,12 @@ var PZ = 0;
 var PUP = "";
 var PopForce = "";
 
+// Multiplayer state
+var emptySlots = [];        // available empty player slot codes from GS response
+var rfInterval = null;      // handle for the RF refresh timer
+var playerItemId = null;    // this client's chosen player slot ItemID (e.g. "Sa")
+var playerAvatarStr = "";   // this client's 4-char avatar string (e.g. "B0D0")
+
 qdosScript("gfx.js");
 startup();
 
@@ -92,7 +98,7 @@ window.flagConnect = async function() {
       var slots = manifest.split('.');
       // Empty slot: exactly 2-char player code with no avatar data (e.g. "Sa")
       // Occupied slot: player code + avatar data (e.g. "SaM3N2L3")
-      var emptySlots = slots.filter(function(slot) { return slot.length === 2; });
+      emptySlots = slots.filter(function(slot) { return slot.length === 2; });
 
       if (emptySlots.length === 0) {
         await print("Server full. Returning to server selection...\n");
@@ -146,7 +152,7 @@ window.NewChar = function(a) {
   } else {
   	if (a.length==2) {
   	 if (a.charAt(0)=="F") { PObj=a+"H0"; } else { PObj=a+"D0"; }
-    char(PName,PObj,PZ); PForce="hidden"; hpop(); mainloop();
+    selectPlayerSlot(PObj);
   	} else {
     PX=2; PY=9; PZ=(PY*(mapx+1))+PX;
     pop("<p>Male or Female?<br><a href=\"javascript:NewChar(\'M\');\"><img src=\"c/B1.png\" height=128 width=64></a> &nbsp; <a href=\"javascript:NewChar(\'F\');\"><img src=\"c/F5.png\" height=128 width=64></a>");
@@ -157,6 +163,69 @@ window.NewChar = function(a) {
 
 function mainloop() {
  // Avatar selection complete - PObj holds the 4-character avatar string
+}
+
+// Step 2 of join flow: display available empty player slots so the player can
+// pick their "player hat" – the ItemID that becomes their in-game identity.
+window.selectPlayerSlot = function(avatarStr) {
+ playerAvatarStr = avatarStr;
+ var html = "Select player slot:<p>";
+ for (var i = 0; i < emptySlots.length; i++) {
+  var slot = emptySlots[i];
+  html += "<a href=\"javascript:joinGame('" + slot + "');\"><img src=\"i/" + slot + ".png\" height=32 width=32 title='" + slot + "'></a> &nbsp; ";
+ }
+ html += "<p><small>Team One (S-slots) &nbsp; Team Two (T-slots)</small>";
+ pop(html);
+};
+
+// Step 3 of join flow: send JG (Join Game) command with chosen ItemID + avatar.
+// Server updates p.txt manifest and creates the player file in the map directory.
+window.joinGame = async function(itemId) {
+ hpop();
+ playerItemId = itemId;
+ var drive = "gfx";
+ try {
+  var res = await gfxPing("JG", { d: drive, id: itemId, av: playerAvatarStr });
+  if (res.startsWith("OK")) {
+   // Start the 1-second RF (Refresh) tick for real-time updates
+   var mapId = (itemId.charAt(0) === 'S') ? 'A1' : 'L8';
+   if (rfInterval) clearInterval(rfInterval);
+   rfInterval = setInterval(async function() {
+    try {
+     var rfRes = await gfxPing("RF", { d: drive, m: mapId });
+     renderMPItems(rfRes);
+    } catch (e) { console.error('RF tick error:', e); }
+   }, 1000);
+  } else {
+   pop("Error joining: " + res + "<p><a href=\"javascript:selectPlayerSlot(playerAvatarStr);\">Try again</a>");
+  }
+ } catch (e) {
+  pop("Connection error.<p><a href=\"javascript:selectPlayerSlot(playerAvatarStr);\">Try again</a>");
+ }
+};
+
+// Render all player items from an RF response string.
+// rfStr is a sequence of 4-char codes: 2-char ItemID + 2-digit z-location, e.g. "Sa43Tb43".
+function renderMPItems(rfStr) {
+ // Remove previously rendered MP items
+ var old = document.querySelectorAll('.mp-item');
+ for (var i = 0; i < old.length; i++) { old[i].parentNode.removeChild(old[i]); }
+ // Render each item at its z-position on the map
+ for (var j = 0; j + 4 <= rfStr.length; j += 4) {
+  var iId = rfStr.slice(j, j + 2);
+  var z = parseInt(rfStr.slice(j + 2, j + 4), 10);
+  if (isNaN(z)) continue;
+  var y = Math.floor(z / (mapx + 1));
+  var x = z - (y * (mapx + 1));
+  var img = document.createElement('img');
+  img.className = 'mp-item';
+  img.src = 'i/' + iId + '.png';
+  img.style.position = 'absolute';
+  img.style.top  = (32 + 20 + (y * 32)) + 'px';
+  img.style.left = (32 + 22 + (x * 32)) + 'px';
+  img.style.zIndex = '120';
+  document.body.appendChild(img);
+ }
 }
 
 // flagServers.js

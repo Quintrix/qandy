@@ -49,6 +49,14 @@ var SERVER_CONFIG_FILE = 'qandyland.json';   // Server config file in the workin
 
 var MAX_PLAYERS    = 100;
 
+// Session → { itemId, mapId, drive } ownership map: ensures a session can only
+// control the item it joined with.  Best-effort for same-origin connections.
+var _playerOwnership = {};
+
+// Default center z-position for player spawn on an 8-column map (mapx=7).
+// Calculated as: y=5, x=3 → z = y*(mapx+1) + x = 5*8 + 3 = 43.
+var DEFAULT_SPAWN_Z = '43';
+
 // ── Server discovery / registry ───────────────────────────────────────────────
 
 // Configurable via command-line: node qandyland2.js [port] [--name "..."] [--registry "url"] [--maxPlayers N]
@@ -1251,6 +1259,12 @@ function parsePlayerManifest(content) {
     slots.push(code + avatar);
   }
   var state = hasActive ? 'IP' : 'JS';
+  // 
+  // @@ game state needs to remain at 'JS' until we implement a system
+  // for all players have voted to 'start game', we will discuss a method
+  // to do this in the prompt 
+  //  
+  var state = 'JS';
   return state + slots.join('.');
 }
 
@@ -1347,6 +1361,103 @@ function handleCommand(req, res, raw) {
       var gsResponse = parsePlayerManifest(gsLoad.content);
       logRequest(req, 'GS', gsDrive, '', session, { success: true, result: gsResponse });
       return respondRetro(res, gsResponse);
+    }
+
+    case 'JG': {
+      // Join Game: claim an empty player slot and create the player file on the map.
+      // Parameters: d=drive, id=itemId (e.g. "Sa"), av=avatar (4-char, e.g. "B0D0")
+      var jgDrive  = String(params.d  || '');
+      var jgItemId = String(params.id || '');
+      var jgAvatar = String(params.av || '');
+
+      if (!isValidDriveName(jgDrive))            return respondRetro(res, 'XXInvalid drive');
+      if (!/^[A-Z][a-z]$/.test(jgItemId))        return respondRetro(res, 'XXInvalid item ID');
+      if (!/^[A-Za-z0-9]{4}$/.test(jgAvatar))    return respondRetro(res, 'XXInvalid avatar');
+      if (!drives[jgDrive])                       return respondRetro(res, 'XXDrive not found');
+
+      // Load p.txt and find the requested slot
+      var jgLoad = fileLoad(jgDrive, '/', 'p.txt', session);
+      if (!jgLoad.success) return respondRetro(res, 'XXWorld not found');
+
+      var jgLines    = jgLoad.content.split('\n');
+      var jgFound    = false;
+      var jgNewLines = [];
+      for (var jgi = 0; jgi < jgLines.length; jgi++) {
+        var jgLine = jgLines[jgi].trim();
+        if (!jgLine) continue;
+        var jgEq = jgLine.indexOf('=');
+        if (jgEq < 0) { jgNewLines.push(jgLine); continue; }
+        var jgCode       = jgLine.slice(0, jgEq);
+        var jgAvatarData = jgLine.slice(jgEq + 1).trim();
+        if (jgCode === jgItemId) {
+          if (jgAvatarData.length > 0) return respondRetro(res, 'XXSlot already taken');
+          jgNewLines.push(jgCode + '=' + jgAvatar);
+          jgFound = true;
+        } else {
+          jgNewLines.push(jgLine);
+        }
+      }
+      if (!jgFound) return respondRetro(res, 'XXItem ID not in manifest');
+
+      // Save updated p.txt
+      var jgPSave = fileSave(jgDrive, '/', 'p.txt', jgNewLines.join('\n') + '\n', session, 'JG');
+      if (!jgPSave.success) return respondRetro(res, 'XXFailed to update manifest');
+
+//
+// @@ let's make spawn space more complex by assigning each player it's own spawn
+//    z-location so that all the player's can be seen at the same time. No z-location
+//    should be on an edge tile that are used to trigger scrolling north/south/east/west  
+//
+
+      // Determine spawn map: Team One (S*) → A1, Team Two (T*) → L8
+      var jgMapId = (jgItemId.charAt(0) === 'S') ? 'A1' : 'L8';
+
+      // Player file name: ItemID + 2-digit z-location (padded), e.g. "Sa43.txt"
+      var jgZ    = DEFAULT_SPAWN_Z;
+      var jgFile = 'w/' + jgMapId + '/' + jgItemId + jgZ + '.txt';
+
+      // Only create player file if it does not already exist
+      var jgEx = fileExists(jgDrive, '/', jgFile, session);
+      if (!(jgEx.success && jgEx.result)) {
+        var jgCreate = fileSave(jgDrive, '/', jgFile, '', session, 'JG');
+        if (!jgCreate.success) return respondRetro(res, 'XXFailed to create player file');
+      }
+
+      // Record session ownership so future move commands can be authorised
+      _playerOwnership[session] = { itemId: jgItemId, mapId: jgMapId, drive: jgDrive };
+
+      logRequest(req, 'JG', jgDrive, jgItemId, session, { success: true });
+      return respondRetro(res, 'OK' + jgItemId + jgZ);
+    }
+
+    case 'RF': {
+      // Refresh: return a directory listing of all player items on a given map.
+      // Parameters: d=drive, m=mapId (e.g. "A1")
+      // Response: concatenated 4-char strings, e.g. "Sa43Sb43" (ItemID + z-location)
+      var rfDrive = String(params.d || '');
+      var rfMapId = String(params.m || '');
+
+      if (!isValidDriveName(rfDrive))            return respondRetro(res, 'XXInvalid drive');
+      if (!/^[A-Z][1-9A-Z]$/.test(rfMapId))      return respondRetro(res, 'XXInvalid map ID');
+      if (!drives[rfDrive])                       return respondRetro(res, 'XXDrive not found');
+
+      // List all files in w/[mapId]/ directory
+      var rfList = fileList(rfDrive, 'w/' + rfMapId, null, session);
+      var rfItems = '';
+      if (rfList.success && rfList.listing) {
+        var rfFiles = rfList.listing.split('\n');
+        for (var rfi = 0; rfi < rfFiles.length; rfi++) {
+          var rfFile = rfFiles[rfi].trim();
+          if (!rfFile) continue;
+          // Extract base filename and match [A-Z][a-z][digit][digit].txt
+          var rfBase  = rfFile.substring(rfFile.lastIndexOf('/') + 1);
+          var rfMatch = rfBase.match(/^([A-Z][a-z]\d{2})\.txt$/);
+          if (rfMatch) rfItems += rfMatch[1];
+        }
+      }
+
+      logRequest(req, 'RF', rfDrive, rfMapId, session, { success: true, result: rfItems });
+      return respondRetro(res, rfItems);
     }
 
     default:
