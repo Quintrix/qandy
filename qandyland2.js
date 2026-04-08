@@ -974,10 +974,10 @@ function matchPattern(name, pattern) {
 // Creates a multiplayer world on the server from a map topology string.
 // Called by gfxCreation() scripts to set up worlds for capture-the-flag etc.
 //
-// bigbang(drive, "A1A2A3B1B2B3", ["Sa","Sb","Ta","Tb"], true)
+// bigbang(drive, "A1A2A3B1B2B3", "SaSbScTaTbTc", true)
 //   drive     – drive name to create world on (e.g. "gfx.js")
 //   mapString – 2-char map IDs concatenated: "A1A2B1B2" → A1, A2, B1, B2
-//   players   – array of 2-char player codes (uppercase letter + lowercase letter/number)
+//   players   – player string of concatenated 2-char codes, e.g. "SaSbScTaTbTc"
 //   isRound   – if true, world edges wrap (A↔Z, 1↔9 / A↔Z for col)
 //
 // Creates server://{drive}/w/{mapId}/  for each map, with:
@@ -1090,8 +1090,16 @@ function bigbang(driveName, mapString, players, isRound, session) {
   var mapsSet = {};
   for (var k = 0; k < allMaps.length; k++) mapsSet[allMaps[k]] = true;
 
-  // Validate players list.
-  var playersList = Array.isArray(players) ? players : [];
+  // Accept players as a string of concatenated 2-char codes or a pre-parsed array.
+  var playersList;
+  if (typeof players === 'string') {
+    playersList = [];
+    for (var pi = 0; pi < players.length; pi += 2) {
+      playersList.push(players.slice(pi, pi + 2));
+    }
+  } else {
+    playersList = Array.isArray(players) ? players : [];
+  }
   if (playersList.length === 0) {
     return { success: false, error: 'players list is required and cannot be empty' };
   }
@@ -1214,6 +1222,67 @@ function respond(res, obj) {
   res.end(body);
 }
 
+// ── Form-encoded 2-character command handler (retro BB protocol) ──────────────
+//
+// POST /qandyland.js  Content-Type: application/x-www-form-urlencoded
+//   c=BB&d=<drive>&p=<players>&m=<mapString>&f=<0|1>
+//
+// Commands:
+//   BB – Big Bang: create a new multiplayer world on <drive>
+//        d = drive name          (safe chars only)
+//        p = player string       (concatenated 2-char codes [A-Z][a-z0-9])
+//        m = map string          (concatenated 2-char map IDs [A-Z][1-9A-Z])
+//        f = flat world flag     (1=flat/false isRound, 0=round/true isRound)
+
+function handleCommand(req, res, raw) {
+  var session = getSession(req, res);
+  var params = {};
+  var pairs = raw.split('&');
+  for (var i = 0; i < pairs.length; i++) {
+    var idx = pairs[i].indexOf('=');
+    if (idx > 0) {
+      params[pairs[i].slice(0, idx)] = pairs[i].slice(idx + 1);
+    }
+  }
+
+  var cmd = String(params.c || '').toUpperCase();
+  var result;
+
+  switch (cmd) {
+    case 'BB': {
+      var drive   = String(params.d || '');
+      var players = String(params.p || '');
+      var mapStr  = String(params.m || '');
+      var isRound = (params.f !== '1'); // f=1 means flat (not round)
+
+      // Validate drive name: safe filesystem characters only
+      if (!drive || !/^[A-Za-z0-9_-]+$/.test(drive) || drive.length > 64) {
+        return respond(res, { success: false, error: 'invalid drive name' });
+      }
+      // Validate players string: pairs of [A-Z][a-z0-9], no illegal characters
+      if (!players || !/^([A-Z][a-z0-9])+$/.test(players)) {
+        return respond(res, { success: false, error: 'invalid players string: must be 2-char codes [A-Z][a-z0-9]' });
+      }
+      // Validate map string: pairs of [A-Z][1-9A-Z], no illegal characters
+      if (!mapStr || !/^([A-Z][1-9A-Z])+$/.test(mapStr)) {
+        return respond(res, { success: false, error: 'invalid map string: must be 2-char map IDs [A-Z][1-9A-Z]' });
+      }
+
+      result = bigbang(drive, mapStr, players, isRound, session);
+      logRequest(req, 'BB', drive, mapStr, session, result);
+      return respond(res, result);
+    }
+
+    default:
+      result = { success: false, error: 'unknown command: ' + cmd };
+      logRequest(req, cmd || '(unknown)', '', '', session, result);
+      return respond(res, result);
+  }
+}
+
+// ── Legacy JSON request dispatcher ────────────────────────────────────────────
+// (legacy reference – new protocol uses form-encoded 2-char commands above)
+
 function handleQandyland(req, res) {
   var session = getSession(req, res);
 
@@ -1294,15 +1363,6 @@ function handleQandyland(req, res) {
         logRequest(req, method, drive, pattern, session, result);
         return respond(res, result);
 
-      case 'bigbang': {
-        var mapString  = normName(pkt.mapString  || '');
-        var players    = pkt.players || [];
-        var isRound    = pkt.isRound;
-        result = bigbang(drive, mapString, players, isRound, session);
-        logRequest(req, method, drive, mapString, session, result);
-        return respond(res, result);
-      }
-
       default:
         result = { success: false, error: 'unknown method: ' + method };
         logRequest(req, method || '(unknown)', drive, name, session, result);
@@ -1334,6 +1394,15 @@ var server = http.createServer(function (req, res) {
   }
 
   if (reqPathname === '/qandyland.js' && req.method === 'POST') {
+    var contentType = (req.headers['content-type'] || '').toLowerCase();
+    if (contentType.indexOf('application/x-www-form-urlencoded') >= 0) {
+      readBody(req).then(function (raw) {
+        handleCommand(req, res, raw);
+      }).catch(function (err) {
+        respond(res, { success: false, error: 'server error: ' + err.message });
+      });
+      return;
+    }
     return handleQandyland(req, res);
   }
 

@@ -431,46 +431,47 @@ window.LoadMap = async function(a) {
  return maps[a];
 }
 
-//   drive     – server drive to build world on (e.g. "gfx.js")
-//   mapString – topology string, e.g. "A1A2A3B1B2B3"
-//   players   – array of 2-char player codes, e.g. ["Sa","Sb","Ta","Tb"]
+//   drive     – server drive to build world on (e.g. "gfx")
+//   mapString – topology string of 2-char map IDs, e.g. "A1A2A3B1B2B3"
+//   players   – player string of concatenated 2-char codes, e.g. "SaSbScTaTbTc"
 //   isRound   – true if world edges wrap (A↔Z, 1↔9); false for flat world
 
 // A1-L8 = small game  (8 rows wide, 12 rows tall) (fits on cell phone screen)
 // A0-Z9 = big game (10 rows wide, 26 rows tall)
 // Aa-Zz = huge game (26 rows wide, 26 rows tall)
 
-
-// this function is wrong, the GUEST can't use fetch()
+// Retro 2-char command protocol: POST c=BB&d=<drive>&p=<players>&m=<mapString>&f=<0|1>
+// HOST sends directly via fetch(); GUEST proxies through HOST via postMessage.
 window.gfxCreation = async function(drive, mapString, players, isRound) {
-  if (!drive)                       throw new Error('gfxCreation: drive is required');
-  if (!mapString)                   throw new Error('gfxCreation: mapString is required');
-  if (!players || !players.length)  throw new Error('gfxCreation: players is required');
+  if (!drive)     throw new Error('gfxCreation: drive is required');
+  if (!mapString) throw new Error('gfxCreation: mapString is required');
+  if (!players)   throw new Error('gfxCreation: players is required');
 
-  var payload = {
-    method:    'bigbang',
-    drive:     String(drive),
-    mapString: String(mapString),
-    players:   Array.isArray(players) ? players : [players],
-    isRound:   isRound === true || isRound === 'true'
-  };
+  var f = (isRound === true || isRound === 'true' || isRound === 1) ? '0' : '1';
+  var body = 'c=BB&d=' + String(drive) + '&p=' + String(players) + '&m=' + String(mapString) + '&f=' + f;
 
-  try {
-    var response = await fetch(_serverUrl, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(payload)
+  if (typeof HOST !== 'undefined' && HOST) {
+    try {
+      var response = await fetch(_serverUrl, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body:    body
+      });
+      if (!response.ok) throw new Error('Server error: ' + response.status);
+      var result = await response.json();
+      if (!result.success) throw new Error(result.error || 'bigbang failed');
+      return result;
+    } catch (e) {
+      throw new Error('gfxCreation: ' + (e.message || String(e)));
+    }
+  } else {
+    return qdosXmitDos('gfxCreation', { body: body }).then(function (result) {
+      if (typeof result === 'string') {
+        try { result = JSON.parse(result); } catch (e) {}
+      }
+      if (result && !result.success) throw new Error(result.error || 'bigbang failed');
+      return result;
     });
-    if (!response.ok) {
-      throw new Error('Server error: ' + response.status);
-    }
-    var result = await response.json();
-    if (!result.success) {
-      throw new Error(result.error || 'bigbang failed');
-    }
-    return result;
-  } catch (e) {
-    throw new Error('gfxCreation: ' + (e.message || String(e)));
   }
 };
 

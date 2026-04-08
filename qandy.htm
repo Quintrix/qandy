@@ -1597,6 +1597,27 @@ async function hostMessageHandler(ev) {
               .catch(function (err) { dosXmitQdos(_dosIframe, d.id, 'serverDrives', false, err && err.message ? err.message : String(err)); });
             break;
           }
+          case 'gfxCreation': {
+            var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
+            var formBody = (typeof d.body === 'undefined' || d.body === null) ? '' : String(d.body);
+            // Validate body: only alphanumeric chars and form-encoding delimiters allowed
+            if (!formBody || !/^[A-Za-z0-9=&]+$/.test(formBody)) {
+              dosXmitQdos(_dosIframe, d.id, 'gfxCreation', false, 'invalid request body'); break;
+            }
+            var _gfxUrl = (typeof _serverUrl !== 'undefined') ? _serverUrl : 'http://localhost:8080/qandyland.js';
+            fetch(_gfxUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: formBody
+            }).then(function (resp) {
+              return resp.json();
+            }).then(function (result) {
+              dosXmitQdos(_dosIframe, d.id, 'gfxCreation', result.success === true, result.success === true ? result : (result.error || 'bigbang failed'));
+            }).catch(function (err) {
+              dosXmitQdos(_dosIframe, d.id, 'gfxCreation', false, err && err.message ? err.message : String(err));
+            });
+            break;
+          }
           case 'dosMount': {
             var _dosIframe = window._vmIframe || document.getElementById('vm-iframe');
             try {
