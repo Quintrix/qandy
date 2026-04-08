@@ -1259,6 +1259,12 @@ function parsePlayerManifest(content) {
     slots.push(code + avatar);
   }
   var state = hasActive ? 'IP' : 'JS';
+  // 
+  // @@ game state needs to remain at 'JS' until we implement a system
+  // for all players have voted to 'start game', we will discuss a method
+  // to do this in the prompt 
+  //  
+  var state = 'JS';
   return state + slots.join('.');
 }
 
@@ -1371,7 +1377,7 @@ function handleCommand(req, res, raw) {
 
       // Load p.txt and find the requested slot
       var jgLoad = fileLoad(jgDrive, '/', 'p.txt', session);
-      if (!jgLoad.success) return respondRetro(res, 'XXGame world not found');
+      if (!jgLoad.success) return respondRetro(res, 'XXWorld not found');
 
       var jgLines    = jgLoad.content.split('\n');
       var jgFound    = false;
@@ -1396,6 +1402,12 @@ function handleCommand(req, res, raw) {
       // Save updated p.txt
       var jgPSave = fileSave(jgDrive, '/', 'p.txt', jgNewLines.join('\n') + '\n', session, 'JG');
       if (!jgPSave.success) return respondRetro(res, 'XXFailed to update manifest');
+
+//
+// @@ let's make spawn space more complex by assigning each player it's own spawn
+//    z-location so that all the player's can be seen at the same time. No z-location
+//    should be on an edge tile that are used to trigger scrolling north/south/east/west  
+//
 
       // Determine spawn map: Team One (S*) → A1, Team Two (T*) → L8
       var jgMapId = (jgItemId.charAt(0) === 'S') ? 'A1' : 'L8';
