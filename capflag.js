@@ -52,7 +52,7 @@ window.flagConnect = async function() {
     var mapString = maps('A', 'L', 1, 8);
     var players = "SaSbScTaTbTc";
     var isRound = false;
-    var res = await gfxCreation(drive, mapString, players, isRound);
+    var res = await gfxPing("BB", {d: drive, m: mapString, p: players, f: isRound ? 0 : 1});
 
     await print("\nConnected!\n");
     // return server connected to here
@@ -144,6 +144,6 @@ async function flagCreate() {
   var mapString="A1A2A3A4A5A6A7A8B1B2B3B4B5B6B7N8C1C2C3C4C5C6C7V8D1D2D3D4D5D6D7D8E1E2E3E4E5E6E7E8F1F2F3F4F5F6F7F8G1G2G3G4G5G6G7G8H1H2H3H4H5H6H7H8I1I2I3IAUAIAIAI8J1J2J3J4J5J6J7J8K1K2K3K4K5K6K7K8L1L2L3L4L5L6L7L8";
   var players="SaSbScTaTbTc";
   var isRound=false;
-  var res = await gfxCreation(drive, mapString, players, isRound);
+  var res = await gfxPing("BB", {d: drive, m: mapString, p: players, f: isRound ? 0 : 1});
   await print(res);
 }

@@ -431,24 +431,25 @@ window.LoadMap = async function(a) {
  return maps[a];
 }
 
-//   drive     – server drive to build world on (e.g. "gfx")
-//   mapString – topology string of 2-char map IDs, e.g. "A1A2A3B1B2B3"
-//   players   – player string of concatenated 2-char codes, e.g. "SaSbScTaTbTc"
-//   isRound   – true if world edges wrap (A↔Z, 1↔9); false for flat world
-
-// A1-L8 = small game  (8 rows wide, 12 rows tall) (fits on cell phone screen)
-// A0-Z9 = big game (10 rows wide, 26 rows tall)
-// Aa-Zz = huge game (26 rows wide, 26 rows tall)
-
-// Retro 2-char command protocol: POST c=BB&d=<drive>&p=<players>&m=<mapString>&f=<0|1>
+// Universal gateway for all 2-character commands to the multiplayer server.
+// command    – 2-char uppercase command code, e.g. "BB"
+// dataObject – plain JS object whose keys/values are appended as form fields
 // HOST sends directly via fetch(); GUEST proxies through HOST via postMessage.
-window.gfxCreation = async function(drive, mapString, players, isRound) {
-  if (!drive)     throw new Error('gfxCreation: drive is required');
-  if (!mapString) throw new Error('gfxCreation: mapString is required');
-  if (!players)   throw new Error('gfxCreation: players is required');
+window.gfxPing = async function(command, dataObject) {
+  if (!command || !/^[A-Z]{2}$/.test(command)) throw new Error('gfxPing: invalid command');
 
-  var f = (isRound === true || isRound === 'true' || isRound === 1) ? '0' : '1';
-  var body = 'c=BB&d=' + String(drive) + '&p=' + String(players) + '&m=' + String(mapString) + '&f=' + f;
+  // Build form-encoded body: c=<command>&key=val&...
+  var parts = ['c=' + command];
+  if (dataObject && typeof dataObject === 'object') {
+    var keys = Object.keys(dataObject);
+    for (var i = 0; i < keys.length; i++) {
+      var k = keys[i];
+      // Strip non-printable characters (keep only printable ASCII and escaped newlines)
+      var v = String(dataObject[k]).replace(/[^\x20-\x7E\n]/g, '');
+      parts.push(k + '=' + v);
+    }
+  }
+  var body = parts.join('&');
 
   if (typeof HOST !== 'undefined' && HOST) {
     try {
@@ -458,21 +459,32 @@ window.gfxCreation = async function(drive, mapString, players, isRound) {
         body:    body
       });
       if (!response.ok) throw new Error('Server error: ' + response.status);
-      var result = await response.json();
-      if (!result.success) throw new Error(result.error || 'bigbang failed');
-      return result;
+      return await response.text();
     } catch (e) {
-      throw new Error('gfxCreation: ' + (e.message || String(e)));
+      throw new Error('gfxPing: ' + (e.message || String(e)));
     }
   } else {
-    return qdosXmitDos('gfxCreation', { body: body }).then(function (result) {
-      if (typeof result === 'string') {
-        try { result = JSON.parse(result); } catch (e) {}
-      }
-      if (result && !result.success) throw new Error(result.error || 'bigbang failed');
-      return result;
-    });
+    return qdosXmitDos('gfxPing', { body: body });
   }
+};
+
+//   drive     – server drive to build world on (e.g. "gfx")
+//   mapString – topology string of 2-char map IDs, e.g. "A1A2A3B1B2B3"
+//   players   – player string of concatenated 2-char codes, e.g. "SaSbScTaTbTc"
+//   isRound   – true if world edges wrap (A↔Z, 1↔9); false for flat world
+
+// A1-L8 = small game  (8 rows wide, 12 rows tall) (fits on cell phone screen)
+// A0-Z9 = big game (10 rows wide, 26 rows tall)
+// Aa-Zz = huge game (26 rows wide, 26 rows tall)
+
+// Compatibility wrapper: delegates to the universal gfxPing gateway.
+window.gfxCreation = async function(drive, mapString, players, isRound) {
+  return await gfxPing("BB", {
+    d: drive,
+    m: mapString,
+    p: players,
+    f: isRound ? 0 : 1
+  });
 };
 
 splash(1000);
