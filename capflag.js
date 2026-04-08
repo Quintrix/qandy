@@ -104,6 +104,8 @@ window.flagConnect = async function() {
       // Initialize graphics and render lobby map (96 Ga grass tiles)
       var lobbyMap = "Ga".repeat(96);
       await gfxInit();
+      document.getElementById('txt').style.top = '50px';
+      document.getElementById('txt').style.left = '350px';
       gfx(lobbyMap);
 
       // Start avatar selection

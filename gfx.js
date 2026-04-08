@@ -64,6 +64,9 @@ window.gfxInit = async function() {
     PUV = setTimeout(() => { popup.style.visibility = PopUpVis; }, 100);
   });
   document.body.appendChild(popup);
+  // move txt screen over to reveal gfx
+  document.getElementById('txt').style.top = '50px';
+  document.getElementById('txt').style.left = '350px';
 };
 
 window.tiles = function() {
