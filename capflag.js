@@ -6,6 +6,15 @@ if (typeof window.GFX === "undefined") window.GFX = 0;
 
 var gfxConnected = null;
 
+// Player state variables for avatar selection
+var PName = "Player";
+var PObj = "";
+var PX = 2;
+var PY = 9;
+var PZ = 0;
+var PUP = "";
+var PopForce = "";
+
 qdosScript("gfx.js");
 startup();
 
@@ -91,8 +100,14 @@ window.flagConnect = async function() {
       }
 
       await print("Empty slots available: " + emptySlots.length + "\n");
-      // TODO: render map, get player avatar, start refresh loop
-      // TODO: items will be displayed and player can 'join game' by selecting item
+
+      // Initialize graphics and render lobby map (96 Ga grass tiles)
+      var lobbyMap = "Ga".repeat(96);
+      await gfxInit();
+      gfx(lobbyMap);
+
+      // Start avatar selection
+      NewChar("");
       return;
     }
   } catch (error) {
@@ -100,6 +115,47 @@ window.flagConnect = async function() {
     throw error;
   }
 };
+
+window.NewChar = function(a) {
+ PopForce="visible";
+ if (a=="M") {
+  PUP="Select Character:<p>";
+  PUP=PUP+"<a href=\"javascript:NewChar(\'B0\');\"><img src=\"c/B0.png\" height=64 width=32></a> &nbsp; ";
+  PUP=PUP+"<a href=\"javascript:NewChar(\'B1\');\"><img src=\"c/B1.png\" height=64 width=32></a> &nbsp; ";
+  PUP=PUP+"<a href=\"javascript:NewChar(\'B2\');\"><img src=\"c/B2.png\" height=64 width=32></a><br>";
+  PUP=PUP+"<a href=\"javascript:NewChar(\'B3\');\"><img src=\"c/B3.png\" height=64 width=32></a> &nbsp; ";
+  PUP=PUP+"<a href=\"javascript:NewChar(\'B4\');\"><img src=\"c/B4.png\" height=64 width=32></a> &nbsp; ";
+  PUP=PUP+"<a href=\"javascript:NewChar(\'B5\');\"><img src=\"c/B5.png\" height=64 width=32></a> &nbsp; ";
+  PUP=PUP+"<a href=\"javascript:NewChar(\'B6\');\"><img src=\"c/B6.png\" height=64 width=32></a><p>";
+  PUP=PUP+"<a href=\"javascript:NewChar(\'\');\">Go Back</a><p>";
+  pop(PUP);
+ } else {
+  if (a=="F") {
+   PUP="Select Character:<p>";
+   PUP=PUP+"<a href=\"javascript:NewChar(\'F0\');\"><img src=\"c/F0.png\" height=64 width=32></a> &nbsp; ";
+   PUP=PUP+"<a href=\"javascript:NewChar(\'F1\');\"><img src=\"c/F1.png\" height=64 width=32></a> &nbsp; ";
+   PUP=PUP+"<a href=\"javascript:NewChar(\'F2\');\"><img src=\"c/F2.png\" height=64 width=32></a><br>";
+   PUP=PUP+"<a href=\"javascript:NewChar(\'F3\');\"><img src=\"c/F3.png\" height=64 width=32></a> &nbsp; ";
+   PUP=PUP+"<a href=\"javascript:NewChar(\'F4\');\"><img src=\"c/F4.png\" height=64 width=32></a> &nbsp; ";
+   PUP=PUP+"<a href=\"javascript:NewChar(\'F5\');\"><img src=\"c/F5.png\" height=64 width=32></a> &nbsp; ";
+   PUP=PUP+"<a href=\"javascript:NewChar(\'F6\');\"><img src=\"c/F6.png\" height=64 width=32></a><p>";
+   PUP=PUP+"<a href=\"javascript:NewChar(\'\');\">Go Back</a><p>";
+   pop(PUP);
+  } else {
+  	if (a.length==2) {
+  	 if (a.charAt(0)=="F") { PObj=a+"H0"; } else { PObj=a+"D0"; }
+    char(PName,PObj,PZ); PForce="hidden"; hpop(); mainloop();
+  	} else {
+    PX=2; PY=9; PZ=(PY*(mapx+1))+PX;
+    pop("<p>Male or Female?<br><a href=\"javascript:NewChar(\'M\');\"><img src=\"c/B1.png\" height=128 width=64></a> &nbsp; <a href=\"javascript:NewChar(\'F\');\"><img src=\"c/F5.png\" height=128 width=64></a>");
+   }
+  }
+ }
+};
+
+function mainloop() {
+ // Avatar selection complete - PObj holds the 4-character avatar string
+}
 
 // flagServers.js
 // opts: { driveFilter='gfx', prompt, defaultIndex=0, allowCancel=true }
