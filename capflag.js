@@ -53,7 +53,7 @@ window.flagConnect = async function() {
 
     // Handle "no world" - create one with big bang, then fall through to normal handling
     if (gameState.startsWith("XW")) {
-      await print("\nNo world found.\nCreating new world...\n");
+      await print("No world found.\nCreating new world...");
       var mapString = maps('A', 'L', 1, 8);
       var players = "SaSbScTaTbTc";
       var isRound = false;
