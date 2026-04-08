@@ -47,27 +47,46 @@ window.flagConnect = async function() {
     }
     _serverUrl = proto + '://' + gfxConnected.host + ':' + gfxConnected.port + '/qandyland.js';
 
-    var gameState = await gfxGameState(drive);
+    var drive = "gfx";
+    var gameState = await gfxPing("GS", {d: drive});
     await print("\nGame state: " + gameState + "\n");
 
-    // what to do if game is in progress? return to server list?
-    // if game is just starting:    
-    //   if no empty slot on player manifest what to do? return to server list?
-    //   render map
-    //   get player avatar    
-    //   start 1-second refresh loop
-    //   items will be displayed and player can 'join game' by selecting item
-    
-    // if no games have been started execute big bang:
+    if (gameState.startsWith("XX")) {
+      var errorMsg = gameState.substring(2);
+      await print("Error: " + errorMsg + "\n");
+      return flagConnect();
+    }
+
+    if (gameState.startsWith("IP")) {
+      await print("Game in progress. Returning to server selection...\n");
+      return flagConnect();
+    }
+
+    if (gameState.startsWith("JS")) {
+      var manifest = gameState.substring(2);
+      var slots = manifest.split('.');
+      // Empty slot: exactly 2-char player code with no avatar data (e.g. "Sa")
+      // Occupied slot: player code + avatar data (e.g. "SaM3N2L3")
+      var emptySlots = slots.filter(function(slot) { return slot.length === 2; });
+
+      if (emptySlots.length === 0) {
+        await print("Server full. Returning to server selection...\n");
+        return flagConnect();
+      }
+
+      await print("Empty slots available: " + emptySlots.length + "\n");
+      // TODO: render map, get player avatar, start refresh loop
+      // TODO: items will be displayed and player can 'join game' by selecting item
+      return;
+    }
+
+    // If no recognizable state, create world
     await print("\nNo world found.\nCreating new world...\n");
-    var drive = "gfx";
     var mapString = maps('A', 'L', 1, 8);
     var players = "SaSbScTaTbTc";
     var isRound = false;
     var res = await gfxPing("BB", {d: drive, m: mapString, p: players, f: isRound ? 0 : 1});
-
-    // return server connected to here
-    // return 'Connected to ' + gfxConnected.name + ' at ' + gfxConnected.host + ':' + gfxConnected.port + '\n';
+    // Process big bang response and then check game state again
   } catch (error) {
     await print("Connection failed: " + error.message + " " + (gfxConnected ? gfxConnected.host : '') + "\n");
     throw error;
