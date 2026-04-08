@@ -1231,6 +1231,29 @@ function respondRetro(res, text) {
   res.end(String(text));
 }
 
+// Parse a p.txt manifest string and return the formatted GS-style game state string.
+// @param {string} content - the raw p.txt file content (lines of "PlayerCode=AvatarData")
+// @returns {string} formatted game state, e.g. "JSSa.SbM3N2L3.Tc"
+//   Format: <state><slot>.<slot>...  where state is JS or IP and each slot is
+//   <playerCode><avatarData> for occupied slots or <playerCode> for empty slots.
+function parsePlayerManifest(content) {
+  var lines = content.split('\n');
+  var hasActive = false;
+  var slots = [];
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (!line) continue;
+    var eqIdx = line.indexOf('=');
+    if (eqIdx < 0) continue;
+    var code   = line.slice(0, eqIdx);
+    var avatar = line.slice(eqIdx + 1).trim();
+    if (avatar.length > 0) hasActive = true;
+    slots.push(code + avatar);
+  }
+  var state = hasActive ? 'IP' : 'JS';
+  return state + slots.join('.');
+}
+
 // ── Form-encoded 2-character command handler (retro BB protocol) ──────────────
 //
 // POST /qandyland.js  Content-Type: application/x-www-form-urlencoded
@@ -1290,7 +1313,15 @@ function handleCommand(req, res, raw) {
 
       result = bigbang(drive, mapStr, players, isRound, session);
       logRequest(req, 'BB', drive, mapStr, session, result);
-      return respond(res, result);
+      if (!result.success) {
+        return respond(res, result);
+      }
+      // Return game state in GS format so client can fall through to normal handling
+      var bbLoad = fileLoad(drive, '/', 'p.txt', session);
+      if (!bbLoad.success) {
+        return respondRetro(res, 'XX[World created but state unavailable]');
+      }
+      return respondRetro(res, parsePlayerManifest(bbLoad.content));
     }
 
     case 'GS': {
@@ -1309,26 +1340,11 @@ function handleCommand(req, res, raw) {
       // Read player manifest from p.txt
       var gsLoad = fileLoad(gsDrive, '/', 'p.txt', session);
       if (!gsLoad.success) {
-        return respondRetro(res, 'XX[No game world]');
+        return respondRetro(res, 'XW[No game world]');
       }
 
-      // Parse p.txt: each non-empty line is "PlayerCode=AvatarData"
-      var gsLines = gsLoad.content.split('\n');
-      var hasActive = false;
-      var gsSlots = [];
-      for (var gi = 0; gi < gsLines.length; gi++) {
-        var gsLine = gsLines[gi].trim();
-        if (!gsLine) continue;
-        var gsEq = gsLine.indexOf('=');
-        if (gsEq < 0) continue;
-        var gsCode   = gsLine.slice(0, gsEq);
-        var gsAvatar = gsLine.slice(gsEq + 1).trim();
-        if (gsAvatar.length > 0) hasActive = true;
-        gsSlots.push(gsCode + gsAvatar);
-      }
-
-      var gsState = hasActive ? 'IP' : 'JS';
-      var gsResponse = gsState + gsSlots.join('.');
+      // Parse p.txt and return formatted game state
+      var gsResponse = parsePlayerManifest(gsLoad.content);
       logRequest(req, 'GS', gsDrive, '', session, { success: true, result: gsResponse });
       return respondRetro(res, gsResponse);
     }

@@ -51,6 +51,22 @@ window.flagConnect = async function() {
     var gameState = await gfxPing("GS", {d: drive});
     await print("\nGame state: " + gameState + "\n");
 
+    // Handle "no world" - create one with big bang, then fall through to normal handling
+    if (gameState.startsWith("XW")) {
+      await print("\nNo world found.\nCreating new world...\n");
+      var mapString = maps('A', 'L', 1, 8);
+      var players = "SaSbScTaTbTc";
+      var isRound = false;
+      gameState = await gfxPing("BB", {d: drive, m: mapString, p: players, f: isRound ? 0 : 1});
+      if (gameState.startsWith("XX")) {
+        var bbErrorMsg = gameState.substring(2);
+        await print("Error creating world: " + bbErrorMsg + "\n");
+        return flagConnect();
+      }
+      await print("\nWorld created. Game state: " + gameState + "\n");
+      // Now fall through to normal JS/IP handling
+    }
+
     if (gameState.startsWith("XX")) {
       var errorMsg = gameState.substring(2);
       await print("Error: " + errorMsg + "\n");
@@ -79,14 +95,6 @@ window.flagConnect = async function() {
       // TODO: items will be displayed and player can 'join game' by selecting item
       return;
     }
-
-    // If no recognizable state, create world
-    await print("\nNo world found.\nCreating new world...\n");
-    var mapString = maps('A', 'L', 1, 8);
-    var players = "SaSbScTaTbTc";
-    var isRound = false;
-    var res = await gfxPing("BB", {d: drive, m: mapString, p: players, f: isRound ? 0 : 1});
-    // Process big bang response and then check game state again
   } catch (error) {
     await print("Connection failed: " + error.message + " " + (gfxConnected ? gfxConnected.host : '') + "\n");
     throw error;
