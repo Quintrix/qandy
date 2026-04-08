@@ -487,6 +487,14 @@ window.gfxCreation = async function(drive, mapString, players, isRound) {
   });
 };
 
+// Query game state and player manifest for a drive.
+// Returns the raw retro response string: e.g. "JSSa.Sb.Sc.Ta.Tb.Tc"
+//   state prefix: JS = just starting (no active players), IP = in progress
+//   each dot-separated slot: <playerCode><avatarData> if occupied, <playerCode> if empty
+window.gfxGameState = async function(drive) {
+  return await gfxPing("GS", { d: drive });
+};
+
 splash(1000);
 
 qdosScript("gfx-itemid.js");

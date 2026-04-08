@@ -54,6 +54,9 @@ window.flagConnect = async function() {
     var isRound = false;
     var res = await gfxPing("BB", {d: drive, m: mapString, p: players, f: isRound ? 0 : 1});
 
+    var gameState = await gfxGameState(drive);
+    await print("\nGame state: " + gameState + "\n");
+
     await print("\nConnected!\n");
     // return server connected to here
     return 'Connected to ' + gfxConnected.name + ' at ' + gfxConnected.host + ':' + gfxConnected.port + '\n';
