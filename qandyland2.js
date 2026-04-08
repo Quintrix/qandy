@@ -1222,6 +1222,15 @@ function respond(res, obj) {
   res.end(body);
 }
 
+// Send a plain-text retro-style response (used by 2-char commands like GS).
+function respondRetro(res, text) {
+  res.writeHead(200, {
+    'Content-Type':  'text/plain',
+    'Cache-Control': 'no-store'
+  });
+  res.end(String(text));
+}
+
 // ── Form-encoded 2-character command handler (retro BB protocol) ──────────────
 //
 // POST /qandyland.js  Content-Type: application/x-www-form-urlencoded
@@ -1233,6 +1242,17 @@ function respond(res, obj) {
 //        p = player string       (concatenated 2-char codes [A-Z][a-z0-9])
 //        m = map string          (concatenated 2-char map IDs [A-Z][1-9A-Z])
 //        f = flat world flag     (1=flat/false isRound, 0=round/true isRound)
+//
+//   GS – Game State: return current state and complete player manifest
+//        d = drive name          (safe chars only)
+//        Response: <state><slot>.<slot>...
+//          state codes: JS (just starting), IP (in progress)
+//          slot format: <playerCode><avatarData> for occupied, <playerCode> for empty
+
+// Returns true if the drive name contains only safe filesystem characters.
+function isValidDriveName(drive) {
+  return !!(drive && /^[A-Za-z0-9_-]+$/.test(drive) && drive.length <= 64);
+}
 
 function handleCommand(req, res, raw) {
   var session = getSession(req, res);
@@ -1256,7 +1276,7 @@ function handleCommand(req, res, raw) {
       var isRound = (params.f !== '1'); // f=1 means flat (not round)
 
       // Validate drive name: safe filesystem characters only
-      if (!drive || !/^[A-Za-z0-9_-]+$/.test(drive) || drive.length > 64) {
+      if (!isValidDriveName(drive)) {
         return respond(res, { success: false, error: 'invalid drive name' });
       }
       // Validate players string: pairs of [A-Z][a-z0-9], no illegal characters
@@ -1271,6 +1291,46 @@ function handleCommand(req, res, raw) {
       result = bigbang(drive, mapStr, players, isRound, session);
       logRequest(req, 'BB', drive, mapStr, session, result);
       return respond(res, result);
+    }
+
+    case 'GS': {
+      var gsDrive = String(params.d || '');
+
+      // Validate drive name: safe filesystem characters only
+      if (!isValidDriveName(gsDrive)) {
+        return respondRetro(res, 'XX[Invalid drive name]');
+      }
+
+      // Check drive is mounted
+      if (!drives[gsDrive]) {
+        return respondRetro(res, 'XX[Drive not found]');
+      }
+
+      // Read player manifest from p.txt
+      var gsLoad = fileLoad(gsDrive, '/', 'p.txt', session);
+      if (!gsLoad.success) {
+        return respondRetro(res, 'XX[No game world]');
+      }
+
+      // Parse p.txt: each non-empty line is "PlayerCode=AvatarData"
+      var gsLines = gsLoad.content.split('\n');
+      var hasActive = false;
+      var gsSlots = [];
+      for (var gi = 0; gi < gsLines.length; gi++) {
+        var gsLine = gsLines[gi].trim();
+        if (!gsLine) continue;
+        var gsEq = gsLine.indexOf('=');
+        if (gsEq < 0) continue;
+        var gsCode   = gsLine.slice(0, gsEq);
+        var gsAvatar = gsLine.slice(gsEq + 1).trim();
+        if (gsAvatar.length > 0) hasActive = true;
+        gsSlots.push(gsCode + gsAvatar);
+      }
+
+      var gsState = hasActive ? 'IP' : 'JS';
+      var gsResponse = gsState + gsSlots.join('.');
+      logRequest(req, 'GS', gsDrive, '', session, { success: true, result: gsResponse });
+      return respondRetro(res, gsResponse);
     }
 
     default:

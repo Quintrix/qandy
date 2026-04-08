@@ -47,6 +47,18 @@ window.flagConnect = async function() {
     }
     _serverUrl = proto + '://' + gfxConnected.host + ':' + gfxConnected.port + '/qandyland.js';
 
+    var gameState = await gfxGameState(drive);
+    await print("\nGame state: " + gameState + "\n");
+
+    // what to do if game is in progress? return to server list?
+    // if game is just starting:    
+    //   if no empty slot on player manifest what to do? return to server list?
+    //   render map
+    //   get player avatar    
+    //   start 1-second refresh loop
+    //   items will be displayed and player can 'join game' by selecting item
+    
+    // if no games have been started execute big bang:
     await print("\nNo world found.\nCreating new world...\n");
     var drive = "gfx";
     var mapString = maps('A', 'L', 1, 8);
@@ -54,9 +66,8 @@ window.flagConnect = async function() {
     var isRound = false;
     var res = await gfxPing("BB", {d: drive, m: mapString, p: players, f: isRound ? 0 : 1});
 
-    await print("\nConnected!\n");
     // return server connected to here
-    return 'Connected to ' + gfxConnected.name + ' at ' + gfxConnected.host + ':' + gfxConnected.port + '\n';
+    // return 'Connected to ' + gfxConnected.name + ' at ' + gfxConnected.host + ':' + gfxConnected.port + '\n';
   } catch (error) {
     await print("Connection failed: " + error.message + " " + (gfxConnected ? gfxConnected.host : '') + "\n");
     throw error;
