@@ -1403,18 +1403,63 @@ function handleCommand(req, res, raw) {
       var jgPSave = fileSave(jgDrive, '/', 'p.txt', jgNewLines.join('\n') + '\n', session, 'JG');
       if (!jgPSave.success) return respondRetro(res, 'XXFailed to update manifest');
 
-//
-// @@ let's make spawn space more complex by assigning each player it's own spawn
-//    z-location so that all the player's can be seen at the same time. No z-location
-//    should be on an edge tile that are used to trigger scrolling north/south/east/west  
-//
-
       // Determine spawn map: Team One (S*) → A1, Team Two (T*) → L8
       var jgMapId = (jgItemId.charAt(0) === 'S') ? 'A1' : 'L8';
 
+// @@ let's make spawn space more complex by assigning each player it's own spawn
+//    z-location so that all the player's can be seen at the same time. No z-location
+//    should be on an edge tile that are used to trigger scrolling north/south/east/west  
       // Player file name: ItemID + 2-digit z-location (padded), e.g. "Sa43.txt"
-      var jgZ    = DEFAULT_SPAWN_Z;
-      var jgFile = 'w/' + jgMapId + '/' + jgItemId + jgZ + '.txt';
+
+// Valid coordinate pools for spacing
+const VALID_X = [1, 2, 3, 4, 5, 6];
+const VALID_Y = [2, 4, 6, 8, 10];
+
+// Team prefixes
+const TEAM_ONE = ['Sa', 'Sb', 'Sc', 'Sd', 'Se', 'Sf', 'Sg', 'Sh'];
+const TEAM_TWO = ['Ta', 'Tb', 'Tc', 'Td', 'Te', 'Tf', 'Tg', 'Th'];
+
+function getUniqueSpawnZ(jgMapId, jgItemId, session) {
+    let teamList = jgItemId.startsWith('S') ? TEAM_ONE : TEAM_TWO;
+    
+    var jgDrive = 'gfx'; 
+    // The directory is 'w' plus the specific map (e.g., 'w/A1')
+    var jgCwd   = 'w/' + jgMapId; 
+
+    for (let y of VALID_Y) {
+        for (let x of VALID_X) {
+            
+            // Calculate Linear Z: (Y * 8) + X
+            let zValue = (y * 8) + x;
+            let potentialZ = zValue.toString().padStart(2, '0');
+            let isOccupied = false;
+
+            for (let memberId of teamList) {
+                let fileName = memberId + potentialZ + '.txt';
+                
+                // Using your original call structure
+                // We check the 'w/A1' or 'w/L8' subdirectory
+                var jgEx = fileExists(jgDrive, jgCwd, fileName, session);
+                
+                if (jgEx.success && jgEx.exists) {
+                    isOccupied = true;
+                    break; 
+                }
+            }
+
+            if (!isOccupied) {
+                return potentialZ;
+            }
+        }
+    }
+
+    return DEFAULT_SPAWN_Z; 
+}
+
+// How to use it in your main script:
+var jgZ    = getUniqueSpawnZ(jgMapId, jgItemId, session);
+var jgFile = 'w/' + jgMapId + '/' + jgItemId + jgZ + '.txt';
+
 
       // Only create player file if it does not already exist
       var jgEx = fileExists(jgDrive, '/', jgFile, session);

@@ -3,7 +3,7 @@ window.GFX = 0; // set to true when gfx.js ready to use
 
 var PopAlign = "click"; // "center", "click"
 var PopUpVis = "hidden"; // current target visibility
-var PForce = "hidden";   // forced visibility on mouseout in your original code
+var PForce = "visible";   // forced visibility on mouseout in your original code
 var PUV;                 // timeout id (used to clear/set the timeout)
 
 var mapx=7;
@@ -303,15 +303,6 @@ function maps(startChar,endChar,startNum,endNum) {
   return out;
 }
 
-async function checkWorldExists() {
-  try {
-    var result = await qdosServerExists("capflag.js/A1/a.txt");
-    return result === true;
-  } catch (e) {
-    return false;
-  }
-}
-
 async function loadWorldConfig() {
   try {
     // Load essential config files
@@ -369,31 +360,7 @@ async function renderMapItems(mapId) {
   }
 }
 
-async function createPlayerOnServer(avatar, mapId, zPos) {
-  try {
-    var playerData = {
-      name: PName,
-      avatar: avatar,
-      map: mapId,
-      position: zPos,
-      created: Date.now()
-    };
-    
-    // Create player file in map directory
-    var playerFile = "capflag.js/" + mapId + "/player_" + PName + ".json";
-    await qdosServerSave(playerFile, JSON.stringify(playerData));
-    
-    // Add player to map's player list
-    var players = await qdosServerLoad("capflag.js/" + mapId + "/p.txt");
-    if (players && !players.includes(PName)) {
-      players += (players ? "," : "") + PName;
-      await qdosServerSave("capflag.js/" + mapId + "/p.txt", players);
-    }
-    
-  } catch (error) {
-    throw new Error("Failed to create player on server: " + error.message);
-  }
-}
+
 
 
 
