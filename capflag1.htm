@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Map Walker - Tile Editor</title>
+    <style>
+        body { font-family: sans-serif; background: #222; color: #eee; padding: 20px; }
+        .controls { background: #333; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+        table { border-collapse: collapse; background: #000; margin: 10px; }
+        td { border: 1px solid #444; width: 60px; height: 75px; text-align: center; position: relative; cursor: pointer; }
+        .map-id { position: absolute; top: 2px; left: 2px; font-size: 9px; color: #888; }
+        .world-img { width: 32px; height: 32px; margin: 10px auto; }
+        
+        /* Detail Overlay */
+        #detailOverlay { 
+            display: none; position: fixed; top: 50%; left: 50%; 
+            transform: translate(-50%, -50%); background: #444; 
+            padding: 20px; border: 3px solid #666; z-index: 100; box-shadow: 0 0 50px #000;
+        }
+        .tile-grid { display: grid; grid-template-columns: repeat(8, 32px); gap: 1px; background: #222; }
+        .tile-unit { width: 32px; height: 32px; background: #000; border: 0.1px solid #333; }
+        .close-btn { float: right; cursor: pointer; color: red; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div class="controls">
+        Wide: <input type="number" id="mapWide" value="5"> 
+        High: <input type="number" id="mapHigh" value="3">
+        Brush: <select id="brushSelect">
+            <option value="Ga">Grass</option><option value="Ca">Dirt</option>
+            <option value="Ua">Water</option><option value="Ta">Swamp</option>
+        </select>
+        <button onclick="drawWorld()">Generate World</button>
+        <button onclick="copyBigBang()" style="background:#2196F3; color:white;">Copy All to Clipboard</button>
+    </div>
+
+    <div id="worldContainer"></div>
+
+    <!-- Detail View for 8x12 Tiles -->
+    <div id="detailOverlay">
+        <span class="close-btn" onclick="closeDetail()">[X] Close</span>
+        <h3 id="detailTitle">Map ID: --</h3>
+        <div id="tileGrid" class="tile-grid"></div>
+    </div>
+
+    <script>
+        let worldData = {}; // Stores the 192-char string for each Map ID
+
+        function getRandomNoise(base) {
+            if (base === 'Ga' && Math.random() > 0.8) return Math.random() > 0.5 ? 'Fa' : 'Gb'; // Grass -> Flowers/Weeds
+            if (base === 'Ca' && Math.random() > 0.9) return 'Rh'; // Dirt -> Stump
+            return base;
+        }
+
+        function generate192CharString(baseTerrain) {
+            let str = "";
+            for (let i = 0; i < 96; i++) {
+                str += getRandomNoise(baseTerrain);
+            }
+            return str;
+        }
+
+        function drawWorld() {
+            const high = parseInt(document.getElementById('mapHigh').value);
+            const wide = parseInt(document.getElementById('mapWide').value);
+            const brush = document.getElementById('brushSelect').value;
+            let html = "<table>";
+
+            for (let h = 0; h < high; h++) {
+                html += "<tr>";
+                for (let w = 0; w < wide; w++) {
+                    const id = String.fromCharCode(65 + h) + (w < 26 ? String.fromCharCode(97 + w) : (w - 26));
+                    worldData[id] = generate192CharString(brush);
+                    html += `<td onclick="showDetail('${id}')">
+                        <span class="map-id">${id}</span>
+                        <img class="world-img" src="t/${brush}.png">
+                        <div style="font-size:10px">${brush}</div>
+                    </td>`;
+                }
+                html += "</tr>";
+            }
+            document.getElementById('worldContainer').innerHTML = html + "</table>";
+        }
+
+        function showDetail(id) {
+            const overlay = document.getElementById('detailOverlay');
+            const grid = document.getElementById('tileGrid');
+            const data = worldData[id];
+            
+            document.getElementById('detailTitle').innerText = `Map Screen: ${id}`;
+            grid.innerHTML = "";
+            
+            // Loop through the 96 tile pairs (2 chars each)
+            for (let i = 0; i < data.length; i += 2) {
+                const tileCode = data.substring(i, i + 2);
+                grid.innerHTML += `<img class="tile-unit" src="t/${tileCode}.png" title="${tileCode}">`;
+            }
+            overlay.style.display = 'block';
+        }
+
+        function closeDetail() { document.getElementById('detailOverlay').style.display = 'none'; }
+
+        async function copyBigBang() {
+            const finalString = Object.values(worldData).join('');
+            await navigator.clipboard.writeText(finalString);
+            alert("Copied " + finalString.length + " characters to clipboard!");
+        }
+
+        drawWorld();
+    </script>
+</body>
+</html>

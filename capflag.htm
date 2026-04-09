@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Map Walker - Paintable Grid</title>
+    <style>
+        body { font-family: sans-serif; background: #222; color: #eee; padding: 20px; }
+        .controls { background: #333; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+        table { border-collapse: collapse; background: #000; cursor: crosshair; }
+        td { 
+            border: 1px solid #444; 
+            width: 70px; height: 90px; 
+            text-align: center; position: relative;
+        }
+        .map-id { 
+            position: absolute; top: 2px; left: 2px; 
+            font-size: 10px; background: rgba(0,0,0,0.6); padding: 2px; z-index: 10;
+        }
+        img { width: 48px; height: 48px; display: block; margin: 15px auto 5px; }
+        .label { display: block; font-size: 11px; color: #aaa; }
+        select, input, button { margin: 5px; padding: 8px; border-radius: 4px; border: none; }
+        button { cursor: pointer; background: #4CAF50; color: white; }
+    </style>
+</head>
+<body>
+
+    <div class="controls">
+        <strong>1. Setup Dimensions:</strong>
+        Wide: <input type="number" id="mapWide" value="6" min="1" max="36"> 
+        High: <input type="number" id="mapHigh" value="4" min="1" max="26">
+        <button onclick="drawTable()">Reset Grid</button>
+        <br>
+        <strong>2. Select Brush:</strong>
+        <select id="brushSelect">
+            <option value="Ga">Grass (Ga)</option>
+            <option value="Ca">Dirt (Ca)</option>
+            <option value="Ea">Brick (Ea)</option>
+            <option value="Ha">Farm (Ha)</option>
+            <option value="Ua">Water (Ua)</option>
+            <option value="Sb">Rock (Sb)</option>
+            <option value="Ta">Swamp (Ta)</option>
+            <option value="Va">Wall (Va)</option>
+        </select>
+        <span>Click cells below to paint!</span>
+    </div>
+
+    <div id="tableContainer"></div>
+
+    <script>
+        // Track the current map data in a 2D object
+        let worldData = {};
+
+        function getID(h, w) {
+            const rowChar = String.fromCharCode(65 + h);
+            const colChar = w < 26 ? String.fromCharCode(97 + w) : (w - 26).toString();
+            return rowChar + colChar;
+        }
+
+        function paintCell(cell, id) {
+            const brush = document.getElementById('brushSelect').value;
+            worldData[id] = brush; // Update internal data
+            
+            // Update visual elements inside the cell
+            const img = cell.querySelector('img');
+            const label = cell.querySelector('.label');
+            img.src = `t/${brush}.png`;
+            img.style.display = 'block';
+            label.innerText = brush;
+        }
+
+        function drawTable() {
+            const high = parseInt(document.getElementById('mapHigh').value);
+            const wide = parseInt(document.getElementById('mapWide').value);
+            const defaultTerrain = document.getElementById('brushSelect').value;
+            
+            worldData = {}; // Clear previous session
+            let html = "<table>";
+
+            for (let h = 0; h < high; h++) {
+                html += "<tr>";
+                for (let w = 0; w < wide; w++) {
+                    const id = getID(h, w);
+                    worldData[id] = defaultTerrain;
+                    
+                    html += `<td onclick="paintCell(this, '${id}')">
+                        <span class="map-id">${id}</span>
+                        <img src="t/${defaultTerrain}.png" onerror="this.style.display='none'">
+                        <span class="label">${defaultTerrain}</span>
+                    </td>`;
+                }
+                html += "</tr>";
+            }
+            html += "</table>";
+            document.getElementById('tableContainer').innerHTML = html;
+        }
+
+        drawTable();
+    </script>
+</body>
+</html>
