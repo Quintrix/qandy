@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Map Walker - Procedural Architect</title>
+    <style>
+        body { font-family: 'Courier New', Courier, monospace; background: #1a1a1a; color: #00ffcc; padding: 20px; }
+        .setup-panel { background: #222; padding: 15px; border: 1px solid #444; margin-bottom: 20px; border-radius: 8px; }
+        .step-box { display: inline-block; padding: 10px; margin-right: 10px; border: 1px solid #333; opacity: 0.5; transition: 0.3s; }
+        .step-active { border-color: #00ffcc; opacity: 1; box-shadow: 0 0 10px #00ffcc; }
+        
+        #worldContainer { display: grid; gap: 2px; background: #000; padding: 5px; margin-top: 20px; overflow: auto; }
+        .map-screen { border: 1px solid #333; position: relative; cursor: pointer; }
+        .tile-pixel { width: 4px; height: 4px; display: inline-block; float: left; }
+        
+        button { background: #00ffcc; color: #000; border: none; padding: 10px 15px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        button:disabled { background: #444; color: #888; }
+        .log { color: #888; font-size: 12px; margin-top: 10px; height: 40px; overflow: hidden; }
+    </style>
+</head>
+<body>
+
+    <div class="setup-panel">
+        <h2>World Generation Pipeline</h2>
+        <div id="step1" class="step-box step-active">1. Base Terrain</div>
+        <div id="step2" class="step-box">2. Noise</div>
+        <div id="step3" class="step-box">3. Trees</div>
+        <div id="step4" class="step-box">4. Rivers</div>
+        <div id="step5" class="step-box">5. Paths</div>
+        <div id="step6" class="step-box">6. Export</div>
+        
+        <br>
+        <button id="nextStepBtn" onclick="processNextStep()">Run Step 1</button>
+        <div class="log" id="statusLog">Ready to build...</div>
+    </div>
+
+    <div id="worldContainer"></div>
+
+    <script>
+        // Configuration
+        const MAP_W = 8;  // Screens wide
+        const MAP_H = 12; // Screens high
+        const SCREEN_W = 8; // Tiles per screen wide
+        const SCREEN_H = 12; // Tiles per screen high
+        
+        const TOTAL_W = MAP_W * SCREEN_W;
+        const TOTAL_H = MAP_H * SCREEN_H;
+
+        let currentStep = 0;
+        let globalGrid = []; // A 2D array of tile codes [y][x]
+
+        function updateLog(msg) { document.getElementById('statusLog').innerText = "> " + msg; }
+
+        function initGrid() {
+            globalGrid = Array.from({ length: TOTAL_H }, () => Array(TOTAL_W).fill('Ga'));
+        }
+
+        function renderPreview() {
+            const container = document.getElementById('worldContainer');
+            container.style.gridTemplateColumns = `repeat(${MAP_W}, ${SCREEN_W * 4}px)`;
+            container.innerHTML = "";
+
+            for (let my = 0; my < MAP_H; my++) {
+                for (let mx = 0; mx < MAP_W; mx++) {
+                    const screen = document.createElement('div');
+                    screen.className = 'map-screen';
+                    
+                    // Create mini preview of tiles
+                    for (let sy = 0; sy < SCREEN_H; sy++) {
+                        for (let sx = 0; sx < SCREEN_W; sx++) {
+                            const tile = globalGrid[my * SCREEN_H + sy][mx * SCREEN_W + sx];
+                            const pixel = document.createElement('div');
+                            pixel.className = 'tile-pixel';
+                            pixel.style.background = getTileColor(tile);
+                            screen.appendChild(pixel);
+                        }
+                    }
+                    container.appendChild(screen);
+                }
+            }
+        }
+
+        function getTileColor(code) {
+            const colors = { 'Ga': '#2d5a27', 'Ca': '#5c4033', 'Fa': '#ff69b4', 'Gb': '#4a7c44', 'Ta': '#1a3300', 'Tb': '#2d5a27', 'Ua': '#1e90ff', 'Pa': '#8b4513' };
+            return colors[code.substring(0, 2)] || '#000';
+        }
+
+        function processNextStep() {
+            currentStep++;
+            document.querySelectorAll('.step-box').forEach(b => b.classList.remove('step-active'));
+            document.getElementById('step' + currentStep).classList.add('step-active');
+
+            if (currentStep === 1) { // STEP 1: BASE TERRAIN
+                initGrid();
+                for (let y = 0; y < TOTAL_H; y++) {
+                    for (let x = 0; x < TOTAL_W; x++) {
+                        globalGrid[y][x] = Math.random() > 0.8 ? 'Ca' : 'Ga';
+                    }
+                }
+                updateLog("Base layers painted. High concentration of Grass.");
+            } 
+            else if (currentStep === 2) { // STEP 2: NOISE
+                for (let y = 0; y < TOTAL_H; y++) {
+                    for (let x = 0; x < TOTAL_W; x++) {
+                        if (globalGrid[y][x] === 'Ga' && Math.random() > 0.9) globalGrid[y][x] = 'Fa';
+                        if (globalGrid[y][x] === 'Ga' && Math.random() > 0.85) globalGrid[y][x] = 'Gb';
+                    }
+                }
+                updateLog("Flowers and weeds scattered.");
+            }
+            else if (currentStep === 3) { // STEP 3: TREES (Double Tiles)
+                for (let y = 1; y < TOTAL_H; y++) {
+                    for (let x = 0; x < TOTAL_W; x++) {
+                        if (Math.random() > 0.95 && globalGrid[y][x] === 'Ga') {
+                            globalGrid[y][x] = 'Tb'; // Tree Bottom
+                            globalGrid[y-1][x] = 'Ta'; // Tree Top
+                        }
+                    }
+                }
+                updateLog("Forest structures grown.");
+            }
+            else if (currentStep === 4) { // STEP 4: RIVER PATHFINDER
+                let rx = Math.floor(Math.random() * TOTAL_W);
+                for (let ry = 0; ry < TOTAL_H; ry++) {
+                    globalGrid[ry][rx] = 'Ua';
+                    if (Math.random() > 0.5) rx = Math.max(0, Math.min(TOTAL_W - 1, rx + (Math.random() > 0.5 ? 1 : -1)));
+                }
+                updateLog("River carved through terrain.");
+            }
+            else if (currentStep === 5) { // STEP 5: PATH PATHFINDER
+                let ry = Math.floor(Math.random() * TOTAL_H);
+                for (let rx = 0; rx < TOTAL_W; rx++) {
+                    if (globalGrid[ry][rx] !== 'Ua') globalGrid[ry][rx] = 'Pa';
+                    if (Math.random() > 0.7) ry = Math.max(0, Math.min(TOTAL_H - 1, ry + (Math.random() > 0.5 ? 1 : -1)));
+                }
+                updateLog("Dirt paths established.");
+            }
+            else if (currentStep === 6) { // STEP 6: EXPORT
+                exportToClipboard();
+                document.getElementById('nextStepBtn').disabled = true;
+                return;
+            }
+
+            renderPreview();
+            document.getElementById('nextStepBtn').innerText = "Run Step " + (currentStep + 1);
+        }
+
+        async function exportToClipboard() {
+            let bigString = "";
+            for (let my = 0; my < MAP_H; my++) {
+                for (let mx = 0; mx < MAP_W; mx++) {
+                    for (let sy = 0; sy < SCREEN_H; sy++) {
+                        for (let sx = 0; sx < SCREEN_W; sx++) {
+                            bigString += globalGrid[my * SCREEN_H + sy][mx * SCREEN_W + sx];
+                        }
+                    }
+                }
+            }
+            await navigator.clipboard.writeText(bigString);
+            updateLog("BIG BANG COPIED! Chars: " + bigString.length);
+            alert("Full World Data Copied!");
+        }
+    </script>
+</body>
+</html>

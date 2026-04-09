@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Map Walker - Tile Editor Pro</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #1a1a1a; color: #eee; padding: 20px; margin: 0; }
+        .controls { 
+            background: #333; padding: 15px; border-radius: 8px; margin-bottom: 20px; 
+            position: sticky; top: 10px; z-index: 10; border: 1px solid #444; box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+        table { border-collapse: collapse; background: #000; margin: 10px auto; }
+        td { border: 1px solid #333; width: 64px; height: 80px; text-align: center; position: relative; cursor: crosshair; transition: background 0.2s; }
+        td:hover { background: #444; }
+        .map-id { position: absolute; top: 2px; left: 2px; font-size: 10px; color: #00ffcc; font-weight: bold; pointer-events: none; }
+        .world-img { width: 32px; height: 32px; margin-top: 15px; image-rendering: pixelated; }
+        
+        /* Detail Overlay */
+        #detailOverlay { 
+            display: none; position: fixed; top: 50%; left: 50%; 
+            transform: translate(-50%, -50%); background: #222; 
+            padding: 25px; border: 2px solid #00ffcc; z-index: 100; box-shadow: 0 0 100px #000;
+            border-radius: 8px;
+        }
+        .tile-grid { display: grid; grid-template-columns: repeat(8, 40px); gap: 2px; background: #111; padding: 5px; border: 1px solid #444; }
+        .tile-unit { width: 40px; height: 40px; background: #000; cursor: pointer; image-rendering: pixelated; border: 1px solid transparent; }
+        .tile-unit:hover { border: 1px solid #fff; }
+        .close-btn { float: right; cursor: pointer; color: #ff5555; font-weight: bold; text-transform: uppercase; }
+        
+        input, select, button { background: #444; color: white; border: 1px solid #666; padding: 5px 10px; border-radius: 4px; }
+        button:hover { background: #555; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <div class="controls">
+        <strong>Dimensions:</strong> 
+        W <input type="number" id="mapWide" value="8" style="width: 50px;"> 
+        H <input type="number" id="mapHigh" value="6" style="width: 50px;">
+        | <strong>Brush:</strong> 
+        <select id="brushSelect">
+            <option value="Ga">Grass</option>
+            <option value="Ca">Dirt</option>
+            <option value="Ua">Water</option>
+            <option value="Ta">Swamp</option>
+            <option value="Fa">Flowers</option>
+            <option value="Rh">Stump</option>
+        </select>
+        <button onclick="drawWorld()" style="background:#4CAF50;">Reset World</button>
+        <button onclick="copyBigBang()" style="background:#2196F3;">Copy Export String</button>
+    </div>
+
+    <div id="worldContainer"></div>
+
+    <div id="detailOverlay">
+        <span class="close-btn" onclick="closeDetail()">[Close]</span>
+        <h3 id="detailTitle" style="margin-top:0; color:#00ffcc;">Map Screen: --</h3>
+        <p style="font-size: 12px; color: #aaa;">Click a tile below to paint it with current brush.</p>
+        <div id="tileGrid" class="tile-grid"></div>
+    </div>
+
+    <script>
+        let worldData = {}; 
+        let currentEditingId = null;
+
+        function getRandomNoise(base) {
+            if (base === 'Ga' && Math.random() > 0.85) return Math.random() > 0.5 ? 'Fa' : 'Gb';
+            if (base === 'Ca' && Math.random() > 0.92) return 'Rh';
+            return base;
+        }
+
+        function generate192CharString(baseTerrain) {
+            let str = "";
+            for (let i = 0; i < 96; i++) { str += getRandomNoise(baseTerrain); }
+            return str;
+        }
+
+        function drawWorld() {
+            const high = parseInt(document.getElementById('mapHigh').value);
+            const wide = parseInt(document.getElementById('mapWide').value);
+            const brush = document.getElementById('brushSelect').value;
+            let html = "<table>";
+
+            for (let h = 0; h < high; h++) {
+                html += "<tr>";
+                for (let w = 0; w < wide; w++) {
+                    const id = String.fromCharCode(65 + h) + (w < 26 ? String.fromCharCode(97 + w) : (w - 26));
+                    // Only overwrite if it doesn't exist, or if we reset
+                    worldData[id] = generate192CharString(brush);
+                    html += `<td id="cell-${id}" onclick="showDetail('${id}')" onmousedown="paintWorld(event, '${id}')" onmouseover="paintWorld(event, '${id}')">
+                        <span class="map-id">${id}</span>
+                        <img id="img-${id}" class="world-img" src="t/${brush}.png" onerror="this.src='https://via.placeholder.com/32?text=${brush}'">
+                        <div id="label-${id}" style="font-size:10px; color:#888;">${brush}</div>
+                    </td>`;
+                }
+                html += "</tr>";
+            }
+            document.getElementById('worldContainer').innerHTML = html + "</table>";
+        }
+
+        // Paint the world map via mouse dragging
+        function paintWorld(e, id) {
+            if (e.buttons !== 1) return; // Only if left mouse is held
+            const brush = document.getElementById('brushSelect').value;
+            worldData[id] = generate192CharString(brush);
+            document.getElementById(`img-${id}`).src = `t/${brush}.png`;
+            document.getElementById(`label-${id}`).innerText = brush;
+        }
+
+        function showDetail(id) {
+            currentEditingId = id;
+            const overlay = document.getElementById('detailOverlay');
+            const grid = document.getElementById('tileGrid');
+            renderDetailGrid();
+            document.getElementById('detailTitle').innerText = `Map Screen: ${id}`;
+            overlay.style.display = 'block';
+        }
+
+        function renderDetailGrid() {
+            const grid = document.getElementById('tileGrid');
+            const data = worldData[currentEditingId];
+            grid.innerHTML = "";
+            for (let i = 0; i < data.length; i += 2) {
+                const tileCode = data.substring(i, i + 2);
+                grid.innerHTML += `<img class="tile-unit" src="t/${tileCode}.png" 
+                                    onerror="this.src='https://via.placeholder.com/32?text=${tileCode}'"
+                                    onclick="paintTile(${i})" title="Index: ${i/2}">`;
+            }
+        }
+
+        function paintTile(index) {
+            const brush = document.getElementById('brushSelect').value;
+            let data = worldData[currentEditingId];
+            // Replace the 2 chars at the specific index
+            worldData[currentEditingId] = data.substring(0, index) + brush + data.substring(index + 2);
+            renderDetailGrid();
+            
+            // Update the mini-map icon to show the most common tile or just the last used brush
+            document.getElementById(`img-${currentEditingId}`).src = `t/${brush}.png`;
+            document.getElementById(`label-${currentEditingId}`).innerText = "Mixed*";
+        }
+
+        function closeDetail() { 
+            document.getElementById('detailOverlay').style.display = 'none'; 
+            currentEditingId = null;
+        }
+
+        async function copyBigBang() {
+            const finalString = Object.values(worldData).join('');
+            await navigator.clipboard.writeText(finalString);
+            alert("Success! Exported " + (finalString.length / 2) + " total tiles (" + finalString.length + " chars).");
+        }
+
+        drawWorld();
+    </script>
+</body>
+</html>

@@ -24,14 +24,14 @@
 <body>
 
     <div class="controls">
-        Wide: <input type="number" id="mapWide" value="5"> 
-        High: <input type="number" id="mapHigh" value="3">
-        Brush: <select id="brushSelect">
+        Wide: <input type="number" id="mapWide" value="8"> 
+        <br>&nbsp;High: <input type="number" id="mapHigh" value="12">
+        <p>Brush: <select id="brushSelect">
             <option value="Ga">Grass</option><option value="Ca">Dirt</option>
             <option value="Ua">Water</option><option value="Ta">Swamp</option>
         </select>
         <button onclick="drawWorld()">Generate World</button>
-        <button onclick="copyBigBang()" style="background:#2196F3; color:white;">Copy All to Clipboard</button>
+        <p> &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;<button onclick="copyBigBang()" style="background:#2196F3; color:white;">Export to Clipboard</button>
     </div>
 
     <div id="worldContainer"></div>
