@@ -1,22 +1,26 @@
 
-    clipboard device?
-
-    implement gfx.js tileset engine
-
+    implement gfx.js tileset engine:
+      needs gfxItems() renderer
+      needs todo=variable
+      default todo='RF' (refresh)
+      every 1 second todo command sent to server
+      can be changed to:
+        WI..=Wear ItemID('..') if item is in player's inventory add item to their avatar string, removing any previous item with the same starting letter
+        
+        
+    mouse.js driver
+    draw.js
+    
+    add insert/delete to alt keyboard
     move ctrl and alt to beside caps
     fix missing space label
-    add insert/delete to alt keyboard   
-    
-    add total size and number of files to localDir())
+       
     add insert/delete underline/block mode
-    mouse.js driver    
-    overhaul command_js
 
        ascii.js - improve output
-        ansi.js - fix bugs, display codes
-       piano.js - fix double exit bug
-      mkfile,js - make files using keyboard
-       mouse.js - add mouse tooltip to display x,y on screen 
+        ansi.js - add 256 color codes and cursor controls
+       piano.js - use old sound.js driver instead of gwbasic driver 
+      mkfile.js - write file to make files using keyboard
       cpanel.js - config script
     autoexec.js - batch scripts
         draw.js - ansi draw progran (need cursor keys and/or mouse)
@@ -26,9 +30,13 @@
     DOS Update:
      
       Allow 'sysop' to view dir on mounted devices
+      
       Add 'file' device for file://
       Add 'http' device for http://
       Add 'paste' device for cut/paste
       Add 'xmodem' device for upload/download
+      
+      clipboard device?
 
-
+      add total size and number of files to localDir())
+      overhaul command_js
