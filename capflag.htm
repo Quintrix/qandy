@@ -1,99 +1,178 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Map Walker - Paintable Grid</title>
+    <meta charset="UTF-8">
+    <title>CapFlag Web Map Generator</title>
     <style>
-        body { font-family: sans-serif; background: #222; color: #eee; padding: 20px; }
-        .controls { background: #333; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
-        table { border-collapse: collapse; background: #000; cursor: crosshair; }
-        td { 
-            border: 1px solid #444; 
-            width: 70px; height: 90px; 
-            text-align: center; position: relative;
-        }
-        .map-id { 
-            position: absolute; top: 2px; left: 2px; 
-            font-size: 10px; background: rgba(0,0,0,0.6); padding: 2px; z-index: 10;
-        }
-        img { width: 48px; height: 48px; display: block; margin: 15px auto 5px; }
-        .label { display: block; font-size: 11px; color: #aaa; }
-        select, input, button { margin: 5px; padding: 8px; border-radius: 4px; border: none; }
-        button { cursor: pointer; background: #4CAF50; color: white; }
+        :root { --bg: #1a1a1a; --text: #e0e0e0; --accent: #4a90e2; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); color: var(--text); display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        .controls { margin-bottom: 20px; background: #333; padding: 15px; border-radius: 8px; display: flex; gap: 15px; align-items: center; }
+        
+        #worldGrid { display: grid; grid-template-columns: repeat(8, 70px); gap: 2px; background: #444; border: 2px solid #444; }
+        .sector { width: 70px; height: 70px; background: #222; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 10px; border: 1px solid #333; position: relative; }
+        .sector img { width: 40px; height: 40px; image-rendering: pixelated; }
+        .sector:hover { border-color: var(--accent); }
+
+        /* Modal */
+        #detailOverlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 10; align-items: center; justify-content: center; }
+        #detailContent { background: #222; padding: 20px; border-radius: 10px; border: 2px solid var(--accent); max-width: 90vw; }
+        .mini-grid { display: grid; grid-template-columns: repeat(8, 32px); gap: 1px; background: #555; border: 1px solid #555; }
+        .mini-tile { width: 32px; height: 32px; cursor: pointer; overflow: hidden; background: #111; }
+        .mini-tile img { width: 100%; height: 100%; image-rendering: pixelated; display: block; }
+        .mini-tile:hover { outline: 1px solid white; z-index: 2; }
+        
+        button { padding: 10px 20px; cursor: pointer; background: var(--accent); border: none; color: white; font-weight: bold; border-radius: 4px; }
+        button:hover { opacity: 0.9; }
     </style>
 </head>
 <body>
 
+    <h2>Map Sector Generator</h2>
+
     <div class="controls">
-        <strong>1. Setup Dimensions:</strong>
-        Wide: <input type="number" id="mapWide" value="6" min="1" max="36"> 
-        High: <input type="number" id="mapHigh" value="4" min="1" max="26">
-        <button onclick="drawTable()">Reset Grid</button>
-        <br>
-        <strong>2. Select Brush:</strong>
+        <label>Brush:</label>
         <select id="brushSelect">
             <option value="Ga">Grass (Ga)</option>
             <option value="Ca">Dirt (Ca)</option>
-            <option value="Ea">Brick (Ea)</option>
             <option value="Ha">Farm (Ha)</option>
-            <option value="Ua">Water (Ua)</option>
             <option value="Sb">Rock (Sb)</option>
             <option value="Ta">Swamp (Ta)</option>
-            <option value="Va">Wall (Va)</option>
+            <option value="Ka">Railroad (Ka)</option>
+            <option value="Cp">Stump (Cp)</option>
         </select>
-        <span>Click cells below to paint!</span>
+        <button onclick="generateAll()">Generate All</button>
+        <button onclick="exportData()" style="background:#27ae60">Export to Clipboard</button>
     </div>
 
-    <div id="tableContainer"></div>
+    <div id="worldGrid"></div>
 
-    <script>
-        // Track the current map data in a 2D object
-        let worldData = {};
+    <div id="detailOverlay" onclick="this.style.display='none'">
+        <div id="detailContent" onclick="event.stopPropagation()">
+            <h3 id="detailTitle">Sector Detail</h3>
+            <div id="miniGrid" class="mini-grid"></div>
+            <br>
+            <p style="font-size: 12px; color: #aaa;">Click tiles to paint with current brush.</p>
+            <button onclick="document.getElementById('detailOverlay').style.display='none'">Close</button>
+        </div>
+    </div>
 
-        function getID(h, w) {
-            const rowChar = String.fromCharCode(65 + h);
-            const colChar = w < 26 ? String.fromCharCode(97 + w) : (w - 26).toString();
-            return rowChar + colChar;
-        }
+<script>
+    const ROWS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
+    const COLS = 8;
+    const worldData = {}; 
 
-        function paintCell(cell, id) {
-            const brush = document.getElementById('brushSelect').value;
-            worldData[id] = brush; // Update internal data
-            
-            // Update visual elements inside the cell
-            const img = cell.querySelector('img');
-            const label = cell.querySelector('.label');
-            img.src = `t/${brush}.png`;
-            img.style.display = 'block';
-            label.innerText = brush;
-        }
+    const gridEl = document.getElementById('worldGrid');
+    const brushEl = document.getElementById('brushSelect');
 
-        function drawTable() {
-            const high = parseInt(document.getElementById('mapHigh').value);
-            const wide = parseInt(document.getElementById('mapWide').value);
-            const defaultTerrain = document.getElementById('brushSelect').value;
-            
-            worldData = {}; // Clear previous session
-            let html = "<table>";
-
-            for (let h = 0; h < high; h++) {
-                html += "<tr>";
-                for (let w = 0; w < wide; w++) {
-                    const id = getID(h, w);
-                    worldData[id] = defaultTerrain;
-                    
-                    html += `<td onclick="paintCell(this, '${id}')">
-                        <span class="map-id">${id}</span>
-                        <img src="t/${defaultTerrain}.png" onerror="this.style.display='none'">
-                        <span class="label">${defaultTerrain}</span>
-                    </td>`;
-                }
-                html += "</tr>";
+    function init() {
+        ROWS.forEach(r => {
+            for (let c = 1; c <= COLS; c++) {
+                const code = r + c;
+                worldData[code] = new Array(96).fill('Ga');
+                
+                const cell = document.createElement('div');
+                cell.className = 'sector';
+                cell.id = `sec-${code}`;
+                cell.innerHTML = `<span>${code}</span><img src="t/Ga.png" onerror="this.src='https://via.placeholder.com/40/2ecc71/ffffff?text=Ga'" id="img-${code}">`;
+                cell.onclick = () => paintSector(code);
+                cell.oncontextmenu = (e) => { e.preventDefault(); showDetail(code); };
+                gridEl.appendChild(cell);
             }
-            html += "</table>";
-            document.getElementById('tableContainer').innerHTML = html;
-        }
+        });
+    }
 
-        drawTable();
-    </script>
+    function paintSector(code) {
+        const brush = brushEl.value;
+        worldData[code].fill(brush);
+        document.getElementById(`img-${code}`).src = `t/${brush}.png`;
+    }
+
+    function runProcGen(type) {
+        let tiles = new Array(96).fill(type);
+        if (type === 'Ga') { 
+            const flora = ['Fa','Fb','Fc','Fd','Fe','Ff','Fg','Fh','Fk','Fl','Gb','Gc','Gd','Ge','Gf','Gg'];
+            tiles = tiles.map(t => Math.random() > 0.85 ? flora[Math.floor(Math.random()*flora.length)] : 'Ga');
+        } 
+        else if (type === 'Ca') {
+            tiles = tiles.map(t => Math.random() > 0.95 ? 'Cp' : 'Ca');
+            let startRow = Math.floor(Math.random() * 12) * 8;
+            for(let i=0; i<8; i++) tiles[startRow + i] = 'Ka'; 
+        }
+        else if (type === 'Ha') {
+            for(let i=0; i<4; i++) { 
+                for(let j=0; j<4; j++) tiles[(i+2)*8 + (j+2)] = 'Ha';
+            }
+        }
+        else if (type === 'Sb') {
+            tiles = tiles.map(t => Math.random() > 0.9 ? 'Sb' : 'Sb');
+            let idx = 40;
+            tiles[idx] = 'Sc'; tiles[idx+1] = 'Sd'; tiles[idx+2] = 'Se';
+        }
+        else if (type === 'Ta') {
+            tiles = tiles.map((t, i) => Math.random() > 0.8 ? 'Tf' : 'Ta');
+            tiles[20] = 'Tb'; tiles[21] = 'Tc';
+        }
+        return tiles;
+    }
+
+    function generateAll() {
+        Object.keys(worldData).forEach(code => {
+            const base = worldData[code][0]; 
+            worldData[code] = runProcGen(base);
+        });
+        alert("World features generated!");
+    }
+
+    // UPDATED: right-click detail now shows images and allows editing
+    function showDetail(code) {
+        const overlay = document.getElementById('detailOverlay');
+        const miniGrid = document.getElementById('miniGrid');
+        document.getElementById('detailTitle').innerText = `Sector ${code} Detail (8x12)`;
+        miniGrid.innerHTML = '';
+        
+        worldData[code].forEach((tileID, index) => {
+            const container = document.createElement('div');
+            container.className = 'mini-tile';
+            
+            const img = document.createElement('img');
+            // Set source from t/ directory
+            img.src = `t/${tileID}.png`;
+            img.title = tileID;
+            
+            // Fallback for missing images
+            img.onerror = () => {
+                const color = getTileColor(tileID).replace('#','');
+                img.src = `https://via.placeholder.com/32/${color}/ffffff?text=${tileID}`;
+            };
+
+            // FINE-TUNE CLICK HANDLER
+            container.onclick = () => {
+                const newBrush = brushEl.value;
+                worldData[code][index] = newBrush; // Update the data
+                img.src = `t/${newBrush}.png`;      // Update the visual immediately
+                img.title = newBrush;
+            };
+
+            container.appendChild(img);
+            miniGrid.appendChild(container);
+        });
+        overlay.style.display = 'flex';
+    }
+
+    function getTileColor(id) {
+        const colors = { Ga: '#2ecc71', Ca: '#8b4513', Ha: '#f1c40f', Sb: '#7f8c8d', Ta: '#16a085', Ka: '#34495e', Cp: '#a0522d' };
+        return colors[id.substring(0,2)] || '#333';
+    }
+
+    function exportData() {
+        let output = "";
+        Object.keys(worldData).forEach(code => {
+            output += `${code}=${worldData[code].join(',')}\n`;
+        });
+        navigator.clipboard.writeText(output).then(() => alert("Exported to clipboard!"));
+    }
+
+    init();
+</script>
 </body>
 </html>

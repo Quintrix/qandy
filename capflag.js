@@ -44,7 +44,7 @@ function startup(){
 window.flagConnect = async function() {
   try {
     await print("\n");
-    await print ("\x1b[97m\x1b[101mQandyland Servers:\x1b[40m\x1b[37m\n\n");
+    await print ("\x1b[36mQandyland Servers:\x1b[40m\x1b[37m\n\n");
 
     // Properly capture server selection
     gfxConnected = await flagServers("gfx");

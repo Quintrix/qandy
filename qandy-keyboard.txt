@@ -1,0 +1,22 @@
+
+
+            Qandy Pocket Computer
+         Overview of Keyboard Driver
+
+
+
+The Qandy emulates a keyboard on the screen and also
+intercepts physical keystrokes and processes them making
+it it's own computer with it's own input/output functions. 
+
+The ALT key features cursor control keys and a numeric
+keypad, while SHIFT-ALT features a set of extended ASCII
+graphic images for drawing boxes and other art with.
+
+The press() function is the main source of all input, if
+a running script in the RUN= variable has defined a 
+keydown() and/or keyup() function, the Qandy will direct
+any input to those functions, there is no need to assign
+your own input listener as doing so would by-pass the
+virtual keyboard and not work on the Qandy Pocket Computer.
+
