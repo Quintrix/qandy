@@ -138,6 +138,16 @@ const SECTORS_WIDE = 8, SECTORS_TALL = 12;
             };
             sidebar.appendChild(sbtn);
         });
+        
+        var btn = document.createElement('button');
+        btn.innerText = 'Import';
+        btn.onclick = importMap;
+        sidebar.appendChild(btn);
+
+        var btn = document.createElement('button');
+        btn.innerText = 'Export';
+        btn.onclick = exportMap;
+        sidebar.appendChild(btn);
     }
 
     function getTileImage(code) {
@@ -308,7 +318,90 @@ const SECTORS_WIDE = 8, SECTORS_TALL = 12;
         brushDisplay.innerText = brush;
     }
 
-    // ... (Keep your Import/Export functions as they were, they look solid!)
+async function importMap() {
+    try {
+        const text = await navigator.clipboard.readText();
+        if (!text) return;
+
+        const lines = text.split('\n');
+        const ROWS = ["A","B","C","D","E","F","G","H","I","J","K","L"];
+        const SECTOR_W = 8;
+        const SECTOR_H = 12;
+
+        lines.forEach(line => {
+            if (!line.includes('=')) return;
+
+            // Split "A1=[tiles]" into label and data
+            const [label, data] = line.trim().split('=');
+            
+            // Extract Row index (A-L -> 0-11) and Col index (1-8 -> 0-7)
+            const rowChar = label.charAt(0);
+            const colNum = parseInt(label.substring(1));
+            
+            const rIndex = ROWS.indexOf(rowChar);
+            const cIndex = colNum - 1;
+
+            if (rIndex === -1 || isNaN(cIndex)) return;
+
+            // Loop through the 192-character string (96 tiles)
+            for (let i = 0; i < 96; i++) {
+                const tileCode = data.substring(i * 2, (i * 2) + 2);
+                
+                // Calculate local tile position within sector
+                const sx = i % SECTOR_W;
+                const sy = Math.floor(i / SECTOR_W);
+
+                // Map to global grid coordinates
+                const globalX = (cIndex * SECTOR_W) + sx;
+                const globalY = (rIndex * SECTOR_H) + sy;
+
+                if (globalX < TILE_W && globalY < TILE_H) {
+                    mapData[globalY][globalX] = tileCode;
+                }
+            }
+        });
+
+        // Redraw the entire canvas with the imported data
+        renderFullMap();
+        alert("Map imported successfully!");
+
+    } catch (err) {
+        console.error('Failed to read clipboard:', err);
+        alert("Failed to import. Make sure you've granted clipboard permissions.");
+    }
+}
+
+    // Export logic
+    function exportMap() {
+        const SECTOR_W = 8;
+        const SECTOR_H = 12;
+        const ROWS = ["A","B","C","D","E","F","G","H","I","J","K","L"];
+        let output = "";
+
+        for (let r = 0; r < 12; r++) { // Vertical sectors
+            for (let c = 0; c < 8; c++) { // Horizontal sectors
+                const sectorLabel = `${ROWS[r]}${c + 1}`;
+                let sectorString = "";
+
+                // Get tiles in this sector
+                for (let sy = 0; sy < SECTOR_H; sy++) {
+                    for (let sx = 0; sx < SECTOR_W; sx++) {
+                        const globalX = (c * SECTOR_W) + sx;
+                        const globalY = (r * SECTOR_H) + sy;
+                        sectorString += mapData[globalY][globalX];
+                    }
+                }
+                output += `${sectorLabel}=${sectorString}\n`;
+            }
+        }
+
+        navigator.clipboard.writeText(output.trim()).then(() => {
+            alert("Map exported to clipboard!");
+        }).catch(err => {
+            console.error('Error copying to clipboard', err);
+        });
+    }
+
 
     initMap();
 </script>
