@@ -60,7 +60,8 @@
             <option value="Cp">Stump (Cp)</option>
         </select>
         <button onclick="generateAll()">Generate All</button>
-        <button onclick="exportData()" style="background:#27ae60">Export to Clipboard</button>
+        <button onclick="exportFlat()" style="background:#27ae60">Flat World</button>
+        <button onclick="exportRound()" style="background:#27ae60">Round World</button>
     </div>
 
     <div id="worldGrid"></div>
@@ -233,6 +234,77 @@
         });
         navigator.clipboard.writeText(output).then(() => alert("Exported to clipboard!"));
     }
+    
+function exportFlat() {
+    const rows = 12; // rows: A-L (0-11)
+    const cols = 8;  // cols: 1-8  (0-7)
+    let output = "";
+
+    function getRC(code) {
+        let row = code.charCodeAt(0) - 65;
+        let col = parseInt(code.slice(1), 10) - 1;
+        return [row, col];
+    }
+    function codeFor(rc) {
+        const [row, col] = rc;
+        return String.fromCharCode(65 + row) + (col + 1);
+    }
+    function getExits(row, col) {
+        let exits = "";
+        // North
+        if (row > 0)    exits += codeFor([row - 1, col]);
+        // South
+        if (row < rows - 1) exits += codeFor([row + 1, col]);
+        // West
+        if (col > 0)    exits += codeFor([row, col - 1]);
+        // East
+        if (col < cols - 1) exits += codeFor([row, col + 1]);
+        return exits;
+    }
+
+    Object.keys(worldData).forEach(code => {
+        let [row, col] = getRC(code);
+        let exits = getExits(row, col);
+        output += `${code}=${worldData[code].join('')}${exits}\n`;
+    });
+    navigator.clipboard.writeText(output).then(() => alert("Flat map exported to clipboard!"));
+}
+
+function exportRound() {
+    const rows = 12; // A-L (0-11)
+    const cols = 8;  // 1-8  (0-7)
+    let output = "";
+
+    function getRC(code) {
+        let row = code.charCodeAt(0) - 65;
+        let col = parseInt(code.slice(1), 10) - 1;
+        return [row, col];
+    }
+    function codeFor(row, col) {
+        return String.fromCharCode(65 + row) + (col + 1);
+    }
+    function wrapIndex(idx, max) {
+        return (idx + max) % max;
+    }
+    function getExits(row, col) {
+        // Always have 4 exits in round world (N, S, W, E), wrapping edges
+        const north = codeFor(wrapIndex(row - 1, rows), col);
+        const south = codeFor(wrapIndex(row + 1, rows), col);
+        const west = codeFor(row, wrapIndex(col - 1, cols));
+        const east = codeFor(row, wrapIndex(col + 1, cols));
+        return north + south + west + east;
+        // Order: North, South, West, East (consistent with your flat export order)
+    }
+
+    Object.keys(worldData).forEach(code => {
+        let [row, col] = getRC(code);
+        let exits = getExits(row, col);
+        output += `${code}=${worldData[code].join('')}${exits}\n`;
+    });
+    navigator.clipboard.writeText(output).then(() => alert("Round world exported to clipboard!"));
+}    
+    
+    
 
     init();
 </script>

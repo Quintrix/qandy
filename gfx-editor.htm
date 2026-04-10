@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>2D Tile Map Editor</title>
+    <title>GFX EDIT</title>
     <style>
         body {
             background: #222;
@@ -55,12 +55,15 @@
 
 <div id="toolbar">
     <div>Brush: <span class="brush-info" id="brushDisplay">Ga</span></div>
-    <button onclick="importMap()">Import from Clipboard</button>
-    <button onclick="exportMap()">Export to Clipboard</button>
+    <button onclick="importMap()">Import</button>
+    <button onclick="exportMap()">Export</button>
     <div style="font-size: 0.8em; color: #aaa;">
         [L-Click] Paint | [R-Click] Eyedropper | [A-Z] Set 1st Char | [a-z] Set 2nd Char
     </div>
 </div>
+
+
+
 
 <div id="viewport">
     <canvas id="mapCanvas"></canvas>
