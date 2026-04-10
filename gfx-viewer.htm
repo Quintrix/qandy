@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>CapFlag Map Renderer</title>
+    <style>
+        body { font-family: sans-serif; background: #222; color: #eee; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        .container { display: flex; gap: 20px; width: 95%; max-width: 1200px; }
+        .sidebar { flex: 1; display: flex; flex-direction: column; gap: 10px; }
+        textarea { height: 400px; background: #111; color: #0f0; border: 1px solid #444; font-family: monospace; padding: 10px; resize: none; }
+        .viewer { flex: 2; background: #333; padding: 10px; border-radius: 5px; overflow: auto; max-height: 80vh; border: 2px dashed #555; }
+        canvas { display: block; margin: 0 auto; background: #000; }
+        .btns { display: flex; gap: 5px; flex-wrap: wrap; }
+        button { flex: 1; padding: 10px; cursor: pointer; font-weight: bold; border: none; border-radius: 3px; }
+        .btn-full { background: #4a90e2; color: white; }
+        .btn-mini { background: #9b59b6; color: white; }
+        .btn-save { background: #27ae60; color: white; }
+        #status { font-size: 0.8em; color: #aaa; }
+    </style>
+</head>
+<body>
+
+    <h2>Map Renderer (Full & Mini)</h2>
+
+    <div class="container">
+        <div class="sidebar">
+            <label>Paste Map Data:</label>
+            <textarea id="mapInput" placeholder="A1=GaGaGa..."></textarea>
+            <div id="status">Ready.</div>
+            <div class="btns">
+                <button class="btn-full" onclick="render(32, 't')">Draw Full Map (32px)</button>
+                <button class="btn-mini" onclick="render(4, 'm')">Draw Mini Map (4px)</button>
+                <button class="btn-save" onclick="saveCanvas()">Save Image</button>
+            </div>
+        </div>
+
+        <div class="viewer">
+            <canvas id="mapCanvas"></canvas>
+        </div>
+    </div>
+
+<script>
+    const canvas = document.getElementById('mapCanvas');
+    const ctx = canvas.getContext('2d');
+    const status = document.getElementById('status');
+    const ROWS = "ABCDEFGHIJKL".split(""); // A-L (12 rows)
+    
+    // Cache for loaded images to prevent redundant fetches
+    const imageCache = {};
+
+    async function loadImage(src) {
+        if (imageCache[src]) return imageCache[src];
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.onload = () => { imageCache[src] = img; resolve(img); };
+            img.onerror = () => { resolve(null); }; // Skip missing assets
+            img.src = src;
+        });
+    }
+
+    async function render(tileSize, folder) {
+        const input = document.getElementById('mapInput').value.trim();
+        if (!input) return alert("Please paste map data first.");
+
+        // 1. Setup Canvas Dimensions
+        canvas.width = 8 * 8 * tileSize;   // 8 sectors wide * 8 tiles per sector
+        canvas.height = 12 * 12 * tileSize; // 12 sectors high * 12 tiles per sector
+        ctx.imageSmoothingEnabled = false;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        status.innerText = "Processing tiles...";
+
+        const lines = input.split('\n');
+        
+        // 2. Parse and Draw
+        for (let line of lines) {
+            const [header, data] = line.split('=');
+            if (!header || !data) continue;
+
+            const rowChar = header[0].toUpperCase();
+            const colNum = parseInt(header.substring(1));
+            
+            // Determine Sector Top-Left in Pixels
+            const sectorY = ROWS.indexOf(rowChar) * 12; // Row offset in tiles
+            const sectorX = (colNum - 1) * 8;          // Col offset in tiles
+
+            // 3. Draw the 96 tiles (8x12 grid inside sector)
+            for (let i = 0; i < 96; i++) {
+                const tileID = data.substring(i * 2, (i * 2) + 2);
+                const localX = i % 8;
+                const localY = Math.floor(i / 8);
+
+                const finalX = (sectorX + localX) * tileSize;
+                const finalY = (sectorY + localY) * tileSize;
+
+                const imgPath = `${folder}/${tileID}.png`;
+                const img = await loadImage(imgPath);
+
+                if (img) {
+                    ctx.drawImage(img, finalX, finalY, tileSize, tileSize);
+                } else {
+                    // Fallback visual for missing assets
+                    ctx.fillStyle = "#333";
+                    ctx.fillRect(finalX, finalY, tileSize, tileSize);
+                }
+            }
+        }
+        status.innerText = "Render Complete.";
+    }
+
+    function saveCanvas() {
+        const link = document.createElement('a');
+        link.download = 'world_map.png';
+        link.href = canvas.toDataURL();
+        link.click();
+    }
+</script>
+</body>
+</html>

@@ -18,17 +18,29 @@ So the client itself is not considered a 'player' yet, the user will need to cli
 
 The 'name' field is not to be considered 'unique', it is not an ID. All names should be pre-populated as 'Team S Player x' or 'Team T Player x' with x being their number 1-26 (a-z). We'll add a command where players can change their name in the future, let's get this working before we add bells and whistles. 
 
-To get any of this to work, we need to assemble a 'map state' string that  a single server request that can use to transmit everything the client needs to render any given map, and do so using the absolute least amount of bandwidth possible -even 1 character being server to 1 hundred players every 1 second for hours adds up into huge amounts of bandwidth. These are the map files a client will need: m.txt (tiles), e.txt which contains a list of valid exits, and p.txt (player avatars). 
 
-We know the length of m.txt so it goes first. 
 
-Next a list of exists, which is a list of valid maps an item can be moved to, this allows for server-side validation of all player movements to ensure they don't exploit a teleport cheat. Each valid exit will be two-characters (ie: w/F5/e.txt = F4F6E5G5) ... that gets added to our map string followed by a single dot '.' separator. 
+                      Quintrix and Crew Software
+                      Multiplayer Graphics Engine
+                      Stand Alone DevTeam Tools:
 
-Finally, the list of player avatars from p.txt, because each avatar length if variable we will need a dot '.' separator between each one. So the final string with two players on the map would have: var state="[96 map tiles]F4F6E5G5.SaA1C1J0.SbE2G2I1"
+    gfx-bigbang.ntm — lets user 'paint' each map sector with a default tilebase
+                      then generates 'noise' so each map is unique. Copies output
+                      to clipboard which can then be imported into.....
 
-So when capflag.js requests to join game, it returns "[96 map tiles]F4F6E5G5.SaA1C1J0.SbE2G2I1" and then capflag.js can render the map.
-  
-
+     gfx-editor.htm — Displays entire world and lets user edit each tile. Right-click
+                      a tile and it becomes the 'brush', left-click a tile paints that
+                      tile to the brush. You can hold the mouse down to draw lines and
+                      file areas. Input capital letter to change the first character
+                      of the tile, input lower case letter to change the second character
+                      of the tile. Again, copies output to clipboard which can be imported...
+                      
+     gfx-viewer.htm — Renders entire world on a 'canvas image' at either full size
+                      32x32 tiles, or mini-size 4x4 tiles. This image can compatiable
+                      with 'Save As'. 
+                      
+    gfx-tileset.htm — Displays entire tileset including tiles, characters, and items.
+     
 
 
 
