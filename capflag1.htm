@@ -55,6 +55,7 @@
 
 <div id="toolbar">
     <div>Brush: <span class="brush-info" id="brushDisplay">Ga</span></div>
+    <button onclick="importMap()">Import from Clipboard</button>
     <button onclick="exportMap()">Export to Clipboard</button>
     <div style="font-size: 0.8em; color: #aaa;">
         [L-Click] Paint | [R-Click] Eyedropper | [A-Z] Set 1st Char | [a-z] Set 2nd Char
@@ -66,6 +67,9 @@
 </div>
 
 <script>
+    const SECTORS_WIDE = 8, SECTORS_TALL = 12;
+    const SECTOR_TILE_WIDTH = 8, SECTOR_TILE_HEIGHT = 12;
+
     const TILE_W = 64;
     const TILE_H = 144;
     const TILE_SIZE = 32; // Visual size of tiles on canvas
@@ -110,7 +114,38 @@
                 drawTile(x, y);
             }
         }
+        drawSectorBorders(
+            ctx, 
+            TILE_SIZE, 
+            SECTORS_WIDE, SECTORS_TALL, 
+            SECTOR_TILE_WIDTH, SECTOR_TILE_HEIGHT
+        );
     }
+
+function drawSectorBorders(ctx, tileSize, sectorsWide, sectorsTall, sectorTileWidth, sectorTileHeight) {
+    ctx.save();
+    ctx.strokeStyle = '#FF0'; // sector border color (yellow, but adjust as you like)
+    ctx.lineWidth = 2;        // sector border thickness
+
+    // Draw vertical sector lines
+    for (let sx = 1; sx < sectorsWide; sx++) {
+        const x = sx * sectorTileWidth * tileSize + 0.5;
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, sectorsTall * sectorTileHeight * tileSize);
+        ctx.stroke();
+    }
+
+    // Draw horizontal sector lines
+    for (let sy = 1; sy < sectorsTall; sy++) {
+        const y = sy * sectorTileHeight * tileSize + 0.5;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(sectorsWide * sectorTileWidth * tileSize, y);
+        ctx.stroke();
+    }
+    ctx.restore();
+}
 
     function drawTile(x, y) {
         const code = mapData[y][x];
@@ -130,18 +165,44 @@
     }
 
     // Interaction logic
-    canvas.addEventListener('mousedown', (e) => {
-        const rect = canvas.getBoundingClientRect();
-        const x = Math.floor((e.clientX - rect.left) / TILE_SIZE);
-        const y = Math.floor((e.clientY - rect.top) / TILE_SIZE);
+let isPainting = false;
 
-        if (e.button === 0) { // Left Click: Paint
-            mapData[y][x] = brush;
-            drawTile(x, y);
-        } else if (e.button === 2) { // Right Click: Pick
+    // Helper to paint a specific coordinate
+    function paintAt(clientX, clientY) {
+        const rect = canvas.getBoundingClientRect();
+        const x = Math.floor((clientX - rect.left) / TILE_SIZE);
+        const y = Math.floor((clientY - rect.top) / TILE_SIZE);
+
+        // Bounds check to prevent errors if dragging off-canvas
+        if (x >= 0 && x < TILE_W && y >= 0 && y < TILE_H) {
+            if (mapData[y][x] !== brush) {
+                mapData[y][x] = brush;
+                drawTile(x, y);
+            }
+        }
+    }
+
+    canvas.addEventListener('mousedown', (e) => {
+        if (e.button === 0) { // Left Click
+            isPainting = true;
+            paintAt(e.clientX, e.clientY);
+        } else if (e.button === 2) { // Right Click: Eyedropper
+            const rect = canvas.getBoundingClientRect();
+            const x = Math.floor((e.clientX - rect.left) / TILE_SIZE);
+            const y = Math.floor((e.clientY - rect.top) / TILE_SIZE);
             brush = mapData[y][x];
             updateBrushUI();
         }
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (isPainting) {
+            paintAt(e.clientX, e.clientY);
+        }
+    });
+
+    window.addEventListener('mouseup', () => {
+        isPainting = false;
     });
 
     // Disable context menu on right click
@@ -162,6 +223,59 @@
     function updateBrushUI() {
         brushDisplay.innerText = brush;
     }
+
+async function importMap() {
+    try {
+        const text = await navigator.clipboard.readText();
+        if (!text) return;
+
+        const lines = text.split('\n');
+        const ROWS = ["A","B","C","D","E","F","G","H","I","J","K","L"];
+        const SECTOR_W = 8;
+        const SECTOR_H = 12;
+
+        lines.forEach(line => {
+            if (!line.includes('=')) return;
+
+            // Split "A1=[tiles]" into label and data
+            const [label, data] = line.trim().split('=');
+            
+            // Extract Row index (A-L -> 0-11) and Col index (1-8 -> 0-7)
+            const rowChar = label.charAt(0);
+            const colNum = parseInt(label.substring(1));
+            
+            const rIndex = ROWS.indexOf(rowChar);
+            const cIndex = colNum - 1;
+
+            if (rIndex === -1 || isNaN(cIndex)) return;
+
+            // Loop through the 192-character string (96 tiles)
+            for (let i = 0; i < 96; i++) {
+                const tileCode = data.substring(i * 2, (i * 2) + 2);
+                
+                // Calculate local tile position within sector
+                const sx = i % SECTOR_W;
+                const sy = Math.floor(i / SECTOR_W);
+
+                // Map to global grid coordinates
+                const globalX = (cIndex * SECTOR_W) + sx;
+                const globalY = (rIndex * SECTOR_H) + sy;
+
+                if (globalX < TILE_W && globalY < TILE_H) {
+                    mapData[globalY][globalX] = tileCode;
+                }
+            }
+        });
+
+        // Redraw the entire canvas with the imported data
+        renderFullMap();
+        alert("Map imported successfully!");
+
+    } catch (err) {
+        console.error('Failed to read clipboard:', err);
+        alert("Failed to import. Make sure you've granted clipboard permissions.");
+    }
+}
 
     // Export logic
     function exportMap() {
