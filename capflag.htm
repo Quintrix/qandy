@@ -8,9 +8,28 @@
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); color: var(--text); display: flex; flex-direction: column; align-items: center; padding: 20px; }
         .controls { margin-bottom: 20px; background: #333; padding: 15px; border-radius: 8px; display: flex; gap: 15px; align-items: center; }
         
-        #worldGrid { display: grid; grid-template-columns: repeat(8, 70px); gap: 2px; background: #444; border: 2px solid #444; }
-        .sector { width: 70px; height: 70px; background: #222; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 10px; border: 1px solid #333; position: relative; }
-        .sector img { width: 40px; height: 40px; image-rendering: pixelated; }
+        #worldGrid { display: grid;
+                     grid-template-columns: repeat(8, 70px);
+                     gap: 0px;
+                     background: #444;
+                     border: 0px; }
+
+        .sector { width: 70px;
+                  height: 70px;
+                  background: #222;
+                  cursor: pointer;
+                  display: flex;
+                  flex-direction: column;
+                  align-items: center;
+                  justify-content: center;
+                  font-size: 10px;
+                  border: 1px solid #333;
+                  position: relative; }
+
+        .sector img { width: 40px;
+                      height: 40px;
+                      image-rendering: pixelated; }
+        
         .sector:hover { border-color: var(--accent); }
 
         /* Modal */
@@ -75,7 +94,7 @@
                 cell.id = `sec-${code}`;
                 cell.innerHTML = `<span>${code}</span><img src="t/Ga.png" onerror="this.src='https://via.placeholder.com/40/2ecc71/ffffff?text=Ga'" id="img-${code}">`;
                 cell.onclick = () => paintSector(code);
-                cell.oncontextmenu = (e) => { e.preventDefault(); showDetail(code); };
+                //cell.oncontextmenu = (e) => { e.preventDefault(); showDetail(code); };
                 gridEl.appendChild(cell);
             }
         });
@@ -121,10 +140,46 @@
             worldData[code] = runProcGen(base);
         });
         alert("World features generated!");
-    }
+        document.querySelectorAll('.sector').forEach(cell => {
+                const code = cell.id.replace('sec-', ''); // extract code (e.g., "A1" from "sec-A1")
+                cell.onclick = (e) => {
+                    e.preventDefault();
+                    showDetail(code);
+                };
+            });
+        }
 
     // UPDATED: right-click detail now shows images and allows editing
     function showDetail(code) {
+      var brush="Ga";
+      document.addEventListener('keydown', function(event) {
+          // Only react if a single character (ignores arrows, etc)
+          if (event.key.length === 1 && /[a-zA-Z]/.test(event.key)) {
+              // Assuming 'brush' is a global string variable.
+              // Ensure brush has at least 2 characters.
+              if (typeof brush === "string" && brush.length >= 2) {
+                  if (event.key === event.key.toUpperCase() && event.key >= 'A' && event.key <= 'Z') {
+                      // Uppercase, set first character
+                      brush = event.key + brush.slice(1);
+                  } else if (event.key === event.key.toLowerCase() && event.key >= 'a' && event.key <= 'z') {
+                      // Lowercase, set second character
+                      brush = brush.charAt(0) + event.key + brush.slice(2);
+                  }
+              }
+              // If brush is an array, use:
+              /*
+              if (Array.isArray(brush) && brush.length >= 2) {
+                  if (event.key === event.key.toUpperCase() && event.key >= 'A' && event.key <= 'Z') {
+                      brush[0] = event.key;
+                  } else if (event.key === event.key.toLowerCase() && event.key >= 'a' && event.key <= 'z') {
+                      brush[1] = event.key;
+                  }
+              }
+              */
+          }
+      });
+    
+    
         const overlay = document.getElementById('detailOverlay');
         const miniGrid = document.getElementById('miniGrid');
         document.getElementById('detailTitle').innerText = `Sector ${code} Detail (8x12)`;
@@ -140,19 +195,26 @@
             img.title = tileID;
             
             // Fallback for missing images
-            img.onerror = () => {
-                const color = getTileColor(tileID).replace('#','');
-                img.src = `https://via.placeholder.com/32/${color}/ffffff?text=${tileID}`;
-            };
+            // img.onerror = () => {
+            //    const color = getTileColor(tileID).replace('#','');
+            //    img.src = `https://via.placeholder.com/32/${color}/ffffff?text=${tileID}`;
+            // };
 
             // FINE-TUNE CLICK HANDLER
             container.onclick = () => {
-                const newBrush = brushEl.value;
+                const newBrush = brush;
                 worldData[code][index] = newBrush; // Update the data
                 img.src = `t/${newBrush}.png`;      // Update the visual immediately
                 img.title = newBrush;
             };
 
+            // set brush to this tile
+            img.oncontextmenu = (e) => {
+                e.preventDefault(); // Prevent the browser's context menu
+                brush = img.title;  // Or extract from img.src if you prefer
+                // Optionally, update brush UI if you have brushEl:
+                // brushEl.value = brush;
+            };
             container.appendChild(img);
             miniGrid.appendChild(container);
         });
@@ -167,12 +229,17 @@
     function exportData() {
         let output = "";
         Object.keys(worldData).forEach(code => {
-            output += `${code}=${worldData[code].join(',')}\n`;
+            output += `${code}=${worldData[code].join('')}\n`;
         });
         navigator.clipboard.writeText(output).then(() => alert("Exported to clipboard!"));
     }
 
     init();
 </script>
+
+
+
+
+
 </body>
 </html>
