@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>GFX EDIT</title>
+    <title>.GFX EDITOR</title>
     <style>
         body {
             background: #222;
@@ -64,13 +64,9 @@
 </head>
 <body>
 
-<div id="toolbar">
-    <div>Brush: <span class="brush-info" id="brushDisplay">Ga</span></div>
-</div>
+<div id="toolbar"></div>
 
 <div id="outerContainer">
-    <div id="sideToolbar">
-    </div>
     <div id="viewport"> <canvas id="mapCanvas"></canvas></div>
 </div>
 
@@ -86,6 +82,7 @@ const SECTORS_WIDE = 8, SECTORS_TALL = 12;
     var NOISE_TILES = ['Fa', 'Gb', 'Gc', 'Gd', 'Ge', 'Gf', 'Gg'];
     
     let sectorExits = {};  // Example: { "A1": "A2B1", "A2": "A1A3B2", ... }
+    let lastEditedSector = "A1";
     
     let brush = "Ga";
     let brushSize = 1; 
@@ -109,13 +106,61 @@ const SECTORS_WIDE = 8, SECTORS_TALL = 12;
         renderFullMap();
     }
 
-    renderSidebar();
+function renderToolbar() {
+    const toolbar = document.getElementById('toolbar');
+    toolbar.innerHTML = ''; // Remove the brush display (now handled in the popup)
+
+    function addButton(label, onclick) {
+        var btn = document.createElement('button');
+        btn.innerText = label;
+        btn.onclick = onclick;
+        toolbar.appendChild(btn);
+    }
+
+    addButton('Brush', bigbrush);
+    addButton('Borders', borders);
+
+    // Tile size dropdown
+    const select = document.createElement('select');
+    [
+      {label:'2x', value:64},
+      {label:'1x', value:32},
+      {label:'1/2x', value:16},
+      {label:'1/4x', value:8}
+    ].forEach(opt => {
+      let o = document.createElement('option');
+      o.textContent = opt.label;
+      o.value = opt.value;
+      select.appendChild(o);
+    });
+
+    // *** Add the event listener ***
+    select.addEventListener('change', function() {
+      setTileSize(Number(this.value));
+    });
+
+    toolbar.appendChild(select);
+
+    addButton('Exits', () => showExitsEditor(lastEditedSector));
+    addButton('Import', importMap);
+    addButton('Export', exportMap);
+}
+
+    function setTileSize(size) {
+        TILE_SIZE = size;
+        canvas.width = TILE_W * TILE_SIZE;
+        canvas.height = TILE_H * TILE_SIZE;
+        renderFullMap();
+    }
+
+    // no longer used
+    // renderSidebar();
     function renderSidebar() {
         const sidebar = document.getElementById('sideToolbar');
         sidebar.innerHTML = '';
 
         var btn = document.createElement('button');
-        btn.innerText = 'Big Brush';
+        btn.innerText = 'Brush';
         btn.onclick = bigbrush;
         sidebar.appendChild(btn);
 
@@ -140,6 +185,11 @@ const SECTORS_WIDE = 8, SECTORS_TALL = 12;
             };
             sidebar.appendChild(sbtn);
         });
+
+        var btn = document.createElement('button');
+        btn.innerText = 'Exits';
+        btn.onclick = () => showExitsEditor(lastEditedSector);
+        sidebar.appendChild(btn);
         
         var btn = document.createElement('button');
         btn.innerText = 'Import';
@@ -180,30 +230,59 @@ const SECTORS_WIDE = 8, SECTORS_TALL = 12;
     }
 
     function bigbrush() {
+        const group = brush[0];
+        const matchingTiles = Object.keys(imageCache)
+            .filter(code => code[0] === group)
+            .sort();
+
+        var groupTiles = [];
+        for (let i = 0; i < 16; ++i) {
+            var code = group + String.fromCharCode(97 + i); // 'a'..'p'
+            groupTiles.push(code);
+        }
+
+        const tileButtons = groupTiles.map(code =>
+        `<button onclick="setBrush('${code}')" style="margin:2px; padding:2px;${brush===code ? 'background:#4af;' : ''}">
+          <img src="t/${code}.png" style="width:32px; height:32px; vertical-align:middle;" alt="">
+        </button>`
+        ).join("");
+
         const popup = document.getElementById('toolPopup');
         popup.innerHTML = `
-            <div id="toolPopupHeader" style="cursor:move; background:#047; padding:8px; border-radius:6px 6px 0 0; font-weight:bold;">
-                Brush Tool
-                <span style="float:right;cursor:pointer;" onclick="document.getElementById('toolPopup').style.display='none'">✕</span>
+        <div id="toolPopupHeader" style="cursor:move; background:#047; padding:8px; border-radius:6px 6px 0 0; font-weight:bold;">
+            Brush Tool
+            <span style="float:right;cursor:pointer;" onclick="document.getElementById('toolPopup').style.display='none'">✕</span>
+        </div>
+        <div style="padding:14px;">
+            <div style="margin-bottom:10px;">
+                <b>Current tile:</b>
+                <span class="brush-info" style="padding:4px 10px; font-size:1.2em;">${brush}</span>
             </div>
-            <div style="padding:14px;">
-                <div style="margin-bottom:10px;">
-                    <b>Current tile:</b>
-                    <span class="brush-info" style="padding:4px 10px; font-size:1.2em;">${brush}</span>
-                </div>
-                <div style="margin-bottom:10px;">
-                    <label for="brushSizeSlider"><b>Brush Size:</b></label>
-                    <input type="range" min="1" max="7" step="2" id="brushSizeSlider" value="${brushSize}"
-                        oninput="updateBrushSizePreview(this.value)">
-                    <span id="brushSizeValue">${brushSize}</span>
-                </div>
-                <div><b>Preview:</b></div>
-                <div id="brushPreview" style="padding:8px 0;"></div>
+            <div style="margin-bottom:10px;">
+                <label for="brushSizeSlider"><b>Brush Size:</b></label>
+                <input type="range" min="1" max="7" step="2" id="brushSizeSlider" value="${brushSize}"
+                    oninput="updateBrushSizePreview(this.value)">
+                <span id="brushSizeValue">${brushSize}</span>
             </div>
+            <div><b>Preview:</b></div>
+            <div id="brushPreview" style="padding:8px 0; text-align:center;">
+                <img src="t/${brush}.png" style="width:48px; height:48px; border:2px solid #05f; border-radius:6px; background:#fff;">
+            </div>
+            <div style="margin:10px 0 5px 0;"><b>Group:</b></div>
+            <div id="brushGroup" style="display:flex; flex-wrap:wrap; gap:2px; align-items:center; width:170px;">
+          ${tileButtons}
+        </div>
+        </div>
         `;
         popup.style.display = "block";
         makeDraggable(popup, document.getElementById('toolPopupHeader'));
         updateBrushSizePreview(brushSize);
+    }
+
+    function setBrush(code) {
+      brush = code;
+      updateBrushUI();
+      bigbrush(); // re-show popup with new tile highlighted
     }
 
     function updateBrushSizePreview(val) {
@@ -269,9 +348,17 @@ const SECTORS_WIDE = 8, SECTORS_TALL = 12;
     let isPainting = false;
 
     function handlePaintAction(clientX, clientY) {
+    
         const rect = canvas.getBoundingClientRect();
         const tileX = Math.floor((clientX - rect.left) / TILE_SIZE);
         const tileY = Math.floor((clientY - rect.top) / TILE_SIZE);
+        
+
+        // Calculate the sector
+        const sectorCol = Math.floor(tileX / SECTOR_TILE_WIDTH);
+        const sectorRow = Math.floor(tileY / SECTOR_TILE_HEIGHT);
+        const ROWS = ["A","B","C","D","E","F","G","H","I","J","K","L"];
+        lastEditedSector = `${ROWS[sectorRow]}${sectorCol+1}`;    
         
         const half = Math.floor(brushSize / 2);
         for (let dy = -half; dy <= half; dy++) {
@@ -285,6 +372,10 @@ const SECTORS_WIDE = 8, SECTORS_TALL = 12;
                     }
                 }
             }
+        }
+        if(document.getElementById('toolPopup').style.display === "block" && 
+           document.getElementById('toolPopupHeader')?.textContent?.includes("Sector Exits Editor")) {
+           showExitsEditor(lastEditedSector);
         }
     }
 
@@ -319,6 +410,72 @@ const SECTORS_WIDE = 8, SECTORS_TALL = 12;
     function updateBrushUI() {
         brushDisplay.innerText = brush;
     }
+
+
+let exitEditSector = null; // Sector label being edited, e.g., "A1"
+
+function showExitsEditor(sectorLabel) {
+    exitEditSector = sectorLabel;
+    const currExits = sectorExits[sectorLabel] || '';
+    const popup = document.getElementById('toolPopup');
+    popup.innerHTML = `
+        <div id="toolPopupHeader" style="cursor:move; background:#047; padding:8px; border-radius:6px 6px 0 0; font-weight:bold;">
+            Sector Exits Editor (${sectorLabel})
+            <span style="float:right;cursor:pointer;" onclick="document.getElementById('toolPopup').style.display='none'">✕</span>
+        </div>
+        <div style="padding:16px;">
+            <label for="exitsInput">Exits (e.g. A2B1): </label>
+            <input type="text" id="exitsInput" maxlength="8" value="${currExits}" style="width:90px;" autocomplete="off">
+            <button onclick="resetExitsToNatural('${sectorLabel}')">Reset</button>
+            <div id="exitsValidation" style="margin-top:8px; font-size:0.9em"></div>
+            <p style="font-size:0.95em;color:#aaa;margin:7px 0 0 0;">
+              Enter 2-char sector labels concatenated: e.g. <b>A2B1</b>.<br>
+              Use <b>Reset</b> to auto-fill with the "natural" 4 exits.<br>
+              Accepts teleport/secret exits, as needed.
+            </p>
+            <button style="margin-top:12px" onclick="saveExitsInput()">Save</button>
+        </div>
+    `;
+    popup.style.display = "block";
+    makeDraggable(popup, document.getElementById('toolPopupHeader'));
+    document.getElementById('exitsInput').addEventListener('input', validateExitsInput);
+    validateExitsInput();
+}
+
+function validateExitsInput() {
+    const val = document.getElementById('exitsInput').value.toUpperCase();
+    document.getElementById('exitsInput').value = val;
+    // Validate: up to 8 characters, each 2 chars A-L + [1-8]
+    let valid = (/^([A-L][1-8]){0,4}$/).test(val);
+    document.getElementById('exitsValidation').innerHTML =
+        valid ?
+          `<span style="color:#3fa">Valid exits:</span> ${val.match(/.{1,2}/g)?.join(' ')||''}` :
+          `<span style="color:#f66">Invalid! Use 2-char codes, e.g. A2B1</span>`;
+}
+
+function saveExitsInput() {
+    const val = document.getElementById('exitsInput').value.toUpperCase();
+    if (!/^([A-L][1-8]){0,4}$/.test(val)) {
+        alert("Invalid exits! Use sector codes like A2B1 (2 chars each, up to 4).");
+        return;
+    }
+    sectorExits[exitEditSector] = val;
+    document.getElementById('toolPopup').style.display = 'none';
+}
+
+// Generates the 4 "natural" exits (within map bounds) for a sector
+function resetExitsToNatural(sectorLabel) {
+    const ROWS = ["A","B","C","D","E","F","G","H","I","J","K","L"];
+    let rowChar = sectorLabel.charAt(0), colNum = parseInt(sectorLabel.slice(1));
+    let r = ROWS.indexOf(rowChar), c = colNum - 1;
+    let exits = "";
+    if (r > 0) exits += `${ROWS[r-1]}${c+1}`;
+    if (r < 11) exits += `${ROWS[r+1]}${c+1}`;
+    if (c > 0) exits += `${ROWS[r]}${c}`;
+    if (c < 7) exits += `${ROWS[r]}${c+2}`;
+    document.getElementById('exitsInput').value = exits;
+    validateExitsInput();
+}
 
 async function importMap() {
     try {
@@ -416,6 +573,9 @@ function exportMap() {
 }
 
     initMap();
+    renderToolbar();    
+    
+    
 </script>
 </body>
 </html>
