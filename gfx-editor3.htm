@@ -83,13 +83,22 @@ const SECTORS_WIDE = 8, SECTORS_TALL = 12;
 
     let mapData = [];
     const imageCache = {};
-    
+
+    let mapHistory = [];
+    const MAX_UNDO = 20; // Limit memory usage
+
     let sectorExits = {};  // Example: { "A1": "A2B1", "A2": "A1A3B2", ... }
     let lastEditedSector = "A1";
-    
+
+    let activeTool = 'brush'; // Options: 'brush', 'path', 'flower'    
+
     let brush = "Ga";
     let brushSize = 1;
     let brushShape = 'box'; // Options: 'box', 'circle' 
+
+    let flowerMode = false;
+    let currentFlowerSet = 'yellow'; // 'yellow', 'white', 'blue'
+    let flowerWeights = { primary: 30, variant: 20, weeds: 10 }; // Percentages
     
     let pathMode = 0; // 0: Off, 1: Select Start, 2: Select End
     let pathStartNode = null;
@@ -122,9 +131,6 @@ function renderToolbar() {
         toolbar.appendChild(btn);
     }
 
-    addButton('Brush', bigbrush);
-    addButton('Borders', borders);
-
     // Tile size dropdown
     const select = document.createElement('select');
     [
@@ -146,12 +152,232 @@ function renderToolbar() {
 
     toolbar.appendChild(select);
 
+    addButton('Borders', borders);
+    addButton('Brush', bigbrush);
+    addButton('Flower', showFlowerTool);
+    addButton('Fill', () => { activeTool = 'fill'; });
     addButton('Path', showPathTool);
-
+    addButton('River', showRiverTool);
+    addButton('Mountain', showMountainTool);
     addButton('Exits', () => showExitsEditor(lastEditedSector));
     addButton('Import', importMap);
     addButton('Export', exportMap);
 }
+
+function showRiverTool() {
+    activeTool = 'river';
+    pathMode = 1; // Reuse the path-selection state machine
+    const popup = document.getElementById('toolPopup');
+    popup.innerHTML = `
+        <div id="toolPopupHeader" style="cursor:move; background:#005588; padding:8px; border-radius:6px 6px 0 0; font-weight:bold;">
+            Simple River Tool
+            <span style="float:right;cursor:pointer;" onclick="exitPathMode()">✕</span>
+        </div>
+        <div style="padding:16px;">
+            <p id="pathStatus">Click map for <b>River Start</b>.</p>
+            <p style="font-size:0.8em; color:#aaa;">Will draw a "drunk" path using tile Ua.</p>
+            <button onclick="exitPathMode()">Cancel</button>
+        </div>
+    `;
+    popup.style.display = "block";
+    makeDraggable(popup, document.getElementById('toolPopupHeader'));
+}
+
+function applySimpleRiver(start, end) {
+    console.log("Generating thick river...");
+    
+    // Disable walkability constraints so the river can go anywhere
+    const originalWalkable = window.isWalkable;
+    window.isWalkable = () => true; 
+
+    const path = findPath(start, end);
+    window.isWalkable = originalWalkable;
+
+    if (!path) return;
+
+    path.forEach(node => {
+        // 1. Draw a core 2x2 block to ensure thickness
+        for (let dy = 0; dy <= 1; dy++) {
+            for (let dx = 0; dx <= 1; dx++) {
+                const nx = node.x + dx;
+                const ny = node.y + dy;
+                if (nx >= 0 && nx < TILE_W && ny >= 0 && ny < TILE_H) {
+                    mapData[ny][nx] = 'Ua';
+                }
+            }
+        }
+
+        // 2. Extra "Stumble" (80% chance to add 1-2 random surrounding tiles)
+        if (Math.random() > 0.2) {
+            const offsets = [
+                {x: -1, y: 0}, {x: 2, y: 0}, 
+                {x: 0, y: -1}, {x: 0, y: 2},
+                {x: 1, y: -1}, {x: -1, y: 1}
+            ];
+            // Pick two random offsets for variety
+            for (let i = 0; i < 2; i++) {
+                const off = offsets[Math.floor(Math.random() * offsets.length)];
+                const sx = node.x + off.x;
+                const sy = node.y + off.y;
+                if (sx >= 0 && sx < TILE_W && sy >= 0 && sy < TILE_H) {
+                    mapData[sy][sx] = 'Ua';
+                }
+            }
+        }
+    });
+
+    renderFullMap();
+}
+function solveRiverEdges() {
+    // Clone map so neighbor checks don't cascade and mess up calculations mid-loop
+    const tempMap = mapData.map(row => [...row]);
+
+    // Helper: Is this coordinate Water? 
+    // We treat off-screen tiles as water so rivers flow cleanly off the map edges.
+    const isW = (x, y) => {
+        if (x < 0 || x >= TILE_W || y < 0 || y >= TILE_H) return true; 
+        const t = tempMap[y][x];
+        return t.startsWith('U') || t.startsWith('A'); 
+    };
+
+    for (let y = 0; y < TILE_H; y++) {
+        for (let x = 0; x < TILE_W; x++) {
+            // ONLY shape tiles that are already part of the water mass
+            if (!isW(x, y)) continue;
+
+            // Check 4 Cardinal Directions
+            const N = isW(x, y - 1);
+            const S = isW(x, y + 1);
+            const W = isW(x - 1, y);
+            const E = isW(x + 1, y);
+            
+            // Check 4 Diagonal Directions
+            const NW = isW(x - 1, y - 1);
+            const NE = isW(x + 1, y - 1);
+            const SW = isW(x - 1, y + 1);
+            const SE = isW(x + 1, y + 1);
+
+            // Count how many cardinal water neighbors this tile has
+            const edges = (N?1:0) + (S?1:0) + (W?1:0) + (E?1:0);
+            
+            let tile = 'Ua'; // Default to full water
+
+            if (edges === 3) {
+                // Flat Shores (Grass is touching exactly one side)
+                if (!N) tile = 'Aa'; // Grass North (GG/WW)
+                if (!S) tile = 'Ab'; // Grass South (WW/GG) - Assumed
+                if (!E) tile = 'Ac'; // Grass East -> Water West (WG/WG)
+                if (!W) tile = 'Ad'; // Grass West -> Water East (GW/GW)
+            } 
+            else if (edges === 2) {
+                // Outer Corners (Grass is eating two sides of the tile)
+                if (N && W) tile = 'Ae'; // Water in Top-Left (WG/GG)
+                if (S && E) tile = 'Ag'; // Water in Bottom-Right (GG/WG)
+                if (S && W) tile = 'Ah'; // Water in Bottom-Left (GG/GW) - Assumed
+                if (N && E) tile = 'Ai'; // Water in Top-Right (GW/GG) - Assumed
+            }
+            else if (edges === 4) {
+                // Inner Corners (Water on all 4 sides, but Grass peeking in from a diagonal)
+                if (!SE) tile = 'Ub'; // Grass Bottom-Right (WW/WG)
+                if (!SW) tile = 'Uc'; // Grass Bottom-Left (WW/GW)
+                if (!NE) tile = 'Ud'; // Grass Top-Right (WG/WW)
+                if (!NW) tile = 'Ue'; // Grass Top-Left (GW/WW)
+            }
+            // If edges === 1 or 0, it remains 'Ua' (a dead end or a 1x1 puddle)
+
+            mapData[y][x] = tile;
+        }
+    }
+    renderFullMap();
+}
+
+function applyDrunkRiver(start, end) {
+    let path = findPath(start, end);
+    if (!path) return;
+
+    // Stage 1: The "Drunk" filling
+    path.forEach(node => {
+        mapData[node.y][node.x] = 'Ua';
+        // Randomly widen the river
+        if (Math.random() > 0.5) {
+            const neighbors = [{x:1,y:0}, {x:-1,y:0}, {x:0,y:1}, {x:0,y:-1}];
+            const rand = neighbors[Math.floor(Math.random()*4)];
+            if (mapData[node.y + rand.y]?.[node.x + rand.x]) {
+                mapData[node.y + rand.y][node.x + rand.x] = 'Ua';
+            }
+        }
+    });
+
+    // Stage 2: The Edge Filter
+    solveRiverEdges();
+    exitPathMode();
+}
+
+function showMountainTool() {
+    activeTool = 'mountain';
+    const popup = document.getElementById('toolPopup');
+    popup.innerHTML = `
+        <div id="toolPopupHeader" style="cursor:move; background:#444; padding:8px; border-radius:6px 6px 0 0; font-weight:bold;">
+            Smart Mountain Brush
+            <span style="float:right;cursor:pointer;" onclick="document.getElementById('toolPopup').style.display='none'">✕</span>
+        </div>
+        <div style="padding:14px;">
+            <p>Painting with this tool will automatically connect Mountain tiles (Sa-Sf).</p>
+            <p style="font-size:0.8em; color:#aaa;">Best for drawing vertical ridges and peaks.</p>
+            <button onclick="activeTool='brush'; document.getElementById('toolPopup').style.display='none'">Done</button>
+        </div>
+    `;
+    popup.style.display = "block";
+    makeDraggable(popup, document.getElementById('toolPopupHeader'));
+}
+
+function showFlowerTool() {
+    activeTool = 'flower';
+    flowerMode = true;
+    pathMode = 0; // Turn off other specialized modes
+    const popup = document.getElementById('toolPopup');
+    popup.innerHTML = `
+        <div id="toolPopupHeader" style="cursor:move; background:#047; padding:8px; border-radius:6px 6px 0 0; font-weight:bold;">
+            Flower Sprayer
+            <span style="float:right;cursor:pointer;" onclick="exitFlowerMode()">✕</span>
+        </div>
+        <div style="padding:14px;">
+            <div style="margin-bottom:12px;">
+                <b>Flower Type:</b><br>
+                <div style="display:flex; gap:5px; margin-top:5px;">
+                    <button onclick="setFlowerSet('yellow')" style="${currentFlowerSet==='yellow'?'background:#fa0;':''}">Yellow</button>
+                    <button onclick="setFlowerSet('white')" style="${currentFlowerSet==='white'?'background:#eee;color:#333':''}">White</button>
+                    <button onclick="setFlowerSet('blue')" style="${currentFlowerSet==='blue'?'background:#05f;':''}">Blue/Mix</button>
+                </div>
+            </div>
+            
+            <div style="margin-bottom:10px;">
+                <b>Weights (Density):</b><br>
+                <label>Flower: <input type="range" min="0" max="100" value="${flowerWeights.primary}" oninput="flowerWeights.primary=parseInt(this.value)"> </label><br>
+                <label>Mixed: <input type="range" min="0" max="100" value="${flowerWeights.variant}" oninput="flowerWeights.variant=parseInt(this.value)"> </label><br>
+                <label>Weeds: <input type="range" min="0" max="100" value="${flowerWeights.weeds}" oninput="flowerWeights.weeds=parseInt(this.value)"> </label>
+            </div>
+            
+            <p style="font-size:0.85em; color:#aaa;">Only sprays on Grass (Ga-Gg).</p>
+            <button onclick="exitFlowerMode()">Done</button>
+        </div>
+    `;
+    popup.style.display = "block";
+    makeDraggable(popup, document.getElementById('toolPopupHeader'));
+}
+
+function setFlowerSet(set) {
+    currentFlowerSet = set;
+    showFlowerTool();
+}
+
+function exitFlowerMode() {
+    flowerMode = false;
+    document.getElementById('toolPopup').style.display = 'none';
+}    
+
+
+
 
     function setTileSize(size) {
         TILE_SIZE = size;
@@ -237,6 +463,8 @@ function renderToolbar() {
     }
 
 function bigbrush() {
+    activeTool = 'brush'; // Selecting the brush automatically disables others
+
     const group = brush[0];
     const groupTiles = Array.from({length: 16}, (_, i) => group + String.fromCharCode(97 + i));
 
@@ -368,68 +596,114 @@ function handlePaintAction(clientX, clientY) {
     const tileX = Math.floor((clientX - rect.left) / TILE_SIZE);
     const tileY = Math.floor((clientY - rect.top) / TILE_SIZE);
 
-    // Update last edited sector (existing logic)
-    const sectorCol = Math.floor(tileX / SECTOR_TILE_WIDTH);
-    const sectorRow = Math.floor(tileY / SECTOR_TILE_HEIGHT);
-    const ROWS = ["A","B","C","D","E","F","G","H","I","J","K","L"];
-    lastEditedSector = `${ROWS[sectorRow]}${sectorCol+1}`;    
-    
     const half = Math.floor(brushSize / 2);
     const radiusSq = half * half;
 
     for (let dy = -half; dy <= half; dy++) {
         for (let dx = -half; dx <= half; dx++) {
-            // Check shape mask
-            if (brushShape === 'circle') {
-                if (dx * dx + dy * dy > radiusSq + 0.1) continue;
-            }
+            if (brushShape === 'circle' && (dx * dx + dy * dy > radiusSq + 0.1)) continue;
 
             const x = tileX + dx;
             const y = tileY + dy;
-            
-            if (x >= 0 && x < TILE_W && y >= 0 && y < TILE_H) {
+            if (x < 0 || x >= TILE_W || y < 0 || y >= TILE_H) continue;
+
+            // Switch behavior based on activeTool
+
+            if (activeTool === 'mountain') {
+                applySmartMountain(x, y);
+            } else if (activeTool === 'flower') {
+                applyFlowerSpray(x, y);
+            } else if (activeTool === 'brush') {
                 if (mapData[y][x] !== brush) {
                     mapData[y][x] = brush;
                     drawTile(x, y);
                 }
             }
+            // Note: 'path' is handled by the mousedown listener, not the drag/paint action
         }
     }
+}
+
+function updateToolbarUI() {
+    // Remove "active" class from all buttons, then add it to the current one
+    document.querySelectorAll('#toolbar button').forEach(btn => btn.classList.remove('active-tool'));
+    // (Logic to find the specific button and add class)
+}
+
+function exitFlowerMode() {
+    activeTool = 'brush';
+    document.getElementById('toolPopup').style.display = 'none';
+}
+
+function exitPathMode() {
+    activeTool = 'brush';
+    pathMode = 0;
+    pathStartNode = null;
+    document.getElementById('toolPopup').style.display = 'none';
+}
+
+function applyFlowerSpray(x, y) {
+    const currentTile = mapData[y][x];
     
-    // Refresh Exits Editor if open
-    if(document.getElementById('toolPopup').style.display === "block" && 
-       document.getElementById('toolPopupHeader')?.textContent?.includes("Sector Exits Editor")) {
-       showExitsEditor(lastEditedSector);
+    // Constraint: Only spray on Ga-Gg (Grass/Noise)
+    const isGrass = currentTile.startsWith('G') || currentTile === 'Fa'; // Fa is also noise in your initMap
+    if (!isGrass) return;
+
+    const roll = Math.random() * 100;
+    let targetTile = null;
+
+    // Define the tile groups based on your rules
+    const sets = {
+        yellow: { primary: 'Fa', variant: 'Fe', weeds: 'Gb' },
+        white:  { primary: 'Fb', variant: 'Ff', weeds: 'Gb' },
+        blue:   { primary: 'Fc', variant: 'Fd', weeds: 'Gb' }
+    };
+
+    const config = sets[currentFlowerSet];
+
+    if (roll < flowerWeights.primary) {
+        targetTile = config.primary;
+    } else if (roll < (flowerWeights.primary + flowerWeights.variant)) {
+        targetTile = config.variant;
+    } else if (roll < (flowerWeights.primary + flowerWeights.variant + flowerWeights.weeds)) {
+        targetTile = config.weeds;
+    }
+
+    if (targetTile && mapData[y][x] !== targetTile) {
+        mapData[y][x] = targetTile;
+        drawTile(x, y);
     }
 }
 
 canvas.addEventListener('mousedown', (e) => {
+    saveHistory();
     // 1. Calculate tile coordinates for any click type
     const rect = canvas.getBoundingClientRect();
     const tx = Math.floor((e.clientX - rect.left) / TILE_SIZE);
     const ty = Math.floor((e.clientY - rect.top) / TILE_SIZE);
 
-    // 2. Handle Path Mode Interception
+    if (activeTool === 'fill' && e.button === 0) {
+        fillSectorAt(e.clientX, e.clientY);
+        return; 
+    }
+
+    if (activeTool === 'river' || activeTool === 'path') {
     if (pathMode === 1) {
-        // First click: Set the Start Point
         pathStartNode = { x: tx, y: ty };
         pathMode = 2;
-        const status = document.getElementById('pathStatus');
-        if (status) status.innerHTML = "Click to set the <b>Ending Point</b>.";
-        return; // Exit so we don't start "painting" normally
+        document.getElementById('pathStatus').innerHTML = "Click for <b>River End</b>.";
+        return;
     } 
-    
     if (pathMode === 2) {
-        // Second click: Set the End Point and calculate
-        const path = findPath(pathStartNode, { x: tx, y: ty });
-        if (path) {
-            applyPathToMap(path);
+        if (activeTool === 'river') applyDrunkRiver(pathStartNode, { x: tx, y: ty });
+        else {
+            const path = findPath(pathStartNode, { x: tx, y: ty });
+            if (path) applyPathToMap(path);
             exitPathMode();
-        } else {
-            alert("No walkable path found! (Blocked by tiles > Lz)");
         }
-        return; // Exit
+        return;
     }
+}
 
     // 3. Original Editor Logic
     if (e.button === 0) {
@@ -452,6 +726,7 @@ canvas.addEventListener('mousedown', (e) => {
     canvas.addEventListener('contextmenu', e => e.preventDefault());
 
     window.addEventListener('keydown', (e) => {
+        if (e.ctrlKey && e.key === 'z') { undo(); }
         if (e.key.length === 1) {
             if (/[A-Z]/.test(e.key)) brush = e.key + brush[1];
             else if (/[a-z]/.test(e.key)) brush = brush[0] + e.key;
@@ -625,6 +900,7 @@ function exportMap() {
 }
 
 function showPathTool() {
+    activeTool = 'path';
     pathMode = 1;
     const popup = document.getElementById('toolPopup');
     popup.innerHTML = `
@@ -757,6 +1033,95 @@ function applyPathToMap(path) {
     renderFullMap();
 }
 
+function fillSectorAt(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    const tileX = Math.floor((clientX - rect.left) / TILE_SIZE);
+    const tileY = Math.floor((clientY - rect.top) / TILE_SIZE);
+
+    const sectorX = Math.floor(tileX / SECTOR_TILE_WIDTH);
+    const sectorY = Math.floor(tileY / SECTOR_TILE_HEIGHT);
+
+    // Calculate the pixel/tile boundaries of that sector
+    const startX = sectorX * SECTOR_TILE_WIDTH;
+    const endX = startX + SECTOR_TILE_WIDTH;
+    const startY = sectorY * SECTOR_TILE_HEIGHT;
+    const endY = startY + SECTOR_TILE_HEIGHT;
+
+    // Fill the sector
+    for (let y = startY; y < endY; y++) {
+        for (let x = startX; x < endX; x++) {
+            if (mapData[y][x] !== brush) {
+                mapData[y][x] = brush;
+            }
+        }
+    }
+    renderFullMap();
+}
+
+// Helper to check if a tile is part of a mountain
+function isMountain(x, y) {
+    if (x < 0 || x >= TILE_W || y < 0 || y >= TILE_H) return false;
+    return mapData[y][x].startsWith('S');
+}
+
+function getSmartMountainTile(x, y) {
+    const N = isMountain(x, y - 1);
+    const S = isMountain(x, y + 1);
+    const W = isMountain(x - 1, y);
+    const E = isMountain(x + 1, y);
+
+    // 1. Vertical Logic (Peak/Base/Middle)
+    if (!N && S) return 'Sb'; // Peak (Grass above, Mountain below)
+    if (N && !S) return 'Sf'; // Base (Mountain above, Grass below)
+    
+    // 2. Horizontal/Edge Logic (Only if it's a middle vertical piece)
+    if (N && S) {
+        if (!W && E) return 'Sc'; // Left Edge
+        if (W && !E) return 'Sd'; // Right Edge
+        return 'Sd';              // Solid Center
+    }
+
+    // 3. Default/Isolated
+    return 'Sb'; // Single tiles look like rocks/peaks
+}
+
+function applySmartMountain(x, y) {
+    // 1. Set the current tile to a generic mountain tile first so neighbors recognize it
+    mapData[y][x] = 'Sd'; 
+
+    // 2. Define the area to "heal" (the tile itself + 4 neighbors)
+    const pointsToUpdate = [
+        {x: x, y: y},
+        {x: x, y: y - 1}, {x: x, y: y + 1},
+        {x: x - 1, y: y}, {x: x + 1, y: y}
+    ];
+
+    // 3. Update each point based on its new neighborhood
+    pointsToUpdate.forEach(p => {
+        if (isMountain(p.x, p.y)) {
+            mapData[p.y][p.x] = getSmartMountainTile(p.x, p.y);
+            drawTile(p.x, p.y);
+        }
+    });
+}
+
+
+function undo() {
+    if (mapHistory.length === 0) return;
+    mapData = mapHistory.pop();
+    renderFullMap();
+}
+
+function saveHistory() {
+    // We must clone the array, otherwise we just save a reference to the live map
+    const snapshot = mapData.map(row => [...row]);
+    mapHistory.push(snapshot);
+    
+    // Keep history from getting too large
+    if (mapHistory.length > MAX_UNDO) {
+        mapHistory.shift(); 
+    }
+}
 
 
 
