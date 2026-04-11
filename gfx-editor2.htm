@@ -85,6 +85,8 @@ const SECTORS_WIDE = 8, SECTORS_TALL = 12;
     var TILE_SIZE = 32; 
     var NOISE_TILES = ['Fa', 'Gb', 'Gc', 'Gd', 'Ge', 'Gf', 'Gg'];
     
+    let sectorExits = {};  // Example: { "A1": "A2B1", "A2": "A1A3B2", ... }
+    
     let brush = "Ga";
     let brushSize = 1; 
     let mapData = [];
@@ -331,27 +333,34 @@ async function importMap() {
         lines.forEach(line => {
             if (!line.includes('=')) return;
 
-            // Split "A1=[tiles]" into label and data
+            // Split "A1=[tiles][exits]"
             const [label, data] = line.trim().split('=');
+            if (!label || !data) return;
             
-            // Extract Row index (A-L -> 0-11) and Col index (1-8 -> 0-7)
+            // Parse sector indices
             const rowChar = label.charAt(0);
             const colNum = parseInt(label.substring(1));
-            
             const rIndex = ROWS.indexOf(rowChar);
             const cIndex = colNum - 1;
-
             if (rIndex === -1 || isNaN(cIndex)) return;
 
-            // Loop through the 192-character string (96 tiles)
+            // --- Extract and store exits after tiles ---
+            const tilesLength = 96 * 2; // 192 chars for 96 tiles, each 2 chars
+            const tilesString = data.substring(0, tilesLength);
+            const exitString = data.substring(tilesLength); // may be "" if no exits were saved (old format)
+
+            // Store exits using sector codes (label) or by [r][c] as needed
+            sectorExits[label] = exitString; // e.g. sectorExits["A1"] = "A2B1"
+
+            // --- Process tiles ---
             for (let i = 0; i < 96; i++) {
-                const tileCode = data.substring(i * 2, (i * 2) + 2);
-                
-                // Calculate local tile position within sector
+                const tileCode = tilesString.substring(i * 2, (i * 2) + 2);
+
+                // Local tile coords in sector
                 const sx = i % SECTOR_W;
                 const sy = Math.floor(i / SECTOR_W);
 
-                // Map to global grid coordinates
+                // Map to global grid
                 const globalX = (cIndex * SECTOR_W) + sx;
                 const globalY = (rIndex * SECTOR_H) + sy;
 
@@ -361,7 +370,8 @@ async function importMap() {
             }
         });
 
-        // Redraw the entire canvas with the imported data
+        // Optionally: update UI to reflect exits here
+
         renderFullMap();
         alert("Map imported successfully!");
 
@@ -372,36 +382,38 @@ async function importMap() {
 }
 
     // Export logic
-    function exportMap() {
-        const SECTOR_W = 8;
-        const SECTOR_H = 12;
-        const ROWS = ["A","B","C","D","E","F","G","H","I","J","K","L"];
-        let output = "";
+function exportMap() {
+    const SECTOR_W = 8;
+    const SECTOR_H = 12;
+    const ROWS = ["A","B","C","D","E","F","G","H","I","J","K","L"];
+    let output = "";
 
-        for (let r = 0; r < 12; r++) { // Vertical sectors
-            for (let c = 0; c < 8; c++) { // Horizontal sectors
-                const sectorLabel = `${ROWS[r]}${c + 1}`;
-                let sectorString = "";
+    for (let r = 0; r < 12; r++) { // Vertical sectors
+        for (let c = 0; c < 8; c++) { // Horizontal sectors
+            const sectorLabel = `${ROWS[r]}${c + 1}`;
+            let sectorString = "";
 
-                // Get tiles in this sector
-                for (let sy = 0; sy < SECTOR_H; sy++) {
-                    for (let sx = 0; sx < SECTOR_W; sx++) {
-                        const globalX = (c * SECTOR_W) + sx;
-                        const globalY = (r * SECTOR_H) + sy;
-                        sectorString += mapData[globalY][globalX];
-                    }
+            // Get tiles in this sector
+            for (let sy = 0; sy < SECTOR_H; sy++) {
+                for (let sx = 0; sx < SECTOR_W; sx++) {
+                    const globalX = (c * SECTOR_W) + sx;
+                    const globalY = (r * SECTOR_H) + sy;
+                    sectorString += mapData[globalY][globalX];
                 }
-                output += `${sectorLabel}=${sectorString}\n`;
             }
-        }
 
-        navigator.clipboard.writeText(output.trim()).then(() => {
-            alert("Map exported to clipboard!");
-        }).catch(err => {
-            console.error('Error copying to clipboard', err);
-        });
+            // --- Add the exits string ---
+            var exits = sectorExits[sectorLabel] || ""; // fallback to "" if undefined
+            output += `${sectorLabel}=${sectorString}${exits}\n`;
+        }
     }
 
+    navigator.clipboard.writeText(output.trim()).then(() => {
+        alert("Map exported to clipboard!");
+    }).catch(err => {
+        console.error('Error copying to clipboard', err);
+    });
+}
 
     initMap();
 </script>
