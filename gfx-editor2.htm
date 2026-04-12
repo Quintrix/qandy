@@ -1127,25 +1127,35 @@ function getSmartMountainTile(x, y) {
 }
 
 function applySmartMountain(x, y) {
-    // 1. Set the current tile to a generic mountain tile first so neighbors recognize it
+    // 1. Set the painted tile to mountain center by default for neighbor detection.
     mapData[y][x] = 'Sd'; 
 
-    // 2. Define the area to "heal" (the tile itself + 4 neighbors)
+    // 2. Heal the painted tile and the 4 neighbors if they are mountains
     const pointsToUpdate = [
         {x: x, y: y},
         {x: x, y: y - 1}, {x: x, y: y + 1},
         {x: x - 1, y: y}, {x: x + 1, y: y}
     ];
 
-    // 3. Update each point based on its new neighborhood
     pointsToUpdate.forEach(p => {
         if (isMountain(p.x, p.y)) {
             mapData[p.y][p.x] = getSmartMountainTile(p.x, p.y);
             drawTile(p.x, p.y);
         }
     });
-}
 
+    // 3. Handle right (east) edge for "mountain meets grass"
+    // If the tile to the right is grass, make it Se
+    const ex = x + 1;
+    if (ex < TILE_W && !isMountain(ex, y)) {
+        const rightCode = mapData[y][ex];
+        // Only convert if it is grass/noise
+        if (rightCode.startsWith('G') || rightCode === 'Ga') {
+            mapData[y][ex] = 'Se'; // left side mountain, right side grass
+            drawTile(ex, y);
+        }
+    }
+}
 
 function undo() {
     if (mapHistory.length === 0) return;
@@ -1394,6 +1404,12 @@ function showTerrainTool() {
     popup.style.display = "block";
     makeDraggable(popup, document.getElementById('toolPopupHeader'));
 }    
+
+window.onload = function() {
+    renderToolbar();
+    initMap();
+};
+
 </script>
 </body>
 </html>
