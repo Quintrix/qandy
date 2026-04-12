@@ -6,28 +6,52 @@
         Joe: Lead Programmer
     QuaCzar: Programmer  
 
-  Special thanks to USMarine, DarthKitty, Pixie, BeYondZer,
-  Lawlers, Spike, Guard, Dana, and all the thousands of
-  players that have encouraged me to continue writing this
-  game. As far as I'm concenered, it belongs to you as much
-  as it belongs to me, which is why it is now Open Source.
 
-          
-            index.htm Links to all .htm pages
 
-            qandy.htm Qandy Pocket Computer running QUEVILLE.js
-             demo.htm Qandy Pocket Computer embedded with demo.js
-         queville.htm Tandy Pocket Computer emulating Queville v.Zero
-                  
-          qandy-tileset.htm Displays all graphics in the qandy-gfx.js script
+An emulator for the Qandy Pocket Computer with
+ANSI support, a multiplayer graphics engine,
+soundcard, and everything else you need to have
+fun!
 
-               qandy-gfx.js Qandy graphics, image src strings stored here
-            qandy-itemid.js ItemID(item) function, returns name of item    
+This is Alpha release software that has not been tested!
+
+
+
+Official Releases:
+
+         qandy.htm — Qandy Pocket Computer Alpha Release
+
+        qandy2.htm — Official DevTeam Release
+
+
+
+Multiplayer Graphics Engine:
+
+   gfx-bigbang.htm — Big Bang Tool
+
+   gfx-tileset.htm — Tile Set Viewer
+
+    gfx-editor.htm — World Map Editor
+
+    gfx-stamps.txt — Queville Tile Stamps
+
+      qandyland.js — Experimental Qandyland Server
+
+
+
+Queville:
+
+      queville.htm — vZERO Demo
   
-                queville.js Queville ported to Qandy        
-                    demo.js Queville v.Zero ported to Qandy
-  
-           qandy-readme.txt Notes on qandy.htm
-        queville-readme.txt Notes on queville.js
-    
-             first boot.png Screen shot of first successful boot
+  queville-map.htm — Original Queville Map
+
+
+
+The Qandy Pocket Computer was was written with AI assistance.
+The Qandy Pocket Computer is public domain with no copyright.
+
+
+PayPal 'Magic Hat' Donation (thank you!):
+https://www.paypal.com/paypalme/AmazingJoeJoe
+
+
