@@ -1,16 +1,158 @@
-<html><head>
-<title>Qandy Pocket Computer</title>
+<!DOCTYPE html>
+<html>
+<head>
+  <title>QANDY RETRO COMPUTER PROJECTS</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DotGothic16&display=swap">
+  <style>
+    body {
+      background: #000;
+      color: #FFFF55;
+      font-family: 'DotGothic16', monospace;
+      margin: 0;
+      padding: 0;
+    }
+    .center-wrapper {
+      width: 1020px; /* Adjust to taste or to fit your widest content, can be 600, 700, etc. */
+      margin: 2em auto 2em auto;
+      padding: 0 1em;
+      box-sizing: border-box;
+    }
+    a:link    { color: #55FFFF; }
+    a:visited { color: #FF55FF; }
+    a:active  { color: #FFFF55; }
+    a:hover   { color: #FF5555; }
+    hr { border: 1px solid #40ffda; }
+    pre, code { font-family: inherit; }
+    h1, h2, h3 {
+      font-family: inherit;
+      font-weight: bold;
+      letter-spacing: 2px;
+      margin-top: 2em;
+      margin-bottom: 0.25em;
+    }
+    h1 {
+      font-size: 2.8em;
+    }
+    h2 {
+      font-size: 2em;
+    }
+    h3 {
+      font-size: 1.3em;
+    }
+    .ansi-q {
+      line-height: 1;
+      color: #00ffff;
+      font-size: 2.3em;
+      margin-bottom: 0.3em;
+    }
+    .ascii-box {
+      line-height: 1.4;
+      margin: 2em auto 1em auto;
+      max-width: 48em;
+    }
+    ul {
+      margin-top: 0.4em;
+      margin-bottom: 1.5em;
+    }
+  </style>
 </head>
-<body bgcolor=black text=white link=#9F9FA9 vlink=#6699ff alink=#6699ff>
+<body>
+<div class="center-wrapper">
+
+<h3> &nbsp; <img src="qandy.png"> <font color="#ffffff">Qandy Pocket Computer</font></h3>
+
+<p>
+<font color="#ffffff">
+Retro emulator for the Qandy Pocket Computer with ANSI support,<br>
+Multiplayer Graphics Engine, sound card, and everything else<br>
+you need to have fun!</font>
+
+<p> 
+<font color=#FF5555>POSTED:</font> <font color=#ffffff>This is Alpha release software that has not been tested!</font>
+
+<p>
+
+<h3>Official Releases:</h3>
+<ul>
+  <li><a href="qandy.htm">Qandy Pocket Computer Alpha Release</a></li>
+  <li><a href="javascript:openQandy()">Open in New Window</a></li>
+  <li><a href="qandy2.htm">Official DevTeam Release</a></li>
+</ul>
+
+<ul>
+ <li><a href="https://www.paypal.com/paypalme/AmazingJoeJoe"><font color=#55FFFF>PayPal 'Magic Hat' Donation</a> <font color=#ffffff>(thank you)</font></font></a></li>
+</ul> 
+
+<h3>Multiplayer Graphics Engine:</h3>
+<ul>
+  <li><a href="gfx-bigbang.htm">Big Bang Tool</a></li>
+  <li><a href="gfx-tileset.htm">Tile Set Viewer</a></li>
+  <li><a href="gfx-editor.htm">World Map Editor</a></li>
+  <li><a href="gfx-stamps.txt">Queville Tile Stamps</a></li>
+  <p>
+  <li><a href="qandyland.js" download>Download Experimental Qandyland Server</a> <font color=#ffffff>(requires node.js)</font></li>
+</ul>
+
+<h3>Queville:</h3>
+<ul>
+  <li><a href="queville.htm">vZERO Demo</a></li>
+  <li><a href="queville-map.htm">Original Queville Map</a></li>
+</ul>
+
+<pre>
+<font color="#50FA7B">The Qandy Pocket Computer was was written with AI assistance.</font>
+<font color="#50FA7B">The Qandy Pocket Computer is public domain with no copyright.</font>
+</pre>
+
+  <script>
+      // Desired content size of the emulated Qandy area (adjust to match qandy.htm)
+      var CONTENT_WIDTH = 352;   // change to actual Qandy inner width
+      var CONTENT_HEIGHT = 648;  // change to actual Qandy inner height
+
+      // Rough extra pixel allowance for OS/title bar/chrome — tweak if you want exact fit
+      var CHROME_W = 16;  // approximate vertical chrome (window edges)
+      var CHROME_H = 40;  // approximate height for title bar + top/bottom borders
+
+      function openQandy() {
+        var winName = 'qandy_' + Date.now();
+
+        // Compose features: hide menubar, toolbar, location/address, status, scrollbars
+        var width = CONTENT_WIDTH + CHROME_W;
+        var height = CONTENT_HEIGHT + CHROME_H;
+        var features = [
+          'width=' + width,
+          'height=' + height,
+          'menubar=yes',
+          'toolbar=yes',
+          'location=yes',
+          'status=no',
+          'scrollbars=no',
+          'resizable=yes'
+        ].join(',');
+
+        var win = window.open('qandy.htm', winName, features);
+
+        if (!win) { alert('Popup blocked — please allow popups for this site to open Qandy windows.'); return; }
+
+        try {
+          win.onload = function() {
+            try {
+              var d = win.document;
+              d.documentElement.style.overflow = 'hidden';
+              d.body.style.margin = '0';
+              d.body.style.overflow = 'hidden';
+            } catch (e) {
+              // cross-origin or other restriction — can't set styles
+            }
+          };
+        } catch (e) {
+          // ignore
+        }
+
+        win.focus();
+      }
+  </script>
 <p><br>
-&nbsp; &nbsp; Qandy Pocket Computer
-<p>
- &nbsp; &nbsp; &nbsp; &nbsp;<a href="qandy.htm">Boot Qandy Pocket Computer</a> 
-<p>
- &nbsp; &nbsp; &nbsp; &nbsp;<a href="qandy2.htm">Experimental DevTeam Release</a>
-<p>
- &nbsp; &nbsp; &nbsp; &nbsp;<a href="qandy-tileset.htm">View Tileset</a>
-<p>
- &nbsp; &nbsp; &nbsp; &nbsp;<a href="qandy-readme.txt">View readme.txt</a> 
-<p><br>
-<p><br><br></body></html>
+</div>
+</body>
+</html>
