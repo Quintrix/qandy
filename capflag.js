@@ -165,8 +165,10 @@ function mainloop() {
  // Avatar selection complete - PObj holds the 4-character avatar string
 }
 
-// Step 2 of join flow: display available empty player slots so the player can
-// pick their "player hat" – the ItemID that becomes their in-game identity.
+
+
+// @@ //
+
 window.selectPlayerSlot = function(avatarStr) {
  playerAvatarStr = avatarStr;
  var html = "Select player slot:<p>";

@@ -1,0 +1,1380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>.GFX EDITOR</title>
+    <style>
+        body {
+            background: #222;
+            color: #eee;
+            font-family: sans-serif;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        #toolbar {
+            background: #333;
+            padding: 10px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            border-bottom: 1px solid #444;
+        }
+        #outerContainer { display: flex; flex-direction: row; height: 100vh; }
+        #sideToolbar {
+          width: 56px;
+          background: #202a36;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          padding: 8px 0;
+          border-right: 1px solid #333;
+          gap: 14px;
+        }
+        #viewport {
+            flex-grow: 1;
+            overflow: auto;
+            background: #111;
+            padding: 20px;
+        }
+        canvas {
+            background: #000;
+            cursor: crosshair;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+        .brush-info {
+            font-weight: bold;
+            font-family: monospace;
+            font-size: 1.2em;
+            background: #444;
+            padding: 5px 10px;
+            border-radius: 4px;
+        }
+        button {
+            padding: 8px 16px;
+            cursor: pointer;
+            background: #068;
+            color: white;
+            border: none;
+            border-radius: 4px;
+        }
+        button:hover { background: #07a; }
+    </style>
+</head>
+<body>
+
+<div id="toolbar"></div>
+
+<div id="outerContainer">
+    <div id="viewport"> <canvas id="mapCanvas"></canvas></div>
+</div>
+
+<div id="toolPopup" style="display:none; position:fixed; left:200px; top:100px; background:#333; border:2px solid #0af; color:#eee; border-radius:8px; z-index:1000; min-width:250px; min-height:120px; box-shadow:0 6px 32px #000a"></div>
+
+<script>
+const SECTORS_WIDE = 8, SECTORS_TALL = 12;
+    const SECTOR_TILE_WIDTH = 8, SECTOR_TILE_HEIGHT = 12;
+
+    var TILE_W = 64;
+    var TILE_H = 144;
+    var TILE_SIZE = 32; 
+    var NOISE_TILES = ['Fa', 'Gb', 'Gc', 'Gd', 'Ge', 'Gf', 'Gg'];
+
+    let mapData = [];
+    const imageCache = {};
+
+    let mapHistory = [];
+    const MAX_UNDO = 20; // Limit memory usage
+
+    let sectorExits = {};  // Example: { "A1": "A2B1", "A2": "A1A3B2", ... }
+    let lastEditedSector = "A1";
+
+    let selection = null; // {x, y, w, h} in tile coordinates
+    let isSelecting = false;
+    let selectionStart = null; // {x, y}
+    let clipboard = "";
+
+    let activeTool = 'brush'; // Options: 'brush', 'path', 'flower'    
+
+    let brush = "Ga";
+    let brushSize = 1;
+    let brushShape = 'box'; // Options: 'box', 'circle' 
+
+    let flowerMode = false;
+    let currentFlowerSet = 'yellow'; // 'yellow', 'white', 'blue'
+    let flowerWeights = { primary: 30, variant: 20, weeds: 10 }; // Percentages
+    
+    let pathMode = 0; // 0: Off, 1: Select Start, 2: Select End
+    let pathStartNode = null;
+
+    const canvas = document.getElementById('mapCanvas');
+    const ctx = canvas.getContext('2d');
+    const brushDisplay = document.getElementById('brushDisplay');
+
+    function initMap() {
+        canvas.width = TILE_W * TILE_SIZE;
+        canvas.height = TILE_H * TILE_SIZE;
+
+        for (let y = 0; y < TILE_H; y++) {
+            mapData[y] = [];
+            for (let x = 0; x < TILE_W; x++) {
+                mapData[y][x] = NOISE_TILES[Math.floor(Math.random() * NOISE_TILES.length)];
+            }
+        }
+        renderFullMap();
+    }
+
+function renderToolbar() {
+    const toolbar = document.getElementById('toolbar');
+    toolbar.innerHTML = ''; // Remove the brush display (now handled in the popup)
+
+    function addButton(label, onclick) {
+        var btn = document.createElement('button');
+        btn.innerText = label;
+        btn.onclick = onclick;
+        toolbar.appendChild(btn);
+    }
+
+    // Tile size dropdown
+    const select = document.createElement('select');
+    [
+      {label:'2x', value:64},
+      {label:'1x', value:32},
+      {label:'1/2x', value:16},
+      {label:'1/4x', value:8}
+    ].forEach(opt => {
+      let o = document.createElement('option');
+      o.textContent = opt.label;
+      o.value = opt.value;
+      select.appendChild(o);
+    });
+
+    // *** Add the event listener ***
+    select.addEventListener('change', function() {
+      setTileSize(Number(this.value));
+    });
+    toolbar.appendChild(select);
+
+    addButton('Borders', borders);
+    addButton('Fill', () => { activeTool = 'fill'; });
+    addButton('Stamp', showStampTool);    
+
+    addButton('Brush', bigbrush);
+    addButton('Flower', showFlowerTool);
+
+    addButton('Terrain', showTerrainTool);
+
+    addButton('Exits', () => showExitsEditor(lastEditedSector));
+    addButton('Import', importMap);
+    addButton('Export', exportMap);
+}
+
+function showRiverTool() {
+    activeTool = 'river';
+    pathMode = 1; // Reuse the path-selection state machine
+    const popup = document.getElementById('toolPopup');
+    popup.innerHTML = `
+        <div id="toolPopupHeader" style="cursor:move; background:#005588; padding:8px; border-radius:6px 6px 0 0; font-weight:bold;">
+            Simple River Tool
+            <span style="float:right;cursor:pointer;" onclick="exitPathMode()">✕</span>
+        </div>
+        <div style="padding:16px;">
+            <p id="pathStatus">Click map for <b>River Start</b>.</p>
+            <p style="font-size:0.8em; color:#aaa;">Will draw a "drunk" path using tile Ua.</p>
+            <button onclick="exitPathMode()">Cancel</button>
+        </div>
+    `;
+    popup.style.display = "block";
+    makeDraggable(popup, document.getElementById('toolPopupHeader'));
+}
+
+function applySimpleRiver(start, end) {
+    console.log("Generating thick river...");
+    
+    // Disable walkability constraints so the river can go anywhere
+    const originalWalkable = window.isWalkable;
+    window.isWalkable = () => true; 
+
+    const path = findPath(start, end);
+    window.isWalkable = originalWalkable;
+
+    if (!path) return;
+
+    path.forEach(node => {
+        // 1. Draw a core 2x2 block to ensure thickness
+        for (let dy = 0; dy <= 1; dy++) {
+            for (let dx = 0; dx <= 1; dx++) {
+                const nx = node.x + dx;
+                const ny = node.y + dy;
+                if (nx >= 0 && nx < TILE_W && ny >= 0 && ny < TILE_H) {
+                    mapData[ny][nx] = 'Ua';
+                }
+            }
+        }
+
+        // 2. Extra "Stumble" (80% chance to add 1-2 random surrounding tiles)
+        if (Math.random() > 0.2) {
+            const offsets = [
+                {x: -1, y: 0}, {x: 2, y: 0}, 
+                {x: 0, y: -1}, {x: 0, y: 2},
+                {x: 1, y: -1}, {x: -1, y: 1}
+            ];
+            // Pick two random offsets for variety
+            for (let i = 0; i < 2; i++) {
+                const off = offsets[Math.floor(Math.random() * offsets.length)];
+                const sx = node.x + off.x;
+                const sy = node.y + off.y;
+                if (sx >= 0 && sx < TILE_W && sy >= 0 && sy < TILE_H) {
+                    mapData[sy][sx] = 'Ua';
+                }
+            }
+        }
+    });
+
+    renderFullMap();
+}
+function solveRiverEdges() {
+    // Clone map so neighbor checks don't cascade and mess up calculations mid-loop
+    const tempMap = mapData.map(row => [...row]);
+
+    // Helper: Is this coordinate Water? 
+    // We treat off-screen tiles as water so rivers flow cleanly off the map edges.
+    const isW = (x, y) => {
+        if (x < 0 || x >= TILE_W || y < 0 || y >= TILE_H) return true; 
+        const t = tempMap[y][x];
+        return t.startsWith('U') || t.startsWith('A'); 
+    };
+
+    for (let y = 0; y < TILE_H; y++) {
+        for (let x = 0; x < TILE_W; x++) {
+            // ONLY shape tiles that are already part of the water mass
+            if (!isW(x, y)) continue;
+
+            // Check 4 Cardinal Directions
+            const N = isW(x, y - 1);
+            const S = isW(x, y + 1);
+            const W = isW(x - 1, y);
+            const E = isW(x + 1, y);
+            
+            // Check 4 Diagonal Directions
+            const NW = isW(x - 1, y - 1);
+            const NE = isW(x + 1, y - 1);
+            const SW = isW(x - 1, y + 1);
+            const SE = isW(x + 1, y + 1);
+
+            // Count how many cardinal water neighbors this tile has
+            const edges = (N?1:0) + (S?1:0) + (W?1:0) + (E?1:0);
+            
+            let tile = 'Ua'; // Default to full water
+
+            if (edges === 3) {
+                // Flat Shores (Grass is touching exactly one side)
+                if (!N) tile = 'Aa'; // Grass North (GG/WW)
+                if (!S) tile = 'Ab'; // Grass South (WW/GG) - Assumed
+                if (!E) tile = 'Ac'; // Grass East -> Water West (WG/WG)
+                if (!W) tile = 'Ad'; // Grass West -> Water East (GW/GW)
+            } 
+            else if (edges === 2) {
+                // Outer Corners (Grass is eating two sides of the tile)
+                if (N && W) tile = 'Ae'; // Water in Top-Left (WG/GG)
+                if (S && E) tile = 'Ag'; // Water in Bottom-Right (GG/WG)
+                if (S && W) tile = 'Ah'; // Water in Bottom-Left (GG/GW) - Assumed
+                if (N && E) tile = 'Ai'; // Water in Top-Right (GW/GG) - Assumed
+            }
+            else if (edges === 4) {
+                // Inner Corners (Water on all 4 sides, but Grass peeking in from a diagonal)
+                if (!SE) tile = 'Ub'; // Grass Bottom-Right (WW/WG)
+                if (!SW) tile = 'Uc'; // Grass Bottom-Left (WW/GW)
+                if (!NE) tile = 'Ud'; // Grass Top-Right (WG/WW)
+                if (!NW) tile = 'Ue'; // Grass Top-Left (GW/WW)
+            }
+            // If edges === 1 or 0, it remains 'Ua' (a dead end or a 1x1 puddle)
+
+            mapData[y][x] = tile;
+        }
+    }
+    renderFullMap();
+}
+
+function applyDrunkRiver(start, end) {
+    let path = findPath(start, end);
+    if (!path) return;
+
+    // Stage 1: The "Drunk" filling
+    path.forEach(node => {
+        mapData[node.y][node.x] = 'Ua';
+        // Randomly widen the river
+        if (Math.random() > 0.5) {
+            const neighbors = [{x:1,y:0}, {x:-1,y:0}, {x:0,y:1}, {x:0,y:-1}];
+            const rand = neighbors[Math.floor(Math.random()*4)];
+            if (mapData[node.y + rand.y]?.[node.x + rand.x]) {
+                mapData[node.y + rand.y][node.x + rand.x] = 'Ua';
+            }
+        }
+    });
+
+    // Stage 2: The Edge Filter
+    solveRiverEdges();
+    exitPathMode();
+}
+
+function showMountainTool() {
+    activeTool = 'mountain';
+    const popup = document.getElementById('toolPopup');
+    popup.innerHTML = `
+        <div id="toolPopupHeader" style="cursor:move; background:#444; padding:8px; border-radius:6px 6px 0 0; font-weight:bold;">
+            Smart Mountain Brush
+            <span style="float:right;cursor:pointer;" onclick="document.getElementById('toolPopup').style.display='none'">✕</span>
+        </div>
+        <div style="padding:14px;">
+            <p>Painting with this tool will automatically connect Mountain tiles (Sa-Sf).</p>
+            <p style="font-size:0.8em; color:#aaa;">Best for drawing vertical ridges and peaks.</p>
+            <button onclick="activeTool='brush'; document.getElementById('toolPopup').style.display='none'">Done</button>
+        </div>
+    `;
+    popup.style.display = "block";
+    makeDraggable(popup, document.getElementById('toolPopupHeader'));
+}
+
+function showFlowerTool() {
+    activeTool = 'flower';
+    flowerMode = true;
+    pathMode = 0; // Turn off other specialized modes
+    const popup = document.getElementById('toolPopup');
+    popup.innerHTML = `
+        <div id="toolPopupHeader" style="cursor:move; background:#047; padding:8px; border-radius:6px 6px 0 0; font-weight:bold;">
+            Flower Sprayer
+            <span style="float:right;cursor:pointer;" onclick="exitFlowerMode()">✕</span>
+        </div>
+        <div style="padding:14px;">
+            <div style="margin-bottom:12px;">
+                <b>Flower Type:</b><br>
+                <div style="display:flex; gap:5px; margin-top:5px;">
+                    <button onclick="setFlowerSet('yellow')" style="${currentFlowerSet==='yellow'?'background:#fa0;':''}">Yellow</button>
+                    <button onclick="setFlowerSet('white')" style="${currentFlowerSet==='white'?'background:#eee;color:#333':''}">White</button>
+                    <button onclick="setFlowerSet('blue')" style="${currentFlowerSet==='blue'?'background:#05f;':''}">Blue/Mix</button>
+                </div>
+            </div>
+            
+            <div style="margin-bottom:10px;">
+                <b>Weights (Density):</b><br>
+                <label>Flower: <input type="range" min="0" max="100" value="${flowerWeights.primary}" oninput="flowerWeights.primary=parseInt(this.value)"> </label><br>
+                <label>Mixed: <input type="range" min="0" max="100" value="${flowerWeights.variant}" oninput="flowerWeights.variant=parseInt(this.value)"> </label><br>
+                <label>Weeds: <input type="range" min="0" max="100" value="${flowerWeights.weeds}" oninput="flowerWeights.weeds=parseInt(this.value)"> </label>
+            </div>
+            
+            <p style="font-size:0.85em; color:#aaa;">Only sprays on Grass (Ga-Gg).</p>
+            <button onclick="exitFlowerMode()">Done</button>
+        </div>
+    `;
+    popup.style.display = "block";
+    makeDraggable(popup, document.getElementById('toolPopupHeader'));
+}
+
+function setFlowerSet(set) {
+    currentFlowerSet = set;
+    showFlowerTool();
+}
+
+function exitFlowerMode() {
+    flowerMode = false;
+    document.getElementById('toolPopup').style.display = 'none';
+}    
+
+
+
+
+    function setTileSize(size) {
+        TILE_SIZE = size;
+        canvas.width = TILE_W * TILE_SIZE;
+        canvas.height = TILE_H * TILE_SIZE;
+        renderFullMap();
+    }
+
+    // no longer used
+    // renderSidebar();
+    function renderSidebar() {
+        const sidebar = document.getElementById('sideToolbar');
+        sidebar.innerHTML = '';
+
+        var btn = document.createElement('button');
+        btn.innerText = 'Brush';
+        btn.onclick = bigbrush;
+        sidebar.appendChild(btn);
+
+        var btn = document.createElement('button');
+        btn.innerText = 'Borders';
+        btn.onclick = borders;
+        sidebar.appendChild(btn);
+
+        const sizes = [
+            {label: '1x', size: 32},
+            {label: '1/2x', size: 16},
+            {label: '1/4x', size: 8}
+        ];
+        sizes.forEach(option => {
+            const sbtn = document.createElement('button');
+            sbtn.innerText = option.label;
+            sbtn.onclick = function() {
+                TILE_SIZE = option.size;
+                canvas.width = TILE_W * TILE_SIZE;
+                canvas.height = TILE_H * TILE_SIZE;
+                renderFullMap();
+            };
+            sidebar.appendChild(sbtn);
+        });
+
+        var btn = document.createElement('button');
+        btn.innerText = 'Exits';
+        btn.onclick = () => showExitsEditor(lastEditedSector);
+        sidebar.appendChild(btn);
+        
+        var btn = document.createElement('button');
+        btn.innerText = 'Import';
+        btn.onclick = importMap;
+        sidebar.appendChild(btn);
+
+        var btn = document.createElement('button');
+        btn.innerText = 'Export';
+        btn.onclick = exportMap;
+        sidebar.appendChild(btn);
+    }
+
+    function getTileImage(code) {
+        if (imageCache[code]) return imageCache[code];
+        const img = new Image();
+        img.src = `t/${code}.png`;
+        img.onload = () => renderFullMap(); 
+        imageCache[code] = img;
+        return img;
+    }
+
+    function makeDraggable(popup, header) {
+        let offsetX = 0, offsetY = 0, isDown = false;
+        header.onmousedown = function(e) {
+            isDown = true;
+            offsetX = e.clientX - popup.offsetLeft;
+            offsetY = e.clientY - popup.offsetTop;
+            document.onmousemove = function(e) {
+                if (!isDown) return;
+                popup.style.left = (e.clientX - offsetX) + 'px';
+                popup.style.top = (e.clientY - offsetY) + 'px';
+            };
+            document.onmouseup = function() {
+                isDown = false;
+                document.onmousemove = null;
+            };
+        };
+    }
+
+function bigbrush() {
+    activeTool = 'brush'; // Selecting the brush automatically disables others
+
+    const group = brush[0];
+    const groupTiles = Array.from({length: 16}, (_, i) => group + String.fromCharCode(97 + i));
+
+    const tileButtons = groupTiles.map(code =>
+        `<button onclick="setBrush('${code}')" style="margin:2px; padding:2px;${brush===code ? 'background:#0af;outline:2px solid #fff;' : ''}">
+          <img src="t/${code}.png" style="width:32px; height:32px; vertical-align:middle;" alt="">
+        </button>`
+    ).join("");
+
+    const popup = document.getElementById('toolPopup');
+    popup.innerHTML = `
+        <div id="toolPopupHeader" style="cursor:move; background:#047; padding:8px; border-radius:6px 6px 0 0; font-weight:bold;">
+            Brush Tool
+            <span style="float:right;cursor:pointer;" onclick="document.getElementById('toolPopup').style.display='none'">✕</span>
+        </div>
+        <div style="padding:14px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                <div><b>Tile:</b> <span class="brush-info">${brush}</span></div>
+                <div id="shapeButtons">
+                    <button onclick="setBrushShape('box')" style="${brushShape==='box'?'background:#0af;':''}">Box</button>
+                    <button onclick="setBrushShape('circle')" style="${brushShape==='circle'?'background:#0af;':''}">Circle</button>
+                </div>
+            </div>
+            
+            <div style="margin-bottom:10px;">
+                <label><b>Size:</b></label>
+                <input type="range" min="1" max="7" step="2" id="brushSizeSlider" value="${brushSize}"
+                    oninput="updateBrushSizePreview(this.value)">
+                <span id="brushSizeValue">${brushSize}</span>
+            </div>
+
+            <div id="brushPreview" style="padding:10px 0; display:flex; justify-content:center; background:#111; border-radius:4px;"></div>
+            
+            <div style="margin:10px 0 5px 0;"><b>Group:</b></div>
+            <div style="display:flex; flex-wrap:wrap; gap:2px; width:170px;">${tileButtons}</div>
+        </div>
+    `;
+    popup.style.display = "block";
+    makeDraggable(popup, document.getElementById('toolPopupHeader'));
+    updateBrushSizePreview(brushSize);
+}
+
+function setBrushShape(s) {
+    brushShape = s;
+    bigbrush(); // Refresh popup to show active button
+}
+    function setBrush(code) {
+      brush = code;
+      updateBrushUI();
+      bigbrush(); // re-show popup with new tile highlighted
+    }
+
+function updateBrushSizePreview(val) {
+    brushSize = parseInt(val, 10);
+    document.getElementById('brushSizeValue').textContent = brushSize;
+    
+    let out = '<table style="border-collapse:collapse; background:#000;">';
+    const half = Math.floor(brushSize / 2);
+    const radiusSq = half * half;
+
+    for (let dy = -half; dy <= half; dy++) {
+        out += '<tr>';
+        for (let dx = -half; dx <= half; dx++) {
+            let isActive = true;
+            if (brushShape === 'circle') {
+                // Euclidean distance check for rounding
+                if (dx * dx + dy * dy > radiusSq + 0.1) isActive = false;
+            }
+            
+            const color = isActive ? '#0af' : 'transparent';
+            const border = isActive ? '1px solid #444' : 'none';
+            out += `<td style="width:12px; height:12px; background:${color}; border:${border};"></td>`;
+        }
+        out += '</tr>';
+    }
+    out += '</table>';
+    document.getElementById('brushPreview').innerHTML = out;
+}
+
+    function borders() {
+      drawSectorBorders(ctx, TILE_SIZE, SECTORS_WIDE, SECTORS_TALL, SECTOR_TILE_WIDTH, SECTOR_TILE_HEIGHT);
+    }
+
+    function drawSectorBorders(ctx, tileSize, sectorsWide, sectorsTall, sectorTileWidth, sectorTileHeight) {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255, 255, 0, 0.4)';
+        ctx.lineWidth = 1;
+        for (let sx = 1; sx < sectorsWide; sx++) {
+            const x = sx * sectorTileWidth * tileSize;
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+        }
+        for (let sy = 1; sy < sectorsTall; sy++) {
+            const y = sy * sectorTileHeight * tileSize;
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+        }
+        ctx.restore();
+    }
+
+    function drawTile(x, y) {
+        if (x < 0 || x >= TILE_W || y < 0 || y >= TILE_H) return;
+        const code = mapData[y][x];
+        const img = getTileImage(code);
+        ctx.fillStyle = '#000';
+        ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+        if (img.complete && img.naturalWidth !== 0) {
+            ctx.drawImage(img, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+        } else {
+            ctx.strokeStyle = '#333';
+            ctx.strokeRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+        }
+    }
+
+    // Consolidated Paint Logic
+    let isPainting = false;
+
+function handlePaintAction(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    const tileX = Math.floor((clientX - rect.left) / TILE_SIZE);
+    const tileY = Math.floor((clientY - rect.top) / TILE_SIZE);
+
+    const half = Math.floor(brushSize / 2);
+    const radiusSq = half * half;
+
+    for (let dy = -half; dy <= half; dy++) {
+        for (let dx = -half; dx <= half; dx++) {
+            if (brushShape === 'circle' && (dx * dx + dy * dy > radiusSq + 0.1)) continue;
+
+            const x = tileX + dx;
+            const y = tileY + dy;
+            if (x < 0 || x >= TILE_W || y < 0 || y >= TILE_H) continue;
+
+            // Switch behavior based on activeTool
+
+            if (activeTool === 'mountain') {
+                applySmartMountain(x, y);
+            } else if (activeTool === 'flower') {
+                applyFlowerSpray(x, y);
+            } else if (activeTool === 'brush') {
+                if (mapData[y][x] !== brush) {
+                    mapData[y][x] = brush;
+                    drawTile(x, y);
+                }
+            }
+            // Note: 'path' is handled by the mousedown listener, not the drag/paint action
+        }
+    }
+}
+
+function updateToolbarUI() {
+    // Remove "active" class from all buttons, then add it to the current one
+    document.querySelectorAll('#toolbar button').forEach(btn => btn.classList.remove('active-tool'));
+    // (Logic to find the specific button and add class)
+}
+
+function exitFlowerMode() {
+    activeTool = 'brush';
+    document.getElementById('toolPopup').style.display = 'none';
+}
+
+function exitPathMode() {
+    activeTool = 'brush';
+    pathMode = 0;
+    pathStartNode = null;
+    document.getElementById('toolPopup').style.display = 'none';
+}
+
+function applyFlowerSpray(x, y) {
+    const currentTile = mapData[y][x];
+    
+    // Constraint: Only spray on Ga-Gg (Grass/Noise)
+    const isGrass = currentTile.startsWith('G') || currentTile === 'Fa'; // Fa is also noise in your initMap
+    if (!isGrass) return;
+
+    const roll = Math.random() * 100;
+    let targetTile = null;
+
+    // Define the tile groups based on your rules
+    const sets = {
+        yellow: { primary: 'Fa', variant: 'Fe', weeds: 'Gb' },
+        white:  { primary: 'Fb', variant: 'Ff', weeds: 'Gb' },
+        blue:   { primary: 'Fc', variant: 'Fd', weeds: 'Gb' }
+    };
+
+    const config = sets[currentFlowerSet];
+
+    if (roll < flowerWeights.primary) {
+        targetTile = config.primary;
+    } else if (roll < (flowerWeights.primary + flowerWeights.variant)) {
+        targetTile = config.variant;
+    } else if (roll < (flowerWeights.primary + flowerWeights.variant + flowerWeights.weeds)) {
+        targetTile = config.weeds;
+    }
+
+    if (targetTile && mapData[y][x] !== targetTile) {
+        mapData[y][x] = targetTile;
+        drawTile(x, y);
+    }
+}
+
+canvas.addEventListener('mousedown', (e) => {
+    saveHistory();
+    const rect = canvas.getBoundingClientRect();
+    const tx = Math.floor((e.clientX - rect.left) / TILE_SIZE);
+    const ty = Math.floor((e.clientY - rect.top) / TILE_SIZE);
+
+    if (activeTool === 'stamp' && e.button === 0) {
+        applyStamp(tx, ty);
+        return; 
+    }
+
+    if (activeTool === 'select') {
+        isSelecting = true;
+        selectionStart = { x: tx, y: ty };
+        selection = { x: tx, y: ty, w: 1, h: 1 };
+        return;
+    }
+
+    if (activeTool === 'paste') {
+        pasteAt(tx, ty);
+        return;
+    }
+
+    if (activeTool === 'fill' && e.button === 0) {
+        fillSectorAt(e.clientX, e.clientY);
+        return; 
+    }
+
+    if (activeTool === 'river' || activeTool === 'path') {
+    if (pathMode === 1) {
+        pathStartNode = { x: tx, y: ty };
+        pathMode = 2;
+        document.getElementById('pathStatus').innerHTML = "Click for <b>River End</b>.";
+        return;
+    } 
+    if (pathMode === 2) {
+        if (activeTool === 'river') applyDrunkRiver(pathStartNode, { x: tx, y: ty });
+        else {
+            const path = findPath(pathStartNode, { x: tx, y: ty });
+            if (path) applyPathToMap(path);
+            exitPathMode();
+        }
+        return;
+    }
+}
+
+    // 3. Original Editor Logic
+    if (e.button === 0) {
+        // Left Click: Normal Painting
+        isPainting = true;
+        handlePaintAction(e.clientX, e.clientY);
+    } else if (e.button === 2) {
+        // Right Click: Eye-dropper (pick tile from map)
+        if (ty >= 0 && ty < TILE_H && tx >= 0 && tx < TILE_W) {
+            brush = mapData[ty][tx];
+            updateBrushUI();
+        }
+    }
+});
+    window.addEventListener('mousemove', (e) => {
+      if (isSelecting) {
+        const rect = canvas.getBoundingClientRect();
+        const tx = Math.floor((e.clientX - rect.left) / TILE_SIZE);
+        const ty = Math.floor((e.clientY - rect.top) / TILE_SIZE);
+        
+        selection.x = Math.min(tx, selectionStart.x);
+        selection.y = Math.min(ty, selectionStart.y);
+        selection.w = Math.abs(tx - selectionStart.x) + 1;
+        selection.h = Math.abs(ty - selectionStart.y) + 1;
+        renderFullMap(); // Redraw to show the box
+      }
+      if (isPainting) handlePaintAction(e.clientX, e.clientY);
+    });
+
+    window.addEventListener('mouseup', () => {
+      isPainting = false
+      isSelecting = false;
+      isPainting = false;
+     });
+    canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+    window.addEventListener('keydown', (e) => {
+        if (e.ctrlKey) {
+          if (e.key === 'c') copySelected();
+          if (e.key === 'x') copySelected(true);
+          if (e.key === 'v') activeTool = 'paste';
+          if (e.key === 'z') undo();
+        }
+
+        if (e.key.length === 1) {
+            if (/[A-Z]/.test(e.key)) brush = e.key + brush[1];
+            else if (/[a-z]/.test(e.key)) brush = brush[0] + e.key;
+            updateBrushUI();
+        }
+        
+        // Unset selection/tool on Escape
+        if (e.key === 'Escape') { exitSelectionMode(); }
+
+        if (e.ctrlKey) {
+            if (e.key === 'c' && activeTool === 'select') copySelectionToStamp();
+            if (e.key === 'v' && activeTool === 'select') applyStampToSelection();
+            if (e.key === 'z') undo();
+        }
+    });
+
+    function updateBrushUI() { brushDisplay.innerText = brush; }
+
+
+let exitEditSector = null; // Sector label being edited, e.g., "A1"
+
+function showExitsEditor(sectorLabel) {
+    exitEditSector = sectorLabel;
+    const currExits = sectorExits[sectorLabel] || '';
+    const popup = document.getElementById('toolPopup');
+    popup.innerHTML = `
+        <div id="toolPopupHeader" style="cursor:move; background:#047; padding:8px; border-radius:6px 6px 0 0; font-weight:bold;">
+            Sector Exits Editor (${sectorLabel})
+            <span style="float:right;cursor:pointer;" onclick="document.getElementById('toolPopup').style.display='none'">✕</span>
+        </div>
+        <div style="padding:16px;">
+            <label for="exitsInput">Exits (e.g. A2B1): </label>
+            <input type="text" id="exitsInput" maxlength="8" value="${currExits}" style="width:90px;" autocomplete="off">
+            <button onclick="resetExitsToNatural('${sectorLabel}')">Reset</button>
+            <div id="exitsValidation" style="margin-top:8px; font-size:0.9em"></div>
+            <p style="font-size:0.95em;color:#aaa;margin:7px 0 0 0;">
+              Enter 2-char sector labels concatenated: e.g. <b>A2B1</b>.<br>
+              Use <b>Reset</b> to auto-fill with the "natural" 4 exits.<br>
+              Accepts teleport/secret exits, as needed.
+            </p>
+            <button style="margin-top:12px" onclick="saveExitsInput()">Save</button>
+        </div>
+    `;
+    popup.style.display = "block";
+    makeDraggable(popup, document.getElementById('toolPopupHeader'));
+    document.getElementById('exitsInput').addEventListener('input', validateExitsInput);
+    validateExitsInput();
+}
+
+function validateExitsInput() {
+    const val = document.getElementById('exitsInput').value.toUpperCase();
+    document.getElementById('exitsInput').value = val;
+    // Validate: up to 8 characters, each 2 chars A-L + [1-8]
+    let valid = (/^([A-L][1-8]){0,4}$/).test(val);
+    document.getElementById('exitsValidation').innerHTML =
+        valid ?
+          `<span style="color:#3fa">Valid exits:</span> ${val.match(/.{1,2}/g)?.join(' ')||''}` :
+          `<span style="color:#f66">Invalid! Use 2-char codes, e.g. A2B1</span>`;
+}
+
+function saveExitsInput() {
+    const val = document.getElementById('exitsInput').value.toUpperCase();
+    if (!/^([A-L][1-8]){0,4}$/.test(val)) {
+        alert("Invalid exits! Use sector codes like A2B1 (2 chars each, up to 4).");
+        return;
+    }
+    sectorExits[exitEditSector] = val;
+    document.getElementById('toolPopup').style.display = 'none';
+}
+
+// Generates the 4 "natural" exits (within map bounds) for a sector
+function resetExitsToNatural(sectorLabel) {
+    const ROWS = ["A","B","C","D","E","F","G","H","I","J","K","L"];
+    let rowChar = sectorLabel.charAt(0), colNum = parseInt(sectorLabel.slice(1));
+    let r = ROWS.indexOf(rowChar), c = colNum - 1;
+    let exits = "";
+    if (r > 0) exits += `${ROWS[r-1]}${c+1}`;
+    if (r < 11) exits += `${ROWS[r+1]}${c+1}`;
+    if (c > 0) exits += `${ROWS[r]}${c}`;
+    if (c < 7) exits += `${ROWS[r]}${c+2}`;
+    document.getElementById('exitsInput').value = exits;
+    validateExitsInput();
+}
+
+async function importMap() {
+    try {
+        const text = await navigator.clipboard.readText();
+        if (!text) return;
+
+        const lines = text.split('\n');
+        const ROWS = ["A","B","C","D","E","F","G","H","I","J","K","L"];
+        const SECTOR_W = 8;
+        const SECTOR_H = 12;
+
+        lines.forEach(line => {
+            if (!line.includes('=')) return;
+
+            // Split "A1=[tiles][exits]"
+            const [label, data] = line.trim().split('=');
+            if (!label || !data) return;
+            
+            // Parse sector indices
+            const rowChar = label.charAt(0);
+            const colNum = parseInt(label.substring(1));
+            const rIndex = ROWS.indexOf(rowChar);
+            const cIndex = colNum - 1;
+            if (rIndex === -1 || isNaN(cIndex)) return;
+
+            // --- Extract and store exits after tiles ---
+            const tilesLength = 96 * 2; // 192 chars for 96 tiles, each 2 chars
+            const tilesString = data.substring(0, tilesLength);
+            const exitString = data.substring(tilesLength); // may be "" if no exits were saved (old format)
+
+            // Store exits using sector codes (label) or by [r][c] as needed
+            sectorExits[label] = exitString; // e.g. sectorExits["A1"] = "A2B1"
+
+            // --- Process tiles ---
+            for (let i = 0; i < 96; i++) {
+                const tileCode = tilesString.substring(i * 2, (i * 2) + 2);
+
+                // Local tile coords in sector
+                const sx = i % SECTOR_W;
+                const sy = Math.floor(i / SECTOR_W);
+
+                // Map to global grid
+                const globalX = (cIndex * SECTOR_W) + sx;
+                const globalY = (rIndex * SECTOR_H) + sy;
+
+                if (globalX < TILE_W && globalY < TILE_H) {
+                    mapData[globalY][globalX] = tileCode;
+                }
+            }
+        });
+
+        // Optionally: update UI to reflect exits here
+
+        renderFullMap();
+        alert("Map imported successfully!");
+
+    } catch (err) {
+        console.error('Failed to read clipboard:', err);
+        alert("Failed to import. Make sure you've granted clipboard permissions.");
+    }
+}
+
+    // Export logic
+function exportMap() {
+    const SECTOR_W = 8;
+    const SECTOR_H = 12;
+    const ROWS = ["A","B","C","D","E","F","G","H","I","J","K","L"];
+    let output = "";
+
+    for (let r = 0; r < 12; r++) { // Vertical sectors
+        for (let c = 0; c < 8; c++) { // Horizontal sectors
+            const sectorLabel = `${ROWS[r]}${c + 1}`;
+            let sectorString = "";
+
+            // Get tiles in this sector
+            for (let sy = 0; sy < SECTOR_H; sy++) {
+                for (let sx = 0; sx < SECTOR_W; sx++) {
+                    const globalX = (c * SECTOR_W) + sx;
+                    const globalY = (r * SECTOR_H) + sy;
+                    sectorString += mapData[globalY][globalX];
+                }
+            }
+
+            // --- Add the exits string ---
+            var exits = sectorExits[sectorLabel] || ""; // fallback to "" if undefined
+            output += `${sectorLabel}=${sectorString}${exits}\n`;
+        }
+    }
+
+    navigator.clipboard.writeText(output.trim()).then(() => {
+        alert("Map exported to clipboard!");
+    }).catch(err => {
+        console.error('Error copying to clipboard', err);
+    });
+}
+
+function showPathTool() {
+    activeTool = 'path';
+    pathMode = 1;
+    const popup = document.getElementById('toolPopup');
+    popup.innerHTML = `
+        <div id="toolPopupHeader" style="cursor:move; background:#047; padding:8px; border-radius:6px 6px 0 0; font-weight:bold;">
+            Path Finder
+            <span style="float:right;cursor:pointer;" onclick="exitPathMode()">✕</span>
+        </div>
+        <div style="padding:16px;">
+            <p id="pathStatus">Click on the map to set the <b>Starting Point</b>.</p>
+            <button onclick="exitPathMode()">Cancel</button>
+        </div>
+    `;
+    popup.style.display = "block";
+    makeDraggable(popup, document.getElementById('toolPopupHeader'));
+}
+
+function exitPathMode() {
+    pathMode = 0;
+    pathStartNode = null;
+    document.getElementById('toolPopup').style.display = 'none';
+}
+
+function isWalkable(tileCode) {
+    // Walkable: Aa-Lz. Blocked: Ma and above.
+    return tileCode < "Ma"; 
+}
+
+function findPath(start, end) {
+    const openSet = [start];
+    const cameFrom = new Map();
+    const gScore = new Map();
+    const fScore = new Map();
+
+    const posKey = (p) => `${p.x},${p.y}`;
+    
+    gScore.set(posKey(start), 0);
+    fScore.set(posKey(start), Math.abs(start.x - end.x) + Math.abs(start.y - end.y));
+
+    while (openSet.length > 0) {
+        // Get node with lowest fScore
+        openSet.sort((a, b) => fScore.get(posKey(a)) - fScore.get(posKey(b)));
+        let current = openSet.shift();
+
+        if (current.x === end.x && current.y === end.y) {
+            const path = [];
+            while (current) {
+                path.push(current);
+                current = cameFrom.get(posKey(current));
+            }
+            return path.reverse();
+        }
+
+        const neighbors = [
+            {x: current.x, y: current.y - 1}, {x: current.x, y: current.y + 1},
+            {x: current.x - 1, y: current.y}, {x: current.x + 1, y: current.y}
+        ];
+
+        for (let neighbor of neighbors) {
+            if (neighbor.x < 0 || neighbor.x >= TILE_W || neighbor.y < 0 || neighbor.y >= TILE_H) continue;
+            if (!isWalkable(mapData[neighbor.y][neighbor.x])) continue;
+
+            // "Stumble" Logic: Add a tiny random weight (0 to 0.2) to make paths less robotic
+            let tentativeG = gScore.get(posKey(current)) + 1 + (Math.random() * 0.2);
+
+            if (!gScore.has(posKey(neighbor)) || tentativeG < gScore.get(posKey(neighbor))) {
+                cameFrom.set(posKey(neighbor), current);
+                gScore.set(posKey(neighbor), tentativeG);
+                fScore.set(posKey(neighbor), tentativeG + Math.abs(neighbor.x - end.x) + Math.abs(neighbor.y - end.y));
+                if (!openSet.find(p => p.x === neighbor.x && p.y === neighbor.y)) {
+                    openSet.push(neighbor);
+                }
+            }
+        }
+    }
+    return null; // No path found
+}
+
+function applyPathToMap(path) {
+    for (let i = 0; i < path.length; i++) {
+        let curr = path[i];
+        let prev = path[i - 1];
+        let next = path[i + 1];
+
+        let connections = { n: false, s: false, e: false, w: false };
+
+        // Determine directions for current tile
+        if (prev) {
+            if (prev.y < curr.y) connections.n = true;
+            if (prev.y > curr.y) connections.s = true;
+            if (prev.x < curr.x) connections.w = true;
+            if (prev.x > curr.x) connections.e = true;
+        }
+        if (next) {
+            if (next.y < curr.y) connections.n = true;
+            if (next.y > curr.y) connections.s = true;
+            if (next.x < curr.x) connections.w = true;
+            if (next.x > curr.x) connections.e = true;
+        }
+
+        // Logic for "Pro" Junction Merging
+        let existing = mapData[curr.y][curr.x];
+        if (existing.startsWith('B')) {
+            // Add existing connections to our new path tile
+            if (existing === 'Ba') { connections.n = true; connections.s = true; }
+            if (existing === 'Bb') { connections.e = true; connections.w = true; }
+            // ... add more logic here to detect existing corners if desired
+        }
+
+        let tile = 'Ba'; // Default
+        const {n, s, e, w} = connections;
+
+        // Selection Logic
+        if (n && s && e && w) tile = 'Bc';
+        else if (n && s && w) tile = 'Bh';
+        else if (n && s && e) tile = 'Bi';
+        else if (n && s) tile = 'Ba';
+        else if (e && w) tile = 'Bb';
+        else if (n && w) tile = 'Bd';
+        else if (n && e) tile = 'Be';
+        else if (s && e) tile = 'Bf';
+        else if (s && w) tile = 'Bg';
+        // Caps/Starts
+        else if (n) tile = 'Bm';
+        else if (s) tile = 'Bn';
+        else if (e) tile = 'Bk';
+        else if (w) tile = 'Bl';
+
+        mapData[curr.y][curr.x] = tile;
+    }
+    renderFullMap();
+}
+
+function fillSectorAt(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    const tileX = Math.floor((clientX - rect.left) / TILE_SIZE);
+    const tileY = Math.floor((clientY - rect.top) / TILE_SIZE);
+
+    const sectorX = Math.floor(tileX / SECTOR_TILE_WIDTH);
+    const sectorY = Math.floor(tileY / SECTOR_TILE_HEIGHT);
+
+    // Calculate the pixel/tile boundaries of that sector
+    const startX = sectorX * SECTOR_TILE_WIDTH;
+    const endX = startX + SECTOR_TILE_WIDTH;
+    const startY = sectorY * SECTOR_TILE_HEIGHT;
+    const endY = startY + SECTOR_TILE_HEIGHT;
+
+    // Fill the sector
+    for (let y = startY; y < endY; y++) {
+        for (let x = startX; x < endX; x++) {
+            if (mapData[y][x] !== brush) {
+                mapData[y][x] = brush;
+            }
+        }
+    }
+    renderFullMap();
+}
+
+// Helper to check if a tile is part of a mountain
+function isMountain(x, y) {
+    if (x < 0 || x >= TILE_W || y < 0 || y >= TILE_H) return false;
+    return mapData[y][x].startsWith('S');
+}
+
+function getSmartMountainTile(x, y) {
+    const N = isMountain(x, y - 1);
+    const S = isMountain(x, y + 1);
+    const W = isMountain(x - 1, y);
+    const E = isMountain(x + 1, y);
+
+    // 1. Vertical Logic (Peak/Base/Middle)
+    if (!N && S) return 'Sb'; // Peak (Grass above, Mountain below)
+    if (N && !S) return 'Sf'; // Base (Mountain above, Grass below)
+    
+    // 2. Horizontal/Edge Logic (Only if it's a middle vertical piece)
+    if (N && S) {
+        if (!W && E) return 'Sc'; // Left Edge
+        if (W && !E) return 'Sd'; // Right Edge
+        return 'Sd';              // Solid Center
+    }
+
+    // 3. Default/Isolated
+    return 'Sb'; // Single tiles look like rocks/peaks
+}
+
+function applySmartMountain(x, y) {
+    // 1. Set the current tile to a generic mountain tile first so neighbors recognize it
+    mapData[y][x] = 'Sd'; 
+
+    // 2. Define the area to "heal" (the tile itself + 4 neighbors)
+    const pointsToUpdate = [
+        {x: x, y: y},
+        {x: x, y: y - 1}, {x: x, y: y + 1},
+        {x: x - 1, y: y}, {x: x + 1, y: y}
+    ];
+
+    // 3. Update each point based on its new neighborhood
+    pointsToUpdate.forEach(p => {
+        if (isMountain(p.x, p.y)) {
+            mapData[p.y][p.x] = getSmartMountainTile(p.x, p.y);
+            drawTile(p.x, p.y);
+        }
+    });
+}
+
+
+function undo() {
+    if (mapHistory.length === 0) return;
+    mapData = mapHistory.pop();
+    renderFullMap();
+}
+
+function saveHistory() {
+    // We must clone the array, otherwise we just save a reference to the live map
+    const snapshot = mapData.map(row => [...row]);
+    mapHistory.push(snapshot);
+    
+    // Keep history from getting too large
+    if (mapHistory.length > MAX_UNDO) {
+        mapHistory.shift(); 
+    }
+}
+
+function copySelected(isCut = false) {
+    if (!selection) return;
+    saveHistory();
+    let out = "";
+    for (let y = selection.y; y < selection.y + selection.h; y++) {
+        for (let x = selection.x; x < selection.x + selection.w; x++) {
+            out += mapData[y][x];
+            if (isCut) mapData[y][x] = "Ga"; // Replace with default grass
+        }
+        if (y < selection.y + selection.h - 1) out += "\n";
+    }
+    clipboard = out;
+    if (isCut) renderFullMap();
+    console.log("Copied to internal clipboard:\n" + clipboard);
+}
+
+function pasteAt(tileX, tileY) {
+    if (!clipboard) return;
+    saveHistory();
+    const rows = clipboard.split('\n');
+    rows.forEach((rowStr, dy) => {
+        // Match every 2 characters (the tile codes)
+        const tiles = rowStr.match(/.{1,2}/g); 
+        tiles.forEach((code, dx) => {
+            const x = tileX + dx;
+            const y = tileY + dy;
+            if (x < TILE_W && y < TILE_H) {
+                mapData[y][x] = code;
+            }
+        });
+    });
+    renderFullMap();
+}
+
+function renderFullMap() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (let y = 0; y < TILE_H; y++) {
+        for (let x = 0; x < TILE_W; x++) {
+            drawTile(x, y);
+        }
+    }
+    
+    // Draw Selection Box
+    if (selection) {
+        ctx.strokeStyle = '#0af';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]); // Dashed line effect
+        ctx.strokeRect(
+            selection.x * TILE_SIZE, 
+            selection.y * TILE_SIZE, 
+            selection.w * TILE_SIZE, 
+            selection.h * TILE_SIZE
+        );
+        ctx.setLineDash([]); // Reset dash
+    }
+
+    drawSectorBorders(ctx, TILE_SIZE, SECTORS_WIDE, SECTORS_TALL, SECTOR_TILE_WIDTH, SECTOR_TILE_HEIGHT);
+}
+
+let currentStamp = [];
+
+function showStampTool() {
+    activeTool = 'select'; // Automatically enable selection mode
+    const popup = document.getElementById('toolPopup');
+    popup.innerHTML = `
+        <div id="toolPopupHeader" style="cursor:move; background:#639; padding:8px; border-radius:6px 6px 0 0; font-weight:bold;">
+            Selection & Stamp
+            <span style="float:right;cursor:pointer;" onclick="exitSelectionMode()">✕</span>
+        </div>
+        <div style="padding:14px;">
+            <p style="margin:0 0 10px 0; font-size:0.85em; color:#aaa;">
+                1. Drag on map to select area.<br>
+                2. Copy selection to text OR paste text to map.
+            </p>
+            
+            <textarea id="stampInput" placeholder="Tile codes appear here..." 
+                style="width:100%; height:100px; background:#111; color:#0f0; font-family:monospace; border:1px solid #555; margin-bottom:10px;"></textarea>
+            
+            <div style="display:flex; flex-direction:column; gap:8px;">
+                <div style="display:flex; gap:5px;">
+                    <button style="flex:1; background:#282;" onclick="copySelectionToStamp()">Copy Selection</button>
+                    <button style="flex:1; background:#822;" onclick="clearSelection()">Clear Box</button>
+                </div>
+                <button style="background:#068;" onclick="applyStampToSelection()">Paste Text to Selection</button>
+            </div>
+            
+            <p id="stampStatus" style="font-size:0.8em; color:#aaa; margin-top:8px;">Ready.</p>
+        </div>
+    `;
+    popup.style.display = "block";
+    makeDraggable(popup, document.getElementById('toolPopupHeader'));
+}
+
+function exitSelectionMode() {
+    selection = null;
+    activeTool = 'brush';
+    document.getElementById('toolPopup').style.display = 'none';
+    renderFullMap();
+}
+
+function clearSelection() {
+    selection = null;
+    renderFullMap();
+}
+
+// Copies the selected map area into the textarea and the browser clipboard
+async function copySelectionToStamp() {
+    if (!selection) {
+        alert("Please select an area on the map first.");
+        return;
+    }
+
+    let out = "";
+    for (let y = selection.y; y < selection.y + selection.h; y++) {
+        for (let x = selection.x; x < selection.x + selection.w; x++) {
+            out += mapData[y][x];
+        }
+        if (y < selection.y + selection.h - 1) out += "\n";
+    }
+
+    document.getElementById('stampInput').value = out;
+    
+    try {
+        await navigator.clipboard.writeText(out);
+        document.getElementById('stampStatus').innerText = "Copied to clipboard!";
+    } catch (err) {
+        document.getElementById('stampStatus').innerText = "Copied to box (Clipboard blocked).";
+    }
+}
+
+// Pastes text from the textarea onto the map starting at the selection's top-left
+function applyStampToSelection() {
+    const text = document.getElementById('stampInput').value.trim();
+    if (!text) {
+        document.getElementById('stampStatus').innerText = "Nothing to paste!";
+        return;
+    }
+    if (!selection) {
+        alert("Click or drag on the map to set the paste origin.");
+        return;
+    }
+
+    saveHistory();
+    
+    // We use selection.x/y as the strict top-left origin
+    const originX = selection.x;
+    const originY = selection.y;
+
+    const lines = text.split('\n');
+    lines.forEach((line, dy) => {
+        // Strip spaces/tabs but keep the 2-char codes
+        const cleanLine = line.replace(/\s+/g, '');
+        const tiles = cleanLine.match(/.{1,2}/g); 
+        
+        if (tiles) {
+            tiles.forEach((code, dx) => {
+                const gx = originX + dx;
+                const gy = originY + dy;
+                
+                // Overflow Check: Paste everywhere as long as it's on the map
+                if (gx >= 0 && gx < TILE_W && gy >= 0 && gy < TILE_H) {
+                    mapData[gy][gx] = code;
+                }
+            });
+        }
+    });
+    
+    document.getElementById('stampStatus').innerText = "Pasted at (" + originX + "," + originY + ")";
+    renderFullMap();
+}
+function updateStampData() {
+    const text = document.getElementById('stampInput').value.trim();
+    if (!text) return;
+
+    const lines = text.split('\n');
+    currentStamp = lines.map(line => {
+        // Remove all whitespace and match 2-character pairs
+        const cleanLine = line.replace(/\s+/g, '');
+        const matches = cleanLine.match(/.{1,2}/g);
+        return matches || [];
+    });
+
+    const height = currentStamp.length;
+    const width = currentStamp[0] ? currentStamp[0].length : 0;
+    document.getElementById('stampStatus').innerText = `Loaded: ${width}x${height} stamp. Click map to place.`;
+}
+
+function applyStamp(tx, ty) {
+    if (currentStamp.length === 0) return;
+    
+    saveHistory(); // Ensure undo works
+    for (let y = 0; y < currentStamp.length; y++) {
+        for (let x = 0; x < currentStamp[y].length; x++) {
+            const gx = tx + x;
+            const gy = ty + y;
+            // Bounds check
+            if (gx >= 0 && gx < TILE_W && gy >= 0 && gy < TILE_H) {
+                mapData[gy][gx] = currentStamp[y][x];
+            }
+        }
+    }
+    renderFullMap();
+}
+
+function showTerrainTool() {
+    activeTool = 'terrain';
+    const popup = document.getElementById('toolPopup');
+
+    // addButton('Path', showPathTool);
+    // addButton('River', showRiverTool);
+    // addButton('Mountain', showMountainTool);
+}    
+    
+</script>
+</body>
+</html>
