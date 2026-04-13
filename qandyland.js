@@ -977,159 +977,92 @@ function matchPattern(name, pattern) {
   }
 }
 
-// ── bigbang() – Procedural World Generation ──────────────────────────────────
+// ── bigbang() – GFX World Generation ─────────────────────────────────────────
 //
-// Creates a multiplayer world on the server from a map topology string.
-// Called by gfxCreation() scripts to set up worlds for capture-the-flag etc.
+// Creates a multiplayer world on the server by reading capflag.gfx from the
+// server's working directory.  The client is never trusted for map data.
 //
-// bigbang(drive, "A1A2A3B1B2B3", "SaSbScTaTbTc", true)
-//   drive     – drive name to create world on (e.g. "gfx.js")
-//   mapString – 2-char map IDs concatenated: "A1A2B1B2" → A1, A2, B1, B2
-//   players   – player string of concatenated 2-char codes, e.g. "SaSbScTaTbTc"
-//   isRound   – if true, world edges wrap (A↔Z, 1↔9 / A↔Z for col)
+// bigbang(driveName, session)
+//   driveName – drive name to create world on (e.g. "gfx")
+//   session   – caller session token
 //
-// Creates server://{drive}/w/{mapId}/  for each map, with:
-//   m.txt  – 194-char procedural tileset string
-//   e.txt  – legal exit destinations (pre-calculated, no runtime physics needed)
-// Creates server://{drive}/p.txt with empty player slots:
-//   Sa=\nSb=\n...
+// .gfx file format (one sector per line):
+//   [sector]=[96 tiles][valid exits].[item id][item z][item data]...
+//   sector  – upper-case letter + lower-case letter or numeral (e.g. A1, _L)
+//   tiles   – 2-char code each, 96 tiles = 192 chars
+//   exits   – 2-char sector codes for allowed movement (after tile chars)
+//   .       – separator before item list
+//   items   – 6-char entries: 2=id, 2=z-location, 2=data
+//
+// Creates server://{drive}/w/{sectorId}/  for each non-_L sector, with:
+//   e.txt – valid exit sector codes
+//   <id><z><data> – one 6-char file per static item in the sector
+// Creates server://{drive}/p.txt with empty player slots derived from _L items.
 
-var BIGBANG_TILE_POOL = [
-  'Ga','Ga','Ga','Ga','Ga',
-  'Gb','Gb','Gb','Gc','Gc',
-  'Ra','Ra','Rb',
-  'Sa','Sb','Sc','Sd',
-  'Ca','Cb',
-  'Ta','Tb'
-];
+var GFX_FILE = 'capflag.gfx';
 
-function parseMapString(mapString) {
-  var s = normName(mapString);
-  if (!s) return { ok: false, error: 'empty map string' };
-  if (s.length % 2 !== 0) {
-    return { ok: false, error: 'map string length must be even (2 chars per map ID)' };
+function bigbang(driveName, session) {
+  if (!drives[driveName]) return { success: false, error: 'drive not mounted: ' + driveName };
+
+  // Load capflag.gfx from the server's working directory (never from the client)
+  var gfxPath = path.join(process.cwd(), GFX_FILE);
+  var raw;
+  try {
+    raw = fs.readFileSync(gfxPath, 'utf8');
+  } catch (e) {
+    return { success: false, error: 'cannot read ' + GFX_FILE + ': ' + (e.message || String(e)) };
   }
 
-  var maps = [];
-  var seen = {};
-  for (var i = 0; i < s.length; i += 2) {
-    var id = s.substring(i, i + 2);
-    if (!/^[A-Z][1-9A-Z]$/.test(id)) {
-      return { ok: false, error: 'invalid map ID "' + id + '" (must be A-Z then 1-9 or A-Z)' };
+  var lines = raw.split('\n');
+  var sectors = [];   // { id, exits, items[] }
+  var lobbyItems = [];
+
+  for (var li = 0; li < lines.length; li++) {
+    var line = lines[li].trim();
+    if (!line) continue;
+
+    var eqIdx = line.indexOf('=');
+    if (eqIdx < 0) continue;
+
+    var sectorId  = line.substring(0, eqIdx);
+    var rest      = line.substring(eqIdx + 1);
+    var dotIdx    = rest.indexOf('.');
+    var mapData   = dotIdx >= 0 ? rest.substring(0, dotIdx) : rest;
+    var itemData  = dotIdx >= 0 ? rest.substring(dotIdx + 1) : '';
+
+    // tiles are first 192 chars (96 × 2); exits are the remainder
+    var exitStr = mapData.substring(192);
+
+    // parse items (6 chars each: 2=id, 2=z, 2=data)
+    var items = [];
+    for (var ji = 0; ji + 6 <= itemData.length; ji += 6) {
+      items.push(itemData.substring(ji, ji + 6));
     }
-    if (seen[id]) {
-      return { ok: false, error: 'duplicate map ID: ' + id };
-    }
-    seen[id] = true;
-    maps.push(id);
-  }
-  if (maps.length === 0) return { ok: false, error: 'no maps in map string' };
-  return { ok: true, maps: maps };
-}
 
-function getRandomTileset() {
-  var tiles = '';
-  for (var i = 0; i < 96; i++) {
-    tiles += BIGBANG_TILE_POOL[Math.floor(Math.random() * BIGBANG_TILE_POOL.length)];
-  }
-  return tiles + '..';
-}
-
-var BB_ROW_A = 65, BB_ROW_Z = 90;
-var BB_COL_1 = 49, BB_COL_9 = 57;
-var BB_COL_A = 65, BB_COL_Z = 90;
-
-function getNeighborMapId(mapId, direction, mapsSet, isRound) {
-  var row = mapId.charCodeAt(0);
-  var col = mapId.charCodeAt(1);
-  var newRow = row;
-  var newCol = col;
-
-  if (direction === 'N') {
-    if (row === BB_ROW_A) { if (!isRound) return null; newRow = BB_ROW_Z; }
-    else { newRow = row - 1; }
-  } else if (direction === 'S') {
-    if (row === BB_ROW_Z) { if (!isRound) return null; newRow = BB_ROW_A; }
-    else { newRow = row + 1; }
-  } else if (direction === 'W') {
-    if (col >= BB_COL_1 && col <= BB_COL_9) {
-      if (col === BB_COL_1) { if (!isRound) return null; newCol = BB_COL_9; }
-      else { newCol = col - 1; }
-    } else if (col >= BB_COL_A && col <= BB_COL_Z) {
-      if (col === BB_COL_A) { if (!isRound) return null; newCol = BB_COL_Z; }
-      else { newCol = col - 1; }
+    if (sectorId === '_L') {
+      lobbyItems = items;
     } else {
-      return null;
-    }
-  } else if (direction === 'E') {
-    if (col >= BB_COL_1 && col <= BB_COL_9) {
-      if (col === BB_COL_9) { if (!isRound) return null; newCol = BB_COL_1; }
-      else { newCol = col + 1; }
-    } else if (col >= BB_COL_A && col <= BB_COL_Z) {
-      if (col === BB_COL_Z) { if (!isRound) return null; newCol = BB_COL_A; }
-      else { newCol = col + 1; }
-    } else {
-      return null;
+      sectors.push({ id: sectorId, exits: exitStr, items: items });
     }
   }
 
-  var neighborId = String.fromCharCode(newRow) + String.fromCharCode(newCol);
-  return mapsSet[neighborId] ? neighborId : null;
-}
-
-function calculateLegalMoves(currentMap, mapsSet, isRound) {
-  var exits = '';
-  var dirs = ['N', 'S', 'W', 'E'];
-  for (var i = 0; i < dirs.length; i++) {
-    var neighbor = getNeighborMapId(currentMap, dirs[i], mapsSet, isRound);
-    if (neighbor) exits += neighbor;
-  }
-  return exits;
-}
-
-function bigbang(driveName, mapString, players, isRound, session) {
-  var drive = drives[driveName];
-  if (!drive) return { success: false, error: 'drive not mounted: ' + driveName };
-
-  var parsed = parseMapString(mapString);
-  if (!parsed.ok) return { success: false, error: parsed.error };
-  var allMaps = parsed.maps;
-
-  var mapsSet = {};
-  for (var k = 0; k < allMaps.length; k++) mapsSet[allMaps[k]] = true;
-
-  // Accept players as a string of concatenated 2-char codes or a pre-parsed array.
-  var playersList;
-  if (typeof players === 'string') {
-    playersList = [];
-    for (var pi = 0; pi < players.length; pi += 2) {
-      playersList.push(players.slice(pi, pi + 2));
-    }
-  } else {
-    playersList = Array.isArray(players) ? players : [];
-  }
-  if (playersList.length === 0) {
-    return { success: false, error: 'players list is required and cannot be empty' };
-  }
-  for (var p = 0; p < playersList.length; p++) {
-    var code = String(playersList[p] || '');
-    if (!/^[A-Z][a-z0-9]$/.test(code)) {
-      return { success: false, error: 'invalid player code "' + code + '" (must be uppercase letter + lowercase letter/number)' };
-    }
+  if (sectors.length === 0) {
+    return { success: false, error: GFX_FILE + ' contains no valid world sectors' };
   }
 
-  var round = (isRound === true || isRound === 'true' || isRound === 1);
   var created = [];
   var errors  = [];
 
+  // Create /w/ root directory
   var wDir = dirMake(driveName, '/', 'w', session);
   if (!wDir.success && wDir.error !== 'directory already exists') {
     return { success: false, error: 'failed to create /w/ directory: ' + wDir.error };
   }
 
-  for (var i = 0; i < allMaps.length; i++) {
-    var mapId   = allMaps[i];
-    var dirPath = 'w/' + mapId;
+  // Create a sub-directory and files for each world sector
+  for (var si = 0; si < sectors.length; si++) {
+    var sector  = sectors[si];
+    var dirPath = 'w/' + sector.id;
 
     var mkResult = dirMake(driveName, '/', dirPath, session);
     if (!mkResult.success && mkResult.error !== 'directory already exists') {
@@ -1137,24 +1070,42 @@ function bigbang(driveName, mapString, players, isRound, session) {
       continue;
     }
 
-    var tileset = getRandomTileset();
-    var mResult = fileSave(driveName, '/', dirPath + '/m.txt', tileset, session, 'bigbang');
-    if (!mResult.success) errors.push(dirPath + '/m.txt: ' + mResult.error);
-
-    var exits   = calculateLegalMoves(mapId, mapsSet, round);
-    var eResult = fileSave(driveName, '/', dirPath + '/e.txt', exits, session, 'bigbang');
+    // e.txt – valid exits for this sector
+    var eResult = fileSave(driveName, '/', dirPath + '/e.txt', sector.exits, session, 'bigbang');
     if (!eResult.success) errors.push(dirPath + '/e.txt: ' + eResult.error);
 
-    created.push(mapId);
+    // one 6-char file per static item (filename encodes id+z+data, content empty)
+    for (var ii = 0; ii < sector.items.length; ii++) {
+      var itemFile = sector.items[ii];
+      var iResult  = fileSave(driveName, '/', dirPath + '/' + itemFile, '', session, 'bigbang');
+      if (!iResult.success) errors.push(dirPath + '/' + itemFile + ': ' + iResult.error);
+    }
+
+    created.push(sector.id);
   }
 
-  // Create root p.txt with empty player slots.
+  // Build p.txt from player-slot items in the _L (lobby) sector.
+  // Player slot items have ID matching [A-Z][a-z] and data == "Za" (no special data).
+  // Items with non-Za data (e.g. the flag Yj44Sa) are game objects, not player slots.
+  // Deduplicate: the same player code may appear at more than one z-position.
   var playerSlots = '';
-  for (var j = 0; j < playersList.length; j++) {
-    playerSlots += playersList[j] + '=\n';
+  var playerCodes = [];
+  var seenCodes   = {};
+  for (var pi = 0; pi < lobbyItems.length; pi++) {
+    var itemId   = lobbyItems[pi].substring(0, 2);
+    var itemData = lobbyItems[pi].substring(4, 6);
+    if (/^[A-Z][a-z]$/.test(itemId) && itemData === 'Za' && !seenCodes[itemId]) {
+      seenCodes[itemId] = true;
+      playerSlots += itemId + '=\n';
+      playerCodes.push(itemId);
+    }
   }
-  var pResult = fileSave(driveName, '/', 'p.txt', playerSlots, session, 'bigbang');
-  if (!pResult.success) errors.push('p.txt: ' + pResult.error);
+  if (!playerSlots) {
+    errors.push('p.txt: no player codes found in _L sector');
+  } else {
+    var pResult = fileSave(driveName, '/', 'p.txt', playerSlots, session, 'bigbang');
+    if (!pResult.success) errors.push('p.txt: ' + pResult.error);
+  }
 
   if (errors.length > 0) {
     return { success: false, error: errors.join('; '), maps: created };
@@ -1162,9 +1113,9 @@ function bigbang(driveName, mapString, players, isRound, session) {
 
   return {
     success: true,
-    result:  'World created: ' + allMaps.length + ' map' + (allMaps.length !== 1 ? 's' : '') + ', ' + playersList.length + ' player slots',
+    result:  'World created: ' + created.length + ' sector' + (created.length !== 1 ? 's' : '') + ', ' + playerCodes.length + ' player slots',
     maps:    created,
-    players: playersList
+    players: playerCodes
   };
 }
 
@@ -1271,14 +1222,12 @@ function parsePlayerManifest(content) {
 // ── Form-encoded 2-character command handler (retro BB protocol) ──────────────
 //
 // POST /qandyland.js  Content-Type: application/x-www-form-urlencoded
-//   c=BB&d=<drive>&p=<players>&m=<mapString>&f=<0|1>
+//   c=BB&d=<drive>
 //
 // Commands:
-//   BB – Big Bang: create a new multiplayer world on <drive>
+//   BB – Big Bang: create a new multiplayer world on <drive> by loading
+//        capflag.gfx from the server's working directory.
 //        d = drive name          (safe chars only)
-//        p = player string       (concatenated 2-char codes [A-Z][a-z0-9])
-//        m = map string          (concatenated 2-char map IDs [A-Z][1-9A-Z])
-//        f = flat world flag     (1=flat/false isRound, 0=round/true isRound)
 //
 //   GS – Game State: return current state and complete player manifest
 //        d = drive name          (safe chars only)
@@ -1307,28 +1256,17 @@ function handleCommand(req, res, raw) {
 
   switch (cmd) {
     case 'BB': {
-      var drive   = String(params.d || '');
-      var players = String(params.p || '');
-      var mapStr  = String(params.m || '');
-      var isRound = (params.f !== '1'); // f=1 means flat (not round)
+      var drive = String(params.d || '');
 
       // Validate drive name: safe filesystem characters only
       if (!isValidDriveName(drive)) {
         return respond(res, { success: false, error: 'invalid drive name' });
       }
-      // Validate players string: pairs of [A-Z][a-z0-9], no illegal characters
-      if (!players || !/^([A-Z][a-z0-9])+$/.test(players)) {
-        return respond(res, { success: false, error: 'invalid players string: must be 2-char codes [A-Z][a-z0-9]' });
-      }
-      // Validate map string: pairs of [A-Z][1-9A-Z], no illegal characters
-      if (!mapStr || !/^([A-Z][1-9A-Z])+$/.test(mapStr)) {
-        return respond(res, { success: false, error: 'invalid map string: must be 2-char map IDs [A-Z][1-9A-Z]' });
-      }
 
-      result = bigbang(drive, mapStr, players, isRound, session);
-      logRequest(req, 'BB', drive, mapStr, session, result);
+      result = bigbang(drive, session);
+      logRequest(req, 'BB', drive, '', session, result);
       if (!result.success) {
-        return respond(res, result);
+        return respondRetro(res, 'XX' + result.error);
       }
       // Return game state in GS format so client can fall through to normal handling
       var bbLoad = fileLoad(drive, '/', 'p.txt', session);
