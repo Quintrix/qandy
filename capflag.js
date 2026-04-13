@@ -4,18 +4,8 @@ var gfxConnected = null;
 
 if (typeof window.GFX === "undefined") window.GFX = 0;
 
-var gfxConnected = null;
-
-// Player state variables for avatar selection
-var PName = "Player";
-var PObj = "";
-var PX = 2;
-var PY = 9;
-var PZ = 0;
-var PUP = "";
-var PopForce = "";
-
 // Multiplayer state
+var gfxConnected = null;
 var emptySlots = [];        // available empty player slot codes from GS response
 var rfInterval = null;      // handle for the RF refresh timer
 var playerItemId = null;    // this client's chosen player slot ItemID (e.g. "Sa")
@@ -23,18 +13,13 @@ var playerAvatarStr = "";   // this client's 4-char avatar string (e.g. "B0D0")
 
 qdosScript("gfx.js");
 startup();
-
 var ts=3000;
-setTimeout(function() { startup(); },200);
+setTimeout(function() { startup(); },400);
 
 function startup(){
   if (window.GFX==0) {
   	 ts=ts-200;
-  	 if (ts>0) { 
-      setTimeout(function() { 
-        startup();
-      },200);
-    }
+  	 if (ts>0) { setTimeout(function() { startup(); },200); }
     return;
   } else {
     flagConnect();
@@ -45,16 +30,13 @@ window.flagConnect = async function() {
   try {
     await print("\n");
     await print ("\x1b[36mQandyland Servers:\x1b[40m\x1b[37m\n\n");
-
     // Properly capture server selection
     gfxConnected = await flagServers("gfx");
     if (!gfxConnected) {
       await print("Server selection cancelled.\n");
       return 'Connection cancelled';
     }
-
     await print("\nConnecting "+gfxConnected.host+":"+gfxConnected.port+"...");
-
     // Fix protocol detection - localhost should use HTTP
     var proto = 'http';
     if (gfxConnected.host !== 'localhost' && gfxConnected.host !== '127.0.0.1') {
@@ -69,10 +51,7 @@ window.flagConnect = async function() {
     // Handle "no world" - create one with big bang, then fall through to normal handling
     if (gameState.startsWith("XW")) {
       await print("No world found.\nCreating new world...");
-      var mapString = maps('A', 'L', 1, 8);
-      var players = "SaSbScTaTbTc";
-      var isRound = false;
-      gameState = await gfxPing("BB", {d: drive, m: mapString, p: players, f: isRound ? 0 : 1});
+      gameState = await gfxPing("BB");
       if (gameState.startsWith("XX")) {
         var bbErrorMsg = gameState.substring(2);
         await print("Error creating world: " + bbErrorMsg + "\n");
@@ -108,7 +87,9 @@ window.flagConnect = async function() {
       await print("Empty slots available: " + emptySlots.length + "\n");
 
       // Initialize graphics and render lobby map (96 Ga grass tiles)
-      var lobbyMap = "Ga".repeat(96);
+
+      var lobbyMap = gfxFetchMap("_L");
+      
       await gfxInit();
       document.getElementById('txt').style.top = '50px';
       document.getElementById('txt').style.left = '350px';

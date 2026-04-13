@@ -154,17 +154,21 @@ function renderToolbar() {
     select.addEventListener('change', function() {
       setTileSize(Number(this.value));
     });
+
     toolbar.appendChild(select);
 
     addButton('Borders', borders);
-    addButton('Fill', () => { activeTool = 'fill'; });
-    addButton('Stamp', showStampTool);    
 
+    addButton('Select', () => { activeTool = 'select'; selection = null; });
+    addButton('Paste', () => { activeTool = 'paste'; });
+    
     addButton('Brush', bigbrush);
     addButton('Flower', showFlowerTool);
-
-    addButton('Terrain', showTerrainTool);
-
+    addButton('Fill', () => { activeTool = 'fill'; });
+    addButton('Stamp', showStampTool);    
+    addButton('Path', showPathTool);
+    addButton('River', showRiverTool);
+    addButton('Mountain', showMountainTool);
     addButton('Exits', () => showExitsEditor(lastEditedSector));
     addButton('Import', importMap);
     addButton('Export', exportMap);
@@ -765,17 +769,11 @@ canvas.addEventListener('mousedown', (e) => {
             updateBrushUI();
         }
         
-        // Unset selection/tool on Escape
-        if (e.key === 'Escape') { exitSelectionMode(); }
-
-        if (e.ctrlKey) {
-            if (e.key === 'c' && activeTool === 'select') copySelectionToStamp();
-            if (e.key === 'v' && activeTool === 'select') applyStampToSelection();
-            if (e.key === 'z') undo();
-        }
     });
 
-    function updateBrushUI() { brushDisplay.innerText = brush; }
+    function updateBrushUI() {
+        brushDisplay.innerText = brush;
+    }
 
 
 let exitEditSector = null; // Sector label being edited, e.g., "A1"
@@ -1224,114 +1222,27 @@ function renderFullMap() {
 let currentStamp = [];
 
 function showStampTool() {
-    activeTool = 'select'; // Automatically enable selection mode
+    activeTool = 'stamp';
     const popup = document.getElementById('toolPopup');
     popup.innerHTML = `
         <div id="toolPopupHeader" style="cursor:move; background:#639; padding:8px; border-radius:6px 6px 0 0; font-weight:bold;">
-            Selection & Stamp
-            <span style="float:right;cursor:pointer;" onclick="exitSelectionMode()">✕</span>
+            Rubber Stamp Tool
+            <span style="float:right;cursor:pointer;" onclick="document.getElementById('toolPopup').style.display='none'">✕</span>
         </div>
         <div style="padding:14px;">
-            <p style="margin:0 0 10px 0; font-size:0.85em; color:#aaa;">
-                1. Drag on map to select area.<br>
-                2. Copy selection to text OR paste text to map.
-            </p>
-            
-            <textarea id="stampInput" placeholder="Tile codes appear here..." 
-                style="width:100%; height:100px; background:#111; color:#0f0; font-family:monospace; border:1px solid #555; margin-bottom:10px;"></textarea>
-            
-            <div style="display:flex; flex-direction:column; gap:8px;">
-                <div style="display:flex; gap:5px;">
-                    <button style="flex:1; background:#282;" onclick="copySelectionToStamp()">Copy Selection</button>
-                    <button style="flex:1; background:#822;" onclick="clearSelection()">Clear Box</button>
-                </div>
-                <button style="background:#068;" onclick="applyStampToSelection()">Paste Text to Selection</button>
+            <p style="margin-top:0; font-size:0.9em;">Paste tile codes (2 chars each):</p>
+            <textarea id="stampInput" style="width:100%; height:120px; background:#111; color:#0f0; font-family:monospace; border:1px solid #555;"></textarea>
+            <div style="margin-top:10px; display:flex; justify-content:space-between;">
+                <button onclick="updateStampData()">Load Stamp</button>
+                <button onclick="exitPathMode()">Close</button>
             </div>
-            
-            <p id="stampStatus" style="font-size:0.8em; color:#aaa; margin-top:8px;">Ready.</p>
+            <p id="stampStatus" style="font-size:0.8em; color:#aaa; margin-top:8px;">No stamp loaded.</p>
         </div>
     `;
     popup.style.display = "block";
     makeDraggable(popup, document.getElementById('toolPopupHeader'));
 }
 
-function exitSelectionMode() {
-    selection = null;
-    activeTool = 'brush';
-    document.getElementById('toolPopup').style.display = 'none';
-    renderFullMap();
-}
-
-function clearSelection() {
-    selection = null;
-    renderFullMap();
-}
-
-// Copies the selected map area into the textarea and the browser clipboard
-async function copySelectionToStamp() {
-    if (!selection) {
-        alert("Please select an area on the map first.");
-        return;
-    }
-
-    let out = "";
-    for (let y = selection.y; y < selection.y + selection.h; y++) {
-        for (let x = selection.x; x < selection.x + selection.w; x++) {
-            out += mapData[y][x];
-        }
-        if (y < selection.y + selection.h - 1) out += "\n";
-    }
-
-    document.getElementById('stampInput').value = out;
-    
-    try {
-        await navigator.clipboard.writeText(out);
-        document.getElementById('stampStatus').innerText = "Copied to clipboard!";
-    } catch (err) {
-        document.getElementById('stampStatus').innerText = "Copied to box (Clipboard blocked).";
-    }
-}
-
-// Pastes text from the textarea onto the map starting at the selection's top-left
-function applyStampToSelection() {
-    const text = document.getElementById('stampInput').value.trim();
-    if (!text) {
-        document.getElementById('stampStatus').innerText = "Nothing to paste!";
-        return;
-    }
-    if (!selection) {
-        alert("Click or drag on the map to set the paste origin.");
-        return;
-    }
-
-    saveHistory();
-    
-    // We use selection.x/y as the strict top-left origin
-    const originX = selection.x;
-    const originY = selection.y;
-
-    const lines = text.split('\n');
-    lines.forEach((line, dy) => {
-        // Strip spaces/tabs but keep the 2-char codes
-        const cleanLine = line.replace(/\s+/g, '');
-        const tiles = cleanLine.match(/.{1,2}/g); 
-        
-        if (tiles) {
-            tiles.forEach((code, dx) => {
-                const gx = originX + dx;
-                const gy = originY + dy;
-                
-                // Overflow Check: Paste everywhere as long as it's on the map
-                if (gx >= 0 && gx < TILE_W && gy >= 0 && gy < TILE_H) {
-                    mapData[gy][gx] = code;
-                }
-            });
-        }
-    });
-    
-    document.getElementById('stampStatus').innerText = "Pasted at (" + originX + "," + originY + ")";
-    renderFullMap();
-}
 function updateStampData() {
     const text = document.getElementById('stampInput').value.trim();
     if (!text) return;
@@ -1366,14 +1277,12 @@ function applyStamp(tx, ty) {
     renderFullMap();
 }
 
-function showTerrainTool() {
-    activeTool = 'terrain';
-    const popup = document.getElementById('toolPopup');
 
-    // addButton('Path', showPathTool);
-    // addButton('River', showRiverTool);
-    // addButton('Mountain', showMountainTool);
-}    
+
+
+    initMap();
+    renderToolbar();    
+    
     
 </script>
 </body>

@@ -26,7 +26,40 @@ window.gfxInit = async function() {
   window._gfxInitializing = true;
   try {
     await qdosScript('gfx-itemid.js');
-    window.tiles();
+    // inject the tiles
+    // Use the host's map dimensions, but the tile count is mapx+1, mapy+1
+    const tileCountX = (typeof mapx !== 'undefined') ? mapx + 1 : 7;
+    const tileCountY = (typeof mapy !== 'undefined') ? mapy + 1 : 11;
+
+    let topOffset = 50;
+    let leftOffset = 54;
+
+    // remove any existing tiles
+    let cleanupIndex = 0;
+    while (true) {
+      const old = document.getElementById('T' + cleanupIndex);
+      if (!old) break;
+      old.parentNode && old.parentNode.removeChild(old);
+      cleanupIndex++;
+    }
+    // create tiles: 0 to mapx = mapx+1 tiles, 0 to mapy = mapy+1 tiles
+    for (let z=0, y=0; y < tileCountY; y++) {
+      for (let x=0; x < tileCountX; x++, z++) {
+        const t=document.createElement('img');
+        t.id = 'T' + z;
+        t.src = 't/Ga.png';
+        t.style.height = '32px';
+        t.style.width = '32px';
+        t.className = 'tile';
+        t.style.position = 'absolute';
+        t.style.top = (topOffset + y * 32) + 'px';
+        t.style.left = (leftOffset + x * 32) + 'px';
+        t.style.zIndex = '10';
+        const tileZ = z;
+        t.onclick = function() { gfxZClick(tileZ, t); };
+        document.body.appendChild(t);
+      }
+    }
     window._gfxInitialized = true;
   } catch(e) {
     console.error('Error: gfxInit()', e);
@@ -70,43 +103,9 @@ window.gfxInit = async function() {
 };
 
 window.tiles = function() {
-  // Use the host's map dimensions, but the tile count is mapx+1, mapy+1
-  const tileCountX = (typeof mapx !== 'undefined') ? mapx + 1 : 7;
-  const tileCountY = (typeof mapy !== 'undefined') ? mapy + 1 : 11;
-
-  let topOffset = 50;
-  let leftOffset = 54;
-
-  // remove any existing tiles
-  let cleanupIndex = 0;
-  while (true) {
-    const old = document.getElementById('T' + cleanupIndex);
-    if (!old) break;
-    old.parentNode && old.parentNode.removeChild(old);
-    cleanupIndex++;
-  }
-
-  // create tiles: 0 to mapx = mapx+1 tiles, 0 to mapy = mapy+1 tiles
-  for (let z=0, y=0; y < tileCountY; y++) {
-    for (let x=0; x < tileCountX; x++, z++) {
-      const t=document.createElement('img');
-      t.id = 'T' + z;
-      t.src = 't/Ga.png';
-      t.style.height = '32px';
-      t.style.width = '32px';
-      t.className = 'tile';
-      t.style.position = 'absolute';
-      t.style.top = (topOffset + y * 32) + 'px';
-      t.style.left = (leftOffset + x * 32) + 'px';
-      t.style.zIndex = '10';
-      const tileZ = z;
-      t.onclick = function() { dispatchZClick(tileZ, t); };
-      document.body.appendChild(t);
-    }
-  }
 };
 
-window.gfx = function(scr) { 
+window.gfxMap = function(scr) { 
  a=0;
  for (b=0; b<=mapy; b++) { 
   for (c=0; c<=mapx; c++) {
@@ -117,7 +116,6 @@ window.gfx = function(scr) {
 }
 
 window.hpop=function() { document.getElementById("pop").style.visibility="hidden"; }
-
 window.pop=function(htm) {
   const popup = document.getElementById("pop");
   popup.innerHTML = "<p>" + htm;
@@ -198,7 +196,7 @@ window.char = function(C,O,Z) {
   chr.className="char";  
   chr.style.position="absolute"; chr.style.height=64; chr.style.width=32;
   chr.style.top=32+22+(y*32)+"px"; chr.style.left=(32+22+(x*32))+"px";
-  chr.onclick=function(){dispatchZClick(Z,this);};
+  chr.onclick=function(){gfxZClick(Z,this);};
   chr.style.zIndex="150";  
   document.body.appendChild(chr);
  }
@@ -212,7 +210,7 @@ window.char = function(C,O,Z) {
   chr.className="char";  
   chr.style.position="absolute"; chr.style.height=64; chr.style.width=32;
   chr.style.top=32+22+(y*32)+"px"; chr.style.left=(32+22+(x*32))+"px";
-  chr.onclick=function(){dispatchZClick(Z,this);};
+  chr.onclick=function(){gfxZClick(Z,this);};
   chr.style.zIndex="151";
   document.body.appendChild(chr);
  }
@@ -230,7 +228,7 @@ window.char = function(C,O,Z) {
    chr.className="char";  
    chr.style.position="absolute"; chr.style.height=64; chr.style.width=32;
    chr.style.top=32+22+(y*32)+"px"; chr.style.left=(32+22+(x*32))+"px";
-   chr.onclick=function(){dispatchZClick(Z,this);};
+   chr.onclick=function(){gfxZClick(Z,this);};
    chr.style.zIndex="152";
    document.body.appendChild(chr);
   } 
@@ -239,7 +237,7 @@ window.char = function(C,O,Z) {
  }
 }
 
-window.dispatchZClick=function(z, clickedElement) {
+window.gfxZClick=function(z, clickedElement) {
   // Store the clicked location for popup positioning
   window.lastClickedZ = z;
   
@@ -360,14 +358,9 @@ async function renderMapItems(mapId) {
   }
 }
 
-
-
-
-
-
-window.LoadMap = async function(a) {
- if (maps[a]) {} else { maps[a]="UaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUa.."; }
- gfx(maps[a]);
+window.gfxRenderMap = async function(a) {
+ if (maps[a]) {} else { maps[a]="UaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUa"; }
+ gfx(maps[a]); 
  items=[]; if (maps[a].length>194) { ilist=maps[a].substring(194).match(/.{1,6}/g); }
  for (b=0;b<ilist.length;b++) {
   i=ilist[b].substring(0,2);
@@ -383,7 +376,7 @@ window.LoadMap = async function(a) {
   c.style.left=(32+22+(x*32))+"px";
   c.style.zIndex="120";
   c.onload = () => { c.style.top = parseInt(c.style.top) - (c.height - 32) + "px"; c.style.left = parseInt(c.style.left) - (c.width - 32) + "px"; };
-  (function(itemZ){c.onmousedown=function(){dispatchZClick(parseInt(itemZ,10),this);};})(z);
+  (function(itemZ){c.onmousedown=function(){gfxZClick(parseInt(itemZ,10),this);};})(z);
   document.body.appendChild(c);
  }
  RefDItems();
@@ -510,5 +503,7 @@ async function splash(durationMs) {
   window.GFX=1;
 }
 
+
 // Backwards compatibility alias
 window.LMap = window.LoadMap;
+window.gfx = window.gfxMap;
