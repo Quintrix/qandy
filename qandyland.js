@@ -1040,6 +1040,9 @@ function bigbang(driveName, session) {
     }
 
     if (sectorId === '_L') {
+      // _L is the lobby sector: it has no exits and is not part of the navigable
+      // world.  Its items define the player-slot positions; we use them only to
+      // build p.txt and do not create a w/_L/ directory for it.
       lobbyItems = items;
     } else {
       sectors.push({ id: sectorId, exits: exitStr, items: items });
@@ -1086,12 +1089,15 @@ function bigbang(driveName, session) {
 
   // Build p.txt from player-slot items in the _L (lobby) sector.
   // Player slot items have ID matching [A-Z][a-z] and data == "Za" (no special data).
-  // Items with non-Za data (e.g. the flag Yj44Sa) are game objects, not player slots.
+  // "Za" is the .gfx convention for "item has no attached data"; items with other
+  // data values (e.g. the flag Yj44Sa whose data "Sa" encodes its owning team) are
+  // game objects that are not player slots.
   // Deduplicate: the same player code may appear at more than one z-position.
   var playerSlots = '';
   var playerCodes = [];
   var seenCodes   = {};
   for (var pi = 0; pi < lobbyItems.length; pi++) {
+    if (lobbyItems[pi].length < 6) continue; // skip malformed items
     var itemId   = lobbyItems[pi].substring(0, 2);
     var itemData = lobbyItems[pi].substring(4, 6);
     if (/^[A-Z][a-z]$/.test(itemId) && itemData === 'Za' && !seenCodes[itemId]) {
