@@ -288,31 +288,67 @@ window.gfxServers = async function() {
   }
 };
 
-function maps(startChar,endChar,startNum,endNum) {
-  const startCode = startChar.charCodeAt(0);
-  const endCode = endChar.charCodeAt(0);
-  let out = '';
-  for (let code = startCode; code <= endCode; code++) {
-    const letter = String.fromCharCode(code);
-    for (let n = startNum; n <= endNum; n++) {
-      out += letter + n;
-    }
-  }
-  return out;
-}
-
-async function loadWorldConfig() {
+async function gfxFetch(filename) {
   try {
-    // Load essential config files
-    var aConfig = await qdosServerLoad("capflag.js/A1/a.txt");
-    var mTiles = await qdosServerLoad("capflag.js/A1/m.txt");
+    await print("Loading " + filename + "...\n");
+    var gfxContent = await qdosLoad(filename);
     
-    // Store globally for gfx engine
-    window.worldConfig = aConfig;
-    window.currentMapData = mTiles;
+    if (!gfxContent) {
+      throw new Error("Failed to load " + filename);
+    }
     
-  } catch (error) {
-    throw new Error("Failed to load world config: " + error.message);
+    var lines = gfxContent.split('\n').filter(line => line.trim());
+    window.gfxSector = {}; // Clear existing data
+    
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim();
+      if (!line) continue;
+      
+      var parts = line.split('=');
+      if (parts.length !== 2) continue;
+      
+      var sectorId = parts[0];
+      var [mapData, itemData] = parts[1].split('.');
+      
+      // Parse tiles (first 192 chars = 96 tiles × 2 chars each)
+      var tileString = mapData.substring(0, 192);
+      var tiles = [];
+      for (var t = 0; t < tileString.length; t += 2) {
+        tiles.push(tileString.substring(t, t + 2));
+      }
+      
+      // Parse exits (remaining chars after tiles)
+      var exitString = mapData.substring(192);
+      var exits = [];
+      for (var e = 0; e < exitString.length; e += 2) {
+        exits.push(exitString.substring(e, e + 2));
+      }
+      
+      // Parse items (6 chars each: 2=id, 2=z, 2=data)
+      var items = [];
+      if (itemData) {
+        for (var j = 0; j < itemData.length; j += 6) {
+          items.push({
+            id: itemData.substring(j, j + 2),
+            z: parseInt(itemData.substring(j + 2, j + 4), 10),
+            data: itemData.substring(j + 4, j + 6)
+          });
+        }
+      }
+      
+      window.gfxSector[sectorId] = {
+        tiles: tiles,   // 96-element array
+        exits: exits,   // variable length array
+        items: items    // variable length array of objects
+      };
+    }
+    
+    await print("Loaded " + Object.keys(window.gfxSector).length + " sectors.\n");
+    return true;
+    
+  } catch (e) {
+    await print("Error loading " + filename + ": " + e.message + "\n");
+    return false;
   }
 }
 
