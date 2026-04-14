@@ -89,17 +89,11 @@ window.flagConnect = async function() {
         return flagConnect();
       }
 
-      var lobbySector = window.gfxSector["_L"];
-      var lobbyTiles = lobbySector ? lobbySector.tiles.join("") : "GaGaGa..."; // fallback to grass
-        	
-      // Initialize graphics and render lobby sector tiles
+      // Initialize graphics and render lobby sector tiles and items
       await gfxInit();
       document.getElementById('txt').style.top = '50px';
       document.getElementById('txt').style.left = '350px';
-      
-      gfxRenderMap(lobbySector);
-
-      // Start avatar selection
+      gfxRenderMap("_L");
       NewChar("");
       return;
     }
