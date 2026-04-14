@@ -1408,7 +1408,7 @@ function handleCommand(req, res, raw) {
         // No pre-assigned slot: find an available z-location and create a new slot file
         var jgValidX = [1, 2, 3, 4, 5, 6];
         var jgValidY = [2, 4, 6, 8, 10];
-        jgZ = '18'; // fallback default
+        jgZ = '18'; // z=18 (y=2, x=2 on 8-wide grid) is the first valid non-edge coordinate
         var jgZFound = false;
         for (var jgYi = 0; jgYi < jgValidY.length && !jgZFound; jgYi++) {
           for (var jgXi = 0; jgXi < jgValidX.length && !jgZFound; jgXi++) {
@@ -1485,8 +1485,9 @@ function handleCommand(req, res, raw) {
       // Remove the lobby slot file; roll back world file if deletion fails
       var sgLobbyDelete = fileDelete(sgDrive, '/', 'w/' + sgLobbyBase, session);
       if (!sgLobbyDelete.success) {
-        fileDelete(sgDrive, '/', sgWorldFile, session); // attempt rollback
-        return respondRetro(res, 'XXFailed to remove lobby slot: ' + sgLobbyDelete.error);
+        var sgRollback = fileDelete(sgDrive, '/', sgWorldFile, session);
+        var rollbackMsg = sgRollback.success ? ' (world file rolled back)' : ' (rollback also failed - state inconsistent)';
+        return respondRetro(res, 'XXFailed to remove lobby slot: ' + sgLobbyDelete.error + rollbackMsg);
       }
 
       // Update player ownership to reflect the world map
