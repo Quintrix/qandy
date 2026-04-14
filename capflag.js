@@ -73,28 +73,30 @@ window.flagConnect = async function() {
     }
 
     if (gameState.startsWith("JS")) {
-      var manifest = gameState.substring(2);
-      var slots = manifest.split('.');
-      // Empty slot: exactly 2-char player code with no avatar data (e.g. "Sa")
-      // Occupied slot: player code + avatar data (e.g. "SaM3N2L3")
-      emptySlots = slots.filter(function(slot) { return slot.length === 2; });
-
-      if (emptySlots.length === 0) {
-        await print("Server full. Returning to server selection...\n");
+    	var flagMap="capflag.gfx";
+    	await print("Loading map: " + flagMap + "\n");
+      var map = await gfxFetchMap(flagMap);
+      if (!map) {
+        await print("Failed to load map.\n");
         return flagConnect();
       }
 
-      await print("Empty slots available: " + emptySlots.length + "\n");
+      var manifest = gameState.substring(2);
+      var slots = manifest.split('.');
+      emptySlots = slots.filter(function(slot) { return slot.length === 2; });
+      if (emptySlots.length === 0) {
+        await print("Server full.\n");
+        return flagConnect();
+      }
 
-      // Initialize graphics and render lobby map (96 Ga grass tiles)
-
-      var lobbyMap = gfxFetchMap("_L");
-      
+      var lobbySector = window.gfxSector["_L"];
+      var lobbyTiles = lobbySector ? lobbySector.tiles.join("") : "GaGaGa..."; // fallback to grass
+        	
+      // Initialize graphics and render lobby sector tiles
       await gfxInit();
       document.getElementById('txt').style.top = '50px';
       document.getElementById('txt').style.left = '350px';
-      gfx(lobbyMap);
-
+      gfxRenderMap(lobbySector);
       // Start avatar selection
       NewChar("");
       return;
