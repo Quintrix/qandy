@@ -672,6 +672,20 @@ function fileLoad(driveName, cwd, name, session) {
   return { success: true, content: content };
 }
 
+// Append an element to a JSON array stored in a file.
+// If the file does not exist it is created with a single-element array.
+// Returns { success, error } like other file operations.
+function fileAppendJSON(driveName, cwd, name, element, session, owner) {
+  var existing = fileLoad(driveName, cwd, name, session);
+  var arr = [];
+  if (existing.success) {
+    try { arr = JSON.parse(existing.content); } catch (e) { arr = []; }
+    if (!Array.isArray(arr)) arr = [];
+  }
+  arr.push(element);
+  return fileSave(driveName, cwd, name, JSON.stringify(arr), session, owner);
+}
+
 function fileDelete(driveName, cwd, name, session) {
   var drive = drives[driveName];
   if (!drive) return { success: false, error: 'drive not mounted' };
@@ -1274,6 +1288,8 @@ function handleCommand(req, res, raw) {
       if (!result.success) {
         return respondRetro(res, 'XX' + result.error);
       }
+      // Initialise game console: create c.txt with ["BB"]
+      fileSave(drive, '/', 'c.txt', JSON.stringify(['BB']), session, 'BB');
       // Return game state in GS format so client can fall through to normal handling
       var bbLoad = fileLoad(drive, '/', 'p.txt', session);
       if (!bbLoad.success) {
@@ -1414,6 +1430,9 @@ var jgFile = 'w/' + jgMapId + '/' + jgItemId + jgZ + '.txt';
 
       // Record session ownership so future move commands can be authorised
       _playerOwnership[session] = { itemId: jgItemId, mapId: jgMapId, drive: jgDrive };
+
+      // Log join event to game console
+      fileAppendJSON(jgDrive, '/', 'c.txt', 'JG ' + jgItemId + ' ' + jgAvatar, session, 'JG');
 
       logRequest(req, 'JG', jgDrive, jgItemId, session, { success: true });
       return respondRetro(res, 'OK' + jgItemId + jgZ);
