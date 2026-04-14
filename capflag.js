@@ -97,6 +97,17 @@ window.flagConnect = async function() {
       document.getElementById('txt').style.top = '50px';
       document.getElementById('txt').style.left = '350px';
       gfxRenderMap("_L");
+
+      // Start RF polling immediately so players already in the lobby are visible
+      var lobbyDrive = drive;
+      if (rfInterval) clearInterval(rfInterval);
+      rfInterval = setInterval(async function() {
+        try {
+          var rfRes = await gfxPing("RF", { d: lobbyDrive, m: '_L' });
+          processRFResponse(rfRes);
+        } catch (e) { console.debug('lobby RF poll error:', e); /* silent: lobby RF errors don't affect gameplay */ }
+      }, 1000);
+
       NewChar("");
       return;
     }
@@ -286,6 +297,7 @@ function renderPlayer(playerStr) {
  var dashIdx = remaining.indexOf('-');
  var avatarStr = (dashIdx !== -1) ? remaining.substring(0, dashIdx) : remaining;
  var movements = (dashIdx !== -1) ? remaining.substring(dashIdx + 1) : '';
+ if (avatarStr.length < 2) return; // Minimum valid avatar is one 2-char part code (e.g. "B0")
  renderPlayerAvatar(playerId, zLocation, avatarStr, movements);
 }
 
