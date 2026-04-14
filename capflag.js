@@ -194,7 +194,7 @@ window.joinGame = async function(itemId) {
    if (rfInterval) clearInterval(rfInterval);
    rfInterval = setInterval(async function() {
     try {
-     var rfRes = await gfxPing("RF", { d: drive, m: mapId, c: window.gfxConsole.length });
+     var rfRes = await gfxPing("RF", { d: drive, m: mapId });
      processRFResponse(rfRes);
     } catch (e) { console.error('RF tick error:', e); }
    }, 1000);
@@ -206,25 +206,25 @@ window.joinGame = async function(itemId) {
  }
 };
 
-// Process an RF response string, extracting sector items and any new console entries.
-// rfStr format: "<items>[|C:<jsonArray>]"
+// Process an RF response string in Queville format.
+// rfStr format: "[items]-[player1]-[player2]..."
+//   items   – concatenated 4-char codes: ItemID + zz (non-player items)
+//   players – each section is "[playerId][zz][avatarStr]" e.g. "Sa43B1D0"
 function processRFResponse(rfStr) {
- var parts = rfStr.split('|C:');
+ var parts = rfStr.split('-');
  var sectorData = parts[0];
 
- if (parts[1]) {
-  try {
-   var newEntries = JSON.parse(parts[1]);
-   if (Array.isArray(newEntries)) {
-    for (var i = 0; i < newEntries.length; i++) {
-     window.gfxConsole.push(newEntries[i]);
-     processConsoleEntry(newEntries[i]);
-    }
-   }
-  } catch (e) { /* ignore malformed console data */ }
- }
+ // Clear existing MP players before re-rendering
+ var oldPlayers = document.querySelectorAll('.mp-player');
+ for (var p = 0; p < oldPlayers.length; p++) { oldPlayers[p].parentNode.removeChild(oldPlayers[p]); }
 
+ // Render non-player items (first section)
  renderMPItems(sectorData);
+
+ // Render players (remaining sections)
+ for (var i = 1; i < parts.length; i++) {
+  if (parts[i]) renderPlayer(parts[i]);
+ }
 }
 
 // Handle a single game console entry, updating client game state as needed.
@@ -241,8 +241,15 @@ function processConsoleEntry(entry) {
  }
 }
 
-// Render all player items from an RF response string.
-// rfStr is a sequence of 4-char codes: 2-char ItemID + 2-digit z-location, e.g. "Sa43Tb43".
+// Convert a z-position to {x, y} tile coordinates using the current map width.
+function zToXY(z) {
+ var y = Math.floor(z / (mapx + 1));
+ var x = z - (y * (mapx + 1));
+ return { x: x, y: y };
+}
+
+// Render non-player items from the items section of an RF response string.
+// rfStr is a sequence of 4-char codes: 2-char ItemID + 2-digit z-location, e.g. "Ab12Cd34".
 function renderMPItems(rfStr) {
  // Remove previously rendered MP items
  var old = document.querySelectorAll('.mp-item');
@@ -252,15 +259,54 @@ function renderMPItems(rfStr) {
   var iId = rfStr.slice(j, j + 2);
   var z = parseInt(rfStr.slice(j + 2, j + 4), 10);
   if (isNaN(z)) continue;
-  var y = Math.floor(z / (mapx + 1));
-  var x = z - (y * (mapx + 1));
+  var coords = zToXY(z);
   var img = document.createElement('img');
   img.className = 'mp-item';
   img.src = 'i/' + iId + '.png';
   img.style.position = 'absolute';
-  img.style.top  = (32 + 20 + (y * 32)) + 'px';
-  img.style.left = (32 + 22 + (x * 32)) + 'px';
+  img.style.top  = (32 + 20 + (coords.y * 32)) + 'px';
+  img.style.left = (32 + 22 + (coords.x * 32)) + 'px';
   img.style.zIndex = '120';
+  document.body.appendChild(img);
+ }
+}
+
+// Render a single player from a Queville player section string.
+// playerStr format: "[playerId][zz][avatarStr][^movements]"
+//   e.g. "Sa43B1D0C2" or "Tb22A2E1F3^NSW"
+// Minimum 6 chars: 2 (playerId) + 2 (zz) + 2 (at least one avatar part).
+function renderPlayer(playerStr) {
+ if (!playerStr || playerStr.length < 6) return;
+ var playerId  = playerStr.substring(0, 2);            // "Sa"
+ var zLocation = parseInt(playerStr.substring(2, 4), 10); // 43
+ if (isNaN(zLocation)) return;
+ var movementIdx = playerStr.indexOf('^');
+ var avatarStr = (movementIdx !== -1)
+  ? playerStr.substring(4, movementIdx)
+  : playerStr.substring(4);
+ var movements = (movementIdx !== -1)
+  ? playerStr.substring(movementIdx + 1)
+  : '';
+ renderPlayerAvatar(playerId, zLocation, avatarStr, movements);
+}
+
+// Render a player avatar at the given z-location by stacking 2-char part images.
+// avatarStr contains up to 5 two-character codes: [head][body][hat][sword][shield]
+// Each code maps to an image in c/<code>.png that is layered at the player's tile.
+function renderPlayerAvatar(playerId, z, avatarStr, movements) {
+ var coords = zToXY(z);
+ var top  = 32 + 20 + (coords.y * 32);
+ var left = 32 + 22 + (coords.x * 32);
+ for (var k = 0; k + 2 <= avatarStr.length; k += 2) {
+  var partCode = avatarStr.slice(k, k + 2);
+  var img = document.createElement('img');
+  img.className = 'mp-player';
+  img.dataset.player = playerId;
+  img.src = 'c/' + partCode + '.png';
+  img.style.position = 'absolute';
+  img.style.top  = top + 'px';
+  img.style.left = left + 'px';
+  img.style.zIndex = '125';
   document.body.appendChild(img);
  }
 }

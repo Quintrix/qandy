@@ -1254,6 +1254,13 @@ function parsePlayerManifest(content) {
 //        Response: <state><slot>.<slot>...
 //          state codes: JS (just starting), IP (in progress)
 //          slot format: <playerCode><avatarData> for occupied, <playerCode> for empty
+//
+//   RF – Refresh: return complete map state in Queville format
+//        d = drive name          (safe chars only)
+//        m = map ID              (e.g. "A1")
+//        Response: Queville format "[items]-[player1]-[player2]..."
+//          items   – concatenated 4-char codes for non-player items (ItemID + zz)
+//          players – "[playerId][zz][avatarStr]" e.g. "Sa43B1D0"
 
 // Returns true if the drive name contains only safe filesystem characters.
 function isValidDriveName(drive) {
@@ -1421,12 +1428,11 @@ var jgZ    = getUniqueSpawnZ(jgMapId, jgItemId, session);
 var jgFile = 'w/' + jgMapId + '/' + jgItemId + jgZ + '.txt';
 
 
-      // Only create player file if it does not already exist
-      var jgEx = fileExists(jgDrive, '/', jgFile, session);
-      if (!(jgEx.success && jgEx.result)) {
-        var jgCreate = fileSave(jgDrive, '/', jgFile, '', session, 'JG');
-        if (!jgCreate.success) return respondRetro(res, 'XXFailed to create player file');
-      }
+      // Create or overwrite player file with avatar string as content.
+      // Overwriting is intentional: a player may re-join with a different avatar,
+      // and future move commands will rename the file to reflect the new z-location.
+      var jgCreate = fileSave(jgDrive, '/', jgFile, jgAvatar, session, 'JG');
+      if (!jgCreate.success) return respondRetro(res, 'XXFailed to create player file');
 
       // Record session ownership so future move commands can be authorised
       _playerOwnership[session] = { itemId: jgItemId, mapId: jgMapId, drive: jgDrive };
@@ -1439,12 +1445,11 @@ var jgFile = 'w/' + jgMapId + '/' + jgItemId + jgZ + '.txt';
     }
 
     case 'RF': {
-      // Refresh: return a directory listing of all player items on a given map,
-      // plus any new console entries since the client's last known index.
-      // Parameters: d=drive, m=mapId (e.g. "A1"), c=clientConsoleLength (optional)
-      // Response: "<items>[|C:<jsonArray>]"
-      //   items    – concatenated 4-char strings, e.g. "Sa43Sb43" (ItemID + z-location)
-      //   |C:...   – JSON array of new console entries since client's c index (if any)
+      // Refresh: return complete game state in Queville format.
+      // Parameters: d=drive, m=mapId (e.g. "A1")
+      // Response: Queville format "[items]-[player1]-[player2]..."
+      //   items   – concatenated 4-char strings for non-player items, e.g. "Ab12Cd34"
+      //   players – each section is "[playerId][zz][avatarStr]", e.g. "Sa43B1D0"
       var rfDrive = String(params.d || '');
       var rfMapId = String(params.m || '');
 
@@ -1452,9 +1457,26 @@ var jgFile = 'w/' + jgMapId + '/' + jgItemId + jgZ + '.txt';
       if (!/^[A-Z][1-9A-Z]$/.test(rfMapId))      return respondRetro(res, 'XXInvalid map ID');
       if (!drives[rfDrive])                       return respondRetro(res, 'XXDrive not found');
 
-      // List all files in w/[mapId]/ directory
+      // Build a map of occupied player slots from p.txt: { "Sa": "B0D0", ... }
+      var rfPlayerAvatars = {};
+      var rfPLoad = fileLoad(rfDrive, '/', 'p.txt', session);
+      if (rfPLoad.success && rfPLoad.content) {
+        var rfPLines = rfPLoad.content.split('\n');
+        for (var rpi = 0; rpi < rfPLines.length; rpi++) {
+          var rfPLine = rfPLines[rpi].trim();
+          if (!rfPLine) continue;
+          var rfPEq = rfPLine.indexOf('=');
+          if (rfPEq < 0) continue;
+          var rfPCode   = rfPLine.slice(0, rfPEq);
+          var rfPAvatar = rfPLine.slice(rfPEq + 1).trim();
+          if (rfPAvatar.length > 0) rfPlayerAvatars[rfPCode] = rfPAvatar;
+        }
+      }
+
+      // List all files in w/[mapId]/ directory; separate items from players
       var rfList = fileList(rfDrive, 'w/' + rfMapId, null, session);
       var rfItems = '';
+      var rfPlayers = [];
       if (rfList.success && rfList.listing) {
         var rfFiles = rfList.listing.split('\n');
         for (var rfi = 0; rfi < rfFiles.length; rfi++) {
@@ -1463,27 +1485,25 @@ var jgFile = 'w/' + jgMapId + '/' + jgItemId + jgZ + '.txt';
           // Extract base filename and match [A-Z][a-z][digit][digit].txt
           var rfBase  = rfFile.substring(rfFile.lastIndexOf('/') + 1);
           var rfMatch = rfBase.match(/^([A-Z][a-z]\d{2})\.txt$/);
-          if (rfMatch) rfItems += rfMatch[1];
+          if (!rfMatch) continue;
+          var rfCode   = rfMatch[1];         // e.g. "Sa43"
+          var rfItemId = rfCode.slice(0, 2); // e.g. "Sa"
+          var rfZ      = rfCode.slice(2, 4); // e.g. "43"
+          if (Object.prototype.hasOwnProperty.call(rfPlayerAvatars, rfItemId)) {
+            // Occupied player slot: include avatar data in player section
+            rfPlayers.push(rfItemId + rfZ + rfPlayerAvatars[rfItemId]);
+          } else {
+            // Non-player item: add to items section
+            rfItems += rfCode;
+          }
         }
       }
 
-      // Console sync: append new entries since client's last known index
+      // Build Queville format: [items]-[player1]-[player2]...
       var rfResponse = rfItems;
-      try {
-        var rfClientLen = parseInt(params.c, 10);
-        if (!isNaN(rfClientLen) && rfClientLen >= 0) {
-          var rfConsole = fileLoad(rfDrive, '/', 'c.txt', session);
-          var rfConsoleArr = [];
-          if (rfConsole.success) {
-            try { rfConsoleArr = JSON.parse(rfConsole.content); } catch (e) { rfConsoleArr = []; }
-            if (!Array.isArray(rfConsoleArr)) rfConsoleArr = [];
-          }
-          if (rfConsoleArr.length > rfClientLen) {
-            var rfNewEntries = rfConsoleArr.slice(rfClientLen);
-            rfResponse += '|C:' + JSON.stringify(rfNewEntries);
-          }
-        }
-      } catch (e) { /* console sync failure is non-fatal */ }
+      if (rfPlayers.length > 0) {
+        rfResponse += '-' + rfPlayers.join('-');
+      }
 
       logRequest(req, 'RF', rfDrive, rfMapId, session, { success: true, result: rfResponse });
       return respondRetro(res, rfResponse);
