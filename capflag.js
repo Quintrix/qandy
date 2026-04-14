@@ -274,16 +274,17 @@ function renderMPItems(rfStr) {
 // Render a single player from a Queville player section string.
 // playerStr format: "[playerId][zz][avatarStr][^movements]"
 //   e.g. "Sa43B1D0C2" or "Tb22A2E1F3^NSW"
+// Minimum 6 chars: 2 (playerId) + 2 (zz) + 2 (at least one avatar part).
 function renderPlayer(playerStr) {
  if (!playerStr || playerStr.length < 6) return;
  var playerId  = playerStr.substring(0, 2);            // "Sa"
  var zLocation = parseInt(playerStr.substring(2, 4), 10); // 43
  if (isNaN(zLocation)) return;
  var movementIdx = playerStr.indexOf('^');
- var avatarStr = (movementIdx > 0)
+ var avatarStr = (movementIdx !== -1)
   ? playerStr.substring(4, movementIdx)
   : playerStr.substring(4);
- var movements = (movementIdx > 0)
+ var movements = (movementIdx !== -1)
   ? playerStr.substring(movementIdx + 1)
   : '';
  renderPlayerAvatar(playerId, zLocation, avatarStr, movements);

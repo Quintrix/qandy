@@ -1428,7 +1428,9 @@ var jgZ    = getUniqueSpawnZ(jgMapId, jgItemId, session);
 var jgFile = 'w/' + jgMapId + '/' + jgItemId + jgZ + '.txt';
 
 
-      // Create (or overwrite) player file with avatar string as content
+      // Create or overwrite player file with avatar string as content.
+      // Overwriting is intentional: a player may re-join with a different avatar,
+      // and future move commands will rename the file to reflect the new z-location.
       var jgCreate = fileSave(jgDrive, '/', jgFile, jgAvatar, session, 'JG');
       if (!jgCreate.success) return respondRetro(res, 'XXFailed to create player file');
 
