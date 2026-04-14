@@ -352,6 +352,48 @@ async function gfxFetchMap() {
   }
 }
 
+async function renderMap(mapId) {
+  try {
+    // Load map tile data
+    var mapData = await qdosServerLoad("capflag.js/" + mapId + "/m.txt");
+    
+    // Initialize graphics if not done
+    if (!gfxInitialized) {
+      await initializeGfx();
+    }
+    
+    // Render the tiles
+    gfx(mapData);
+    
+    // Load and render any existing items on this map
+    await renderMapItems(mapId);
+    
+  } catch (error) {
+    throw new Error("Failed to render map: " + error.message);
+  }
+}
+
+async function renderMapItems(mapId) {
+  try {
+    // Get directory listing for this map
+    var items = await qdosServerList("capflag.js/" + mapId + "/");
+    
+    // Filter for item files (two-char codes + position + .json)
+    var itemFiles = items.split('\n').filter(f => 
+      f.length > 6 && f.endsWith('.json') && 
+      f.match(/^[A-Z][a-z]\d+\.json$/)
+    );
+    
+    // Render each item
+    for (var file of itemFiles) {
+      await renderItem(mapId, file);
+    }
+    
+  } catch (error) {
+    console.warn("Failed to render items:", error.message);
+  }
+}
+
 window.gfxRenderMap = async function(a) {
  if (maps[a]) {} else { maps[a]="UaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUa"; }
  gfx(maps[a]); 

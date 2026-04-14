@@ -96,7 +96,9 @@ window.flagConnect = async function() {
       await gfxInit();
       document.getElementById('txt').style.top = '50px';
       document.getElementById('txt').style.left = '350px';
+      
       gfxRenderMap(lobbySector);
+
       // Start avatar selection
       NewChar("");
       return;
