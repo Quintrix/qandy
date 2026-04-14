@@ -86,14 +86,21 @@ window.flagConnect = async function() {
 
       await print("Empty slots available: " + emptySlots.length + "\n");
 
-      // Initialize graphics and render lobby map (96 Ga grass tiles)
+      // Load map data from capflag.gfx into window.gfxSector
+      var mapLoaded = await gfxFetchMap();
+      if (!mapLoaded) {
+        await print("Failed to load map data.\n");
+        return flagConnect();
+      }
 
-      var lobbyMap = gfxFetchMap("_L");
-      
+      // Initialize graphics and render lobby sector tiles
+      var lobbySector = window.gfxSector && window.gfxSector["_L"];
+      var lobbyTiles = lobbySector ? lobbySector.tiles.join("") : "";
+
       await gfxInit();
       document.getElementById('txt').style.top = '50px';
       document.getElementById('txt').style.left = '350px';
-      gfx(lobbyMap);
+      gfx(lobbyTiles);
 
       // Start avatar selection
       NewChar("");
