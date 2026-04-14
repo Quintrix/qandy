@@ -1439,9 +1439,12 @@ var jgFile = 'w/' + jgMapId + '/' + jgItemId + jgZ + '.txt';
     }
 
     case 'RF': {
-      // Refresh: return a directory listing of all player items on a given map.
-      // Parameters: d=drive, m=mapId (e.g. "A1")
-      // Response: concatenated 4-char strings, e.g. "Sa43Sb43" (ItemID + z-location)
+      // Refresh: return a directory listing of all player items on a given map,
+      // plus any new console entries since the client's last known index.
+      // Parameters: d=drive, m=mapId (e.g. "A1"), c=clientConsoleLength (optional)
+      // Response: "<items>[|C:<jsonArray>]"
+      //   items    – concatenated 4-char strings, e.g. "Sa43Sb43" (ItemID + z-location)
+      //   |C:...   – JSON array of new console entries since client's c index (if any)
       var rfDrive = String(params.d || '');
       var rfMapId = String(params.m || '');
 
@@ -1464,8 +1467,26 @@ var jgFile = 'w/' + jgMapId + '/' + jgItemId + jgZ + '.txt';
         }
       }
 
-      logRequest(req, 'RF', rfDrive, rfMapId, session, { success: true, result: rfItems });
-      return respondRetro(res, rfItems);
+      // Console sync: append new entries since client's last known index
+      var rfResponse = rfItems;
+      try {
+        var rfClientLen = parseInt(params.c, 10);
+        if (!isNaN(rfClientLen) && rfClientLen >= 0) {
+          var rfConsole = fileLoad(rfDrive, '/', 'c.txt', session);
+          var rfConsoleArr = [];
+          if (rfConsole.success) {
+            try { rfConsoleArr = JSON.parse(rfConsole.content); } catch (e) { rfConsoleArr = []; }
+            if (!Array.isArray(rfConsoleArr)) rfConsoleArr = [];
+          }
+          if (rfConsoleArr.length > rfClientLen) {
+            var rfNewEntries = rfConsoleArr.slice(rfClientLen);
+            rfResponse += '|C:' + JSON.stringify(rfNewEntries);
+          }
+        }
+      } catch (e) { /* console sync failure is non-fatal */ }
+
+      logRequest(req, 'RF', rfDrive, rfMapId, session, { success: true, result: rfResponse });
+      return respondRetro(res, rfResponse);
     }
 
     default:
