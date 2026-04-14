@@ -1354,76 +1354,48 @@ function handleCommand(req, res, raw) {
 
     case 'JG': {
       // Join Game: claim a player slot in the lobby (w/ directory).
-      // If bigbang() has pre-created a slot file for this itemId in w/, that slot
-      // is claimed (no new file needed).  Otherwise a new slot file is created at
-      // an available z-location.  Call SG (Start Game) to move the player to a
-      // world map with their avatar.
-      // Parameters: d=drive, id=itemId (e.g. "Sa"), av=avatar (optional, for SG)
+      // Scans the lobby for a file starting with the player item code (e.g. "Sa").
+      // If the slot exists and is unclaimed (4-char base name, e.g. "Sa33.txt"),
+      // renames it to append the player's avatar (e.g. "Sa33B0D0.txt").
+      // Parameters: d=drive, id=itemId (e.g. "Sa"), av=avatar (e.g. "B0D0")
       var jgDrive  = String(params.d  || '');
       var jgItemId = String(params.id || '');
       var jgAvatar = String(params.av || '');
 
-      if (!isValidDriveName(jgDrive))            return respondRetro(res, 'XXInvalid drive');
-      if (!/^[A-Z][a-z]$/.test(jgItemId))        return respondRetro(res, 'XXInvalid item ID');
-      if (!drives[jgDrive])                       return respondRetro(res, 'XXDrive not found');
+      if (!isValidDriveName(jgDrive))              return respondRetro(res, 'XXInvalid drive');
+      if (!/^[A-Z][a-z]$/.test(jgItemId))          return respondRetro(res, 'XXInvalid item ID');
+      if (!/^[A-Za-z0-9]{2,10}$/.test(jgAvatar))   return respondRetro(res, 'XXInvalid avatar');
+      if (!drives[jgDrive])                         return respondRetro(res, 'XXDrive not found');
 
-      // Reject if this itemId is already owned by any active session
-      var jgOwnerSessions = Object.keys(_playerOwnership);
-      for (var jgOi = 0; jgOi < jgOwnerSessions.length; jgOi++) {
-        var jgOwn = _playerOwnership[jgOwnerSessions[jgOi]];
-        if (jgOwn && jgOwn.itemId === jgItemId && jgOwn.drive === jgDrive) {
-          return respondRetro(res, 'XXSlot already taken');
-        }
-      }
-
-      // Scan w/ (lobby) to find a pre-existing bigbang slot for this itemId and
-      // to track occupied z-positions for z-assignment fallback.
+      // Scan lobby directory (w/) for a file starting with this itemId
       var jgScanResult = fileList(jgDrive, 'w', null, session);
-      var jgOccupiedZ  = {};
-      var jgExistingZ  = null;
+      var jgSlotFile = null;
       if (jgScanResult.success && jgScanResult.listing) {
         var jgScanFiles = jgScanResult.listing.split('\n');
         for (var jgSi = 0; jgSi < jgScanFiles.length; jgSi++) {
           var jgSf = jgScanFiles[jgSi].trim();
           if (!jgSf) continue;
           var jgSb = jgSf.substring(jgSf.lastIndexOf('/') + 1);
-          var jgPfx = jgSb.match(/^([A-Z][a-z])(\d{2})/);
-          if (!jgPfx) continue;
-          // Track all z-positions occupied by same-team files to avoid collisions
-          if (jgPfx[1].charAt(0) === jgItemId.charAt(0)) {
-            jgOccupiedZ[jgPfx[2]] = true;
-          }
-          // Identify an existing 8-char slot for this specific itemId (from bigbang)
-          if (jgPfx[1] === jgItemId && /^[A-Z][a-z]\d{2}\.txt$/.test(jgSb)) {
-            jgExistingZ = jgPfx[2];
+          if (jgSb.indexOf(jgItemId) === 0) {
+            jgSlotFile = jgSb;
+            break;
           }
         }
       }
 
-      var jgZ;
-      if (jgExistingZ !== null) {
-        // Use the bigbang-pre-assigned lobby slot; no new file needed
-        jgZ = jgExistingZ;
-      } else {
-        // No pre-assigned slot: find an available z-location and create a new slot file
-        var jgValidX = [1, 2, 3, 4, 5, 6];
-        var jgValidY = [2, 4, 6, 8, 10];
-        jgZ = '18'; // z=18 (y=2, x=2 on 8-wide grid) is the first valid non-edge coordinate
-        var jgZFound = false;
-        for (var jgYi = 0; jgYi < jgValidY.length && !jgZFound; jgYi++) {
-          for (var jgXi = 0; jgXi < jgValidX.length && !jgZFound; jgXi++) {
-            var jgZval = jgValidY[jgYi] * 8 + jgValidX[jgXi];
-            var jgZStr = String(jgZval).padStart(2, '0');
-            if (!jgOccupiedZ[jgZStr]) {
-              jgZ = jgZStr;
-              jgZFound = true;
-            }
-          }
-        }
-        var jgFile   = 'w/' + jgItemId + jgZ + '.txt';
-        var jgCreate = fileSave(jgDrive, '/', jgFile, '', session, 'JG');
-        if (!jgCreate.success) return respondRetro(res, 'XXFailed to create player file');
-      }
+      if (!jgSlotFile) return respondRetro(res, 'XXNot a valid player slot');
+
+      // Base name = filename without .txt extension (e.g. "Sa33" from "Sa33.txt")
+      // Unclaimed slot files have exactly 4 chars: 2-char itemId + 2-digit z-position
+      var jgBase = jgSlotFile.replace(/\.txt$/i, '');
+      if (jgBase.length > 4) return respondRetro(res, 'XXSlot already in use');
+      if (jgBase.length < 4) return respondRetro(res, 'XXNot a valid player slot');
+
+      // Rename: append the avatar string to claim the slot (e.g. "Sa33B0D0.txt")
+      var jgZ = jgBase.substring(2); // 2-digit z-position encoded in slot filename
+      var jgNewName = jgBase + jgAvatar + '.txt';
+      var jgRename = fileRename(jgDrive, '/', 'w/' + jgSlotFile, 'w/' + jgNewName, session);
+      if (!jgRename.success) return respondRetro(res, 'XXFailed to claim slot: ' + jgRename.error);
 
       // Record session ownership so future move/SG commands can be authorised
       _playerOwnership[session] = { itemId: jgItemId, mapId: '_L', drive: jgDrive };
@@ -1437,8 +1409,8 @@ function handleCommand(req, res, raw) {
 
     case 'SG': {
       // Start Game: move the player from the lobby (w/ directory) to a world map.
-      // Finds the 8-char lobby slot file in w/, creates an active player file in
-      // w/[mapId]/ that encodes the avatar, then removes the lobby slot file.
+      // Finds the claimed lobby slot file in w/ (e.g. "Sa33B0D0.txt"), creates an
+      // active player file in w/[mapId]/, then removes the lobby slot file.
       // Parameters: d=drive, id=itemId (e.g. "Sa"), av=avatar (e.g. "B1D0C2")
       var sgDrive  = String(params.d  || '');
       var sgItemId = String(params.id || '');
@@ -1453,7 +1425,7 @@ function handleCommand(req, res, raw) {
       var sgOwner = _playerOwnership[session];
       if (!sgOwner || sgOwner.itemId !== sgItemId)           return respondRetro(res, 'XXUnauthorized');
 
-      // Find the 8-char lobby slot file in w/ for this player
+      // Find the claimed lobby slot file in w/ for this player (base name > 4 chars)
       var sgLobbyList = fileList(sgDrive, 'w', null, session);
       var sgLobbyBase = null;
       var sgZLocation = null;
@@ -1463,7 +1435,7 @@ function handleCommand(req, res, raw) {
           var sgLF = sgLobbyFiles[sgi].trim();
           if (!sgLF) continue;
           var sgLB = sgLF.substring(sgLF.lastIndexOf('/') + 1);
-          var sgSlotMatch = sgLB.match(/^([A-Z][a-z])(\d{2})\.txt$/);
+          var sgSlotMatch = sgLB.match(/^([A-Z][a-z])(\d{2})[A-Za-z0-9]+\.txt$/);
           if (sgSlotMatch && sgSlotMatch[1] === sgItemId) {
             sgLobbyBase = sgLB;
             sgZLocation = sgSlotMatch[2];
