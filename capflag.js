@@ -272,21 +272,19 @@ function renderMPItems(rfStr) {
 }
 
 // Render a single player from a Queville player section string.
-// playerStr format: "[playerId][zz][avatarStr][^movements]"
-//   e.g. "Sa43B1D0C2" or "Tb22A2E1F3^NSW"
-// Minimum 6 chars: 2 (playerId) + 2 (zz) + 2 (at least one avatar part).
+// playerStr format: "[playerId][zz][avatarStr]" or "[playerId][zz][avatarStr]-[movements]"
+//   e.g. "Sa43B1D0C2" or "Tb22A2E1F3-NSW"
+// Sections shorter than 6 chars are movement-only segments from a dash-split response
+// (e.g. "NSW" split off from "Sa43B1D0C2-NSW") and are silently skipped.
 function renderPlayer(playerStr) {
  if (!playerStr || playerStr.length < 6) return;
  var playerId  = playerStr.substring(0, 2);            // "Sa"
  var zLocation = parseInt(playerStr.substring(2, 4), 10); // 43
  if (isNaN(zLocation)) return;
- var movementIdx = playerStr.indexOf('^');
- var avatarStr = (movementIdx !== -1)
-  ? playerStr.substring(4, movementIdx)
-  : playerStr.substring(4);
- var movements = (movementIdx !== -1)
-  ? playerStr.substring(movementIdx + 1)
-  : '';
+ var remaining = playerStr.substring(4); // "B1D0C2" or "B1D0C2-NSW"
+ var dashIdx = remaining.indexOf('-');
+ var avatarStr = (dashIdx !== -1) ? remaining.substring(0, dashIdx) : remaining;
+ var movements = (dashIdx !== -1) ? remaining.substring(dashIdx + 1) : '';
  renderPlayerAvatar(playerId, zLocation, avatarStr, movements);
 }
 
@@ -309,7 +307,30 @@ function renderPlayerAvatar(playerId, z, avatarStr, movements) {
   img.style.zIndex = '125';
   document.body.appendChild(img);
  }
+ if (movements) processPlayerMovements(playerId, movements);
 }
+
+// Store movement buffer for a player (NSEW sequence, one move per ~0.2 s).
+// Future: implement smooth movement animation driven by this buffer.
+function processPlayerMovements(playerId, movements) {
+ console.log('Player ' + playerId + ' movements: ' + movements);
+}
+
+// Send SG (Start Game) command to rename the player's empty slot file to include
+// their avatar string, making them visible as an active player in RF responses.
+window.startGame = async function(itemId, avatar) {
+ var drive = 'gfx';
+ try {
+  var res = await gfxPing('SG', { d: drive, id: itemId, av: avatar });
+  if (res.startsWith('OK')) {
+   console.log('Game started for ' + itemId + ' with avatar ' + avatar);
+  } else {
+   console.error('Start game error: ' + res);
+  }
+ } catch (e) {
+  console.error('Start game error:', e);
+ }
+};
 
 // flagServers.js
 // opts: { driveFilter='gfx', prompt, defaultIndex=0, allowCancel=true }

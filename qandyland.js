@@ -1331,110 +1331,80 @@ function handleCommand(req, res, raw) {
     }
 
     case 'JG': {
-      // Join Game: claim an empty player slot and create the player file on the map.
-      // Parameters: d=drive, id=itemId (e.g. "Sa"), av=avatar (4-char, e.g. "B0D0")
+      // Join Game: claim an empty player slot and create the initial slot file on the map.
+      // The slot file is named "[itemId][zz].txt" (8 chars, e.g. "Sa43.txt").
+      // Call SG (Start Game) afterwards to rename the file with the player's avatar.
+      // Parameters: d=drive, id=itemId (e.g. "Sa"), av=avatar (optional, stored for SG)
       var jgDrive  = String(params.d  || '');
       var jgItemId = String(params.id || '');
       var jgAvatar = String(params.av || '');
 
       if (!isValidDriveName(jgDrive))            return respondRetro(res, 'XXInvalid drive');
       if (!/^[A-Z][a-z]$/.test(jgItemId))        return respondRetro(res, 'XXInvalid item ID');
-      if (!/^[A-Za-z0-9]{4}$/.test(jgAvatar))    return respondRetro(res, 'XXInvalid avatar');
       if (!drives[jgDrive])                       return respondRetro(res, 'XXDrive not found');
-
-      // Load p.txt and find the requested slot
-      var jgLoad = fileLoad(jgDrive, '/', 'p.txt', session);
-      if (!jgLoad.success) return respondRetro(res, 'XXWorld not found');
-
-      var jgLines    = jgLoad.content.split('\n');
-      var jgFound    = false;
-      var jgNewLines = [];
-      for (var jgi = 0; jgi < jgLines.length; jgi++) {
-        var jgLine = jgLines[jgi].trim();
-        if (!jgLine) continue;
-        var jgEq = jgLine.indexOf('=');
-        if (jgEq < 0) { jgNewLines.push(jgLine); continue; }
-        var jgCode       = jgLine.slice(0, jgEq);
-        var jgAvatarData = jgLine.slice(jgEq + 1).trim();
-        if (jgCode === jgItemId) {
-          if (jgAvatarData.length > 0) return respondRetro(res, 'XXSlot already taken');
-          jgNewLines.push(jgCode + '=' + jgAvatar);
-          jgFound = true;
-        } else {
-          jgNewLines.push(jgLine);
-        }
-      }
-      if (!jgFound) return respondRetro(res, 'XXItem ID not in manifest');
-
-      // Save updated p.txt
-      var jgPSave = fileSave(jgDrive, '/', 'p.txt', jgNewLines.join('\n') + '\n', session, 'JG');
-      if (!jgPSave.success) return respondRetro(res, 'XXFailed to update manifest');
 
       // Determine spawn map: Team One (S*) → A1, Team Two (T*) → L8
       var jgMapId = (jgItemId.charAt(0) === 'S') ? 'A1' : 'L8';
 
-// @@ let's make spawn space more complex by assigning each player it's own spawn
-//    z-location so that all the player's can be seen at the same time. No z-location
-//    should be on an edge tile that are used to trigger scrolling north/south/east/west  
-      // Player file name: ItemID + 2-digit z-location (padded), e.g. "Sa43.txt"
-
-// Valid coordinate pools for spacing
-const VALID_X = [1, 2, 3, 4, 5, 6];
-const VALID_Y = [2, 4, 6, 8, 10];
-
-// Team prefixes
-const TEAM_ONE = ['Sa', 'Sb', 'Sc', 'Sd', 'Se', 'Sf', 'Sg', 'Sh'];
-const TEAM_TWO = ['Ta', 'Tb', 'Tc', 'Td', 'Te', 'Tf', 'Tg', 'Th'];
-
-function getUniqueSpawnZ(jgMapId, jgItemId, session) {
-    let teamList = jgItemId.startsWith('S') ? TEAM_ONE : TEAM_TWO;
-    
-    var jgDrive = 'gfx'; 
-    // The directory is 'w' plus the specific map (e.g., 'w/A1')
-    var jgCwd   = 'w/' + jgMapId; 
-
-    for (let y of VALID_Y) {
-        for (let x of VALID_X) {
-            
-            // Calculate Linear Z: (Y * 8) + X
-            let zValue = (y * 8) + x;
-            let potentialZ = zValue.toString().padStart(2, '0');
-            let isOccupied = false;
-
-            for (let memberId of teamList) {
-                let fileName = memberId + potentialZ + '.txt';
-                
-                // Using your original call structure
-                // We check the 'w/A1' or 'w/L8' subdirectory
-                var jgEx = fileExists(jgDrive, jgCwd, fileName, session);
-                
-                if (jgEx.success && jgEx.exists) {
-                    isOccupied = true;
-                    break; 
-                }
-            }
-
-            if (!isOccupied) {
-                return potentialZ;
-            }
+      // Scan the map directory to find all occupied z-locations.
+      // Both empty slot files ("Sa43.txt") and active player files ("Sa43B1D0C2.txt")
+      // encode the z-location at characters 2-3, so we check all files with the
+      // same team prefix (same first letter) to avoid z-location collisions.
+      var jgOccupiedZ = {};
+      var jgScanResult = fileList(jgDrive, 'w/' + jgMapId, null, session);
+      if (jgScanResult.success && jgScanResult.listing) {
+        var jgScanFiles = jgScanResult.listing.split('\n');
+        for (var jgSi = 0; jgSi < jgScanFiles.length; jgSi++) {
+          var jgSf = jgScanFiles[jgSi].trim();
+          if (!jgSf) continue;
+          var jgSb = jgSf.substring(jgSf.lastIndexOf('/') + 1);
+          // Any player file for the same team encodes z at chars 2-3
+          var jgPfx = jgSb.match(/^([A-Z][a-z])(\d{2})/);
+          if (jgPfx && jgPfx[1].charAt(0) === jgItemId.charAt(0)) {
+            jgOccupiedZ[jgPfx[2]] = true;
+          }
         }
-    }
+      }
 
-    return DEFAULT_SPAWN_Z; 
-}
+      // Also reject if this itemId already has any file (slot already taken)
+      var jgAlreadyTaken = false;
+      if (jgScanResult.success && jgScanResult.listing) {
+        var jgCheckFiles = jgScanResult.listing.split('\n');
+        for (var jgCi = 0; jgCi < jgCheckFiles.length; jgCi++) {
+          var jgCf = jgCheckFiles[jgCi].trim();
+          if (!jgCf) continue;
+          var jgCb = jgCf.substring(jgCf.lastIndexOf('/') + 1);
+          if (jgCb.startsWith(jgItemId) && jgCb.endsWith('.txt')) {
+            jgAlreadyTaken = true;
+            break;
+          }
+        }
+      }
+      if (jgAlreadyTaken) return respondRetro(res, 'XXSlot already taken');
 
-// How to use it in your main script:
-var jgZ    = getUniqueSpawnZ(jgMapId, jgItemId, session);
-var jgFile = 'w/' + jgMapId + '/' + jgItemId + jgZ + '.txt';
+      // Find first available z-location from valid non-edge coordinate pools
+      var jgValidX = [1, 2, 3, 4, 5, 6];
+      var jgValidY = [2, 4, 6, 8, 10];
+      var jgZ = '18'; // fallback default
+      var jgZFound = false;
+      for (var jgYi = 0; jgYi < jgValidY.length && !jgZFound; jgYi++) {
+        for (var jgXi = 0; jgXi < jgValidX.length && !jgZFound; jgXi++) {
+          var jgZval = jgValidY[jgYi] * 8 + jgValidX[jgXi];
+          var jgZStr = String(jgZval).padStart(2, '0');
+          if (!jgOccupiedZ[jgZStr]) {
+            jgZ = jgZStr;
+            jgZFound = true;
+          }
+        }
+      }
 
-
-      // Create or overwrite player file with avatar string as content.
-      // Overwriting is intentional: a player may re-join with a different avatar,
-      // and future move commands will rename the file to reflect the new z-location.
-      var jgCreate = fileSave(jgDrive, '/', jgFile, jgAvatar, session, 'JG');
+      // Create empty slot file: "Sa43.txt" (8 chars total)
+      // The avatar will be added to the filename when SG (Start Game) is called.
+      var jgFile = 'w/' + jgMapId + '/' + jgItemId + jgZ + '.txt';
+      var jgCreate = fileSave(jgDrive, '/', jgFile, '', session, 'JG');
       if (!jgCreate.success) return respondRetro(res, 'XXFailed to create player file');
 
-      // Record session ownership so future move commands can be authorised
+      // Record session ownership so future move/SG commands can be authorised
       _playerOwnership[session] = { itemId: jgItemId, mapId: jgMapId, drive: jgDrive };
 
       // Log join event to game console
@@ -1444,12 +1414,67 @@ var jgFile = 'w/' + jgMapId + '/' + jgItemId + jgZ + '.txt';
       return respondRetro(res, 'OK' + jgItemId + jgZ);
     }
 
+    case 'SG': {
+      // Start Game: rename the empty player slot file to include the player's avatar.
+      // Transitions the player from "joined" (8-char slot file) to "active"
+      // (>8-char file whose name encodes avatar and optional movement buffer).
+      // Parameters: d=drive, id=itemId (e.g. "Sa"), av=avatar (e.g. "B1D0C2")
+      var sgDrive  = String(params.d  || '');
+      var sgItemId = String(params.id || '');
+      var sgAvatar = String(params.av || '');
+
+      if (!isValidDriveName(sgDrive))                        return respondRetro(res, 'XXInvalid drive');
+      if (!/^[A-Z][a-z]$/.test(sgItemId))                   return respondRetro(res, 'XXInvalid item ID');
+      if (!/^[A-Za-z0-9]{2,10}$/.test(sgAvatar))            return respondRetro(res, 'XXInvalid avatar');
+      if (!drives[sgDrive])                                  return respondRetro(res, 'XXDrive not found');
+
+      // Verify session owns this player slot (set during JG)
+      var sgOwner = _playerOwnership[session];
+      if (!sgOwner || sgOwner.itemId !== sgItemId)           return respondRetro(res, 'XXUnauthorized');
+
+      // Determine which map the player is on (same rule as JG)
+      var sgMapId = (sgItemId.charAt(0) === 'S') ? 'A1' : 'L8';
+
+      // Scan the map directory to find the 8-char empty slot file for this player
+      var sgList = fileList(sgDrive, 'w/' + sgMapId, null, session);
+      if (sgList.success && sgList.listing) {
+        var sgFiles = sgList.listing.split('\n');
+        for (var sgi = 0; sgi < sgFiles.length; sgi++) {
+          var sgFile = sgFiles[sgi].trim();
+          if (!sgFile) continue;
+          var sgBase = sgFile.substring(sgFile.lastIndexOf('/') + 1);
+          // Match the 8-char empty slot pattern: "[itemId][zz].txt"
+          var sgSlotMatch = sgBase.match(/^([A-Z][a-z])(\d{2})\.txt$/);
+          if (sgSlotMatch && sgSlotMatch[1] === sgItemId) {
+            var sgZLocation = sgSlotMatch[2]; // e.g. "43"
+            var sgNewBase   = sgItemId + sgZLocation + sgAvatar + '.txt'; // e.g. "Sa43B1D0C2.txt"
+            var sgRename = fileRename(sgDrive, 'w/' + sgMapId, sgBase, sgNewBase, session);
+            if (sgRename.success) {
+              logRequest(req, 'SG', sgDrive, sgItemId, session, { success: true });
+              return respondRetro(res, 'OK' + sgItemId);
+            } else {
+              return respondRetro(res, 'XXRename failed: ' + (sgRename.error || ''));
+            }
+          }
+        }
+      }
+
+      return respondRetro(res, 'XXPlayer file not found');
+    }
+
     case 'RF': {
       // Refresh: return complete game state in Queville format.
       // Parameters: d=drive, m=mapId (e.g. "A1")
       // Response: Queville format "[items]-[player1]-[player2]..."
-      //   items   – concatenated 4-char strings for non-player items, e.g. "Ab12Cd34"
-      //   players – each section is "[playerId][zz][avatarStr]", e.g. "Sa43B1D0"
+      //   items   – concatenated 4-char codes for items/empty slots, e.g. "Sa43Tb22"
+      //   players – each section is "[playerId][zz][avatarStr]" or
+      //             "[playerId][zz][avatarStr]-[movements]", e.g. "Sa43B1D0C2" or
+      //             "Sa43B1D0C2-NSW"
+      //
+      // Filename length determines content type (no separate manifest needed):
+      //   8 chars total ("Sa43.txt")         → item or empty player slot
+      //   >8 chars total ("Sa43B1D0C2.txt")  → active player with avatar
+      //   >8 chars with dash ("Sa43B1D0C2-NSW.txt") → active player with movements
       var rfDrive = String(params.d || '');
       var rfMapId = String(params.m || '');
 
@@ -1457,23 +1482,7 @@ var jgFile = 'w/' + jgMapId + '/' + jgItemId + jgZ + '.txt';
       if (!/^[A-Z][1-9A-Z]$/.test(rfMapId))      return respondRetro(res, 'XXInvalid map ID');
       if (!drives[rfDrive])                       return respondRetro(res, 'XXDrive not found');
 
-      // Build a map of occupied player slots from p.txt: { "Sa": "B0D0", ... }
-      var rfPlayerAvatars = {};
-      var rfPLoad = fileLoad(rfDrive, '/', 'p.txt', session);
-      if (rfPLoad.success && rfPLoad.content) {
-        var rfPLines = rfPLoad.content.split('\n');
-        for (var rpi = 0; rpi < rfPLines.length; rpi++) {
-          var rfPLine = rfPLines[rpi].trim();
-          if (!rfPLine) continue;
-          var rfPEq = rfPLine.indexOf('=');
-          if (rfPEq < 0) continue;
-          var rfPCode   = rfPLine.slice(0, rfPEq);
-          var rfPAvatar = rfPLine.slice(rfPEq + 1).trim();
-          if (rfPAvatar.length > 0) rfPlayerAvatars[rfPCode] = rfPAvatar;
-        }
-      }
-
-      // List all files in w/[mapId]/ directory; separate items from players
+      // List all files in w/[mapId]/ and classify by filename length
       var rfList = fileList(rfDrive, 'w/' + rfMapId, null, session);
       var rfItems = '';
       var rfPlayers = [];
@@ -1482,19 +1491,24 @@ var jgFile = 'w/' + jgMapId + '/' + jgItemId + jgZ + '.txt';
         for (var rfi = 0; rfi < rfFiles.length; rfi++) {
           var rfFile = rfFiles[rfi].trim();
           if (!rfFile) continue;
-          // Extract base filename and match [A-Z][a-z][digit][digit].txt
-          var rfBase  = rfFile.substring(rfFile.lastIndexOf('/') + 1);
-          var rfMatch = rfBase.match(/^([A-Z][a-z]\d{2})\.txt$/);
-          if (!rfMatch) continue;
-          var rfCode   = rfMatch[1];         // e.g. "Sa43"
-          var rfItemId = rfCode.slice(0, 2); // e.g. "Sa"
-          var rfZ      = rfCode.slice(2, 4); // e.g. "43"
-          if (Object.prototype.hasOwnProperty.call(rfPlayerAvatars, rfItemId)) {
-            // Occupied player slot: include avatar data in player section
-            rfPlayers.push(rfItemId + rfZ + rfPlayerAvatars[rfItemId]);
-          } else {
-            // Non-player item: add to items section
-            rfItems += rfCode;
+          var rfBase = rfFile.substring(rfFile.lastIndexOf('/') + 1);
+
+          if (rfBase.length === 8) {
+            // "Sa43.txt" = item or empty player slot (8 chars total)
+            var rfItemMatch = rfBase.match(/^([A-Z][a-z]\d{2})\.txt$/);
+            if (rfItemMatch) {
+              rfItems += rfItemMatch[1]; // e.g. "Sa43"
+            }
+          } else if (rfBase.length > 8) {
+            // "Sa43B1D0C2.txt" or "Sa43B1D0C2-NSW.txt" = active player with avatar
+            var rfPlayerMatch = rfBase.match(/^([A-Z][a-z])(\d{2})(.+)\.txt$/);
+            if (rfPlayerMatch) {
+              var rfPlayerId       = rfPlayerMatch[1]; // "Sa"
+              var rfPlayerZ        = rfPlayerMatch[2]; // "43"
+              var rfAvatarAndMoves = rfPlayerMatch[3]; // "B1D0C2" or "B1D0C2-NSW"
+              // Build player entry: "Sa43B1D0C2" or "Sa43B1D0C2-NSW"
+              rfPlayers.push(rfPlayerId + rfPlayerZ + rfAvatarAndMoves);
+            }
           }
         }
       }
