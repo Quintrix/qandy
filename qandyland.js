@@ -1482,8 +1482,12 @@ function handleCommand(req, res, raw) {
       var sgWorldSave = fileSave(sgDrive, '/', sgWorldFile, '', session, 'SG');
       if (!sgWorldSave.success) return respondRetro(res, 'XXFailed to create world player: ' + sgWorldSave.error);
 
-      // Remove the lobby slot file
-      fileDelete(sgDrive, '/', 'w/' + sgLobbyBase, session);
+      // Remove the lobby slot file; roll back world file if deletion fails
+      var sgLobbyDelete = fileDelete(sgDrive, '/', 'w/' + sgLobbyBase, session);
+      if (!sgLobbyDelete.success) {
+        fileDelete(sgDrive, '/', sgWorldFile, session); // attempt rollback
+        return respondRetro(res, 'XXFailed to remove lobby slot: ' + sgLobbyDelete.error);
+      }
 
       // Update player ownership to reflect the world map
       _playerOwnership[session] = { itemId: sgItemId, mapId: sgMapId, drive: sgDrive };
@@ -1510,10 +1514,9 @@ function handleCommand(req, res, raw) {
       var rfDrive = String(params.d || '');
       var rfMapId = String(params.m || '');
 
-      if (!isValidDriveName(rfDrive))            return respondRetro(res, 'XXInvalid drive');
-      if (!/^[A-Z][1-9A-Z]$/.test(rfMapId) && rfMapId !== '_L')
-                                                  return respondRetro(res, 'XXInvalid map ID');
-      if (!drives[rfDrive])                       return respondRetro(res, 'XXDrive not found');
+      if (!isValidDriveName(rfDrive))                    return respondRetro(res, 'XXInvalid drive');
+      if (!/^(_L|[A-Z][1-9A-Z])$/.test(rfMapId))        return respondRetro(res, 'XXInvalid map ID');
+      if (!drives[rfDrive])                              return respondRetro(res, 'XXDrive not found');
 
       // Determine directory: lobby (_L) maps to w/, world maps to w/[mapId]/
       var rfPath = (rfMapId === '_L') ? 'w' : 'w/' + rfMapId;
