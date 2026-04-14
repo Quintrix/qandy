@@ -148,6 +148,24 @@ function mainloop() {
 
 // @@ //
 
+// Handle item clicks from gfx.js - called with the z-location of the clicked item.
+// Finds any items at that location in the current lobby sector and shows a Join Game popup.
+window.gfxZDown = function(z) {
+ var sector = window.gfxSector && window.gfxSector["_L"];
+ if (!sector || !sector.items) return;
+ var PUP = "";
+ for (var i = 0; i < sector.items.length; i++) {
+  var item = sector.items[i];
+  if (parseInt(item.z, 10) === z) {
+   var safeId = String(item.id).replace(/[^A-Za-z0-9]/g, '');
+   var name = (typeof window.ItemID === 'function') ? window.ItemID(safeId) : safeId;
+   var safeName = String(name).replace(/[<>&"']/g, '');
+   PUP += "<a href='javascript:joinGame(\"" + safeId + "\");'>Join Game (" + safeName + ")</a><br>";
+  }
+ }
+ if (PUP) { pop(PUP); }
+};
+
 window.selectPlayerSlot = function(avatarStr) {
  playerAvatarStr = avatarStr;
  var html = "Select player slot:<p>";

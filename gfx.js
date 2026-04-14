@@ -433,7 +433,7 @@ window.gfxRenderMap = function(sectorId) {
     };
    })(c);
    (function(itemZ) {
-    c.onclick = function() { gfxZClick(itemZ, this); };
+    c.onclick = function() { if (typeof window.gfxZDown === 'function') { window.gfxZDown(itemZ); } };
    })(z);
    document.body.appendChild(c);
   }
