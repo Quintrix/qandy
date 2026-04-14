@@ -11,6 +11,9 @@ var rfInterval = null;      // handle for the RF refresh timer
 var playerItemId = null;    // this client's chosen player slot ItemID (e.g. "Sa")
 var playerAvatarStr = "";   // this client's 4-char avatar string (e.g. "B0D0")
 
+// Game console: master log of all game events, kept in sync with server c.txt
+window.gfxConsole = window.gfxConsole || [];
+
 qdosScript("gfx.js");
 startup();
 var ts=3000;
@@ -191,8 +194,8 @@ window.joinGame = async function(itemId) {
    if (rfInterval) clearInterval(rfInterval);
    rfInterval = setInterval(async function() {
     try {
-     var rfRes = await gfxPing("RF", { d: drive, m: mapId });
-     renderMPItems(rfRes);
+     var rfRes = await gfxPing("RF", { d: drive, m: mapId, c: window.gfxConsole.length });
+     processRFResponse(rfRes);
     } catch (e) { console.error('RF tick error:', e); }
    }, 1000);
   } else {
@@ -202,6 +205,41 @@ window.joinGame = async function(itemId) {
   pop("Connection error.<p><a href=\"javascript:selectPlayerSlot(playerAvatarStr);\">Try again</a>");
  }
 };
+
+// Process an RF response string, extracting sector items and any new console entries.
+// rfStr format: "<items>[|C:<jsonArray>]"
+function processRFResponse(rfStr) {
+ var parts = rfStr.split('|C:');
+ var sectorData = parts[0];
+
+ if (parts[1]) {
+  try {
+   var newEntries = JSON.parse(parts[1]);
+   if (Array.isArray(newEntries)) {
+    for (var i = 0; i < newEntries.length; i++) {
+     window.gfxConsole.push(newEntries[i]);
+     processConsoleEntry(newEntries[i]);
+    }
+   }
+  } catch (e) { /* ignore malformed console data */ }
+ }
+
+ renderMPItems(sectorData);
+}
+
+// Handle a single game console entry, updating client game state as needed.
+function processConsoleEntry(entry) {
+ if (typeof entry !== 'string') return;
+ if (entry.startsWith('JG ')) {
+  // "JG <hatId> <avatar>" – a player joined; refresh empty slots display
+  var entryParts = entry.split(' ');
+  var hatId = entryParts[1];
+  // Remove the newly-occupied slot from the emptySlots list
+  if (hatId) {
+   emptySlots = emptySlots.filter(function(s) { return s !== hatId; });
+  }
+ }
+}
 
 // Render all player items from an RF response string.
 // rfStr is a sequence of 4-char codes: 2-char ItemID + 2-digit z-location, e.g. "Sa43Tb43".
