@@ -288,11 +288,12 @@ window.gfxServers = async function() {
   }
 };
 
-async function gfxFetchMap() {
+async function gfxFetchMap(filename) {
+  filename = filename || "capflag.gfx";
   try {
-    await print("Loading capflag.gfx...\n");
-    var gfxContent = await qdosLoad("capflag.gfx");
-    if (!gfxContent) { throw new Error("Failed to load capflag.gfx"); }
+    await print("Loading " + filename + "...\n");
+    var gfxContent = await qdosLoad(filename);
+    if (!gfxContent) { throw new Error("Failed to load " + filename); }
 
     var lines = gfxContent.split('\n').filter(line => line.trim());
     window.gfxSector = {}; // Clear existing data
@@ -347,7 +348,7 @@ async function gfxFetchMap() {
     return true;
     
   } catch (e) {
-    await print("Error loading capflag.gfx: " + e.message + "\n");
+    await print("Error loading " + filename + ": " + e.message + "\n");
     return false;
   }
 }
@@ -394,40 +395,49 @@ async function renderMapItems(mapId) {
   }
 }
 
-window.gfxRenderMap = async function(a) {
- if (maps[a]) {} else { maps[a]="UaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUaUa"; }
- gfx(maps[a]); 
- items=[]; if (maps[a].length>194) { ilist=maps[a].substring(194).match(/.{1,6}/g); }
- for (b=0;b<ilist.length;b++) {
-  i=ilist[b].substring(0,2);
-  z=ilist[b].substring(2,4);
-  d=ilist[b].substring(4,6);
-  y=Math.floor(z/(mapx+1));
-  x=z-(y*(mapx+1));
-  c=document.createElement("img");
-  c.id="i"+b;
-  c.src="i/"+ilist[b].substring(0,2)+".png";
-  c.style.position="absolute";
-  c.style.top=32+20+(y*32)+"px";
-  c.style.left=(32+22+(x*32))+"px";
-  c.style.zIndex="120";
-  c.onload = () => { c.style.top = parseInt(c.style.top) - (c.height - 32) + "px"; c.style.left = parseInt(c.style.left) - (c.width - 32) + "px"; };
-  (function(itemZ){c.onmousedown=function(){gfxZClick(parseInt(itemZ,10),this);};})(z);
-  document.body.appendChild(c);
- }
- RefDItems();
- if (PName && PObj) { 
-  try { 
+window.gfxRenderMap = function(sectorId) {
+ if (!window.gfxSector || !window.gfxSector[sectorId]) { return; }
+ var sector = window.gfxSector[sectorId];
 
-   await qdosSave('player-name', PName);
-   await qdosSave('player-obj', PObj);
-   await qdosSave('player-wear', PWear);
-   await qdosSave('player-inv', PInv);
-   await qdosSave('player-map', PMap);
-   await qdosSave('player-z', String(PZ));
-  } catch(e) {}
+ // Render tiles
+ if (sector.tiles && sector.tiles.length > 0) {
+  gfxMap(sector.tiles.join(""));
  }
- return maps[a];
+
+ // Remove existing sector item elements
+ var oldItems = document.querySelectorAll('.item');
+ for (var k = 0; k < oldItems.length; k++) {
+  if (oldItems[k].parentNode) { oldItems[k].parentNode.removeChild(oldItems[k]); }
+ }
+
+ // Render items on top of tiles with click handlers
+ if (sector.items) {
+  for (var b = 0; b < sector.items.length; b++) {
+   var item = sector.items[b];
+   var z = parseInt(item.z, 10);
+   if (isNaN(z)) { continue; }
+   var y = Math.floor(z / (mapx + 1));
+   var x = z - (y * (mapx + 1));
+   var c = document.createElement("img");
+   c.id = "i" + b;
+   c.src = "i/" + item.id + ".png";
+   c.className = "item";
+   c.style.position = "absolute";
+   c.style.top = (32 + 20 + (y * 32)) + "px";
+   c.style.left = (32 + 22 + (x * 32)) + "px";
+   c.style.zIndex = "120";
+   (function(el) {
+    el.onload = function() {
+     el.style.top = (parseInt(el.style.top) - (el.height - 32)) + "px";
+     el.style.left = (parseInt(el.style.left) - (el.width - 32)) + "px";
+    };
+   })(c);
+   (function(itemZ) {
+    c.onclick = function() { gfxZClick(itemZ, this); };
+   })(z);
+   document.body.appendChild(c);
+  }
+ }
 }
 
 // Universal gateway for all 2-character commands to the multiplayer server.
