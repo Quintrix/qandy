@@ -1487,7 +1487,7 @@ var jgFile = 'w/' + jgMapId + '/' + jgItemId + jgZ + '.txt';
           var rfCode   = rfMatch[1];         // e.g. "Sa43"
           var rfItemId = rfCode.slice(0, 2); // e.g. "Sa"
           var rfZ      = rfCode.slice(2, 4); // e.g. "43"
-          if (rfPlayerAvatars[rfItemId] !== undefined) {
+          if (Object.prototype.hasOwnProperty.call(rfPlayerAvatars, rfItemId)) {
             // Occupied player slot: include avatar data in player section
             rfPlayers.push(rfItemId + rfZ + rfPlayerAvatars[rfItemId]);
           } else {

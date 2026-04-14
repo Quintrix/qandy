@@ -241,6 +241,13 @@ function processConsoleEntry(entry) {
  }
 }
 
+// Convert a z-position to {x, y} tile coordinates using the current map width.
+function zToXY(z) {
+ var y = Math.floor(z / (mapx + 1));
+ var x = z - (y * (mapx + 1));
+ return { x: x, y: y };
+}
+
 // Render non-player items from the items section of an RF response string.
 // rfStr is a sequence of 4-char codes: 2-char ItemID + 2-digit z-location, e.g. "Ab12Cd34".
 function renderMPItems(rfStr) {
@@ -252,14 +259,13 @@ function renderMPItems(rfStr) {
   var iId = rfStr.slice(j, j + 2);
   var z = parseInt(rfStr.slice(j + 2, j + 4), 10);
   if (isNaN(z)) continue;
-  var y = Math.floor(z / (mapx + 1));
-  var x = z - (y * (mapx + 1));
+  var coords = zToXY(z);
   var img = document.createElement('img');
   img.className = 'mp-item';
   img.src = 'i/' + iId + '.png';
   img.style.position = 'absolute';
-  img.style.top  = (32 + 20 + (y * 32)) + 'px';
-  img.style.left = (32 + 22 + (x * 32)) + 'px';
+  img.style.top  = (32 + 20 + (coords.y * 32)) + 'px';
+  img.style.left = (32 + 22 + (coords.x * 32)) + 'px';
   img.style.zIndex = '120';
   document.body.appendChild(img);
  }
@@ -269,7 +275,7 @@ function renderMPItems(rfStr) {
 // playerStr format: "[playerId][zz][avatarStr][^movements]"
 //   e.g. "Sa43B1D0C2" or "Tb22A2E1F3^NSW"
 function renderPlayer(playerStr) {
- if (!playerStr || playerStr.length < 4) return;
+ if (!playerStr || playerStr.length < 6) return;
  var playerId  = playerStr.substring(0, 2);            // "Sa"
  var zLocation = parseInt(playerStr.substring(2, 4), 10); // 43
  if (isNaN(zLocation)) return;
@@ -287,10 +293,9 @@ function renderPlayer(playerStr) {
 // avatarStr contains up to 5 two-character codes: [head][body][hat][sword][shield]
 // Each code maps to an image in c/<code>.png that is layered at the player's tile.
 function renderPlayerAvatar(playerId, z, avatarStr, movements) {
- var y = Math.floor(z / (mapx + 1));
- var x = z - (y * (mapx + 1));
- var top  = 32 + 20 + (y * 32);
- var left = 32 + 22 + (x * 32);
+ var coords = zToXY(z);
+ var top  = 32 + 20 + (coords.y * 32);
+ var left = 32 + 22 + (coords.x * 32);
  for (var k = 0; k + 2 <= avatarStr.length; k += 2) {
   var partCode = avatarStr.slice(k, k + 2);
   var img = document.createElement('img');
