@@ -189,8 +189,9 @@ window.joinGame = async function(itemId) {
  try {
   var res = await gfxPing("JG", { d: drive, id: itemId, av: playerAvatarStr });
   if (res.startsWith("OK")) {
-   // Start the 1-second RF (Refresh) tick for real-time updates
-   var mapId = (itemId.charAt(0) === 'S') ? 'A1' : 'L8';
+   // Start the 1-second RF (Refresh) tick for real-time lobby updates.
+   // All players begin in the lobby (_L) regardless of team.
+   var mapId = '_L';
    if (rfInterval) clearInterval(rfInterval);
    rfInterval = setInterval(async function() {
     try {
@@ -316,13 +317,23 @@ function processPlayerMovements(playerId, movements) {
  console.log('Player ' + playerId + ' movements: ' + movements);
 }
 
-// Send SG (Start Game) command to rename the player's empty slot file to include
-// their avatar string, making them visible as an active player in RF responses.
+// Send SG (Start Game) command to move the player from the lobby (w/) to a world
+// map, making them visible as an active player in RF responses for that map.
+// After SG succeeds, switches the RF polling interval from the lobby to the world map.
 window.startGame = async function(itemId, avatar) {
  var drive = 'gfx';
  try {
   var res = await gfxPing('SG', { d: drive, id: itemId, av: avatar });
   if (res.startsWith('OK')) {
+   // Switch RF polling from lobby (_L) to the player's world map
+   if (rfInterval) clearInterval(rfInterval);
+   var mapId = (itemId.charAt(0) === 'S') ? 'A1' : 'L8';
+   rfInterval = setInterval(async function() {
+    try {
+     var rfRes = await gfxPing("RF", { d: drive, m: mapId });
+     processRFResponse(rfRes);
+    } catch (e) { console.error('RF tick error:', e); }
+   }, 1000);
    console.log('Game started for ' + itemId + ' with avatar ' + avatar);
   } else {
    console.error('Start game error: ' + res);

@@ -1054,9 +1054,9 @@ function bigbang(driveName, session) {
     }
 
     if (sectorId === '_L') {
-      // _L is the lobby sector: it has no exits and is not part of the navigable
-      // world.  Its items define the player-slot positions; we use them only to
-      // build p.txt and do not create a w/_L/ directory for it.
+      // _L is the lobby sector: its items define the player-slot positions and
+      // game objects.  Files for these items are created in the w/ directory
+      // (lobby gateway) so that RF with m="_L" can return the lobby state.
       lobbyItems = items;
     } else {
       sectors.push({ id: sectorId, exits: exitStr, items: items });
@@ -1070,10 +1070,32 @@ function bigbang(driveName, session) {
   var created = [];
   var errors  = [];
 
-  // Create /w/ root directory
+  // Create /w/ root directory (serves as the lobby gateway to world maps)
   var wDir = dirMake(driveName, '/', 'w', session);
   if (!wDir.success && wDir.error !== 'directory already exists') {
     return { success: false, error: 'failed to create /w/ directory: ' + wDir.error };
+  }
+
+  // Create lobby item files in w/ (the lobby directory).
+  // For player-slot items (itemData === 'Za'): one file per unique itemId so
+  // there is exactly one lobby slot per player code (mirrors p.txt deduplication).
+  // For game-object items (other itemData): one file per occurrence.
+  var lSeenIds = {};
+  for (var lbi = 0; lbi < lobbyItems.length; lbi++) {
+    if (lobbyItems[lbi].length < 6) continue;
+    var lItemId   = lobbyItems[lbi].substring(0, 2); // e.g. "Sa", "Yj"
+    var lItemZ    = lobbyItems[lbi].substring(2, 4); // e.g. "33", "44"
+    var lItemData = lobbyItems[lbi].substring(4, 6); // e.g. "Za", "Sa"
+    var lIsSlot   = /^[A-Z][a-z]$/.test(lItemId) && lItemData === 'Za';
+    if (lIsSlot && lSeenIds[lItemId]) continue;
+    if (lIsSlot) lSeenIds[lItemId] = true;
+    var lFile   = lItemId + lItemZ + '.txt';
+    var lResult = fileSave(driveName, '/', 'w/' + lFile, '', session, 'bigbang');
+    if (lResult.success) {
+      created.push('lobby: ' + lFile);
+    } else {
+      errors.push('w/' + lFile + ': ' + lResult.error);
+    }
   }
 
   // Create a sub-directory and files for each world sector
@@ -1331,10 +1353,12 @@ function handleCommand(req, res, raw) {
     }
 
     case 'JG': {
-      // Join Game: claim an empty player slot and create the initial slot file on the map.
-      // The slot file is named "[itemId][zz].txt" (8 chars, e.g. "Sa43.txt").
-      // Call SG (Start Game) afterwards to rename the file with the player's avatar.
-      // Parameters: d=drive, id=itemId (e.g. "Sa"), av=avatar (optional, stored for SG)
+      // Join Game: claim a player slot in the lobby (w/ directory).
+      // If bigbang() has pre-created a slot file for this itemId in w/, that slot
+      // is claimed (no new file needed).  Otherwise a new slot file is created at
+      // an available z-location.  Call SG (Start Game) to move the player to a
+      // world map with their avatar.
+      // Parameters: d=drive, id=itemId (e.g. "Sa"), av=avatar (optional, for SG)
       var jgDrive  = String(params.d  || '');
       var jgItemId = String(params.id || '');
       var jgAvatar = String(params.av || '');
@@ -1343,69 +1367,66 @@ function handleCommand(req, res, raw) {
       if (!/^[A-Z][a-z]$/.test(jgItemId))        return respondRetro(res, 'XXInvalid item ID');
       if (!drives[jgDrive])                       return respondRetro(res, 'XXDrive not found');
 
-      // Determine spawn map: Team One (S*) → A1, Team Two (T*) → L8
-      var jgMapId = (jgItemId.charAt(0) === 'S') ? 'A1' : 'L8';
+      // Reject if this itemId is already owned by any active session
+      var jgOwnerSessions = Object.keys(_playerOwnership);
+      for (var jgOi = 0; jgOi < jgOwnerSessions.length; jgOi++) {
+        var jgOwn = _playerOwnership[jgOwnerSessions[jgOi]];
+        if (jgOwn && jgOwn.itemId === jgItemId && jgOwn.drive === jgDrive) {
+          return respondRetro(res, 'XXSlot already taken');
+        }
+      }
 
-      // Scan the map directory to find all occupied z-locations.
-      // Both empty slot files ("Sa43.txt") and active player files ("Sa43B1D0C2.txt")
-      // encode the z-location at characters 2-3, so we check all files with the
-      // same team prefix (same first letter) to avoid z-location collisions.
-      var jgOccupiedZ = {};
-      var jgScanResult = fileList(jgDrive, 'w/' + jgMapId, null, session);
+      // Scan w/ (lobby) to find a pre-existing bigbang slot for this itemId and
+      // to track occupied z-positions for z-assignment fallback.
+      var jgScanResult = fileList(jgDrive, 'w', null, session);
+      var jgOccupiedZ  = {};
+      var jgExistingZ  = null;
       if (jgScanResult.success && jgScanResult.listing) {
         var jgScanFiles = jgScanResult.listing.split('\n');
         for (var jgSi = 0; jgSi < jgScanFiles.length; jgSi++) {
           var jgSf = jgScanFiles[jgSi].trim();
           if (!jgSf) continue;
           var jgSb = jgSf.substring(jgSf.lastIndexOf('/') + 1);
-          // Any player file for the same team encodes z at chars 2-3
           var jgPfx = jgSb.match(/^([A-Z][a-z])(\d{2})/);
-          if (jgPfx && jgPfx[1].charAt(0) === jgItemId.charAt(0)) {
+          if (!jgPfx) continue;
+          // Track all z-positions occupied by same-team files to avoid collisions
+          if (jgPfx[1].charAt(0) === jgItemId.charAt(0)) {
             jgOccupiedZ[jgPfx[2]] = true;
           }
-        }
-      }
-
-      // Also reject if this itemId already has any file (slot already taken)
-      var jgAlreadyTaken = false;
-      if (jgScanResult.success && jgScanResult.listing) {
-        var jgCheckFiles = jgScanResult.listing.split('\n');
-        for (var jgCi = 0; jgCi < jgCheckFiles.length; jgCi++) {
-          var jgCf = jgCheckFiles[jgCi].trim();
-          if (!jgCf) continue;
-          var jgCb = jgCf.substring(jgCf.lastIndexOf('/') + 1);
-          if (jgCb.startsWith(jgItemId) && jgCb.endsWith('.txt')) {
-            jgAlreadyTaken = true;
-            break;
-          }
-        }
-      }
-      if (jgAlreadyTaken) return respondRetro(res, 'XXSlot already taken');
-
-      // Find first available z-location from valid non-edge coordinate pools
-      var jgValidX = [1, 2, 3, 4, 5, 6];
-      var jgValidY = [2, 4, 6, 8, 10];
-      var jgZ = '18'; // fallback default
-      var jgZFound = false;
-      for (var jgYi = 0; jgYi < jgValidY.length && !jgZFound; jgYi++) {
-        for (var jgXi = 0; jgXi < jgValidX.length && !jgZFound; jgXi++) {
-          var jgZval = jgValidY[jgYi] * 8 + jgValidX[jgXi];
-          var jgZStr = String(jgZval).padStart(2, '0');
-          if (!jgOccupiedZ[jgZStr]) {
-            jgZ = jgZStr;
-            jgZFound = true;
+          // Identify an existing 8-char slot for this specific itemId (from bigbang)
+          if (jgPfx[1] === jgItemId && /^[A-Z][a-z]\d{2}\.txt$/.test(jgSb)) {
+            jgExistingZ = jgPfx[2];
           }
         }
       }
 
-      // Create empty slot file: "Sa43.txt" (8 chars total)
-      // The avatar will be added to the filename when SG (Start Game) is called.
-      var jgFile = 'w/' + jgMapId + '/' + jgItemId + jgZ + '.txt';
-      var jgCreate = fileSave(jgDrive, '/', jgFile, '', session, 'JG');
-      if (!jgCreate.success) return respondRetro(res, 'XXFailed to create player file');
+      var jgZ;
+      if (jgExistingZ !== null) {
+        // Use the bigbang-pre-assigned lobby slot; no new file needed
+        jgZ = jgExistingZ;
+      } else {
+        // No pre-assigned slot: find an available z-location and create a new slot file
+        var jgValidX = [1, 2, 3, 4, 5, 6];
+        var jgValidY = [2, 4, 6, 8, 10];
+        jgZ = '18'; // z=18 (y=2, x=2 on 8-wide grid) is the first valid non-edge coordinate
+        var jgZFound = false;
+        for (var jgYi = 0; jgYi < jgValidY.length && !jgZFound; jgYi++) {
+          for (var jgXi = 0; jgXi < jgValidX.length && !jgZFound; jgXi++) {
+            var jgZval = jgValidY[jgYi] * 8 + jgValidX[jgXi];
+            var jgZStr = String(jgZval).padStart(2, '0');
+            if (!jgOccupiedZ[jgZStr]) {
+              jgZ = jgZStr;
+              jgZFound = true;
+            }
+          }
+        }
+        var jgFile   = 'w/' + jgItemId + jgZ + '.txt';
+        var jgCreate = fileSave(jgDrive, '/', jgFile, '', session, 'JG');
+        if (!jgCreate.success) return respondRetro(res, 'XXFailed to create player file');
+      }
 
       // Record session ownership so future move/SG commands can be authorised
-      _playerOwnership[session] = { itemId: jgItemId, mapId: jgMapId, drive: jgDrive };
+      _playerOwnership[session] = { itemId: jgItemId, mapId: '_L', drive: jgDrive };
 
       // Log join event to game console
       fileAppendJSON(jgDrive, '/', 'c.txt', 'JG ' + jgItemId + ' ' + jgAvatar, session, 'JG');
@@ -1415,9 +1436,9 @@ function handleCommand(req, res, raw) {
     }
 
     case 'SG': {
-      // Start Game: rename the empty player slot file to include the player's avatar.
-      // Transitions the player from "joined" (8-char slot file) to "active"
-      // (>8-char file whose name encodes avatar and optional movement buffer).
+      // Start Game: move the player from the lobby (w/ directory) to a world map.
+      // Finds the 8-char lobby slot file in w/, creates an active player file in
+      // w/[mapId]/ that encodes the avatar, then removes the lobby slot file.
       // Parameters: d=drive, id=itemId (e.g. "Sa"), av=avatar (e.g. "B1D0C2")
       var sgDrive  = String(params.d  || '');
       var sgItemId = String(params.id || '');
@@ -1432,39 +1453,53 @@ function handleCommand(req, res, raw) {
       var sgOwner = _playerOwnership[session];
       if (!sgOwner || sgOwner.itemId !== sgItemId)           return respondRetro(res, 'XXUnauthorized');
 
-      // Determine which map the player is on (same rule as JG)
-      var sgMapId = (sgItemId.charAt(0) === 'S') ? 'A1' : 'L8';
-
-      // Scan the map directory to find the 8-char empty slot file for this player
-      var sgList = fileList(sgDrive, 'w/' + sgMapId, null, session);
-      if (sgList.success && sgList.listing) {
-        var sgFiles = sgList.listing.split('\n');
-        for (var sgi = 0; sgi < sgFiles.length; sgi++) {
-          var sgFile = sgFiles[sgi].trim();
-          if (!sgFile) continue;
-          var sgBase = sgFile.substring(sgFile.lastIndexOf('/') + 1);
-          // Match the 8-char empty slot pattern: "[itemId][zz].txt"
-          var sgSlotMatch = sgBase.match(/^([A-Z][a-z])(\d{2})\.txt$/);
+      // Find the 8-char lobby slot file in w/ for this player
+      var sgLobbyList = fileList(sgDrive, 'w', null, session);
+      var sgLobbyBase = null;
+      var sgZLocation = null;
+      if (sgLobbyList.success && sgLobbyList.listing) {
+        var sgLobbyFiles = sgLobbyList.listing.split('\n');
+        for (var sgi = 0; sgi < sgLobbyFiles.length; sgi++) {
+          var sgLF = sgLobbyFiles[sgi].trim();
+          if (!sgLF) continue;
+          var sgLB = sgLF.substring(sgLF.lastIndexOf('/') + 1);
+          var sgSlotMatch = sgLB.match(/^([A-Z][a-z])(\d{2})\.txt$/);
           if (sgSlotMatch && sgSlotMatch[1] === sgItemId) {
-            var sgZLocation = sgSlotMatch[2]; // e.g. "43"
-            var sgNewBase   = sgItemId + sgZLocation + sgAvatar + '.txt'; // e.g. "Sa43B1D0C2.txt"
-            var sgRename = fileRename(sgDrive, 'w/' + sgMapId, sgBase, sgNewBase, session);
-            if (sgRename.success) {
-              logRequest(req, 'SG', sgDrive, sgItemId, session, { success: true });
-              return respondRetro(res, 'OK' + sgItemId);
-            } else {
-              return respondRetro(res, 'XXRename failed: ' + (sgRename.error || ''));
-            }
+            sgLobbyBase = sgLB;
+            sgZLocation = sgSlotMatch[2];
+            break;
           }
         }
       }
 
-      return respondRetro(res, 'XXPlayer file not found');
+      if (!sgLobbyBase) return respondRetro(res, 'XXPlayer not found in lobby');
+
+      // Determine target world map: Team S → A1, Team T → L8
+      var sgMapId = (sgItemId.charAt(0) === 'S') ? 'A1' : 'L8';
+
+      // Create the active player file in the world map directory
+      var sgWorldFile = 'w/' + sgMapId + '/' + sgItemId + sgZLocation + sgAvatar + '.txt';
+      var sgWorldSave = fileSave(sgDrive, '/', sgWorldFile, '', session, 'SG');
+      if (!sgWorldSave.success) return respondRetro(res, 'XXFailed to create world player: ' + sgWorldSave.error);
+
+      // Remove the lobby slot file; roll back world file if deletion fails
+      var sgLobbyDelete = fileDelete(sgDrive, '/', 'w/' + sgLobbyBase, session);
+      if (!sgLobbyDelete.success) {
+        var sgRollback = fileDelete(sgDrive, '/', sgWorldFile, session);
+        var rollbackMsg = sgRollback.success ? ' (world file rolled back)' : ' (rollback also failed - state inconsistent)';
+        return respondRetro(res, 'XXFailed to remove lobby slot: ' + sgLobbyDelete.error + rollbackMsg);
+      }
+
+      // Update player ownership to reflect the world map
+      _playerOwnership[session] = { itemId: sgItemId, mapId: sgMapId, drive: sgDrive };
+
+      logRequest(req, 'SG', sgDrive, sgItemId, session, { success: true });
+      return respondRetro(res, 'OK' + sgItemId);
     }
 
     case 'RF': {
       // Refresh: return complete game state in Queville format.
-      // Parameters: d=drive, m=mapId (e.g. "A1")
+      // Parameters: d=drive, m=mapId (e.g. "A1" or "_L" for lobby)
       // Response: Queville format "[items]-[player1]-[player2]..."
       //   items   – concatenated 4-char codes for items/empty slots, e.g. "Sa43Tb22"
       //   players – each section is "[playerId][zz][avatarStr]" or
@@ -1475,15 +1510,20 @@ function handleCommand(req, res, raw) {
       //   8 chars total ("Sa43.txt")         → item or empty player slot
       //   >8 chars total ("Sa43B1D0C2.txt")  → active player with avatar
       //   >8 chars with dash ("Sa43B1D0C2-NSW.txt") → active player with movements
+      //
+      // Map ID "_L" refers to the lobby (w/ directory); other IDs refer to w/[id]/.
       var rfDrive = String(params.d || '');
       var rfMapId = String(params.m || '');
 
-      if (!isValidDriveName(rfDrive))            return respondRetro(res, 'XXInvalid drive');
-      if (!/^[A-Z][1-9A-Z]$/.test(rfMapId))      return respondRetro(res, 'XXInvalid map ID');
-      if (!drives[rfDrive])                       return respondRetro(res, 'XXDrive not found');
+      if (!isValidDriveName(rfDrive))                    return respondRetro(res, 'XXInvalid drive');
+      if (!/^(_L|[A-Z][1-9A-Z])$/.test(rfMapId))        return respondRetro(res, 'XXInvalid map ID');
+      if (!drives[rfDrive])                              return respondRetro(res, 'XXDrive not found');
 
-      // List all files in w/[mapId]/ and classify by filename length
-      var rfList = fileList(rfDrive, 'w/' + rfMapId, null, session);
+      // Determine directory: lobby (_L) maps to w/, world maps to w/[mapId]/
+      var rfPath = (rfMapId === '_L') ? 'w' : 'w/' + rfMapId;
+
+      // List all files in the map directory and classify by filename length
+      var rfList = fileList(rfDrive, rfPath, null, session);
       var rfItems = '';
       var rfPlayers = [];
       if (rfList.success && rfList.listing) {
