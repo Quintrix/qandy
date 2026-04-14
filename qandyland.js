@@ -1087,8 +1087,9 @@ function bigbang(driveName, session) {
     var lItemZ    = lobbyItems[lbi].substring(2, 4); // e.g. "33", "44"
     var lItemData = lobbyItems[lbi].substring(4, 6); // e.g. "Za", "Sa"
     var lIsSlot   = /^[A-Z][a-z]$/.test(lItemId) && lItemData === 'Za';
-    if (lIsSlot && lSeenIds[lItemId]) continue;
-    if (lIsSlot) lSeenIds[lItemId] = true;
+    if (!lIsSlot) continue; // Static items (flagpoles etc.) use the static map; only slots need server files
+    if (lSeenIds[lItemId]) continue;
+    lSeenIds[lItemId] = true;
     var lFile   = lItemId + lItemZ + '.txt';
     var lResult = fileSave(driveName, '/', 'w/' + lFile, '', session, 'bigbang');
     if (lResult.success) {
@@ -1399,6 +1400,17 @@ function handleCommand(req, res, raw) {
 
       // Record session ownership so future move/SG commands can be authorised
       _playerOwnership[session] = { itemId: jgItemId, mapId: '_L', drive: jgDrive };
+
+      // Update p.txt to mark this slot as claimed so GS reflects the correct state
+      var jgPLoad = fileLoad(jgDrive, '/', 'p.txt', session);
+      if (jgPLoad.success) {
+        var jgEscId = jgItemId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        var jgPUpdated = jgPLoad.content.replace(
+          new RegExp('^(' + jgEscId + ')=.*$', 'm'),
+          '$1=' + jgAvatar
+        );
+        fileSave(jgDrive, '/', 'p.txt', jgPUpdated, session, 'JG');
+      }
 
       // Log join event to game console
       fileAppendJSON(jgDrive, '/', 'c.txt', 'JG ' + jgItemId + ' ' + jgAvatar, session, 'JG');
