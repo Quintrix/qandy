@@ -288,15 +288,12 @@ window.gfxServers = async function() {
   }
 };
 
-async function gfxFetch(filename) {
+async function gfxFetchMap() {
   try {
-    await print("Loading " + filename + "...\n");
-    var gfxContent = await qdosLoad(filename);
-    
-    if (!gfxContent) {
-      throw new Error("Failed to load " + filename);
-    }
-    
+    await print("Loading capflag.gfx...\n");
+    var gfxContent = await qdosLoad("capflag.gfx");
+    if (!gfxContent) { throw new Error("Failed to load capflag.gfx"); }
+
     var lines = gfxContent.split('\n').filter(line => line.trim());
     window.gfxSector = {}; // Clear existing data
     
@@ -304,11 +301,14 @@ async function gfxFetch(filename) {
       var line = lines[i].trim();
       if (!line) continue;
       
-      var parts = line.split('=');
-      if (parts.length !== 2) continue;
+      var eqIdx = line.indexOf('=');
+      if (eqIdx < 0) continue;
       
-      var sectorId = parts[0];
-      var [mapData, itemData] = parts[1].split('.');
+      var sectorId = line.substring(0, eqIdx);
+      var rest = line.substring(eqIdx + 1);
+      var dotIdx = rest.indexOf('.');
+      var mapData = dotIdx >= 0 ? rest.substring(0, dotIdx) : rest;
+      var itemData = dotIdx >= 0 ? rest.substring(dotIdx + 1) : '';
       
       // Parse tiles (first 192 chars = 96 tiles × 2 chars each)
       var tileString = mapData.substring(0, 192);
@@ -317,7 +317,7 @@ async function gfxFetch(filename) {
         tiles.push(tileString.substring(t, t + 2));
       }
       
-      // Parse exits (remaining chars after tiles)
+      // Parse exits (remaining chars after tiles, 2 chars each)
       var exitString = mapData.substring(192);
       var exits = [];
       for (var e = 0; e < exitString.length; e += 2) {
@@ -327,10 +327,10 @@ async function gfxFetch(filename) {
       // Parse items (6 chars each: 2=id, 2=z, 2=data)
       var items = [];
       if (itemData) {
-        for (var j = 0; j < itemData.length; j += 6) {
+        for (var j = 0; j + 6 <= itemData.length; j += 6) {
           items.push({
-            id: itemData.substring(j, j + 2),
-            z: parseInt(itemData.substring(j + 2, j + 4), 10),
+            id:   itemData.substring(j,     j + 2),
+            z:    parseInt(itemData.substring(j + 2, j + 4), 10),
             data: itemData.substring(j + 4, j + 6)
           });
         }
@@ -338,8 +338,8 @@ async function gfxFetch(filename) {
       
       window.gfxSector[sectorId] = {
         tiles: tiles,   // 96-element array
-        exits: exits,   // variable length array
-        items: items    // variable length array of objects
+        exits: exits,   // variable-length array of 2-char sector codes
+        items: items    // variable-length array of {id, z, data} objects
       };
     }
     
@@ -347,7 +347,7 @@ async function gfxFetch(filename) {
     return true;
     
   } catch (e) {
-    await print("Error loading " + filename + ": " + e.message + "\n");
+    await print("Error loading capflag.gfx: " + e.message + "\n");
     return false;
   }
 }
