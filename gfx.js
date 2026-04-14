@@ -288,26 +288,12 @@ window.gfxServers = async function() {
   }
 };
 
-// gfxFetchMap() – Load capflag.gfx from HOST and parse into window.gfxSector.
-//
-// window.gfxSector = {};
-// gfxSector["A1"] = {
-//   tiles: ["U0","U0","U0",...],     // 96 elements, indexed by z-location
-//   exits: ["A2","B1"],              // array of valid exit sectors
-//   items: [{id:"Sa", z:44, data:"Za"}, ...]  // static items
-// }
-//
-// Called by capflag.js (or other scripts) when ready to load map data.
-// Returns true on success, false on failure.
 async function gfxFetchMap() {
   try {
     await print("Loading capflag.gfx...\n");
     var gfxContent = await qdosLoad("capflag.gfx");
-    
-    if (!gfxContent) {
-      throw new Error("Failed to load capflag.gfx");
-    }
-    
+    if (!gfxContent) { throw new Error("Failed to load capflag.gfx"); }
+
     var lines = gfxContent.split('\n').filter(line => line.trim());
     window.gfxSector = {}; // Clear existing data
     
