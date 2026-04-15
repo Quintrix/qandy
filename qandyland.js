@@ -1278,12 +1278,12 @@ function parsePlayerManifest(content) {
 //          state codes: JS (just starting), IP (in progress)
 //          slot format: <playerCode><avatarData> for occupied, <playerCode> for empty
 //
-//   RF – Refresh: return complete map state in Queville format
+//   RF – Refresh: return complete map state as a comma-separated item list
 //        d = drive name          (safe chars only)
 //        m = map ID              (e.g. "A1")
-//        Response: Queville format "[items]-[player1]-[player2]..."
-//          items   – concatenated 4-char codes for non-player items (ItemID + zz)
-//          players – "[playerId][zz][avatarStr]" e.g. "Sa43B1D0"
+//        Response: comma-separated codes, e.g. "Sa43,Tb22,Sa43B1D0C2"
+//          plain item / empty slot: "<id(2)><z(2-digit)>"          e.g. "Sa43"
+//          item with avatar:        "<id(2)><z(2-digit)><avatarStr>" e.g. "Sa43B1D0C2"
 
 // Returns true if the drive name contains only safe filesystem characters.
 function isValidDriveName(drive) {
@@ -1365,7 +1365,7 @@ function handleCommand(req, res, raw) {
 
       if (!isValidDriveName(jgDrive))              return respondRetro(res, 'XXInvalid drive');
       if (!/^[A-Z][a-z]$/.test(jgItemId))          return respondRetro(res, 'XXInvalid item ID');
-      if (!/^[A-Za-z0-9]{2,10}$/.test(jgAvatar))   return respondRetro(res, 'XXInvalid avatar');
+      if (!/^[A-Za-z0-9]{2,20}$/.test(jgAvatar))   return respondRetro(res, 'XXInvalid avatar');
       if (!drives[jgDrive])                         return respondRetro(res, 'XXDrive not found');
 
       // Scan lobby directory (w/) for a file starting with this itemId
@@ -1430,7 +1430,7 @@ function handleCommand(req, res, raw) {
 
       if (!isValidDriveName(sgDrive))                        return respondRetro(res, 'XXInvalid drive');
       if (!/^[A-Z][a-z]$/.test(sgItemId))                   return respondRetro(res, 'XXInvalid item ID');
-      if (!/^[A-Za-z0-9]{2,10}$/.test(sgAvatar))            return respondRetro(res, 'XXInvalid avatar');
+      if (!/^[A-Za-z0-9]{2,20}$/.test(sgAvatar))            return respondRetro(res, 'XXInvalid avatar');
       if (!drives[sgDrive])                                  return respondRetro(res, 'XXDrive not found');
 
       // Verify session owns this player slot (set during JG)
@@ -1482,18 +1482,17 @@ function handleCommand(req, res, raw) {
     }
 
     case 'RF': {
-      // Refresh: return complete game state in Queville format.
+      // Refresh: return complete map state as a comma-separated item list.
       // Parameters: d=drive, m=mapId (e.g. "A1" or "_L" for lobby)
-      // Response: Queville format "[items]-[player1]-[player2]..."
-      //   items   – concatenated 4-char codes for items/empty slots, e.g. "Sa43Tb22"
-      //   players – each section is "[playerId][zz][avatarStr]" or
-      //             "[playerId][zz][avatarStr]-[movements]", e.g. "Sa43B1D0C2" or
-      //             "Sa43B1D0C2-NSW"
+      // Response: comma-separated item codes, e.g. "Sa43,Tb22,Sa43B1D0C2"
+      //   Each code is "<id(2)><z(2-digit)>" for plain items / empty slots,
+      //   or "<id(2)><z(2-digit)><avatarStr>" for items with avatar data (e.g. active players).
+      //   Avatar strings may also carry a movements suffix: "<avatarStr>-<movements>".
       //
       // Filename length determines content type (no separate manifest needed):
-      //   8 chars total ("Sa43.txt")         → item or empty player slot
-      //   >8 chars total ("Sa43B1D0C2.txt")  → active player with avatar
-      //   >8 chars with dash ("Sa43B1D0C2-NSW.txt") → active player with movements
+      //   8 chars total ("Sa43.txt")               → plain item or empty player slot
+      //   >8 chars total ("Sa43B1D0C2.txt")         → item with avatar
+      //   >8 chars with dash ("Sa43B1D0C2-NSW.txt") → item with avatar and movements
       //
       // Map ID "_L" refers to the lobby (w/ directory); other IDs refer to w/[id]/.
       var rfDrive = String(params.d || '');
@@ -1506,10 +1505,9 @@ function handleCommand(req, res, raw) {
       // Determine directory: lobby (_L) maps to w/, world maps to w/[mapId]/
       var rfPath = (rfMapId === '_L') ? 'w' : 'w/' + rfMapId;
 
-      // List all files in the map directory and classify by filename length
+      // List all files in the map directory and build the comma-separated response
       var rfList = fileList(rfDrive, rfPath, null, session);
-      var rfItems = '';
-      var rfPlayers = [];
+      var rfAllItems = [];
       if (rfList.success && rfList.listing) {
         var rfFiles = rfList.listing.split('\n');
         for (var rfi = 0; rfi < rfFiles.length; rfi++) {
@@ -1518,31 +1516,23 @@ function handleCommand(req, res, raw) {
           var rfBase = rfFile.substring(rfFile.lastIndexOf('/') + 1);
 
           if (rfBase.length === 8) {
-            // "Sa43.txt" = item or empty player slot (8 chars total)
+            // "Sa43.txt" = plain item or empty player slot
             var rfItemMatch = rfBase.match(/^([A-Z][a-z]\d{2})\.txt$/);
             if (rfItemMatch) {
-              rfItems += rfItemMatch[1]; // e.g. "Sa43"
+              rfAllItems.push(rfItemMatch[1]); // e.g. "Sa43"
             }
           } else if (rfBase.length > 8) {
-            // "Sa43B1D0C2.txt" or "Sa43B1D0C2-NSW.txt" = active player with avatar
+            // "Sa43B1D0C2.txt" or "Sa43B1D0C2-NSW.txt" = item with avatar (e.g. active player)
             var rfPlayerMatch = rfBase.match(/^([A-Z][a-z])(\d{2})(.+)\.txt$/);
             if (rfPlayerMatch) {
-              var rfPlayerId       = rfPlayerMatch[1]; // "Sa"
-              var rfPlayerZ        = rfPlayerMatch[2]; // "43"
-              var rfAvatarAndMoves = rfPlayerMatch[3]; // "B1D0C2" or "B1D0C2-NSW"
-              // Build player entry: "Sa43B1D0C2" or "Sa43B1D0C2-NSW"
-              rfPlayers.push(rfPlayerId + rfPlayerZ + rfAvatarAndMoves);
+              // Build full item entry: "<id><z><avatarAndMoves>"
+              rfAllItems.push(rfPlayerMatch[1] + rfPlayerMatch[2] + rfPlayerMatch[3]);
             }
           }
         }
       }
 
-      // Build Queville format: [items]-[player1]-[player2]...
-      var rfResponse = rfItems;
-      if (rfPlayers.length > 0) {
-        rfResponse += '-' + rfPlayers.join('-');
-      }
-
+      var rfResponse = rfAllItems.join(',');
       logRequest(req, 'RF', rfDrive, rfMapId, session, { success: true, result: rfResponse });
       return respondRetro(res, rfResponse);
     }
