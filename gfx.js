@@ -296,7 +296,7 @@ async function gfxFetchMap(filename) {
     if (!gfxContent) { throw new Error("Failed to load " + filename); }
 
     var lines = gfxContent.split('\n').filter(line => line.trim());
-    window.gfxSector = {}; // Clear existing data
+    window.gfxSectorData = {}; // Clear existing data
     
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i].trim();
@@ -337,14 +337,14 @@ async function gfxFetchMap(filename) {
         }
       }
       
-      window.gfxSector[sectorId] = {
+      window.gfxSectorData[sectorId] = {
         tiles: tiles,   // 96-element array
         exits: exits,   // variable-length array of 2-char sector codes
         items: items    // variable-length array of {id, z, data} objects
       };
     }
     
-    await print("Loaded " + Object.keys(window.gfxSector).length + " sectors.\n");
+    await print("Loaded " + Object.keys(window.gfxSectorData).length + " sectors.\n");
     return true;
     
   } catch (e) {
@@ -395,15 +395,7 @@ async function renderMapItems(mapId) {
   }
 }
 
-window.gfxRenderMap = function(sectorId) {
- if (!window.gfxSector || !window.gfxSector[sectorId]) { return; }
- var sector = window.gfxSector[sectorId];
-
- // Render tiles
- if (sector.tiles && sector.tiles.length > 0) {
-  gfxMap(sector.tiles.join(""));
- }
-
+window.gfxItems = function(items) {
  // Remove existing sector item elements
  var oldItems = document.querySelectorAll('.item');
  for (var k = 0; k < oldItems.length; k++) {
@@ -411,9 +403,9 @@ window.gfxRenderMap = function(sectorId) {
  }
 
  // Render items on top of tiles with click handlers
- if (sector.items) {
-  for (var b = 0; b < sector.items.length; b++) {
-   var item = sector.items[b];
+ if (items) {
+  for (var b = 0; b < items.length; b++) {
+   var item = items[b];
    var z = parseInt(item.z, 10);
    if (isNaN(z)) { continue; }
    var y = Math.floor(z / (mapx + 1));
@@ -438,6 +430,22 @@ window.gfxRenderMap = function(sectorId) {
    document.body.appendChild(c);
   }
  }
+}
+
+window.gfxChars = function(players) {
+ // Render characters/players (reserved for future use)
+}
+
+window.gfxSector = function(sectorId) {
+ if (!window.gfxSectorData || !window.gfxSectorData[sectorId]) { return; }
+ var sector = window.gfxSectorData[sectorId];
+
+ if (sector.tiles && sector.tiles.length > 0) {
+  gfxMap(sector.tiles.join(""));
+ }
+
+ gfxItems(sector.items);
+ gfxChars(null);
 }
 
 // Universal gateway for all 2-character commands to the multiplayer server.

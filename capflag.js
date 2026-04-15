@@ -96,7 +96,7 @@ window.flagConnect = async function() {
       await gfxInit();
       document.getElementById('txt').style.top = '50px';
       document.getElementById('txt').style.left = '350px';
-      gfxRenderMap("_L");
+      gfxSector("_L");
 
       // Start RF polling immediately so players already in the lobby are visible
       var lobbyDrive = drive;
@@ -165,7 +165,7 @@ function mainloop() {
 // Handle item clicks from gfx.js - called with the z-location of the clicked item.
 // Finds any items at that location in the current lobby sector and shows a Join Game popup.
 window.gfxZDown = function(z) {
- var sector = window.gfxSector && window.gfxSector["_L"];
+ var sector = window.gfxSectorData && window.gfxSectorData["_L"];
  if (!sector || !sector.items) return;
  var PUP = "";
  for (var i = 0; i < sector.items.length; i++) {
