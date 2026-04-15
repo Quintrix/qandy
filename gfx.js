@@ -105,7 +105,7 @@ window.gfxInit = async function() {
 window.tiles = function() {
 };
 
-window.gfxMap = function(scr) { 
+window.gfxTiles = function(scr) { 
  a=0;
  for (b=0; b<=mapy; b++) { 
   for (c=0; c<=mapx; c++) {
@@ -432,8 +432,106 @@ window.gfxItems = function(items) {
  }
 }
 
+// Convert a z-position to {x, y} tile coordinates using the current map width.
+function zToXY(z) {
+ var y = Math.floor(z / (mapx + 1));
+ var x = z - (y * (mapx + 1));
+ return { x: x, y: y };
+}
+
+// Internal: render a single player from a Queville player string.
+// playerStr format: "[playerId][zz][avatarStr]" e.g. "Sa43B1D0C2"
+function _renderPlayer(playerStr) {
+ if (!playerStr || playerStr.length < 6) return;
+ var playerId  = playerStr.substring(0, 2);
+ var zLocation = parseInt(playerStr.substring(2, 4), 10);
+ if (isNaN(zLocation)) return;
+ var remaining = playerStr.substring(4);
+ var dashIdx = remaining.indexOf('-');
+ var avatarStr = (dashIdx !== -1) ? remaining.substring(0, dashIdx) : remaining;
+ var movements = (dashIdx !== -1) ? remaining.substring(dashIdx + 1) : '';
+ if (avatarStr.length < 2) return;
+ _renderPlayerAvatar(playerId, zLocation, avatarStr, movements);
+}
+
+// Internal: render a player avatar at the given z-location by stacking 2-char part images.
+function _renderPlayerAvatar(playerId, z, avatarStr, movements) {
+ var coords = zToXY(z);
+ var top  = 32 + 20 + (coords.y * 32);
+ var left = 32 + 22 + (coords.x * 32);
+ for (var k = 0; k + 2 <= avatarStr.length; k += 2) {
+  var partCode = avatarStr.slice(k, k + 2);
+  var img = document.createElement('img');
+  img.className = 'mp-player';
+  img.dataset.player = playerId;
+  img.src = 'c/' + partCode + '.png';
+  img.style.position = 'absolute';
+  img.style.top  = top + 'px';
+  img.style.left = left + 'px';
+  img.style.zIndex = '125';
+  document.body.appendChild(img);
+ }
+ if (movements) _processPlayerMovements(playerId, movements);
+}
+
+// Internal: store movement buffer for a player (NSEW sequence).
+function _processPlayerMovements(playerId, movements) {
+ console.log('Player ' + playerId + ' movements: ' + movements);
+}
+
+// Internal: render non-player items from the items section of an RF response string.
+// rfStr is a sequence of 4-char codes: 2-char ItemID + 2-digit z-location, e.g. "Ab12Cd34".
+function _renderMPItems(rfStr) {
+ var old = document.querySelectorAll('.mp-item');
+ for (var i = 0; i < old.length; i++) { old[i].parentNode.removeChild(old[i]); }
+ for (var j = 0; j + 4 <= rfStr.length; j += 4) {
+  var iId = rfStr.slice(j, j + 2);
+  var z = parseInt(rfStr.slice(j + 2, j + 4), 10);
+  if (isNaN(z)) continue;
+  var coords = zToXY(z);
+  var img = document.createElement('img');
+  img.className = 'mp-item';
+  img.src = 'i/' + iId + '.png';
+  img.style.position = 'absolute';
+  img.style.top  = (32 + 20 + (coords.y * 32)) + 'px';
+  img.style.left = (32 + 22 + (coords.x * 32)) + 'px';
+  img.style.zIndex = '120';
+  document.body.appendChild(img);
+ }
+}
+
+// Render multiplayer characters/players from an array of player strings.
+// Each entry is a Queville player string: "[playerId][zz][avatarStr]" e.g. "Sa43B1D0".
+// Also supports static characters by passing {id, outfit, z} objects (calls char()).
 window.gfxChars = function(players) {
- // Render characters/players (reserved for future use)
+ var oldPlayers = document.querySelectorAll('.mp-player');
+ for (var p = 0; p < oldPlayers.length; p++) { oldPlayers[p].parentNode.removeChild(oldPlayers[p]); }
+ if (players) {
+  for (var i = 0; i < players.length; i++) {
+   var player = players[i];
+   if (!player) continue;
+   if (typeof player === 'string') {
+    _renderPlayer(player);
+   } else if (typeof player === 'object' && player.id) {
+    char(player.id, player.outfit || '', player.z || 0);
+   }
+  }
+ }
+}
+
+// Process an RF server response: render MP items and multiplayer players.
+// rfStr format: "[items]-[player1]-[player2]..."
+//   items   – concatenated 4-char codes: ItemID + zz (non-player items)
+//   players – each section: "[playerId][zz][avatarStr]" e.g. "Sa43B1D0"
+window.gfxPong = function(rfStr) {
+ var parts = rfStr.split('-');
+ var sectorData = parts[0];
+ _renderMPItems(sectorData);
+ var playerStrings = [];
+ for (var i = 1; i < parts.length; i++) {
+  if (parts[i]) playerStrings.push(parts[i]);
+ }
+ gfxChars(playerStrings);
 }
 
 window.gfxSector = function(sectorId) {
@@ -441,7 +539,7 @@ window.gfxSector = function(sectorId) {
  var sector = window.gfxSectorData[sectorId];
 
  if (sector.tiles && sector.tiles.length > 0) {
-  gfxMap(sector.tiles.join(""));
+  gfxTiles(sector.tiles.join(""));
  }
 
  gfxItems(sector.items);
@@ -558,6 +656,7 @@ async function splash(durationMs) {
 }
 
 
-// Backwards compatibility alias
+// Backwards compatibility aliases
 window.LMap = window.LoadMap;
-window.gfx = window.gfxMap;
+window.gfxMap = window.gfxTiles;
+window.gfx = window.gfxTiles;
