@@ -101,10 +101,6 @@ window.gfxInit = async function() {
   document.getElementById('txt').style.top = '50px';
   document.getElementById('txt').style.left = '350px';
 };
-
-window.tiles = function() {
-};
-
 window.gfxTiles = function(scr) { 
  a=0;
  for (b=0; b<=mapy; b++) { 
@@ -114,63 +110,6 @@ window.gfxTiles = function(scr) {
   }
  }
 }
-
-window.hpop=function() { document.getElementById("pop").style.visibility="hidden"; }
-window.pop=function(htm) {
-  const popup = document.getElementById("pop");
-  popup.innerHTML = "<p>" + htm;
-  
-  const TopYPos = 32 + 22; 
-  const TopXPos = 32 + 22;
-  
-  // Get popup dimensions after setting content
-  popup.style.visibility = "visible"; // Make visible to measure
-  const popupWidth = popup.offsetWidth;
-  const popupHeight = popup.offsetHeight;
-  
-  let PopX, PopY;
-  
-  switch (PopAlign) {
-    case "center":
-      // Center on the 256x384 game screen
-      PopX = TopXPos + ((256 - popupWidth) / 2);
-      PopY = TopYPos + ((384 - popupHeight) / 2);
-      break;
-      
-    case "click":
-      // Display at the clicked z-location
-      if (typeof lastClickedZ !== 'undefined') {
-        const clickY = Math.floor(lastClickedZ / (mapx + 1));
-        const clickX = lastClickedZ - (clickY * (mapx + 1));
-        PopX = TopXPos + (clickX * 32);
-        PopY = TopYPos + (clickY * 32);
-        
-        // Keep popup within screen bounds
-        if (PopX + popupWidth > TopXPos + 256) {
-          PopX = TopXPos + 256 - popupWidth;
-        }
-        if (PopY + popupHeight > TopYPos + 384) {
-          PopY = TopYPos + 384 - popupHeight;
-        }
-        if (PopX < TopXPos) PopX = TopXPos;
-      } else {
-        // Fallback to center if no click location
-        PopX = TopXPos + ((256 - popupWidth) / 2);
-        if (PopY < TopYPos) PopY = TopYPos;
-        PopY = TopYPos + ((384 - popupHeight) / 2);
-      }
-      break;
-      
-    default:
-      // Default to center
-      PopX = TopXPos + ((256 - popupWidth) / 2);
-      PopY = TopYPos + ((384 - popupHeight) / 2);
-  }
-  
-  popup.style.top = PopY + "px";
-  popup.style.left = PopX + "px";
-}
-
 window.gfxChar = function(C,O,Z) {
  let y=Math.floor(Z/(mapx+1)); let x=Z-(y*(mapx+1)); y--;
  idface="cf"+C; idbody="cb"+C; idwpn="cw"+C; idarm="ca"+C; idhat="ch"+C;
@@ -236,8 +175,7 @@ window.gfxChar = function(C,O,Z) {
   if (document.getElementById("ch"+PName)) { document.getElementById("ch"+PName).remove(); } 
  }
 }
-
-window.gfxZClick=function(z) {
+window.gfxZClick=function(z, clickedElement) {
   var zNum = parseInt(z, 10);
   // Map z-values are stored as 2-char strings (max z=95 for 8x12 grid)
   var zStr = ('0' + zNum).slice(-2);
@@ -310,7 +248,6 @@ window.gfxZClick=function(z) {
 
   if (htm) { pop(htm); }
 }
-
 window.gfxServers = async function() {
   var url = _registryUrl;
   if (!url) return { error: 'Error: no registry URL configured' };
@@ -325,7 +262,6 @@ window.gfxServers = async function() {
     return { error: 'Error: ' + (e.message || String(e)) };
   }
 };
-
 async function gfxFetchMap(filename) {
   filename = filename || "capflag.gfx";
   try {
@@ -392,7 +328,6 @@ async function gfxFetchMap(filename) {
     return false;
   }
 }
-
 async function renderMap(mapId) {
   try {
     // Load map tile data
@@ -413,7 +348,6 @@ async function renderMap(mapId) {
     throw new Error("Failed to render map: " + error.message);
   }
 }
-
 async function renderMapItems(mapId) {
   try {
     // Get directory listing for this map
@@ -434,7 +368,6 @@ async function renderMapItems(mapId) {
     console.warn("Failed to render items:", error.message);
   }
 }
-
 window.gfxItems = function(items) {
  // Remove existing sector item elements
  var oldItems = document.querySelectorAll('.item');
@@ -477,9 +410,9 @@ function zToXY(z) {
  return { x: x, y: y };
 }
 
+function _renderPlayer(playerStr) {
 // Internal: render a single player from a Queville player string.
 // playerStr format: "[playerId][zz][avatarStr]" e.g. "Sa43B1D0C2"
-function _renderPlayer(playerStr) {
  if (!playerStr || playerStr.length < 6) return;
  var playerId  = playerStr.substring(0, 2);
  var zLocation = parseInt(playerStr.substring(2, 4), 10);
@@ -492,12 +425,12 @@ function _renderPlayer(playerStr) {
  _renderPlayerAvatar(playerId, zLocation, avatarStr, movements);
 }
 
+function _renderPlayerAvatar(playerId, z, avatarStr, movements) {
 // Internal: render a player avatar at the given z-location by stacking 2-char part images.
 // Parts are categorised by their first letter (matching the gfxChar() convention):
 //   face/head – A B E F  (z-index 151)
 //   body      – C D G H  (z-index 150, rendered first so head appears on top)
 //   hat/other – everything else (z-index 152)
-function _renderPlayerAvatar(playerId, z, avatarStr, movements) {
  var coords = zToXY(z);
  var top  = 32 + 20 + (coords.y * 32);
  var left = 32 + 22 + (coords.x * 32);
@@ -543,6 +476,7 @@ function _processPlayerMovements(playerId, movements) {
  console.log('Player ' + playerId + ' movements: ' + movements);
 }
 
+function _renderMPItems(rfStr) {
 // Internal: render all dynamic items from an RF response string.
 // rfStr is a comma-separated list of item codes.
 // Each code: "<id(2)><z(2-digit)>" for plain items/empty slots,
@@ -551,7 +485,6 @@ function _processPlayerMovements(playerId, movements) {
 // Plain items are rendered as images from i/.
 // Items with avatar are rendered as layered character sprites via _renderPlayer.
 // Stores all parsed entries in gfxSectorData[gfxCurrentSector].dyn as {id, z, avatar} objects.
-function _renderMPItems(rfStr) {
  var old = document.querySelectorAll('.mp-item, .mp-player');
  for (var i = 0; i < old.length; i++) { old[i].parentNode.removeChild(old[i]); }
  var dynItems = [];
@@ -590,11 +523,11 @@ function _renderMPItems(rfStr) {
  }
 }
 
+window.gfxChars = function(players) {
 // Render multiplayer characters/players from an array of player strings.
 // Each entry is a Queville player string: "[playerId][zz][avatarStr]" e.g. "Sa43B1D0".
 // Also supports static characters by passing {id, outfit, z} objects (calls gfxChar()).
 // Stores the player array in gfxSectorData[gfxCurrentSector].chars when players is non-null.
-window.gfxChars = function(players) {
  var oldPlayers = document.querySelectorAll('.mp-player');
  for (var p = 0; p < oldPlayers.length; p++) { oldPlayers[p].parentNode.removeChild(oldPlayers[p]); }
  if (players) {
@@ -613,11 +546,11 @@ window.gfxChars = function(players) {
  }
 }
 
+window.gfxPong = function(rfStr) {
 // Process an RF server response: render all dynamic items and players.
 // rfStr format: comma-separated item codes, e.g. "Sa43,Tb22,Sa43B1D0C2,Tb22F0H0-NSW"
 //   plain item / empty slot: "<id(2)><z(2-digit)>"           e.g. "Sa43"
 //   item with avatar:        "<id(2)><z(2-digit)><avatarStr>" e.g. "Sa43B1D0C2"
-window.gfxPong = function(rfStr) {
  _renderMPItems(rfStr);
 }
 
@@ -641,11 +574,12 @@ window.gfxSector = function(sectorId) {
  for (var q = 0; q < oldItems.length; q++) { oldItems[q].parentNode.removeChild(oldItems[q]); }
 }
 
+window.gfxPing = async function(command, dataObject) {
 // Universal gateway for all 2-character commands to the multiplayer server.
 // command    – 2-char uppercase command code, e.g. "BB"
 // dataObject – plain JS object whose keys/values are appended as form fields
 // HOST sends directly via fetch(); GUEST proxies through HOST via postMessage.
-window.gfxPing = async function(command, dataObject) {
+
   if (!command || !/^[A-Z]{2}$/.test(command)) throw new Error('gfxPing: invalid command');
 
   // Build form-encoded body: c=<command>&key=val&...
@@ -678,6 +612,7 @@ window.gfxPing = async function(command, dataObject) {
   }
 };
 
+window.gfxCreation = async function(drive, mapString, players, isRound) {
 //   drive     – server drive to build world on (e.g. "gfx")
 //   mapString – topology string of 2-char map IDs, e.g. "A1A2A3B1B2B3"
 //   players   – player string of concatenated 2-char codes, e.g. "SaSbScTaTbTc"
@@ -688,7 +623,7 @@ window.gfxPing = async function(command, dataObject) {
 // Aa-Zz = huge game (26 rows wide, 26 rows tall)
 
 // Compatibility wrapper: delegates to the universal gfxPing gateway.
-window.gfxCreation = async function(drive, mapString, players, isRound) {
+
   return await gfxPing("BB", {
     d: drive,
     m: mapString,
@@ -702,13 +637,67 @@ window.gfxCreation = async function(drive, mapString, players, isRound) {
 //   state prefix: JS = just starting (no active players), IP = in progress
 //   each dot-separated slot: <playerCode><avatarData> if occupied, <playerCode> if empty
 window.gfxGameState = async function(drive) {
+
   return await gfxPing("GS", { d: drive });
 };
 
 splash(1000);
-
 qdosScript("gfx-itemid.js");
-
+window.hpop=function() { document.getElementById("pop").style.visibility="hidden"; }
+window.pop=function(htm) {
+  const popup = document.getElementById("pop");
+  popup.innerHTML = "<p>" + htm;
+  
+  const TopYPos = 32 + 22; 
+  const TopXPos = 32 + 22;
+  
+  // Get popup dimensions after setting content
+  popup.style.visibility = "visible"; // Make visible to measure
+  const popupWidth = popup.offsetWidth;
+  const popupHeight = popup.offsetHeight;
+  
+  let PopX, PopY;
+  
+  switch (PopAlign) {
+    case "center":
+      // Center on the 256x384 game screen
+      PopX = TopXPos + ((256 - popupWidth) / 2);
+      PopY = TopYPos + ((384 - popupHeight) / 2);
+      break;
+      
+    case "click":
+      // Display at the clicked z-location
+      if (typeof lastClickedZ !== 'undefined') {
+        const clickY = Math.floor(lastClickedZ / (mapx + 1));
+        const clickX = lastClickedZ - (clickY * (mapx + 1));
+        PopX = TopXPos + (clickX * 32);
+        PopY = TopYPos + (clickY * 32);
+        
+        // Keep popup within screen bounds
+        if (PopX + popupWidth > TopXPos + 256) {
+          PopX = TopXPos + 256 - popupWidth;
+        }
+        if (PopY + popupHeight > TopYPos + 384) {
+          PopY = TopYPos + 384 - popupHeight;
+        }
+        if (PopX < TopXPos) PopX = TopXPos;
+      } else {
+        // Fallback to center if no click location
+        PopX = TopXPos + ((256 - popupWidth) / 2);
+        if (PopY < TopYPos) PopY = TopYPos;
+        PopY = TopYPos + ((384 - popupHeight) / 2);
+      }
+      break;
+      
+    default:
+      // Default to center
+      PopX = TopXPos + ((256 - popupWidth) / 2);
+      PopY = TopYPos + ((384 - popupHeight) / 2);
+  }
+  
+  popup.style.top = PopY + "px";
+  popup.style.left = PopX + "px";
+}
 async function splash(durationMs) {
   _CURSOR=CURSOR; CURSOR=0;
   await print("\n\n\n");
@@ -750,8 +739,8 @@ async function splash(durationMs) {
   window.GFX=1;
 }
 
-
 // Backwards compatibility aliases
 window.LMap = window.LoadMap;
 window.gfxMap = window.gfxTiles;
 window.gfx = window.gfxTiles;
+window.tiles = function() {};
