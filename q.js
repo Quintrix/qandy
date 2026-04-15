@@ -75,7 +75,7 @@ function oldinput(l) {
   if (PWear.indexOf("La")>-1) {
   	if (l.charAt(0)=="/") {
   	 codes=[]; codes=l.split(" ");
-    if (codes[0].substr(0, 2)=="/t") { EraseAll(); PMap=codes[1]; LMap(PMap); char(PName,PObj,PZ); }
+    if (codes[0].substr(0, 2)=="/t") { EraseAll(); PMap=codes[1]; LMap(PMap); gfxChar(PName,PObj,PZ); }
     if (codes[0].substr(0, 2)=="/i") {
      if (codes[2]) { 
       maps[PMap]=maps[PMap]+codes[1]+PZ+codes[2];
@@ -84,7 +84,7 @@ function oldinput(l) {
      }
      EraseAll();
      LMap(PMap);
-     char(PName,PObj,PZ);
+     gfxChar(PName,PObj,PZ);
     } 
     if (codes[0].substr(0, 2)=="/d") { b=new Date(); c=new Date(b.getTime()+60*1000); tstamp=pad(c.getMinutes())+pad(c.getSeconds()); if (drop[PMap]) { if (drop[PMap].indexOf("--------")>-1) { drop[PMap]=drop[PMap].replace("--------", codes[1]+PZ+tstamp); } else { drop[PMap]=drop[PMap]+codes[1]+PZ+tstamp; }} else { drop[PMap]=codes[1]+PZ+tstamp; }}
     if (codes[0].substr(0, 2)=="/s") { if (codes[1]) { sign[PMap]=l.substring(l.indexOf(" ")+1); pop(sign[PMap]); } else { sign[PMap]=""; }}
@@ -194,7 +194,7 @@ function NewChar(a) {
   } else {
   	if (a.length==2) {
   	 if (a.charAt(0)=="F") { PObj=a+"H0"; } else { PObj=a+"D0"; }
-    char(PName,PObj,PZ); PForce="hidden"; hpop(); mainloop();
+    gfxChar(PName,PObj,PZ); PForce="hidden"; hpop(); mainloop();
   	} else {  	
     PX=2; PY=9; PZ=(PY*(mapx+1))+PX;
     pop("<p>Male or Female?<br><a href=\"javascript:NewChar(\'M\');\"><img src=\"c/B1.png\" height=128 width=64></a> &nbsp; <a href=\"javascript:NewChar(\'F\');\"><img src=\"c/F5.png\" height=128 width=64></a>");
@@ -238,7 +238,7 @@ function mainloop() {
   if (AllowMove) {
    PY=newY; PX=newX; PZ=newZ;
    if (newD=="R") { PObj=FaceR(PObj); } else { if (newD=="L") { PObj=FaceL(PObj); }}
-   char(PName,PObj,PZ);
+   gfxChar(PName,PObj,PZ);
    if (TMode) {
     pop(PZ+" "+maps[PMap].slice(PZ*2,(PZ*2)+2));
     if (TFill) { maps[PMap]=maps[PMap].slice(0,PZ*2)+TFill+maps[PMap].slice((PZ*2)+2,maps[PMap].length); gfx(maps[PMap]); }
@@ -403,7 +403,7 @@ function North() {
   a=a-1; if (a<65) { a=90; }
   PMap=String.fromCharCode(a)+String.fromCharCode(b);
   PY=11; PZ=88+PX; 
-  LMap(PMap); char(PName,PObj,PZ);
+  LMap(PMap); gfxChar(PName,PObj,PZ);
  }
 }
 
@@ -417,7 +417,7 @@ function South() {
   a=a+1; if (a>90) { a=65; }
   PMap=String.fromCharCode(a)+String.fromCharCode(b);
   PY=0; PZ=PX; 
-  LMap(PMap); char(PName,PObj,PZ);
+  LMap(PMap); gfxChar(PName,PObj,PZ);
  }
 }
 
@@ -431,7 +431,7 @@ function East() {
   b=b+1; if (b>122) { b=97; }
   PMap=String.fromCharCode(a)+String.fromCharCode(b);
   PX=PX-mapx; PZ=PZ-mapx; 
-  LMap(PMap); char(PName,PObj,PZ);
+  LMap(PMap); gfxChar(PName,PObj,PZ);
  }
 } 	
  	
@@ -445,7 +445,7 @@ function West() {
   b=b-1; if (b<97) { b=122; }
   PMap=String.fromCharCode(a)+String.fromCharCode(b);
   PX=PX+(mapx); PZ=PZ+(mapx); 
-  LMap(PMap); char(PName,PObj,PZ);
+  LMap(PMap); gfxChar(PName,PObj,PZ);
  }
 }
 
@@ -457,7 +457,7 @@ function XCity(a,b) {
   if (ilist[b].substring(0,2)=="Zm") { PZ=parseInt(ilist[b].substring(2,4)); PY=Math.floor(PZ/(mapx+1)); PX=PZ-(PY*(mapx+1)); }
  }
  qdosSave('player-z', String(PZ)).catch(function(){});
- char(PName,PObj,PZ);
+ gfxChar(PName,PObj,PZ);
 }
 
 function TileMode() {
@@ -677,8 +677,8 @@ function ClickItem(a) {
     stimer=setTimeout('hpop();',1000);
    }
   }   
-  if (i=="Zm") { EraseAll(); a=PMap.charCodeAt(0); b=PMap.charCodeAt(1); if (b>96&&b<123) { PMap=String.fromCharCode(a)+String.fromCharCode(b-58); } if (d>-1&&d<96) { PZ=parseInt(d); PY=Math.floor(PZ/(mapx+1)); PX=PZ-(PY*(mapx+1)); } AllowScroll=0; LMap(PMap); char(PName,PObj,PZ); }
-  if (i=="Ze") { EraseAll(); PMap=d; LMap(PMap); for (b=0;b<ilist.length;b++) { if (ilist[b].substring(0,2)=="Ze") { PZ=parseInt(ilist[b].substring(2,4)); PY=Math.floor(PZ/(mapx+1)); PX=PZ-(PY*(mapx+1)); qdosSave('player-z', String(PZ)).catch(function(){}); }} char(PName,PObj,PZ); }
+  if (i=="Zm") { EraseAll(); a=PMap.charCodeAt(0); b=PMap.charCodeAt(1); if (b>96&&b<123) { PMap=String.fromCharCode(a)+String.fromCharCode(b-58); } if (d>-1&&d<96) { PZ=parseInt(d); PY=Math.floor(PZ/(mapx+1)); PX=PZ-(PY*(mapx+1)); } AllowScroll=0; LMap(PMap); gfxChar(PName,PObj,PZ); }
+  if (i=="Ze") { EraseAll(); PMap=d; LMap(PMap); for (b=0;b<ilist.length;b++) { if (ilist[b].substring(0,2)=="Ze") { PZ=parseInt(ilist[b].substring(2,4)); PY=Math.floor(PZ/(mapx+1)); PX=PZ-(PY*(mapx+1)); qdosSave('player-z', String(PZ)).catch(function(){}); }} gfxChar(PName,PObj,PZ); }
   if (i=="Zf") { pop(sign[PMap]); }
   if (i=="Zg") { if (d!="..") { Fish(a); }}
   if (i=="Yb") {
@@ -698,7 +698,7 @@ function ClickItem(a) {
    	pop("Empty");
    }
   }
-  if (i=="Yi") { EraseAll(); a=PMap.charCodeAt(0); b=PMap.charCodeAt(1); if (b>96&&b<123) { PMap=String.fromCharCode(a)+String.fromCharCode(b-58); } if (d>-1&&d<96) { PZ=parseInt(d); PY=Math.floor(PZ/(mapx+1)); PX=PZ-(PY*(mapx+1)); } LMap(PMap); char(PName,PObj,PZ); }
+  if (i=="Yi") { EraseAll(); a=PMap.charCodeAt(0); b=PMap.charCodeAt(1); if (b>96&&b<123) { PMap=String.fromCharCode(a)+String.fromCharCode(b-58); } if (d>-1&&d<96) { PZ=parseInt(d); PY=Math.floor(PZ/(mapx+1)); PX=PZ-(PY*(mapx+1)); } LMap(PMap); gfxChar(PName,PObj,PZ); }
  }
 }
 
@@ -710,7 +710,7 @@ function Teleport(a) {
   	qdosSave('player-z', String(PZ)).catch(function(){});
   }
  }
- char(PName,PObj,PZ);
+ gfxChar(PName,PObj,PZ);
 }
 
 function PlantTomato(a) {
@@ -751,7 +751,7 @@ function clothes(b) {
  a="C"; if (PObj.indexOf("D")>-1) { a="D"; } else { if (PObj.indexOf("G")>-1) { a="G"; } else { if (PObj.indexOf("H")>-1) { a="H"; }}}
  PObj=PObj.substring(0,PObj.indexOf(a))+a+b+PObj.substring(PObj.indexOf(a)+2);
  // update PWear here
- hpop(); char(PName,PObj,PZ);
+ hpop(); gfxChar(PName,PObj,PZ);
 }
 
 function MenuChar(z) {
@@ -820,7 +820,7 @@ function Wear(a) {
  if (i.indexOf("L")>-1) {
   if (PObj.indexOf("I")>-1) { PObj=PObj.substring(0,PObj.indexOf("I"))+"I"+b+PObj.substring(PObj.indexOf("I"+2)); } else { PObj=PObj+"I"+b; }
   if (PWear.indexOf("L")>-1) { PWear=PWear.replace(/L./g, i) } else { PWear=PWear+i; }}
- hpop(); char(PName,PObj,PZ);
+ hpop(); gfxChar(PName,PObj,PZ);
 }
 
 function Remove(a) {
@@ -831,7 +831,7 @@ function Remove(a) {
   if (PObj.indexOf("I")>-1) { PObj=PObj.replace(/I./g, ""); }
   if (PWear.indexOf("L")>-1) { PWear=PObj.replace(/L./g, ""); }
  }
- hpop(); char(PName,PObj,PZ);
+ hpop(); gfxChar(PName,PObj,PZ);
 }
 
 function Sysop(a) {
@@ -896,7 +896,7 @@ function YesDelete(a) {
  items=[]; if (maps[PMap].length>194) { b=maps[PMap].substring(194); } 
  c=b.replace(i+z+d, "");  
  maps[PMap]=maps[PMap].substring(0,194)+c;
- EraseAll(); LMap(PMap); char(PName,PObj,PZ);
+ EraseAll(); LMap(PMap); gfxChar(PName,PObj,PZ);
 } 
 
 function Fish(a) {
