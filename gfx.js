@@ -427,9 +427,7 @@ window.gfxItems = function(items) {
      el.style.left = (parseInt(el.style.left) - (el.width - 32)) + "px";
     };
    })(c);
-   (function(itemZ) {
-    c.onclick = function() { gfxZClick(itemZ); };
-   })(z);
+   c.onclick = function() { gfxZClick(z); };
    document.body.appendChild(c);
   }
  }
@@ -525,6 +523,7 @@ function _renderMPItems(rfStr) {
   img.style.top  = (32 + 20 + (coords.y * 32)) + 'px';
   img.style.left = (32 + 22 + (coords.x * 32)) + 'px';
   img.style.zIndex = '120';
+  img.onclick = function() { gfxZClick(this.dataset.z, this); };
   document.body.appendChild(img);
  }
 }
