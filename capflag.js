@@ -154,6 +154,7 @@ window.NewChar = function(a) {
   } else {
   	if (a.length==2) {
   	 if (a.charAt(0)=="F") { PObj=a+"H0"; } else { PObj=a+"D0"; }
+    playerAvatarStr = PObj;
     PForce = "hidden";
     pop("Select Player<br>Hat to join game!");
   	} else {

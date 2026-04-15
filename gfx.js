@@ -508,28 +508,47 @@ function _processPlayerMovements(playerId, movements) {
  console.log('Player ' + playerId + ' movements: ' + movements);
 }
 
-// Internal: render non-player items from the items section of an RF response string.
-// rfStr is a sequence of 4-char codes: 2-char ItemID + 2-digit z-location, e.g. "Ab12Cd34".
-// Also stores parsed dynamic items in gfxSectorData[gfxCurrentSector].dyn.
+// Internal: render all dynamic items from an RF response string.
+// rfStr is a comma-separated list of item codes.
+// Each code: "<id(2)><z(2-digit)>" for plain items/empty slots,
+//            "<id(2)><z(2-digit)><avatarStr>" for items with avatar data (e.g. active players).
+// Avatar strings may include a movements suffix separated by "-": "<avatarStr>-<movements>".
+// Plain items are rendered as images from i/.
+// Items with avatar are rendered as layered character sprites via _renderPlayer.
+// Stores all parsed entries in gfxSectorData[gfxCurrentSector].dyn as {id, z, avatar} objects.
 function _renderMPItems(rfStr) {
- var old = document.querySelectorAll('.mp-item');
+ var old = document.querySelectorAll('.mp-item, .mp-player');
  for (var i = 0; i < old.length; i++) { old[i].parentNode.removeChild(old[i]); }
  var dynItems = [];
- for (var j = 0; j + 4 <= rfStr.length; j += 4) {
-  var iId = rfStr.slice(j, j + 2);
-  var z = parseInt(rfStr.slice(j + 2, j + 4), 10);
+ if (!rfStr) {
+  if (window.gfxCurrentSector && window.gfxSectorData && window.gfxSectorData[window.gfxCurrentSector]) {
+   window.gfxSectorData[window.gfxCurrentSector].dyn = dynItems;
+  }
+  return;
+ }
+ var entries = rfStr.split(',');
+ for (var j = 0; j < entries.length; j++) {
+  var entry = entries[j];
+  if (!entry || entry.length < 4) continue;
+  var iId = entry.slice(0, 2);
+  var z = parseInt(entry.slice(2, 4), 10);
   if (isNaN(z)) continue;
-  dynItems.push({ id: iId, z: z });
-  var coords = zToXY(z);
-  var img = document.createElement('img');
-  img.className = 'mp-item';
-  img.src = 'i/' + iId + '.png';
-  img.style.position = 'absolute';
-  img.style.top  = (32 + 20 + (coords.y * 32)) + 'px';
-  img.style.left = (32 + 22 + (coords.x * 32)) + 'px';
-  img.style.zIndex = '120';
-  img.onclick = function() { gfxZClick(this.dataset.z, this); };
-  document.body.appendChild(img);
+  var avatar = entry.length > 4 ? entry.slice(4) : '';
+  dynItems.push({ id: iId, z: z, avatar: avatar });
+  if (avatar) {
+   _renderPlayer(entry); // entry is "<id><z><avatarStr>", matching _renderPlayer's expected format
+  } else {
+   var coords = zToXY(z);
+   var img = document.createElement('img');
+   img.className = 'mp-item';
+   img.src = 'i/' + iId + '.png';
+   img.style.position = 'absolute';
+   img.style.top  = (32 + 20 + (coords.y * 32)) + 'px';
+   img.style.left = (32 + 22 + (coords.x * 32)) + 'px';
+   img.style.zIndex = '120';
+   img.onclick = function() { gfxZClick(this.dataset.z, this); };
+   document.body.appendChild(img);
+  }
  }
  if (window.gfxCurrentSector && window.gfxSectorData && window.gfxSectorData[window.gfxCurrentSector]) {
   window.gfxSectorData[window.gfxCurrentSector].dyn = dynItems;
@@ -559,19 +578,12 @@ window.gfxChars = function(players) {
  }
 }
 
-// Process an RF server response: render MP items and multiplayer players.
-// rfStr format: "[items]-[player1]-[player2]..."
-//   items   – concatenated 4-char codes: ItemID + zz (non-player items)
-//   players – each section: "[playerId][zz][avatarStr]" e.g. "Sa43B1D0"
+// Process an RF server response: render all dynamic items and players.
+// rfStr format: comma-separated item codes, e.g. "Sa43,Tb22,Sa43B1D0C2,Tb22F0H0-NSW"
+//   plain item / empty slot: "<id(2)><z(2-digit)>"           e.g. "Sa43"
+//   item with avatar:        "<id(2)><z(2-digit)><avatarStr>" e.g. "Sa43B1D0C2"
 window.gfxPong = function(rfStr) {
- var parts = rfStr.split('-');
- var sectorData = parts[0];
- _renderMPItems(sectorData);
- var playerStrings = [];
- for (var i = 1; i < parts.length; i++) {
-  if (parts[i]) playerStrings.push(parts[i]);
- }
- gfxChars(playerStrings);
+ _renderMPItems(rfStr);
 }
 
 window.gfxSector = function(sectorId) {
