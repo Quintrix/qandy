@@ -455,22 +455,47 @@ function _renderPlayer(playerStr) {
 }
 
 // Internal: render a player avatar at the given z-location by stacking 2-char part images.
+// Parts are categorised by their first letter (matching the char() convention):
+//   face/head – A B E F  (z-index 151)
+//   body      – C D G H  (z-index 150, rendered first so head appears on top)
+//   hat/other – everything else (z-index 152)
 function _renderPlayerAvatar(playerId, z, avatarStr, movements) {
  var coords = zToXY(z);
  var top  = 32 + 20 + (coords.y * 32);
  var left = 32 + 22 + (coords.x * 32);
+
+ // Split avatarStr into categorised buckets so we can render in the correct order.
+ var bodyParts = [], headParts = [], hatParts = [];
  for (var k = 0; k + 2 <= avatarStr.length; k += 2) {
-  var partCode = avatarStr.slice(k, k + 2);
-  var img = document.createElement('img');
-  img.className = 'mp-player';
-  img.dataset.player = playerId;
-  img.src = 'c/' + partCode + '.png';
-  img.style.position = 'absolute';
-  img.style.top  = top + 'px';
-  img.style.left = left + 'px';
-  img.style.zIndex = '125';
-  img.onclick = function() { gfxZClick(tileZ, t); };
-  document.body.appendChild(img);
+  var partCode  = avatarStr.slice(k, k + 2);
+  var firstChar = partCode.charAt(0).toUpperCase();
+  if ('CDGH'.indexOf(firstChar) !== -1)      { bodyParts.push(partCode); }
+  else if ('ABEF'.indexOf(firstChar) !== -1) { headParts.push(partCode); }
+  else                                        { hatParts.push(partCode); }
+ }
+
+ // Render: body (base) → head → hat, each layer getting a higher z-index.
+ var layers = [
+  { parts: bodyParts, zIndex: '150' },
+  { parts: headParts, zIndex: '151' },
+  { parts: hatParts,  zIndex: '152' }
+ ];
+ for (var li = 0; li < layers.length; li++) {
+  var layer = layers[li];
+  for (var pi = 0; pi < layer.parts.length; pi++) {
+   var img = document.createElement('img');
+   img.className = 'mp-player';
+   img.dataset.player = playerId;
+   img.src = 'c/' + layer.parts[pi] + '.png';
+   img.style.position = 'absolute';
+   img.style.top  = top + 'px';
+   img.style.left = left + 'px';
+   img.style.zIndex = layer.zIndex;
+   img.onclick = (function(capturedZ) {
+    return function() { gfxZClick(capturedZ, this); };
+   })(z);
+   document.body.appendChild(img);
+  }
  }
  if (movements) _processPlayerMovements(playerId, movements);
 }
