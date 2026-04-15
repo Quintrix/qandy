@@ -271,6 +271,9 @@ window.gfxZClick=function(z, clickedElement) {
   if (typeof window.zclick === 'function') {
     window.zclick(z, event);
   }
+  if (typeof window.onZClick === 'function') {
+    window.onZClick(z);
+  }
 }
 
 window.gfxServers = async function() {
@@ -425,7 +428,7 @@ window.gfxItems = function(items) {
     };
    })(c);
    (function(itemZ) {
-    c.onclick = function() { if (typeof window.gfxZDown === 'function') { window.gfxZDown(itemZ); } };
+    c.onclick = function() { gfxZClick(itemZ); };
    })(z);
    document.body.appendChild(c);
   }

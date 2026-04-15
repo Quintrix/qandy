@@ -11,6 +11,12 @@ var rfInterval = null;      // handle for the RF refresh timer
 var playerItemId = null;    // this client's chosen player slot ItemID (e.g. "Sa")
 var playerAvatarStr = "";   // this client's 4-char avatar string (e.g. "B0D0")
 
+// Game phase for click handler state machine.
+// 'idle'          – before connecting to a server
+// 'just starting' – connected to lobby (JS response), awaiting player slot selection
+// 'in progress'   – game active (IP response)
+window.gameState = 'idle';
+
 // Game console: master log of all game events, kept in sync with server c.txt
 window.gfxConsole = window.gfxConsole || [];
 
@@ -71,6 +77,7 @@ window.flagConnect = async function() {
     }
 
     if (gameState.startsWith("IP")) {
+      window.gameState = 'in progress';
       await print("Game in progress. Returning to server selection...\n");
       return flagConnect();
     }
@@ -97,6 +104,8 @@ window.flagConnect = async function() {
       document.getElementById('txt').style.top = '50px';
       document.getElementById('txt').style.left = '350px';
       gfxSector("_L");
+
+      window.gameState = 'just starting';
 
       // Start RF polling immediately so players already in the lobby are visible
       var lobbyDrive = drive;
@@ -161,25 +170,44 @@ function mainloop() {
 
 
 
-// @@ //
+// Game-specific click handler: routes clicks to the appropriate handler based on game state.
+window.onZClick = function(z) {
+ switch (window.gameState) {
+  case 'just starting':
+   handleLobbyClick(z);
+   break;
+  case 'in progress':
+   handleGameplayClick(z);
+   break;
+  default:
+   break;
+ }
+};
 
-// Handle item clicks from gfx.js - called with the z-location of the clicked item.
-// Finds any items at that location in the current lobby sector and shows a Join Game popup.
-window.gfxZDown = function(z) {
- var sector = window.gfxSectorData && window.gfxSectorData["_L"];
- if (!sector || !sector.items) return;
+// Handle a click in the lobby: find items at z and show a Join Game popup for player slots.
+function handleLobbyClick(z) {
  var PUP = "";
- for (var i = 0; i < sector.items.length; i++) {
-  var item = sector.items[i];
-  if (parseInt(item.z, 10) === z) {
-   var safeId = String(item.id).replace(/[^A-Za-z0-9]/g, '');
-   var name = (typeof window.ItemID === 'function') ? window.ItemID(safeId) : safeId;
-   var safeName = String(name).replace(/[<>&"']/g, '');
-   PUP += "<a href='javascript:joinGame(\"" + safeId + "\");'>Join Game (" + safeName + ")</a><br>";
+ var sector = window.gfxSectorData && window.gfxSectorData["_L"];
+ if (sector && sector.items) {
+  for (var i = 0; i < sector.items.length; i++) {
+   var item = sector.items[i];
+   if (parseInt(item.z, 10) === z) {
+    var safeId = String(item.id).replace(/[^A-Za-z0-9]/g, '');
+    if (safeId.match(/^[ST][a-z]$/)) { // player slot items: S or T team + lowercase letter (e.g. Sa, Tb)
+     var name = (typeof window.ItemID === 'function') ? window.ItemID(safeId) : safeId;
+     var safeName = String(name).replace(/[<>&"']/g, '');
+     PUP += "<a href='javascript:joinGame(\"" + safeId + "\");'>Join Game (" + safeName + ")</a><br>";
+    }
+   }
   }
  }
  if (PUP) { pop(PUP); }
-};
+}
+
+// Handle a click during active gameplay (future gameplay menu logic).
+function handleGameplayClick(z) {
+ // TODO: Implement gameplay click handling
+}
 
 // Step 3 of join flow: send JG (Join Game) command with chosen ItemID + avatar.
 // Server updates p.txt manifest and creates the player file in the map directory.
