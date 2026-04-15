@@ -171,7 +171,7 @@ window.pop=function(htm) {
   popup.style.left = PopX + "px";
 }
 
-window.char = function(C,O,Z) {
+window.gfxChar = function(C,O,Z) {
  let y=Math.floor(Z/(mapx+1)); let x=Z-(y*(mapx+1)); y--;
  idface="cf"+C; idbody="cb"+C; idwpn="cw"+C; idarm="ca"+C; idhat="ch"+C;
  face=""; body=""; wpn=""; arm=""; hat="";
@@ -343,7 +343,9 @@ async function gfxFetchMap(filename) {
       window.gfxSectorData[sectorId] = {
         tiles: tiles,   // 96-element array
         exits: exits,   // variable-length array of 2-char sector codes
-        items: items    // variable-length array of {id, z, data} objects
+        items: items,   // variable-length array of {id, z, data} objects
+        chars: [],      // character/player data for this sector
+        dyn:   []       // dynamic items for this sector
       };
     }
     
@@ -456,7 +458,7 @@ function _renderPlayer(playerStr) {
 }
 
 // Internal: render a player avatar at the given z-location by stacking 2-char part images.
-// Parts are categorised by their first letter (matching the char() convention):
+// Parts are categorised by their first letter (matching the gfxChar() convention):
 //   face/head – A B E F  (z-index 151)
 //   body      – C D G H  (z-index 150, rendered first so head appears on top)
 //   hat/other – everything else (z-index 152)
@@ -508,13 +510,16 @@ function _processPlayerMovements(playerId, movements) {
 
 // Internal: render non-player items from the items section of an RF response string.
 // rfStr is a sequence of 4-char codes: 2-char ItemID + 2-digit z-location, e.g. "Ab12Cd34".
+// Also stores parsed dynamic items in gfxSectorData[gfxCurrentSector].dyn.
 function _renderMPItems(rfStr) {
  var old = document.querySelectorAll('.mp-item');
  for (var i = 0; i < old.length; i++) { old[i].parentNode.removeChild(old[i]); }
+ var dynItems = [];
  for (var j = 0; j + 4 <= rfStr.length; j += 4) {
   var iId = rfStr.slice(j, j + 2);
   var z = parseInt(rfStr.slice(j + 2, j + 4), 10);
   if (isNaN(z)) continue;
+  dynItems.push({ id: iId, z: z });
   var coords = zToXY(z);
   var img = document.createElement('img');
   img.className = 'mp-item';
@@ -526,22 +531,29 @@ function _renderMPItems(rfStr) {
   img.onclick = function() { gfxZClick(this.dataset.z, this); };
   document.body.appendChild(img);
  }
+ if (window.gfxCurrentSector && window.gfxSectorData && window.gfxSectorData[window.gfxCurrentSector]) {
+  window.gfxSectorData[window.gfxCurrentSector].dyn = dynItems;
+ }
 }
 
 // Render multiplayer characters/players from an array of player strings.
 // Each entry is a Queville player string: "[playerId][zz][avatarStr]" e.g. "Sa43B1D0".
-// Also supports static characters by passing {id, outfit, z} objects (calls char()).
+// Also supports static characters by passing {id, outfit, z} objects (calls gfxChar()).
+// Stores the player array in gfxSectorData[gfxCurrentSector].chars when players is non-null.
 window.gfxChars = function(players) {
  var oldPlayers = document.querySelectorAll('.mp-player');
  for (var p = 0; p < oldPlayers.length; p++) { oldPlayers[p].parentNode.removeChild(oldPlayers[p]); }
  if (players) {
+  if (window.gfxCurrentSector && window.gfxSectorData && window.gfxSectorData[window.gfxCurrentSector]) {
+   window.gfxSectorData[window.gfxCurrentSector].chars = players.slice();
+  }
   for (var i = 0; i < players.length; i++) {
    var player = players[i];
    if (!player) continue;
    if (typeof player === 'string') {
     _renderPlayer(player);
    } else if (typeof player === 'object' && player.id) {
-    char(player.id, player.outfit || '', player.z || 0);
+    gfxChar(player.id, player.outfit || '', player.z || 0);
    }
   }
  }
@@ -564,6 +576,7 @@ window.gfxPong = function(rfStr) {
 
 window.gfxSector = function(sectorId) {
  if (!window.gfxSectorData || !window.gfxSectorData[sectorId]) { return; }
+ window.gfxCurrentSector = sectorId;
  var sector = window.gfxSectorData[sectorId];
 
  if (sector.tiles && sector.tiles.length > 0) {
@@ -571,7 +584,14 @@ window.gfxSector = function(sectorId) {
  }
 
  gfxItems(sector.items);
- gfxChars(null);
+
+ // Reset dynamic data for the sector and clear any rendered MP elements
+ sector.chars = [];
+ sector.dyn = [];
+ var oldPlayers = document.querySelectorAll('.mp-player');
+ for (var p = 0; p < oldPlayers.length; p++) { oldPlayers[p].parentNode.removeChild(oldPlayers[p]); }
+ var oldItems = document.querySelectorAll('.mp-item');
+ for (var q = 0; q < oldItems.length; q++) { oldItems[q].parentNode.removeChild(oldItems[q]); }
 }
 
 // Universal gateway for all 2-character commands to the multiplayer server.

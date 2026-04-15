@@ -23,7 +23,7 @@ for (z=0; z<96; z++) {
 
 gfx();
 
-char("Joe","A0E0",50);
+gfxChar("Joe","A0E0",50);
 
 function input(l) {
  line=""; if (mode=="txt") { mode="gfx"; }
