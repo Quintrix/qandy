@@ -171,44 +171,25 @@ function mainloop() {
 
 
 
-// Game-specific click handler: routes clicks to the appropriate handler based on game state.
-window.onZClick = function(z) {
+// Game-specific click handler: called by gfxZClick when a z-location is clicked.
+window.zdown = function(z) {
+ // z-location received; item selection handled via itemdown()
+};
+
+// Called by gfxZClick when the player selects an item from the popup (or clicks the only item).
+// fullItemString format: itemId(2) + z(2) + data (e.g. "Sa13Za")
+window.itemdown = function(fullItemString) {
+ var itemId = fullItemString.slice(0, 2);
  switch (window.gameState) {
   case 'just starting':
-   handleLobbyClick(z);
+   // Player slot items start with S or T (e.g. Sa, Tb)
+   if (/^[ST][a-z]$/.test(itemId)) { joinGame(itemId); }
    break;
   case 'in progress':
-   handleGameplayClick(z);
-   break;
-  default:
+   // TODO: Implement gameplay item handling
    break;
  }
 };
-
-// Handle a click in the lobby: find items at z and show a Join Game popup for player slots.
-function handleLobbyClick(z) {
- var PUP = "";
- var sector = window.gfxSectorData && window.gfxSectorData["_L"];
- if (sector && sector.items) {
-  for (var i = 0; i < sector.items.length; i++) {
-   var item = sector.items[i];
-   if (parseInt(item.z, 10) === z) {
-    var safeId = String(item.id).replace(/[^A-Za-z0-9]/g, '');
-    if (safeId.match(/^[ST][a-z]$/)) { // player slot items: S or T team + lowercase letter (e.g. Sa, Tb)
-     var name = (typeof window.ItemID === 'function') ? window.ItemID(safeId) : safeId;
-     var safeName = String(name).replace(/[<>&"']/g, '');
-     PUP += "<a href='javascript:joinGame(\"" + safeId + "\");'>Join Game (" + safeName + ")</a><br>";
-    }
-   }
-  }
- }
- if (PUP) { pop(PUP); }
-}
-
-// Handle a click during active gameplay (future gameplay menu logic).
-function handleGameplayClick(z) {
- // TODO: Implement gameplay click handling
-}
 
 // Step 3 of join flow: send JG (Join Game) command with chosen ItemID + avatar.
 // Server updates p.txt manifest and creates the player file in the map directory.

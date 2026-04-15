@@ -237,43 +237,78 @@ window.gfxChar = function(C,O,Z) {
  }
 }
 
-window.gfxZClick=function(z, clickedElement) {
-  // Store the clicked location for popup positioning
-  window.lastClickedZ = z;
-  
-  let y = Math.floor(z / (mapx + 1)); 
-  let x = z - (y * (mapx + 1));
-  let itemType = 'tile';
-  
-  if (clickedElement) {
-    if (clickedElement.className === 'char') {
-      itemType = 'character';
-    } else if (clickedElement.id && clickedElement.id.charAt(0) === 'i' &&
-               clickedElement.id.length > 1 && !isNaN(parseInt(clickedElement.id.charAt(1), 10))) {
-      itemType = 'item';
-    } else if (clickedElement.id && clickedElement.id.charAt(0) === 'd' &&
-               clickedElement.id.length > 1 && !isNaN(parseInt(clickedElement.id.charAt(1), 10))) {
-      itemType = 'droppedItem';
+window.gfxZClick=function(z) {
+  var zNum = parseInt(z, 10);
+  // Map z-values are stored as 2-char strings (max z=95 for 8x12 grid)
+  var zStr = ('0' + zNum).slice(-2);
+
+  // Call zdown() if defined by the game
+  if (typeof window.zdown === 'function') {
+    window.zdown(zNum);
+  }
+
+  // Collect all items at this z-location from all sector data sources
+  var items = [];
+  if (window.gfxCurrentSector && window.gfxSectorData && window.gfxSectorData[window.gfxCurrentSector]) {
+    var sector = window.gfxSectorData[window.gfxCurrentSector];
+
+    // Static sector items: {id, z, data}
+    if (sector.items) {
+      for (var si = 0; si < sector.items.length; si++) {
+        var item = sector.items[si];
+        if (parseInt(item.z, 10) === zNum) {
+          items.push(item.id + zStr + item.data);
+        }
+      }
+    }
+
+    // Dynamic multiplayer items: {id, z, avatar}
+    if (sector.dyn) {
+      for (var di = 0; di < sector.dyn.length; di++) {
+        var dynItem = sector.dyn[di];
+        if (dynItem.z === zNum) {
+          items.push(dynItem.id + zStr + dynItem.avatar);
+        }
+      }
+    }
+
+    // Character/player data: string "Sa43B1D0C2" or object {id, outfit, z}
+    if (sector.chars) {
+      for (var ci = 0; ci < sector.chars.length; ci++) {
+        var charEntry = sector.chars[ci];
+        if (typeof charEntry === 'string' && charEntry.length >= 4) {
+          if (parseInt(charEntry.slice(2, 4), 10) === zNum) {
+            items.push(charEntry);
+          }
+        } else if (typeof charEntry === 'object' && charEntry !== null && parseInt(charEntry.z, 10) === zNum) {
+          items.push(charEntry.id + zStr + (charEntry.outfit || ''));
+        }
+      }
     }
   }
-  
-  const event = new CustomEvent('zclick', {
-    detail: {
-      z: z,
-      x: x,
-      y: y,
-      itemType: itemType,
-      itemData: {},
-      clickedElement: clickedElement
+
+  // If exactly one item and itemdown() is defined, call it directly
+  if (items.length === 1 && typeof window.itemdown === 'function') {
+    window.itemdown(items[0]);
+    return;
+  }
+
+  // Build popup HTML listing all items at this z-location
+  var htm = '';
+  for (var pi = 0; pi < items.length; pi++) {
+    var fullStr = items[pi];
+    var iId = fullStr.slice(0, 2);
+    var rawName = (typeof window.ItemID === 'function') ? window.ItemID(iId) : iId;
+    var name = String(rawName).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    var safeStr = fullStr.replace(/'/g, '');
+    if (typeof window.itemdown === 'function') {
+      htm += "<a href=\"javascript:itemdown('" + safeStr + "')\">" + name + "</a><br>";
+    } else {
+      htm += name + "<br>";
     }
-  });
-  document.dispatchEvent(event);
-  if (typeof window.zclick === 'function') {
-    window.zclick(z, event);
   }
-  if (typeof window.onZClick === 'function') {
-    window.onZClick(z);
-  }
+
+  if (htm) { pop(htm); }
 }
 
 window.gfxServers = async function() {
