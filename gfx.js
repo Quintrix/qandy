@@ -469,6 +469,7 @@ function _renderPlayerAvatar(playerId, z, avatarStr, movements) {
   img.style.top  = top + 'px';
   img.style.left = left + 'px';
   img.style.zIndex = '125';
+  img.onclick = function() { gfxZClick(tileZ, t); };
   document.body.appendChild(img);
  }
  if (movements) _processPlayerMovements(playerId, movements);

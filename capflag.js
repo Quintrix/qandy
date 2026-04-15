@@ -145,7 +145,8 @@ window.NewChar = function(a) {
   } else {
   	if (a.length==2) {
   	 if (a.charAt(0)=="F") { PObj=a+"H0"; } else { PObj=a+"D0"; }
-    selectPlayerSlot(PObj);
+    PForce = "hidden";
+    pop("Select Player<br>Hat to join game!");
   	} else {
     PX=2; PY=9; PZ=(PY*(mapx+1))+PX;
     pop("<p>Male or Female?<br><a href=\"javascript:NewChar(\'M\');\"><img src=\"c/B1.png\" height=128 width=64></a> &nbsp; <a href=\"javascript:NewChar(\'F\');\"><img src=\"c/F5.png\" height=128 width=64></a>");
@@ -180,17 +181,6 @@ window.gfxZDown = function(z) {
  if (PUP) { pop(PUP); }
 };
 
-window.selectPlayerSlot = function(avatarStr) {
- playerAvatarStr = avatarStr;
- var html = "Select player slot:<p>";
- for (var i = 0; i < emptySlots.length; i++) {
-  var slot = emptySlots[i];
-  html += "<a href=\"javascript:joinGame('" + slot + "');\"><img src=\"i/" + slot + ".png\" height=32 width=32 title='" + slot + "'></a> &nbsp; ";
- }
- html += "<p><small>Team One (S-slots) &nbsp; Team Two (T-slots)</small>";
- pop(html);
-};
-
 // Step 3 of join flow: send JG (Join Game) command with chosen ItemID + avatar.
 // Server updates p.txt manifest and creates the player file in the map directory.
 window.joinGame = async function(itemId) {
@@ -211,10 +201,10 @@ window.joinGame = async function(itemId) {
     } catch (e) { console.error('RF tick error:', e); }
    }, 1000);
   } else {
-   pop("Error joining: " + res + "<p><a href=\"javascript:selectPlayerSlot(playerAvatarStr);\">Try again</a>");
+   pop("Error joining: "+res);
   }
  } catch (e) {
-  pop("Connection error.<p><a href=\"javascript:selectPlayerSlot(playerAvatarStr);\">Try again</a>");
+  pop("Connection error");
  }
 };
 
