@@ -104,7 +104,7 @@ window.flagConnect = async function() {
       rfInterval = setInterval(async function() {
         try {
           var rfRes = await gfxPing("RF", { d: lobbyDrive, m: '_L' });
-          processRFResponse(rfRes);
+          gfxPong(rfRes);
         } catch (e) { console.debug('lobby RF poll error:', e); /* silent: lobby RF errors don't affect gameplay */ }
       }, 1000);
 
@@ -145,7 +145,8 @@ window.NewChar = function(a) {
   } else {
   	if (a.length==2) {
   	 if (a.charAt(0)=="F") { PObj=a+"H0"; } else { PObj=a+"D0"; }
-    selectPlayerSlot(PObj);
+    PForce = "hidden";
+    pop("Select Player<br>Hat to join game!");
   	} else {
     PX=2; PY=9; PZ=(PY*(mapx+1))+PX;
     pop("<p>Male or Female?<br><a href=\"javascript:NewChar(\'M\');\"><img src=\"c/B1.png\" height=128 width=64></a> &nbsp; <a href=\"javascript:NewChar(\'F\');\"><img src=\"c/F5.png\" height=128 width=64></a>");
@@ -180,17 +181,6 @@ window.gfxZDown = function(z) {
  if (PUP) { pop(PUP); }
 };
 
-window.selectPlayerSlot = function(avatarStr) {
- playerAvatarStr = avatarStr;
- var html = "Select player slot:<p>";
- for (var i = 0; i < emptySlots.length; i++) {
-  var slot = emptySlots[i];
-  html += "<a href=\"javascript:joinGame('" + slot + "');\"><img src=\"i/" + slot + ".png\" height=32 width=32 title='" + slot + "'></a> &nbsp; ";
- }
- html += "<p><small>Team One (S-slots) &nbsp; Team Two (T-slots)</small>";
- pop(html);
-};
-
 // Step 3 of join flow: send JG (Join Game) command with chosen ItemID + avatar.
 // Server updates p.txt manifest and creates the player file in the map directory.
 window.joinGame = async function(itemId) {
@@ -207,37 +197,16 @@ window.joinGame = async function(itemId) {
    rfInterval = setInterval(async function() {
     try {
      var rfRes = await gfxPing("RF", { d: drive, m: mapId });
-     processRFResponse(rfRes);
+     gfxPong(rfRes);
     } catch (e) { console.error('RF tick error:', e); }
    }, 1000);
   } else {
-   pop("Error joining: " + res + "<p><a href=\"javascript:selectPlayerSlot(playerAvatarStr);\">Try again</a>");
+   pop("Error joining: "+res);
   }
  } catch (e) {
-  pop("Connection error.<p><a href=\"javascript:selectPlayerSlot(playerAvatarStr);\">Try again</a>");
+  pop("Connection error");
  }
 };
-
-// Process an RF response string in Queville format.
-// rfStr format: "[items]-[player1]-[player2]..."
-//   items   – concatenated 4-char codes: ItemID + zz (non-player items)
-//   players – each section is "[playerId][zz][avatarStr]" e.g. "Sa43B1D0"
-function processRFResponse(rfStr) {
- var parts = rfStr.split('-');
- var sectorData = parts[0];
-
- // Clear existing MP players before re-rendering
- var oldPlayers = document.querySelectorAll('.mp-player');
- for (var p = 0; p < oldPlayers.length; p++) { oldPlayers[p].parentNode.removeChild(oldPlayers[p]); }
-
- // Render non-player items (first section)
- renderMPItems(sectorData);
-
- // Render players (remaining sections)
- for (var i = 1; i < parts.length; i++) {
-  if (parts[i]) renderPlayer(parts[i]);
- }
-}
 
 // Handle a single game console entry, updating client game state as needed.
 function processConsoleEntry(entry) {
@@ -251,82 +220,6 @@ function processConsoleEntry(entry) {
    emptySlots = emptySlots.filter(function(s) { return s !== hatId; });
   }
  }
-}
-
-// Convert a z-position to {x, y} tile coordinates using the current map width.
-function zToXY(z) {
- var y = Math.floor(z / (mapx + 1));
- var x = z - (y * (mapx + 1));
- return { x: x, y: y };
-}
-
-// Render non-player items from the items section of an RF response string.
-// rfStr is a sequence of 4-char codes: 2-char ItemID + 2-digit z-location, e.g. "Ab12Cd34".
-function renderMPItems(rfStr) {
- // Remove previously rendered MP items
- var old = document.querySelectorAll('.mp-item');
- for (var i = 0; i < old.length; i++) { old[i].parentNode.removeChild(old[i]); }
- // Render each item at its z-position on the map
- for (var j = 0; j + 4 <= rfStr.length; j += 4) {
-  var iId = rfStr.slice(j, j + 2);
-  var z = parseInt(rfStr.slice(j + 2, j + 4), 10);
-  if (isNaN(z)) continue;
-  var coords = zToXY(z);
-  var img = document.createElement('img');
-  img.className = 'mp-item';
-  img.src = 'i/' + iId + '.png';
-  img.style.position = 'absolute';
-  img.style.top  = (32 + 20 + (coords.y * 32)) + 'px';
-  img.style.left = (32 + 22 + (coords.x * 32)) + 'px';
-  img.style.zIndex = '120';
-  document.body.appendChild(img);
- }
-}
-
-// Render a single player from a Queville player section string.
-// playerStr format: "[playerId][zz][avatarStr]" or "[playerId][zz][avatarStr]-[movements]"
-//   e.g. "Sa43B1D0C2" or "Tb22A2E1F3-NSW"
-// Sections shorter than 6 chars are movement-only segments from a dash-split response
-// (e.g. "NSW" split off from "Sa43B1D0C2-NSW") and are silently skipped.
-function renderPlayer(playerStr) {
- if (!playerStr || playerStr.length < 6) return;
- var playerId  = playerStr.substring(0, 2);            // "Sa"
- var zLocation = parseInt(playerStr.substring(2, 4), 10); // 43
- if (isNaN(zLocation)) return;
- var remaining = playerStr.substring(4); // "B1D0C2" or "B1D0C2-NSW"
- var dashIdx = remaining.indexOf('-');
- var avatarStr = (dashIdx !== -1) ? remaining.substring(0, dashIdx) : remaining;
- var movements = (dashIdx !== -1) ? remaining.substring(dashIdx + 1) : '';
- if (avatarStr.length < 2) return; // Minimum valid avatar is one 2-char part code (e.g. "B0")
- renderPlayerAvatar(playerId, zLocation, avatarStr, movements);
-}
-
-// Render a player avatar at the given z-location by stacking 2-char part images.
-// avatarStr contains up to 5 two-character codes: [head][body][hat][sword][shield]
-// Each code maps to an image in c/<code>.png that is layered at the player's tile.
-function renderPlayerAvatar(playerId, z, avatarStr, movements) {
- var coords = zToXY(z);
- var top  = 32 + 20 + (coords.y * 32);
- var left = 32 + 22 + (coords.x * 32);
- for (var k = 0; k + 2 <= avatarStr.length; k += 2) {
-  var partCode = avatarStr.slice(k, k + 2);
-  var img = document.createElement('img');
-  img.className = 'mp-player';
-  img.dataset.player = playerId;
-  img.src = 'c/' + partCode + '.png';
-  img.style.position = 'absolute';
-  img.style.top  = top + 'px';
-  img.style.left = left + 'px';
-  img.style.zIndex = '125';
-  document.body.appendChild(img);
- }
- if (movements) processPlayerMovements(playerId, movements);
-}
-
-// Store movement buffer for a player (NSEW sequence, one move per ~0.2 s).
-// Future: implement smooth movement animation driven by this buffer.
-function processPlayerMovements(playerId, movements) {
- console.log('Player ' + playerId + ' movements: ' + movements);
 }
 
 // Send SG (Start Game) command to move the player from the lobby (w/) to a world
@@ -343,7 +236,7 @@ window.startGame = async function(itemId, avatar) {
    rfInterval = setInterval(async function() {
     try {
      var rfRes = await gfxPing("RF", { d: drive, m: mapId });
-     processRFResponse(rfRes);
+     gfxPong(rfRes);
     } catch (e) { console.error('RF tick error:', e); }
    }, 1000);
    console.log('Game started for ' + itemId + ' with avatar ' + avatar);
