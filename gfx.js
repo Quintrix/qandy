@@ -1,4 +1,5 @@
 
+
 window.GFX = 0; // set to true when gfx.js ready to use
 
 var PopAlign = "click"; // "center", "click"
@@ -135,7 +136,7 @@ window.gfxChar = function(C,O,Z) {
   chr.className="char";  
   chr.style.position="absolute"; chr.style.height=64; chr.style.width=32;
   chr.style.top=32+22+(y*32)+"px"; chr.style.left=(32+22+(x*32))+"px";
-  chr.onclick=function(){gfxZClick(Z,this);};
+  chr.onclick = (function(capturedZ) { return function() { gfxZClick(capturedZ); }; })(Z);
   chr.style.zIndex="150";  
   document.body.appendChild(chr);
  }
@@ -149,8 +150,8 @@ window.gfxChar = function(C,O,Z) {
   chr.className="char";  
   chr.style.position="absolute"; chr.style.height=64; chr.style.width=32;
   chr.style.top=32+22+(y*32)+"px"; chr.style.left=(32+22+(x*32))+"px";
-  chr.onclick=function(){gfxZClick(Z,this);};
   chr.style.zIndex="151";
+  chr.onclick = (function(capturedZ) { return function() { gfxZClick(capturedZ); }; })(Z);
   document.body.appendChild(chr);
  }
 
@@ -167,7 +168,7 @@ window.gfxChar = function(C,O,Z) {
    chr.className="char";  
    chr.style.position="absolute"; chr.style.height=64; chr.style.width=32;
    chr.style.top=32+22+(y*32)+"px"; chr.style.left=(32+22+(x*32))+"px";
-   chr.onclick=function(){gfxZClick(Z,this);};
+   chr.onclick = (function(capturedZ) { return function() { gfxZClick(capturedZ); }; })(Z);
    chr.style.zIndex="152";
    document.body.appendChild(chr);
   } 
@@ -422,7 +423,7 @@ function _renderPlayer(playerStr) {
  var avatarStr = (dashIdx !== -1) ? remaining.substring(0, dashIdx) : remaining;
  var movements = (dashIdx !== -1) ? remaining.substring(dashIdx + 1) : '';
  if (avatarStr.length < 2) return;
- _renderPlayerAvatar(playerId, zLocation, avatarStr, movements);
+ gfxChar(playerId, zLocation, avatarStr);
 }
 
 function _renderPlayerAvatar(playerId, z, avatarStr, movements) {
@@ -476,7 +477,6 @@ function _processPlayerMovements(playerId, movements) {
  console.log('Player ' + playerId + ' movements: ' + movements);
 }
 
-function _renderMPItems(rfStr) {
 // Internal: render all dynamic items from an RF response string.
 // rfStr is a comma-separated list of item codes.
 // Each code: "<id(2)><z(2-digit)>" for plain items/empty slots,
@@ -485,6 +485,8 @@ function _renderMPItems(rfStr) {
 // Plain items are rendered as images from i/.
 // Items with avatar are rendered as layered character sprites via _renderPlayer.
 // Stores all parsed entries in gfxSectorData[gfxCurrentSector].dyn as {id, z, avatar} objects.
+
+function _renderMPItems(rfStr) {
  var old = document.querySelectorAll('.mp-item, .mp-player');
  for (var i = 0; i < old.length; i++) { old[i].parentNode.removeChild(old[i]); }
  var dynItems = [];
@@ -514,7 +516,9 @@ function _renderMPItems(rfStr) {
    img.style.top  = (32 + 20 + (coords.y * 32)) + 'px';
    img.style.left = (32 + 22 + (coords.x * 32)) + 'px';
    img.style.zIndex = '120';
-   img.onclick = function() { gfxZClick(this.dataset.z, this); };
+   img.onclick = (function(capturedZ) {
+     return function() { gfxZClick(capturedZ, this); };
+   })(z);
    document.body.appendChild(img);
   }
  }
