@@ -100,7 +100,7 @@ window.gfxInit = async function() {
   // move txt screen over to reveal gfx
   document.getElementById('txt').style.top = '50px';
   document.getElementById('txt').style.left = '350px';
-};
+}
 window.gfxTiles = function(scr) { 
  a=0;
  for (b=0; b<=mapy; b++) { 
@@ -261,7 +261,7 @@ window.gfxServers = async function() {
   } catch (e) {
     return { error: 'Error: ' + (e.message || String(e)) };
   }
-};
+}
 async function gfxFetchMap(filename) {
   filename = filename || "capflag.gfx";
   try {
