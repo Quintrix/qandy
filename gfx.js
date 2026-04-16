@@ -135,7 +135,7 @@ window.gfxChar = function(C,O,Z) {
   chr.className="char";  
   chr.style.position="absolute"; chr.style.height=64; chr.style.width=32;
   chr.style.top=32+22+(y*32)+"px"; chr.style.left=(32+22+(x*32))+"px";
-  chr.onclick=function(){gfxZClick(Z,this);};
+  chr.onclick = (function(capturedZ) { return function() { gfxZClick(capturedZ); }; })(Z);
   chr.style.zIndex="150";  
   document.body.appendChild(chr);
  }
@@ -149,8 +149,8 @@ window.gfxChar = function(C,O,Z) {
   chr.className="char";  
   chr.style.position="absolute"; chr.style.height=64; chr.style.width=32;
   chr.style.top=32+22+(y*32)+"px"; chr.style.left=(32+22+(x*32))+"px";
-  chr.onclick=function(){gfxZClick(Z,this);};
   chr.style.zIndex="151";
+  chr.onclick = (function(capturedZ) { return function() { gfxZClick(capturedZ); }; })(Z);
   document.body.appendChild(chr);
  }
 
@@ -167,7 +167,7 @@ window.gfxChar = function(C,O,Z) {
    chr.className="char";  
    chr.style.position="absolute"; chr.style.height=64; chr.style.width=32;
    chr.style.top=32+22+(y*32)+"px"; chr.style.left=(32+22+(x*32))+"px";
-   chr.onclick=function(){gfxZClick(Z,this);};
+   chr.onclick = (function(capturedZ) { return function() { gfxZClick(capturedZ); }; })(Z);
    chr.style.zIndex="152";
    document.body.appendChild(chr);
   } 
@@ -402,14 +402,11 @@ window.gfxItems = function(items) {
   }
  }
 }
-
-// Convert a z-position to {x, y} tile coordinates using the current map width.
 function zToXY(z) {
  var y = Math.floor(z / (mapx + 1));
  var x = z - (y * (mapx + 1));
  return { x: x, y: y };
 }
-
 function _renderPlayer(playerStr) {
 // Internal: render a single player from a Queville player string.
 // playerStr format: "[playerId][zz][avatarStr]" e.g. "Sa43B1D0C2"
@@ -422,9 +419,8 @@ function _renderPlayer(playerStr) {
  var avatarStr = (dashIdx !== -1) ? remaining.substring(0, dashIdx) : remaining;
  var movements = (dashIdx !== -1) ? remaining.substring(dashIdx + 1) : '';
  if (avatarStr.length < 2) return;
- _renderPlayerAvatar(playerId, zLocation, avatarStr, movements);
+ gfxChar(playerId, zLocation, avatarStr);
 }
-
 function _renderPlayerAvatar(playerId, z, avatarStr, movements) {
 // Internal: render a player avatar at the given z-location by stacking 2-char part images.
 // Parts are categorised by their first letter (matching the gfxChar() convention):
@@ -470,12 +466,10 @@ function _renderPlayerAvatar(playerId, z, avatarStr, movements) {
  }
  if (movements) _processPlayerMovements(playerId, movements);
 }
-
-// Internal: store movement buffer for a player (NSEW sequence).
 function _processPlayerMovements(playerId, movements) {
+	// Internal: store movement buffer for a player (NSEW sequence).
  console.log('Player ' + playerId + ' movements: ' + movements);
 }
-
 function _renderMPItems(rfStr) {
 // Internal: render all dynamic items from an RF response string.
 // rfStr is a comma-separated list of item codes.
@@ -485,6 +479,7 @@ function _renderMPItems(rfStr) {
 // Plain items are rendered as images from i/.
 // Items with avatar are rendered as layered character sprites via _renderPlayer.
 // Stores all parsed entries in gfxSectorData[gfxCurrentSector].dyn as {id, z, avatar} objects.
+
  var old = document.querySelectorAll('.mp-item, .mp-player');
  for (var i = 0; i < old.length; i++) { old[i].parentNode.removeChild(old[i]); }
  var dynItems = [];
@@ -514,7 +509,9 @@ function _renderMPItems(rfStr) {
    img.style.top  = (32 + 20 + (coords.y * 32)) + 'px';
    img.style.left = (32 + 22 + (coords.x * 32)) + 'px';
    img.style.zIndex = '120';
-   img.onclick = function() { gfxZClick(this.dataset.z, this); };
+   img.onclick = (function(capturedZ) {
+     return function() { gfxZClick(capturedZ, this); };
+   })(z);
    document.body.appendChild(img);
   }
  }
@@ -522,7 +519,6 @@ function _renderMPItems(rfStr) {
   window.gfxSectorData[window.gfxCurrentSector].dyn = dynItems;
  }
 }
-
 window.gfxChars = function(players) {
 // Render multiplayer characters/players from an array of player strings.
 // Each entry is a Queville player string: "[playerId][zz][avatarStr]" e.g. "Sa43B1D0".
@@ -573,7 +569,6 @@ window.gfxSector = function(sectorId) {
  var oldItems = document.querySelectorAll('.mp-item');
  for (var q = 0; q < oldItems.length; q++) { oldItems[q].parentNode.removeChild(oldItems[q]); }
 }
-
 window.gfxPing = async function(command, dataObject) {
 // Universal gateway for all 2-character commands to the multiplayer server.
 // command    – 2-char uppercase command code, e.g. "BB"
@@ -610,8 +605,7 @@ window.gfxPing = async function(command, dataObject) {
   } else {
     return qdosXmitDos('gfxPing', { body: body });
   }
-};
-
+}
 window.gfxCreation = async function(drive, mapString, players, isRound) {
 //   drive     – server drive to build world on (e.g. "gfx")
 //   mapString – topology string of 2-char map IDs, e.g. "A1A2A3B1B2B3"
@@ -630,17 +624,14 @@ window.gfxCreation = async function(drive, mapString, players, isRound) {
     p: players,
     f: isRound ? 0 : 1
   });
-};
-
+}
+window.gfxGameState = async function(drive) {
 // Query game state and player manifest for a drive.
 // Returns the raw retro response string: e.g. "JSSa.Sb.Sc.Ta.Tb.Tc"
 //   state prefix: JS = just starting (no active players), IP = in progress
 //   each dot-separated slot: <playerCode><avatarData> if occupied, <playerCode> if empty
-window.gfxGameState = async function(drive) {
-
   return await gfxPing("GS", { d: drive });
-};
-
+}
 splash(1000);
 qdosScript("gfx-itemid.js");
 window.hpop=function() { document.getElementById("pop").style.visibility="hidden"; }
