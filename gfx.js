@@ -1,5 +1,4 @@
 
-
 window.GFX = 0; // set to true when gfx.js ready to use
 
 var PopAlign = "click"; // "center", "click"
@@ -403,14 +402,11 @@ window.gfxItems = function(items) {
   }
  }
 }
-
-// Convert a z-position to {x, y} tile coordinates using the current map width.
 function zToXY(z) {
  var y = Math.floor(z / (mapx + 1));
  var x = z - (y * (mapx + 1));
  return { x: x, y: y };
 }
-
 function _renderPlayer(playerStr) {
 // Internal: render a single player from a Queville player string.
 // playerStr format: "[playerId][zz][avatarStr]" e.g. "Sa43B1D0C2"
@@ -425,7 +421,6 @@ function _renderPlayer(playerStr) {
  if (avatarStr.length < 2) return;
  gfxChar(playerId, zLocation, avatarStr);
 }
-
 function _renderPlayerAvatar(playerId, z, avatarStr, movements) {
 // Internal: render a player avatar at the given z-location by stacking 2-char part images.
 // Parts are categorised by their first letter (matching the gfxChar() convention):
@@ -471,12 +466,11 @@ function _renderPlayerAvatar(playerId, z, avatarStr, movements) {
  }
  if (movements) _processPlayerMovements(playerId, movements);
 }
-
-// Internal: store movement buffer for a player (NSEW sequence).
 function _processPlayerMovements(playerId, movements) {
+	// Internal: store movement buffer for a player (NSEW sequence).
  console.log('Player ' + playerId + ' movements: ' + movements);
 }
-
+function _renderMPItems(rfStr) {
 // Internal: render all dynamic items from an RF response string.
 // rfStr is a comma-separated list of item codes.
 // Each code: "<id(2)><z(2-digit)>" for plain items/empty slots,
@@ -486,7 +480,6 @@ function _processPlayerMovements(playerId, movements) {
 // Items with avatar are rendered as layered character sprites via _renderPlayer.
 // Stores all parsed entries in gfxSectorData[gfxCurrentSector].dyn as {id, z, avatar} objects.
 
-function _renderMPItems(rfStr) {
  var old = document.querySelectorAll('.mp-item, .mp-player');
  for (var i = 0; i < old.length; i++) { old[i].parentNode.removeChild(old[i]); }
  var dynItems = [];
@@ -526,7 +519,6 @@ function _renderMPItems(rfStr) {
   window.gfxSectorData[window.gfxCurrentSector].dyn = dynItems;
  }
 }
-
 window.gfxChars = function(players) {
 // Render multiplayer characters/players from an array of player strings.
 // Each entry is a Queville player string: "[playerId][zz][avatarStr]" e.g. "Sa43B1D0".
@@ -577,7 +569,6 @@ window.gfxSector = function(sectorId) {
  var oldItems = document.querySelectorAll('.mp-item');
  for (var q = 0; q < oldItems.length; q++) { oldItems[q].parentNode.removeChild(oldItems[q]); }
 }
-
 window.gfxPing = async function(command, dataObject) {
 // Universal gateway for all 2-character commands to the multiplayer server.
 // command    – 2-char uppercase command code, e.g. "BB"
@@ -614,8 +605,7 @@ window.gfxPing = async function(command, dataObject) {
   } else {
     return qdosXmitDos('gfxPing', { body: body });
   }
-};
-
+}
 window.gfxCreation = async function(drive, mapString, players, isRound) {
 //   drive     – server drive to build world on (e.g. "gfx")
 //   mapString – topology string of 2-char map IDs, e.g. "A1A2A3B1B2B3"
@@ -634,17 +624,14 @@ window.gfxCreation = async function(drive, mapString, players, isRound) {
     p: players,
     f: isRound ? 0 : 1
   });
-};
-
+}
+window.gfxGameState = async function(drive) {
 // Query game state and player manifest for a drive.
 // Returns the raw retro response string: e.g. "JSSa.Sb.Sc.Ta.Tb.Tc"
 //   state prefix: JS = just starting (no active players), IP = in progress
 //   each dot-separated slot: <playerCode><avatarData> if occupied, <playerCode> if empty
-window.gfxGameState = async function(drive) {
-
   return await gfxPing("GS", { d: drive });
-};
-
+}
 splash(1000);
 qdosScript("gfx-itemid.js");
 window.hpop=function() { document.getElementById("pop").style.visibility="hidden"; }
