@@ -100,7 +100,7 @@ window.gfxInit = async function() {
   // move txt screen over to reveal gfx
   document.getElementById('txt').style.top = '50px';
   document.getElementById('txt').style.left = '350px';
-};
+}
 window.gfxTiles = function(scr) { 
  a=0;
  for (b=0; b<=mapy; b++) { 
@@ -261,7 +261,7 @@ window.gfxServers = async function() {
   } catch (e) {
     return { error: 'Error: ' + (e.message || String(e)) };
   }
-};
+}
 async function gfxFetchMap(filename) {
   filename = filename || "capflag.gfx";
   try {
@@ -541,7 +541,6 @@ window.gfxChars = function(players) {
   }
  }
 }
-
 window.gfxPong = function(rfStr) {
 // Process an RF server response: render all dynamic items and players.
 // rfStr format: comma-separated item codes, e.g. "Sa43,Tb22,Sa43B1D0C2,Tb22F0H0-NSW"
@@ -549,7 +548,6 @@ window.gfxPong = function(rfStr) {
 //   item with avatar:        "<id(2)><z(2-digit)><avatarStr>" e.g. "Sa43B1D0C2"
  _renderMPItems(rfStr);
 }
-
 window.gfxSector = function(sectorId) {
  if (!window.gfxSectorData || !window.gfxSectorData[sectorId]) { return; }
  window.gfxCurrentSector = sectorId;
