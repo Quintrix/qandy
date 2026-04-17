@@ -197,22 +197,23 @@ window.itemdown = function(fullItemString) {
 // Server checks item ownership, renames player file with avatar + player hat (La),
 // records session ownership, and updates the p.txt manifest.
 window.joinGame = async function(fullItemString) {
- hpop();
- 
- // Parse: "Sa43Za" -> itemId="Sa", zLocation="43", itemData="Za"
- var itemId = fullItemString.slice(0, 2);
- var zLocation = fullItemString.slice(2, 4); 
- var itemData = fullItemString.slice(4, 6);
- 
- // Silent fail if hat already claimed
- if (itemData !== "Za") {
-   hpop();
-   return;
- }
- 
- // Queue join command for next server tick
- playerItemId = itemId;
- window.gfxDo = "Qg" + itemId + zLocation + playerAvatarStr; // "QgSa43B0D0"
+  hpop();
+  
+  var itemId = fullItemString.slice(0, 2);
+  var zLocation = fullItemString.slice(2, 4); 
+  var itemData = fullItemString.slice(4, 6);
+  
+  // Silent fail if hat already claimed
+  if (itemData !== "Za") {
+    hpop();
+    return;
+  }
+  
+  // Just queue the command - gfx.js handles the timing
+  playerItemId = itemId;
+  window.gfxDo = "Qg" + itemId + zLocation + playerAvatarStr;
+  
+  // No more interval management needed!
 };
 
 // Handle a single game console entry, updating client game state as needed.
