@@ -108,14 +108,17 @@ window.flagConnect = async function() {
       window.gameState = 'just starting';
 
       // Start RF polling immediately so players already in the lobby are visible
-      if (rfInterval) clearInterval(rfInterval);
       rfInterval = setInterval(async function() {
-        try {
-          var rfRes = await gfxPing("RF");
-          gfxPong(rfRes);
-        } catch (e) { console.debug('lobby RF poll error:', e); /* silent: lobby RF errors don't affect gameplay */ }
+       try {
+        var command = window.gfxDo || "RF";
+        window.gfxDo = "RF"; // Reset to default after use
+  
+        var rfRes = await gfxPing(command);
+        gfxPong(rfRes);
+       } catch (e) { 
+        console.error('RF tick error:', e); 
+       }
       }, 1000);
-
       NewChar("");
       return;
     }
