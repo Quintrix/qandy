@@ -53,7 +53,7 @@ window.flagConnect = async function() {
     }
     _serverUrl = proto + '://' + gfxConnected.host + ':' + gfxConnected.port + '/qandyland.js';
 
-    _gfxDrive = "gfx";
+    window._gfxDrive = "gfx";
     var gameState = await gfxPing("GS");
     await print("\nGame state: " + gameState + "\n");
 

@@ -1238,7 +1238,8 @@ function respondRetro(res, text) {
 // @returns {string} formatted game state, e.g. "JSSa.SbA1M3N2L3.Tc"
 //   Format: <state><slot>.<slot>...  where state is JS or IP and each slot is
 //   <playerCode><mapId><avatarData> for occupied slots or <playerCode> for empty slots.
-//   Enhanced format: "Sa_L" = Sa in lobby, "SbA1M3N2L3" = Sb on map A1 with avatar,
+//   Enhanced format: "Sa_LB0D0La" = Sa in lobby with avatar B0D0La,
+//   "SbA1M3N2L3" = Sb on map A1 with avatar M3N2L3,
 //   "Tc" = empty (unjoined) slot.
 function parsePlayerManifest(content) {
   var lines = content.split('\n');
@@ -1321,32 +1322,26 @@ function handleCommand(req, res, raw, driveName) {
     cmdData = String(raw).slice(2);
     drive   = String(driveName || '');
   } else {
-    // Legacy form-encoded protocol: parse c=<cmd>&d=<drive>&...
-    var params = {};
+    // Legacy form-encoded protocol: parse c=<cmd>&d=<drive>&... once and cache
+    var legacyParams = {};
     var pairs = String(raw).split('&');
     for (var i = 0; i < pairs.length; i++) {
       var idx = pairs[i].indexOf('=');
       if (idx > 0) {
-        params[pairs[i].slice(0, idx)] = pairs[i].slice(idx + 1);
+        legacyParams[pairs[i].slice(0, idx)] = pairs[i].slice(idx + 1);
       }
     }
-    cmd     = String(params.c || '').toUpperCase();
+    cmd     = String(legacyParams.c || '').toUpperCase();
     cmdData = '';
-    drive   = String(params.d || '');
+    drive   = String(legacyParams.d || '');
   }
 
-  // Helper: extract a parameter from the legacy form-encoded body when driveName is null.
+  // Helper: extract a parameter from pre-parsed legacy form-encoded body.
+  // Returns '' when using the new unified command string protocol.
   function legacyParam(key) {
     if (driveName !== null && driveName !== undefined) return '';
-    var params2 = {};
-    var pairs2 = String(raw).split('&');
-    for (var j = 0; j < pairs2.length; j++) {
-      var idx2 = pairs2[j].indexOf('=');
-      if (idx2 > 0) {
-        params2[pairs2[j].slice(0, idx2)] = pairs2[j].slice(idx2 + 1);
-      }
-    }
-    return String(params2[key] || '');
+    if (typeof legacyParams !== 'undefined') return String(legacyParams[key] || '');
+    return '';
   }
 
   var result;

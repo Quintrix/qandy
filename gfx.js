@@ -578,7 +578,9 @@ window.gfxSector = function(sectorId) {
 window.gfxPing = async function(commandString) {
 // Universal gateway for all commands to the multiplayer server.
 // commandString – full command string, e.g. "BB", "RF", "QgSa33B0D0"
-// Drive context is appended automatically from _gfxDrive via ?d= query param.
+// Drive context is automatically included via '?d=<drive>' query parameter.
+// The command string is sent as the request body with Content-Type: text/plain.
+// Drive is tracked in the module-level _gfxDrive variable (default: "gfx").
 // HOST sends directly via fetch(); GUEST proxies through HOST via postMessage.
 
   if (!commandString || commandString.length < 2) throw new Error('gfxPing: invalid command');
