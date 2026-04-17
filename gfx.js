@@ -11,6 +11,7 @@ var mapy=11;
 
 var _serverUrl = 'http://localhost:8080/qandyland.js';
 var _registryUrl = 'https://qandy.vercel.app/api/servers';
+var _gfxDrive = 'gfx'; // current drive context; set by gfxCreation / gfxGameState
 
 // Initialization state tracking
 window._gfxInitialized = false;
@@ -544,10 +545,15 @@ window.gfxChars = function(players) {
 
 window.gfxPong = function(rfStr) {
 // Process an RF server response: render all dynamic items and players.
-// rfStr format: comma-separated item codes, e.g. "Sa43,Tb22,Sa43B1D0C2,Tb22F0H0-NSW"
+// rfStr format: <mapId(2)><comma-separated item codes>
+//   e.g. "_LSa43,Tb22,Sa43B1D0C2" or "A1Sa25B1D0,Tb44"
+//   mapId    – 2-char sector the server is sending (e.g. "_L", "A1")
 //   plain item / empty slot: "<id(2)><z(2-digit)>"           e.g. "Sa43"
 //   item with avatar:        "<id(2)><z(2-digit)><avatarStr>" e.g. "Sa43B1D0C2"
- _renderMPItems(rfStr);
+ if (!rfStr || rfStr.length < 2) return;
+ // Strip the 2-char mapId prefix; client can track current sector if needed
+ var items = rfStr.slice(2);
+ _renderMPItems(items);
 }
 
 window.gfxSector = function(sectorId) {
@@ -569,32 +575,22 @@ window.gfxSector = function(sectorId) {
  var oldItems = document.querySelectorAll('.mp-item');
  for (var q = 0; q < oldItems.length; q++) { oldItems[q].parentNode.removeChild(oldItems[q]); }
 }
-window.gfxPing = async function(command, dataObject) {
-// Universal gateway for all 2-character commands to the multiplayer server.
-// command    – 2-char uppercase command code, e.g. "BB"
-// dataObject – plain JS object whose keys/values are appended as form fields
+window.gfxPing = async function(commandString) {
+// Universal gateway for all commands to the multiplayer server.
+// commandString – full command string, e.g. "BB", "RF", "QgSa33B0D0"
+// Drive context is appended automatically from _gfxDrive via ?d= query param.
 // HOST sends directly via fetch(); GUEST proxies through HOST via postMessage.
 
-  if (!command || !/^[A-Z]{2}$/.test(command)) throw new Error('gfxPing: invalid command');
+  if (!commandString || commandString.length < 2) throw new Error('gfxPing: invalid command');
 
-  // Build form-encoded body: c=<command>&key=val&...
-  var parts = ['c=' + command];
-  if (dataObject && typeof dataObject === 'object') {
-    var keys = Object.keys(dataObject);
-    for (var i = 0; i < keys.length; i++) {
-      var k = keys[i];
-      // Strip non-printable characters (keep only printable ASCII and escaped newlines)
-      var v = String(dataObject[k]).replace(/[^\x20-\x7E\n]/g, '');
-      parts.push(k + '=' + v);
-    }
-  }
-  var body = parts.join('&');
+  var body = commandString;
+  var url  = _serverUrl + '?d=' + encodeURIComponent(_gfxDrive);
 
   if (typeof HOST !== 'undefined' && HOST) {
     try {
-      var response = await fetch(_serverUrl, {
+      var response = await fetch(url, {
         method:  'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        headers: { 'Content-Type': 'text/plain' },
         body:    body
       });
       if (!response.ok) throw new Error('Server error: ' + response.status);
@@ -603,34 +599,31 @@ window.gfxPing = async function(command, dataObject) {
       throw new Error('gfxPing: ' + (e.message || String(e)));
     }
   } else {
-    return qdosXmitDos('gfxPing', { body: body });
+    return qdosXmitDos('gfxPing', { body: body, drive: _gfxDrive });
   }
 }
 window.gfxCreation = async function(drive, mapString, players, isRound) {
 //   drive     – server drive to build world on (e.g. "gfx")
-//   mapString – topology string of 2-char map IDs, e.g. "A1A2A3B1B2B3"
-//   players   – player string of concatenated 2-char codes, e.g. "SaSbScTaTbTc"
-//   isRound   – true if world edges wrap (A↔Z, 1↔9); false for flat world
+//   mapString – topology string of 2-char map IDs (unused; server reads capflag.gfx)
+//   players   – player string of concatenated 2-char codes (unused; server reads capflag.gfx)
+//   isRound   – unused; server determines world topology from capflag.gfx
 
 // A1-L8 = small game  (8 rows wide, 12 rows tall) (fits on cell phone screen)
 // A0-Z9 = big game (10 rows wide, 26 rows tall)
 // Aa-Zz = huge game (26 rows wide, 26 rows tall)
 
-// Compatibility wrapper: delegates to the universal gfxPing gateway.
+// Sets drive context and delegates to gfxPing("BB").
 
-  return await gfxPing("BB", {
-    d: drive,
-    m: mapString,
-    p: players,
-    f: isRound ? 0 : 1
-  });
+  if (drive) _gfxDrive = drive;
+  return await gfxPing("BB");
 }
 window.gfxGameState = async function(drive) {
 // Query game state and player manifest for a drive.
 // Returns the raw retro response string: e.g. "JSSa.Sb.Sc.Ta.Tb.Tc"
 //   state prefix: JS = just starting (no active players), IP = in progress
-//   each dot-separated slot: <playerCode><avatarData> if occupied, <playerCode> if empty
-  return await gfxPing("GS", { d: drive });
+//   each dot-separated slot: <playerCode><mapId><avatarData> if occupied, <playerCode> if empty
+  if (drive) _gfxDrive = drive;
+  return await gfxPing("GS");
 }
 splash(1000);
 qdosScript("gfx-itemid.js");
