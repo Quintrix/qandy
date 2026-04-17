@@ -25,15 +25,67 @@ startup();
 var ts=3000;
 setTimeout(function() { startup(); },400);
 
-function startup(){
+// In capflag.js startup():
+async function startup(){
   if (window.GFX==0) {
-  	 ts=ts-200;
-  	 if (ts>0) { setTimeout(function() { startup(); },200); }
+    ts=ts-200;
+    if (ts>0) { setTimeout(function() { startup(); },200); }
     return;
   } else {
-    flagConnect();
+    await gfxServers();              // Display server list
+    var selectedServer = await input();  // Get user selection  
+    var gameState = await gfxConnect(selectedServer); // Connect & return game state
+    
+    // Handle game state
+    if (gameState === "just starting") {
+      NewChar('');
+    } else {
+      await print("Game in progress.\n");
+      setTimeout(function() { startup(); },200);  // Removed extra }
+    }
   }
 }
+
+async function showServers() {
+  try {
+    await print("Welcome to Capture the Flag!\n");
+    
+    // Use the existing flagServers() function to show list and get selection
+    var server = await flagServers({ 
+      driveFilter: 'gfx', 
+      prompt: "Select server [0]: " 
+    });
+    
+    if (!server) {
+      await print("Connection cancelled.\n");
+      return;
+    }
+    
+    // Build server URL and connect via gfx.js
+    var serverUrl = "http://" + server.host + ":" + server.port + "/qandyland.js";
+    await print("Connecting to " + server.name + "...\n");
+    
+    // Let gfx.js handle the connection and start the server loop
+    var result = await gfxConnect(serverUrl);
+    
+    await print("Connected! Game state: " + window.gameState + "\n");
+    
+    // Show avatar selection or game UI
+    if (window.gameState === "just starting") {
+      await print("Select your avatar and click a player hat to join!\n");
+      NewChar(''); // Start avatar selection
+    } else {
+      await print("Game in progress. Select a hat to join!\n");
+    }
+    
+  } catch (e) {
+    await print("Connection failed: " + e.message + "\n");
+    await print("Retrying in 5 seconds...\n");
+    setTimeout(() => showServerSelectionAndConnect(), 5000);
+  }
+}
+
+
 
 // Replace the entire flagConnect function with:
 window.flagConnect = async function(serverIp) {

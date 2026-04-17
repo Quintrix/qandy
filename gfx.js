@@ -253,6 +253,7 @@ window.gfxZClick=function(z, clickedElement) {
 
   if (htm) { pop(htm); }
 }
+
 window.gfxServers = async function() {
   var url = _registryUrl;
   if (!url) return { error: 'Error: no registry URL configured' };
@@ -268,50 +269,75 @@ window.gfxServers = async function() {
   }
 }
 
-// Add to gfx.js
-window.gfxConnect = async function(serverUrl) {
-  // Set server URL (optional parameter, defaults to localhost)
-  if (serverUrl) {
-    _serverUrl = serverUrl;
-  }
+window.gfxServers = async function() {
+  var url = _registryUrl;
+  if (!url) return { error: 'Error: no registry URL' };
   
   try {
-    // Test connection with initial game state check
+    var response = await fetch(url, { method: 'GET' });
+    if (!response.ok) return { error: 'Error: ' + response.status };
+    var data = await response.json();
+    
+    // Display servers (filter by _gfxDrive automatically)
+    var servers = data.servers || [];
+    var options = [{ name: 'localhost', host: 'localhost', port: 8080 }];
+    
+    for (var i = 0; i < servers.length; i++) {
+      var s = servers[i];
+      if (s.drives && s.drives.includes(_gfxDrive)) {
+        options.push(s);
+      }
+    }
+    
+    // Print numbered list
+    for (var j = 0; j < options.length; j++) {
+      var server = options[j];
+      var label = server.name + " (" + server.host + ":" + server.port + ")";
+      await print(j + ". " + label + "\n");
+    }
+    
+    await print("Server [0]: ");
+    return options; // Store for gfxConnect to use
+    
+  } catch (e) {
+    await print("Error fetching servers: " + e.message + "\n");
+    return null;
+  }
+}
+
+window.gfxConnect = async function(serverIndex) {
+  // Get server from the list stored by gfxServers()
+  var server = window._serverOptions[serverIndex || 0];
+  if (!server) {
+    server = { host: 'localhost', port: 8080 }; // Default
+  }
+  
+  _serverUrl = "http://" + server.host + ":" + server.port + "/qandyland.js";
+  
+  try {
     var gameState = await gfxPing("GS");
     
     if (gameState.startsWith("XW")) {
-      // No world found - need to create it
-      await print("No world found.\nCreating new world...");
+      await print("Creating new world...\n");
       gameState = await gfxPing("BB");
-      
-      if (gameState.startsWith("XX")) {
-        var bbErrorMsg = gameState.substring(2);
-        throw new Error("Error creating world: " + bbErrorMsg);
-      }
-      await print("\nWorld created. Game state: " + gameState);
     }
     
-    // Connection successful - start the 1-second server loop
-    startServerLoop();
+    gfxTick();
     
-    // Set initial game state for scripts to use
     window.gameState = parseGameState(gameState);
-    
-    return { success: true, gameState: gameState };
+    return window.gameState;
     
   } catch (e) {
     throw new Error("Failed to connect: " + e.message);
   }
-};
+}
 
-function startServerLoop() {
+function gfxTick() {
   if (window.gfxInterval) clearInterval(window.gfxInterval);
-  
   window.gfxInterval = setInterval(async function() {
     try {
       var command = window.gfxDo || "RF";
       window.gfxDo = "RF"; // Reset to default
-      
       var response = await gfxPing(command);
       gfxPong(response);
     } catch (e) { 
