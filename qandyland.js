@@ -1233,38 +1233,17 @@ function respondRetro(res, text) {
   res.end(String(text));
 }
 
-// Parse a p.txt manifest string and return the formatted GS-style game state string.
-// @param {string} content - the raw p.txt file content (lines of "PlayerCode=MapIdAvatarData")
-// @returns {string} formatted game state, e.g. "JSSa.SbA1M3N2L3.Tc"
-//   Format: <state><slot>.<slot>...  where state is JS or IP and each slot is
-//   <playerCode><mapId><avatarData> for occupied slots or <playerCode> for empty slots.
-//   Enhanced format: "Sa_LB0D0La" = Sa in lobby with avatar B0D0La,
-//   "SbA1M3N2L3" = Sb on map A1 with avatar M3N2L3,
-//   "Tc" = empty (unjoined) slot.
-function parsePlayerManifest(content) {
-  var lines = content.split('\n');
-  var hasActive = false;
-  var slots = [];
-  for (var i = 0; i < lines.length; i++) {
-    var line = lines[i].trim();
-    if (!line) continue;
-    var eqIdx = line.indexOf('=');
-    if (eqIdx < 0) continue;
-    var code   = line.slice(0, eqIdx);
-    var rest   = line.slice(eqIdx + 1).trim();
-    // rest may be: "" (empty/unjoined), "_L" (in lobby, no avatar),
-    // "_LB0D0La" (in lobby with avatar), "A1M3N2L3" (on map with avatar)
-    if (rest.length > 0) hasActive = true;
-    slots.push(code + rest);
-  }
-  var state = hasActive ? 'IP' : 'JS';
-  // 
-  // @@ game state needs to remain at 'JS' until we implement a system
-  // for all players have voted to 'start game', we will discuss a method
-  // to do this in the prompt 
-  //  
-  var state = 'JS';
-  return state + slots.join('.');
+// Build a compact game state response string in the format MMSSmapname.
+// @returns {string} e.g. "0000capflag"
+//   MM      = minutes (00-99), hardcoded to "00" until timer system is implemented
+//   SS      = seconds (00-59), hardcoded to "00" until timer system is implemented
+//   mapname = .gfx filename without extension (e.g. "capflag")
+function buildGameState() {
+  // TODO: Read actual game timer from server state once timer system is implemented
+  var minutes = '00';
+  var seconds = '00';
+  var mapName = 'capflag';
+  return minutes + seconds + mapName;
 }
 
 // ── Unified command string handler ────────────────────────────────────────────
@@ -1279,10 +1258,11 @@ function parsePlayerManifest(content) {
 //   BB – Big Bang: create a new multiplayer world on <drive> using server-side capflag.gfx.
 //        No client data needed; server reads capflag.gfx directly.
 //
-//   GS – Game State: return current state and complete player manifest.
-//        Response: <state><slot>.<slot>...
-//          state codes: JS (just starting), IP (in progress)
-//          slot format: <playerCode><mapId><avatarData> for occupied, <playerCode> for empty
+//   GS – Game State: return compact game state and map info.
+//        Response: MMSSmapname
+//          MM      = minutes (00-99)
+//          SS      = seconds (00-59)
+//          mapname = .gfx filename without extension (e.g. "capflag")
 //
 //   RF – Refresh: return map sector items for the session's current location.
 //        No client map parameter; server uses _playerOwnership[session].mapId.
@@ -1364,16 +1344,12 @@ function handleCommand(req, res, raw, driveName) {
       }
       // Initialise game console: create c.txt with ["BB"]
       fileSave(bbDrive, '/', 'c.txt', JSON.stringify(['BB']), session, 'BB');
-      // Return game state in GS format so client can fall through to normal handling
-      var bbLoad = fileLoad(bbDrive, '/', 'p.txt', session);
-      if (!bbLoad.success) {
-        return respondRetro(res, 'XX[World created but state unavailable]');
-      }
-      return respondRetro(res, parsePlayerManifest(bbLoad.content));
+      // Return game state in new compact format so client can continue
+      return respondRetro(res, buildGameState());
     }
 
     case 'GS': {
-      // Game State: return current state and complete player manifest.
+      // Game State: return compact game state: MMSSmapname
       var gsDrive = drive || legacyParam('d');
 
       // Validate drive name: safe filesystem characters only
@@ -1386,14 +1362,14 @@ function handleCommand(req, res, raw, driveName) {
         return respondRetro(res, 'XX[Drive not found]');
       }
 
-      // Read player manifest from p.txt
+      // Check world exists (p.txt must be present)
       var gsLoad = fileLoad(gsDrive, '/', 'p.txt', session);
       if (!gsLoad.success) {
         return respondRetro(res, 'XW[No game world]');
       }
 
-      // Parse p.txt and return formatted game state
-      var gsResponse = parsePlayerManifest(gsLoad.content);
+      // Return compact game state: MMSSmapname
+      var gsResponse = buildGameState();
       logRequest(req, 'GS', gsDrive, '', session, { success: true, result: gsResponse });
       return respondRetro(res, gsResponse);
     }

@@ -261,21 +261,6 @@ window.gfxServers = async function() {
     var response = await fetch(url, { method: 'GET' });
     if (!response.ok) return { error: 'Error: registry responded with ' + response.status };
     var data = await response.json();
-    // Validate shape minimally
-    if (!data || !Array.isArray(data.servers)) return { error: 'Error: invalid registry format' };
-    return data; // e.g. { success: true, servers: [ ... ] }
-  } catch (e) {
-    return { error: 'Error: ' + (e.message || String(e)) };
-  }
-}
-
-window.gfxServers = async function() {
-  var url = _registryUrl;
-  if (!url) return { error: 'Error: no registry URL configured' };
-  try {
-    var response = await fetch(url, { method: 'GET' });
-    if (!response.ok) return { error: 'Error: registry responded with ' + response.status };
-    var data = await response.json();
     
     // Build server options
     var servers = data.servers || [];
@@ -326,9 +311,18 @@ window.gfxConnect = async function(serverIndex) {
     }
     
     await gfxInit();
+
+    // Parse game state first so _gameMapFile is populated before loading the map
+    window.gameState = parseGameState(gameState);
+
+    // Load the map file specified by the server
+    if (window._gameMapFile) {
+      await gfxFetchMap(window._gameMapFile);
+      gfxSector("_L");
+    }
+
     gfxTick();
     
-    window.gameState = parseGameState(gameState);
     return window.gameState;
     
   } catch (e) {
@@ -351,7 +345,23 @@ function gfxTick() {
 }
 
 function parseGameState(gameState) {
-  // Parse "JSSa.Sb.Sc" -> return 'just starting' or 'in progress'
+  // Parse new compact format: "MMSSmapname" e.g. "0530capflag" -> 05:30, capflag.gfx
+  // Format requires at least 4 digits (MMSS) + minimum 2-char map name = 6 chars total
+  var MIN_COMPACT_FORMAT_LENGTH = 6;
+  if (gameState.length >= MIN_COMPACT_FORMAT_LENGTH && /^\d{4}/.test(gameState)) {
+    var minutes = gameState.slice(0, 2);
+    var seconds = gameState.slice(2, 4);
+    var mapName = gameState.slice(4);
+    window._gameTime    = minutes + ':' + seconds;
+    window._gameMapFile = mapName + '.gfx';
+    // Timer at 00:00 means the game is just starting
+    if (minutes === '00' && seconds === '00') {
+      return 'just starting';
+    } else {
+      return 'in progress';
+    }
+  }
+  // Fallback for old format (backward compatibility)
   return gameState.startsWith("JS") ? "just starting" : "in progress";
 }
 
@@ -407,9 +417,10 @@ async function gfxFetchMap(filename) {
       window.gfxSectorData[sectorId] = {
         tiles: tiles,   // 96-element array
         exits: exits,   // variable-length array of 2-char sector codes
+        objs: objs,     // variable-length array of {id, z, data} objects
         items: items,   // variable-length array of {id, z, data} objects
-        chars: [],      // character/player data for this sector
-        dyn:   []       // dynamic items for this sector
+        chars: [],      // character/player data for this sector - no longer used
+        dyn:   []       // dynamic items for this sector - no longer used
       };
     }
     
@@ -421,47 +432,9 @@ async function gfxFetchMap(filename) {
     return false;
   }
 }
-async function renderMap(mapId) {
-  try {
-    // Load map tile data
-    var mapData = await qdosServerLoad("capflag.js/" + mapId + "/m.txt");
-    
-    // Initialize graphics if not done
-    if (!gfxInitialized) {
-      await initializeGfx();
-    }
-    
-    // Render the tiles
-    gfx(mapData);
-    
-    // Load and render any existing items on this map
-    await renderMapItems(mapId);
-    
-  } catch (error) {
-    throw new Error("Failed to render map: " + error.message);
-  }
-}
-async function renderMapItems(mapId) {
-  try {
-    // Get directory listing for this map
-    var items = await qdosServerList("capflag.js/" + mapId + "/");
-    
-    // Filter for item files (two-char codes + position + .json)
-    var itemFiles = items.split('\n').filter(f => 
-      f.length > 6 && f.endsWith('.json') && 
-      f.match(/^[A-Z][a-z]\d+\.json$/)
-    );
-    
-    // Render each item
-    for (var file of itemFiles) {
-      await renderItem(mapId, file);
-    }
-    
-  } catch (error) {
-    console.warn("Failed to render items:", error.message);
-  }
-}
+
 window.gfxItems = function(items) {
+ console.log("gfxItems "+items);
  // Remove existing sector item elements
  var oldItems = document.querySelectorAll('.item');
  for (var k = 0; k < oldItems.length; k++) {
@@ -472,6 +445,12 @@ window.gfxItems = function(items) {
  if (items) {
   for (var b = 0; b < items.length; b++) {
    var item = items[b];
+   
+   // NEW: Skip player slot items (S# and T#) - server handles these as dynamic
+   if (/^[ST][a-z]$/.test(item.id)) {
+     continue; // Skip Sa, Sb, Ta, Tb, etc.
+   }
+   
    var z = parseInt(item.z, 10);
    if (isNaN(z)) { continue; }
    var y = Math.floor(z / (mapx + 1));
@@ -495,6 +474,7 @@ window.gfxItems = function(items) {
   }
  }
 }
+
 function zToXY(z) {
  var y = Math.floor(z / (mapx + 1));
  var x = z - (y * (mapx + 1));
@@ -651,12 +631,14 @@ window.gfxPong = function(rfStr) {
 window.gfxSector = function(sectorId) {
  if (!window.gfxSectorData || !window.gfxSectorData[sectorId]) { return; }
  window.gfxCurrentSector = sectorId;
+ 
  var sector = window.gfxSectorData[sectorId];
 
  if (sector.tiles && sector.tiles.length > 0) {
   gfxTiles(sector.tiles.join(""));
  }
 
+ console.log("639 gfxSector -> gfxItems");
  gfxItems(sector.items);
 
  // Reset dynamic data for the sector and clear any rendered MP elements
