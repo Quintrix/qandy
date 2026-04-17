@@ -36,13 +36,9 @@ async function startup(){
     var selectedServer = await input();  // Get user selection  
     var gameState = await gfxConnect(selectedServer); // Connect & return game state
     
-    // Handle game state
-    // if (gameState === "just starting") {
-    //   NewChar('');
-    // } else {
-    //   await print("Game in progress (" + (window._gameTime || "??:??") + ").\n");
-    //   setTimeout(function() { startup(); },200);
-    // }
+    // should render map here
+    
+    
   }
   setTimeout(function() {
     console.log("=== RENDER DEBUG ===");

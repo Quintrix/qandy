@@ -312,8 +312,12 @@ window.gfxConnect = async function(serverIndex) {
     
     await gfxInit();
 
-    // Parse game state first so _gameMapFile is populated before loading the map
-    window.gameState = parseGameState(gameState);
+    var minutes = gameState.slice(0, 2);
+    var seconds = gameState.slice(2, 4);
+    var mapName = gameState.slice(4);
+
+    window._gameTime    = minutes + ':' + seconds;
+    window._gameMapFile = mapName + '.gfx';
 
     // Load the map file specified by the server
     if (window._gameMapFile) {
@@ -342,27 +346,6 @@ function gfxTick() {
       console.error('Server tick error:', e); 
     }
   }, 1000);
-}
-
-function parseGameState(gameState) {
-  // Parse new compact format: "MMSSmapname" e.g. "0530capflag" -> 05:30, capflag.gfx
-  // Format requires at least 4 digits (MMSS) + minimum 2-char map name = 6 chars total
-  var MIN_COMPACT_FORMAT_LENGTH = 6;
-  if (gameState.length >= MIN_COMPACT_FORMAT_LENGTH && /^\d{4}/.test(gameState)) {
-    var minutes = gameState.slice(0, 2);
-    var seconds = gameState.slice(2, 4);
-    var mapName = gameState.slice(4);
-    window._gameTime    = minutes + ':' + seconds;
-    window._gameMapFile = mapName + '.gfx';
-    // Timer at 00:00 means the game is just starting
-    if (minutes === '00' && seconds === '00') {
-      return 'just starting';
-    } else {
-      return 'in progress';
-    }
-  }
-  // Fallback for old format (backward compatibility)
-  return gameState.startsWith("JS") ? "just starting" : "in progress";
 }
 
 async function gfxFetchMap(filename) {
