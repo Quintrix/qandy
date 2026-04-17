@@ -636,6 +636,7 @@ window.gfxSector = function(sectorId) {
   gfxTiles(sector.tiles.join(""));
  }
 
+ console.log("639 gfxSector -> gfxItems");
  gfxItems(sector.items);
 
  // Reset dynamic data for the sector and clear any rendered MP elements
