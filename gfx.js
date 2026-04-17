@@ -417,9 +417,10 @@ async function gfxFetchMap(filename) {
       window.gfxSectorData[sectorId] = {
         tiles: tiles,   // 96-element array
         exits: exits,   // variable-length array of 2-char sector codes
+        objs: objs,     // variable-length array of {id, z, data} objects
         items: items,   // variable-length array of {id, z, data} objects
-        chars: [],      // character/player data for this sector
-        dyn:   []       // dynamic items for this sector
+        chars: [],      // character/player data for this sector - no longer used
+        dyn:   []       // dynamic items for this sector - no longer used
       };
     }
     
@@ -630,6 +631,7 @@ window.gfxPong = function(rfStr) {
 window.gfxSector = function(sectorId) {
  if (!window.gfxSectorData || !window.gfxSectorData[sectorId]) { return; }
  window.gfxCurrentSector = sectorId;
+ 
  var sector = window.gfxSectorData[sectorId];
 
  if (sector.tiles && sector.tiles.length > 0) {

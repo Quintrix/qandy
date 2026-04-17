@@ -22,7 +22,7 @@ window.gfxConsole = window.gfxConsole || [];
 
 qdosScript("gfx.js");
 startup();
-var ts=3000;
+var ts=5000;
 setTimeout(function() { startup(); },400);
 
 // In capflag.js startup():
@@ -37,12 +37,12 @@ async function startup(){
     var gameState = await gfxConnect(selectedServer); // Connect & return game state
     
     // Handle game state
-    if (gameState === "just starting") {
-      NewChar('');
-    } else {
-      await print("Game in progress (" + (window._gameTime || "??:??") + ").\n");
-      setTimeout(function() { startup(); },200);
-    }
+    // if (gameState === "just starting") {
+    //   NewChar('');
+    // } else {
+    //   await print("Game in progress (" + (window._gameTime || "??:??") + ").\n");
+    //   setTimeout(function() { startup(); },200);
+    // }
   }
   setTimeout(function() {
     console.log("=== RENDER DEBUG ===");
@@ -95,13 +95,10 @@ function mainloop() {
  // Avatar selection complete - PObj holds the 4-character avatar string
 }
 
-
-
 // Game-specific click handler: called by gfxZClick when a z-location is clicked.
 window.zdown = function(z) {
  // z-location received; item selection handled via itemdown()
-};
-
+}
 // Called by gfxZClick when the player selects an item from the popup (or clicks the only item).
 // fullItemString format: itemId(2) + z(2) + data (e.g. "Sa13Za")
 window.itemdown = function(fullItemString) {
@@ -115,8 +112,7 @@ window.itemdown = function(fullItemString) {
    // TODO: Implement gameplay item handling
    break;
  }
-};
-
+}
 // Step 3 of join flow: send Qg (Get/Join Game) command with chosen ItemID + z + avatar.
 // Server checks item ownership, renames player file with avatar + player hat (La),
 // records session ownership, and updates the p.txt manifest.
@@ -138,9 +134,7 @@ window.joinGame = async function(fullItemString) {
   window.gfxDo = "Qg" + itemId + zLocation + playerAvatarStr;
   
   // No more interval management needed!
-};
-
-
+}
 // Send SG (Start Game) command to move the player from the lobby (w/) to a world
 // map, making them visible as an active player in RF responses for that map.
 // After SG succeeds, switches the RF polling interval to keep refreshing the map.
