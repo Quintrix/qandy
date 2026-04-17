@@ -271,16 +271,15 @@ window.gfxServers = async function() {
 
 window.gfxServers = async function() {
   var url = _registryUrl;
-  if (!url) return { error: 'Error: no registry URL' };
-  
+  if (!url) return { error: 'Error: no registry URL configured' };
   try {
     var response = await fetch(url, { method: 'GET' });
-    if (!response.ok) return { error: 'Error: ' + response.status };
+    if (!response.ok) return { error: 'Error: registry responded with ' + response.status };
     var data = await response.json();
     
-    // Display servers (filter by _gfxDrive automatically)
+    // Build server options
     var servers = data.servers || [];
-    var options = [{ name: 'localhost', host: 'localhost', port: 8080 }];
+    var options = [{ name: 'localhost', host: 'localhost', port: 8080, drives: [] }];
     
     for (var i = 0; i < servers.length; i++) {
       var s = servers[i];
@@ -289,15 +288,19 @@ window.gfxServers = async function() {
       }
     }
     
-    // Print numbered list
+    // Store for gfxConnect to use
+    window._serverOptions = options;
+    
+    // Display the list
+    await print("Available servers:\n");
     for (var j = 0; j < options.length; j++) {
       var server = options[j];
-      var label = server.name + " (" + server.host + ":" + server.port + ")";
+      var label = server.name || (server.host + ":" + server.port);
       await print(j + ". " + label + "\n");
     }
-    
     await print("Server [0]: ");
-    return options; // Store for gfxConnect to use
+    
+    return options;
     
   } catch (e) {
     await print("Error fetching servers: " + e.message + "\n");
@@ -322,6 +325,7 @@ window.gfxConnect = async function(serverIndex) {
       gameState = await gfxPing("BB");
     }
     
+    await gfxInit();
     gfxTick();
     
     window.gameState = parseGameState(gameState);
