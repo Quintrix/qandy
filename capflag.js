@@ -40,8 +40,8 @@ async function startup(){
     if (gameState === "just starting") {
       NewChar('');
     } else {
-      await print("Game in progress.\n");
-      setTimeout(function() { startup(); },200);  // Removed extra }
+      await print("Game in progress (" + (window._gameTime || "??:??") + ").\n");
+      setTimeout(function() { startup(); },200);
     }
   }
 }
