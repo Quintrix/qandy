@@ -53,14 +53,14 @@ window.flagConnect = async function() {
     }
     _serverUrl = proto + '://' + gfxConnected.host + ':' + gfxConnected.port + '/qandyland.js';
 
-    var drive = "gfx";
-    var gameState = await gfxPing("GS", {d: drive});
+    window._gfxDrive = "gfx";
+    var gameState = await gfxPing("GS");
     await print("\nGame state: " + gameState + "\n");
 
     // Handle "no world" - create one with big bang, then fall through to normal handling
     if (gameState.startsWith("XW")) {
       await print("No world found.\nCreating new world...");
-      gameState = await gfxPing("BB", {d: drive});
+      gameState = await gfxPing("BB");
       if (gameState.startsWith("XX")) {
         var bbErrorMsg = gameState.substring(2);
         await print("Error creating world: " + bbErrorMsg + "\n");
@@ -108,11 +108,10 @@ window.flagConnect = async function() {
       window.gameState = 'just starting';
 
       // Start RF polling immediately so players already in the lobby are visible
-      var lobbyDrive = drive;
       if (rfInterval) clearInterval(rfInterval);
       rfInterval = setInterval(async function() {
         try {
-          var rfRes = await gfxPing("RF", { d: lobbyDrive, m: '_L' });
+          var rfRes = await gfxPing("RF");
           gfxPong(rfRes);
         } catch (e) { console.debug('lobby RF poll error:', e); /* silent: lobby RF errors don't affect gameplay */ }
       }, 1000);
@@ -183,7 +182,7 @@ window.itemdown = function(fullItemString) {
  switch (window.gameState) {
   case 'just starting':
    // Player slot items start with S or T (e.g. Sa, Tb)
-   if (/^[ST][a-z]$/.test(itemId)) { joinGame(itemId); }
+   if (/^[ST][a-z]$/.test(itemId)) { joinGame(fullItemString.slice(0, 4)); }
    break;
   case 'in progress':
    // TODO: Implement gameplay item handling
@@ -191,22 +190,23 @@ window.itemdown = function(fullItemString) {
  }
 };
 
-// Step 3 of join flow: send JG (Join Game) command with chosen ItemID + avatar.
-// Server updates p.txt manifest and creates the player file in the map directory.
-window.joinGame = async function(itemId) {
+// Step 3 of join flow: send Qg (Get/Join Game) command with chosen ItemID + z + avatar.
+// Server checks item ownership, renames player file with avatar + player hat (La),
+// records session ownership, and updates the p.txt manifest.
+window.joinGame = async function(itemRef) {
+ // itemRef = itemId(2) + z(2), e.g. "Sa33"
+ var itemId = itemRef.slice(0, 2);
  hpop();
  playerItemId = itemId;
- var drive = "gfx";
  try {
-  var res = await gfxPing("JG", { d: drive, id: itemId, av: playerAvatarStr });
+  var res = await gfxPing("Qg" + itemRef + playerAvatarStr);
   if (res.startsWith("OK")) {
    // Start the 1-second RF (Refresh) tick for real-time lobby updates.
    // All players begin in the lobby (_L) regardless of team.
-   var mapId = '_L';
    if (rfInterval) clearInterval(rfInterval);
    rfInterval = setInterval(async function() {
     try {
-     var rfRes = await gfxPing("RF", { d: drive, m: mapId });
+     var rfRes = await gfxPing("RF");
      gfxPong(rfRes);
     } catch (e) { console.error('RF tick error:', e); }
    }, 1000);
@@ -221,8 +221,8 @@ window.joinGame = async function(itemId) {
 // Handle a single game console entry, updating client game state as needed.
 function processConsoleEntry(entry) {
  if (typeof entry !== 'string') return;
- if (entry.startsWith('JG ')) {
-  // "JG <hatId> <avatar>" – a player joined; refresh empty slots display
+ if (entry.startsWith('Qg ') || entry.startsWith('JG ')) {
+  // "Qg <hatId> <avatar>" – a player joined via Qg (or legacy JG); refresh empty slots display
   var entryParts = entry.split(' ');
   var hatId = entryParts[1];
   // Remove the newly-occupied slot from the emptySlots list
@@ -234,18 +234,16 @@ function processConsoleEntry(entry) {
 
 // Send SG (Start Game) command to move the player from the lobby (w/) to a world
 // map, making them visible as an active player in RF responses for that map.
-// After SG succeeds, switches the RF polling interval from the lobby to the world map.
+// After SG succeeds, switches the RF polling interval to keep refreshing the map.
 window.startGame = async function(itemId, avatar) {
- var drive = 'gfx';
  try {
-  var res = await gfxPing('SG', { d: drive, id: itemId, av: avatar });
+  var res = await gfxPing("SG" + itemId + avatar);
   if (res.startsWith('OK')) {
-   // Switch RF polling from lobby (_L) to the player's world map
+   // Switch RF polling to the player's world map (server tracks map via session)
    if (rfInterval) clearInterval(rfInterval);
-   var mapId = (itemId.charAt(0) === 'S') ? 'A1' : 'L8';
    rfInterval = setInterval(async function() {
     try {
-     var rfRes = await gfxPing("RF", { d: drive, m: mapId });
+     var rfRes = await gfxPing("RF");
      gfxPong(rfRes);
     } catch (e) { console.error('RF tick error:', e); }
    }, 1000);
@@ -335,7 +333,6 @@ async function flagServers(opts) {
 }
 
 async function flagCreate() {
-  var drive="gfx";
-  var res = await gfxPing("BB", {d: drive});
+  var res = await gfxPing("BB");
   await print(res);
 }

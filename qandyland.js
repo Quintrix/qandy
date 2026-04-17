@@ -1234,10 +1234,13 @@ function respondRetro(res, text) {
 }
 
 // Parse a p.txt manifest string and return the formatted GS-style game state string.
-// @param {string} content - the raw p.txt file content (lines of "PlayerCode=AvatarData")
-// @returns {string} formatted game state, e.g. "JSSa.SbM3N2L3.Tc"
+// @param {string} content - the raw p.txt file content (lines of "PlayerCode=MapIdAvatarData")
+// @returns {string} formatted game state, e.g. "JSSa.SbA1M3N2L3.Tc"
 //   Format: <state><slot>.<slot>...  where state is JS or IP and each slot is
-//   <playerCode><avatarData> for occupied slots or <playerCode> for empty slots.
+//   <playerCode><mapId><avatarData> for occupied slots or <playerCode> for empty slots.
+//   Enhanced format: "Sa_LB0D0La" = Sa in lobby with avatar B0D0La,
+//   "SbA1M3N2L3" = Sb on map A1 with avatar M3N2L3,
+//   "Tc" = empty (unjoined) slot.
 function parsePlayerManifest(content) {
   var lines = content.split('\n');
   var hasActive = false;
@@ -1248,9 +1251,11 @@ function parsePlayerManifest(content) {
     var eqIdx = line.indexOf('=');
     if (eqIdx < 0) continue;
     var code   = line.slice(0, eqIdx);
-    var avatar = line.slice(eqIdx + 1).trim();
-    if (avatar.length > 0) hasActive = true;
-    slots.push(code + avatar);
+    var rest   = line.slice(eqIdx + 1).trim();
+    // rest may be: "" (empty/unjoined), "_L" (in lobby, no avatar),
+    // "_LB0D0La" (in lobby with avatar), "A1M3N2L3" (on map with avatar)
+    if (rest.length > 0) hasActive = true;
+    slots.push(code + rest);
   }
   var state = hasActive ? 'IP' : 'JS';
   // 
@@ -1262,66 +1267,105 @@ function parsePlayerManifest(content) {
   return state + slots.join('.');
 }
 
-// ── Form-encoded 2-character command handler (retro BB protocol) ──────────────
+// ── Unified command string handler ────────────────────────────────────────────
 //
-// POST /qandyland.js  Content-Type: application/x-www-form-urlencoded
-//   c=BB&d=<drive>
+// POST /qandyland.js?d=<drive>  Content-Type: text/plain
+//   body = commandString  (e.g. "BB", "GS", "RF", "QgSa33B0D0", "Qn")
+//
+// Also handles legacy form-encoded requests (Content-Type: application/x-www-form-urlencoded)
+// when driveName is null (backward compatibility).
 //
 // Commands:
-//   BB – Big Bang: create a new multiplayer world on <drive> by loading
-//        capflag.gfx from the server's working directory.
-//        d = drive name          (safe chars only)
+//   BB – Big Bang: create a new multiplayer world on <drive> using server-side capflag.gfx.
+//        No client data needed; server reads capflag.gfx directly.
 //
-//   GS – Game State: return current state and complete player manifest
-//        d = drive name          (safe chars only)
+//   GS – Game State: return current state and complete player manifest.
 //        Response: <state><slot>.<slot>...
 //          state codes: JS (just starting), IP (in progress)
-//          slot format: <playerCode><avatarData> for occupied, <playerCode> for empty
+//          slot format: <playerCode><mapId><avatarData> for occupied, <playerCode> for empty
 //
-//   RF – Refresh: return complete map state as a comma-separated item list
-//        d = drive name          (safe chars only)
-//        m = map ID              (e.g. "A1")
-//        Response: comma-separated codes, e.g. "Sa43,Tb22,Sa43B1D0C2"
-//          plain item / empty slot: "<id(2)><z(2-digit)>"          e.g. "Sa43"
-//          item with avatar:        "<id(2)><z(2-digit)><avatarStr>" e.g. "Sa43B1D0C2"
+//   RF – Refresh: return map sector items for the session's current location.
+//        No client map parameter; server uses _playerOwnership[session].mapId.
+//        Defaults to lobby (_L) if no ownership record exists.
+//        Response: <mapId><items>  e.g. "A1Sa25B1D0,Tb44,Yj22Sa"
+//          mapId      – 2-char sector prefix
+//          items      – comma-separated "<id(2)><z(2-digit)>[avatarStr]"
+//
+//   JG – Join Game (legacy): claim a player slot.
+//        Parameters encoded in body: id=itemId, av=avatar
+//
+//   SG – Start Game: move player from lobby to world map.
+//        Body data: itemId(2) + avatar
+//
+//   Qg – Get Item / Join Game: pick up an item (player hat = join game).
+//        Body data: itemId(2) + z(2) + avatar
+//        Player items (S/T prefix): renamed with avatar + "La" hat, session ownership set.
+//
+//   Qn – Move North: rename player file z-8 (8-wide grid).
+//   Qs – Move South: rename player file z+8.
+//   Qe – Move East:  rename player file z+1 (boundary: x must be < 7).
+//   Qw – Move West:  rename player file z-1 (boundary: x must be > 0).
+//        Movement: zero-response; server updates world state silently.
 
 // Returns true if the drive name contains only safe filesystem characters.
 function isValidDriveName(drive) {
   return !!(drive && /^[A-Za-z0-9_-]+$/.test(drive) && drive.length <= 64);
 }
 
-function handleCommand(req, res, raw) {
+function handleCommand(req, res, raw, driveName) {
   var session = getSession(req, res);
-  var params = {};
-  var pairs = raw.split('&');
-  for (var i = 0; i < pairs.length; i++) {
-    var idx = pairs[i].indexOf('=');
-    if (idx > 0) {
-      params[pairs[i].slice(0, idx)] = pairs[i].slice(idx + 1);
+  var cmd, cmdData, drive;
+
+  if (driveName !== null && driveName !== undefined) {
+    // New unified command string protocol: first 2 chars = command, rest = data
+    cmd     = String(raw).slice(0, 2);
+    cmdData = String(raw).slice(2);
+    drive   = String(driveName || '');
+  } else {
+    // Legacy form-encoded protocol: parse c=<cmd>&d=<drive>&... once and cache
+    var legacyParams = {};
+    var pairs = String(raw).split('&');
+    for (var i = 0; i < pairs.length; i++) {
+      var idx = pairs[i].indexOf('=');
+      if (idx > 0) {
+        legacyParams[pairs[i].slice(0, idx)] = pairs[i].slice(idx + 1);
+      }
     }
+    cmd     = String(legacyParams.c || '').toUpperCase();
+    cmdData = '';
+    drive   = String(legacyParams.d || '');
   }
 
-  var cmd = String(params.c || '').toUpperCase();
+  // Helper: extract a parameter from pre-parsed legacy form-encoded body.
+  // Returns '' when using the new unified command string protocol.
+  function legacyParam(key) {
+    if (driveName !== null && driveName !== undefined) return '';
+    if (typeof legacyParams !== 'undefined') return String(legacyParams[key] || '');
+    return '';
+  }
+
   var result;
 
   switch (cmd) {
     case 'BB': {
-      var drive = String(params.d || '');
+      // Big Bang: create a new multiplayer world using server-side capflag.gfx.
+      // Drive comes from query param (new protocol) or legacy d= field.
+      var bbDrive = drive || legacyParam('d');
 
       // Validate drive name: safe filesystem characters only
-      if (!isValidDriveName(drive)) {
+      if (!isValidDriveName(bbDrive)) {
         return respond(res, { success: false, error: 'invalid drive name' });
       }
 
-      result = bigbang(drive, session);
-      logRequest(req, 'BB', drive, '', session, result);
+      result = bigbang(bbDrive, session);
+      logRequest(req, 'BB', bbDrive, '', session, result);
       if (!result.success) {
         return respondRetro(res, 'XX' + result.error);
       }
       // Initialise game console: create c.txt with ["BB"]
-      fileSave(drive, '/', 'c.txt', JSON.stringify(['BB']), session, 'BB');
+      fileSave(bbDrive, '/', 'c.txt', JSON.stringify(['BB']), session, 'BB');
       // Return game state in GS format so client can fall through to normal handling
-      var bbLoad = fileLoad(drive, '/', 'p.txt', session);
+      var bbLoad = fileLoad(bbDrive, '/', 'p.txt', session);
       if (!bbLoad.success) {
         return respondRetro(res, 'XX[World created but state unavailable]');
       }
@@ -1329,7 +1373,8 @@ function handleCommand(req, res, raw) {
     }
 
     case 'GS': {
-      var gsDrive = String(params.d || '');
+      // Game State: return current state and complete player manifest.
+      var gsDrive = drive || legacyParam('d');
 
       // Validate drive name: safe filesystem characters only
       if (!isValidDriveName(gsDrive)) {
@@ -1354,14 +1399,14 @@ function handleCommand(req, res, raw) {
     }
 
     case 'JG': {
-      // Join Game: claim a player slot in the lobby (w/ directory).
+      // Join Game (legacy): claim a player slot in the lobby (w/ directory).
       // Scans the lobby for a file starting with the player item code (e.g. "Sa").
       // If the slot exists and is unclaimed (4-char base name, e.g. "Sa33.txt"),
       // renames it to append the player's avatar (e.g. "Sa33B0D0.txt").
-      // Parameters: d=drive, id=itemId (e.g. "Sa"), av=avatar (e.g. "B0D0")
-      var jgDrive  = String(params.d  || '');
-      var jgItemId = String(params.id || '');
-      var jgAvatar = String(params.av || '');
+      // Parameters (legacy): d=drive, id=itemId (e.g. "Sa"), av=avatar (e.g. "B0D0")
+      var jgDrive  = drive || legacyParam('d');
+      var jgItemId = legacyParam('id');
+      var jgAvatar = legacyParam('av');
 
       if (!isValidDriveName(jgDrive))              return respondRetro(res, 'XXInvalid drive');
       if (!/^[A-Z][a-z]$/.test(jgItemId))          return respondRetro(res, 'XXInvalid item ID');
@@ -1401,13 +1446,13 @@ function handleCommand(req, res, raw) {
       // Record session ownership so future move/SG commands can be authorised
       _playerOwnership[session] = { itemId: jgItemId, mapId: '_L', drive: jgDrive };
 
-      // Update p.txt to mark this slot as claimed so GS reflects the correct state
+      // Update p.txt: mark slot as claimed with lobby map + avatar
       var jgPLoad = fileLoad(jgDrive, '/', 'p.txt', session);
       if (jgPLoad.success) {
         var jgEscId = jgItemId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         var jgPUpdated = jgPLoad.content.replace(
           new RegExp('^(' + jgEscId + ')=.*$', 'm'),
-          '$1=' + jgAvatar
+          '$1=_L' + jgAvatar
         );
         fileSave(jgDrive, '/', 'p.txt', jgPUpdated, session, 'JG');
       }
@@ -1423,17 +1468,25 @@ function handleCommand(req, res, raw) {
       // Start Game: move the player from the lobby (w/ directory) to a world map.
       // Finds the claimed lobby slot file in w/ (e.g. "Sa33B0D0.txt"), creates an
       // active player file in w/[mapId]/, then removes the lobby slot file.
-      // Parameters: d=drive, id=itemId (e.g. "Sa"), av=avatar (e.g. "B1D0C2")
-      var sgDrive  = String(params.d  || '');
-      var sgItemId = String(params.id || '');
-      var sgAvatar = String(params.av || '');
+      // New protocol body data: itemId(2) + avatar
+      // Legacy parameters: d=drive, id=itemId (e.g. "Sa"), av=avatar (e.g. "B1D0C2")
+      var sgDrive  = drive || legacyParam('d');
+      var sgItemId, sgAvatar;
+      if (driveName !== null && driveName !== undefined) {
+        // New protocol: cmdData = itemId(2) + avatar
+        sgItemId = cmdData.slice(0, 2);
+        sgAvatar = cmdData.slice(2);
+      } else {
+        sgItemId = legacyParam('id');
+        sgAvatar = legacyParam('av');
+      }
 
       if (!isValidDriveName(sgDrive))                        return respondRetro(res, 'XXInvalid drive');
       if (!/^[A-Z][a-z]$/.test(sgItemId))                   return respondRetro(res, 'XXInvalid item ID');
       if (!/^[A-Za-z0-9]{2,20}$/.test(sgAvatar))            return respondRetro(res, 'XXInvalid avatar');
       if (!drives[sgDrive])                                  return respondRetro(res, 'XXDrive not found');
 
-      // Verify session owns this player slot (set during JG)
+      // Verify session owns this player slot (set during Qg/JG)
       var sgOwner = _playerOwnership[session];
       if (!sgOwner || sgOwner.itemId !== sgItemId)           return respondRetro(res, 'XXUnauthorized');
 
@@ -1477,30 +1530,48 @@ function handleCommand(req, res, raw) {
       // Update player ownership to reflect the world map
       _playerOwnership[session] = { itemId: sgItemId, mapId: sgMapId, drive: sgDrive };
 
+      // Update p.txt to reflect player's new map sector
+      var sgPLoad = fileLoad(sgDrive, '/', 'p.txt', session);
+      if (sgPLoad.success) {
+        var sgEscId = sgItemId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        var sgPUpdated = sgPLoad.content.replace(
+          new RegExp('^(' + sgEscId + ')=.*$', 'm'),
+          '$1=' + sgMapId + sgAvatar
+        );
+        fileSave(sgDrive, '/', 'p.txt', sgPUpdated, session, 'SG');
+      }
+
       logRequest(req, 'SG', sgDrive, sgItemId, session, { success: true });
       return respondRetro(res, 'OK' + sgItemId);
     }
 
     case 'RF': {
-      // Refresh: return complete map state as a comma-separated item list.
-      // Parameters: d=drive, m=mapId (e.g. "A1" or "_L" for lobby)
-      // Response: comma-separated item codes, e.g. "Sa43,Tb22,Sa43B1D0C2"
-      //   Each code is "<id(2)><z(2-digit)>" for plain items / empty slots,
-      //   or "<id(2)><z(2-digit)><avatarStr>" for items with avatar data (e.g. active players).
-      //   Avatar strings may also carry a movements suffix: "<avatarStr>-<movements>".
+      // Refresh: return current map sector items for the session's location.
+      // Server determines map from _playerOwnership[session].mapId (secure).
+      // Defaults to lobby (_L) if no ownership record exists.
+      // Response format: <mapId><items>  e.g. "A1Sa25B1D0,Tb44,Yj22Sa"
+      //   mapId  – 2-char sector prefix
+      //   items  – comma-separated "<id(2)><z(2-digit)>[avatarStr]"
       //
-      // Filename length determines content type (no separate manifest needed):
+      // Filename length determines content type:
       //   8 chars total ("Sa43.txt")               → plain item or empty player slot
       //   >8 chars total ("Sa43B1D0C2.txt")         → item with avatar
       //   >8 chars with dash ("Sa43B1D0C2-NSW.txt") → item with avatar and movements
-      //
-      // Map ID "_L" refers to the lobby (w/ directory); other IDs refer to w/[id]/.
-      var rfDrive = String(params.d || '');
-      var rfMapId = String(params.m || '');
+      var rfDrive, rfMapId;
 
-      if (!isValidDriveName(rfDrive))                    return respondRetro(res, 'XXInvalid drive');
-      if (!/^(_L|[A-Z][1-9A-Z])$/.test(rfMapId))        return respondRetro(res, 'XXInvalid map ID');
-      if (!drives[rfDrive])                              return respondRetro(res, 'XXDrive not found');
+      // Use session ownership to determine drive and map (secure: client cannot choose)
+      var rfOwner = _playerOwnership[session];
+      if (rfOwner && rfOwner.drive && rfOwner.mapId) {
+        rfDrive = rfOwner.drive;
+        rfMapId = rfOwner.mapId;
+      } else {
+        // No ownership: use query-param drive and default to lobby
+        rfDrive = drive || legacyParam('d');
+        rfMapId = '_L';
+      }
+
+      if (!isValidDriveName(rfDrive))  return respondRetro(res, 'XXInvalid drive');
+      if (!drives[rfDrive])            return respondRetro(res, 'XXDrive not found');
 
       // Determine directory: lobby (_L) maps to w/, world maps to w/[mapId]/
       var rfPath = (rfMapId === '_L') ? 'w' : 'w/' + rfMapId;
@@ -1532,9 +1603,160 @@ function handleCommand(req, res, raw) {
         }
       }
 
-      var rfResponse = rfAllItems.join(',');
+      // Prepend mapId to response so client knows which sector it received
+      var rfResponse = rfMapId + rfAllItems.join(',');
       logRequest(req, 'RF', rfDrive, rfMapId, session, { success: true, result: rfResponse });
       return respondRetro(res, rfResponse);
+    }
+
+    case 'Qg': {
+      // Get Item / Join Game: pick up an item from the current map sector.
+      // For player items (S or T prefix), this acts as "join game" –
+      // the player claims the hat, their avatar is assigned, and a player hat (La) is added.
+      // Body data (cmdData): itemId(2) + z(2) + avatar (e.g. "Sa33B0D0")
+      // Server renames file: Sa33.txt → Sa33B0D0La.txt
+      var qgDrive  = drive;
+      var qgItemId = cmdData.slice(0, 2);
+      var qgZ      = cmdData.slice(2, 4);
+      var qgAvatar = cmdData.slice(4);
+
+      if (!isValidDriveName(qgDrive))            return respondRetro(res, 'XXInvalid drive');
+      if (!/^[A-Z][a-z]$/.test(qgItemId))        return respondRetro(res, 'XXInvalid item ID');
+      if (!/^\d{2}$/.test(qgZ))                  return respondRetro(res, 'XXInvalid z-location');
+      if (!/^[A-Za-z0-9]{2,20}$/.test(qgAvatar)) return respondRetro(res, 'XXInvalid avatar');
+      if (!drives[qgDrive])                       return respondRetro(res, 'XXDrive not found');
+
+      // Dispatch by item type
+      var qgItemType = qgItemId.charAt(0);
+      switch (qgItemType) {
+        case 'S':
+        case 'T': {
+          // Player hat items: claim the slot and join the game
+          // Scan lobby directory (w/) for the matching unclaimed slot file
+          var qgScanResult = fileList(qgDrive, 'w', null, session);
+          var qgSlotFile = null;
+          if (qgScanResult.success && qgScanResult.listing) {
+            var qgScanFiles = qgScanResult.listing.split('\n');
+            for (var qgSi = 0; qgSi < qgScanFiles.length; qgSi++) {
+              var qgSf = qgScanFiles[qgSi].trim();
+              if (!qgSf) continue;
+              var qgSb = qgSf.substring(qgSf.lastIndexOf('/') + 1);
+              if (qgSb.indexOf(qgItemId) === 0) {
+                qgSlotFile = qgSb;
+                break;
+              }
+            }
+          }
+
+          if (!qgSlotFile) return respondRetro(res, 'XXNot a valid player slot');
+
+          // Verify the slot is unclaimed (base name = exactly 4 chars: itemId + z)
+          var qgBase = qgSlotFile.replace(/\.txt$/i, '');
+          if (qgBase.length > 4) return respondRetro(res, 'XXSlot already in use');
+          if (qgBase.length < 4) return respondRetro(res, 'XXNot a valid player slot');
+
+          // Rename: Sa33.txt → Sa33B0D0La.txt (append avatar + player hat La)
+          var qgNewName = qgItemId + qgZ + qgAvatar + 'La.txt';
+          var qgRename = fileRename(qgDrive, '/', 'w/' + qgSlotFile, 'w/' + qgNewName, session);
+          if (!qgRename.success) return respondRetro(res, 'XXFailed to claim slot: ' + qgRename.error);
+
+          // Record session ownership so future move commands can be authorised
+          _playerOwnership[session] = { itemId: qgItemId, mapId: '_L', drive: qgDrive };
+
+          // Update p.txt: mark slot as claimed with lobby map + avatar + hat
+          var qgPLoad = fileLoad(qgDrive, '/', 'p.txt', session);
+          if (qgPLoad.success) {
+            var qgEscId = qgItemId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            var qgPUpdated = qgPLoad.content.replace(
+              new RegExp('^(' + qgEscId + ')=.*$', 'm'),
+              '$1=_L' + qgAvatar + 'La'
+            );
+            fileSave(qgDrive, '/', 'p.txt', qgPUpdated, session, 'Qg');
+          }
+
+          // Log join event to game console
+          fileAppendJSON(qgDrive, '/', 'c.txt', 'Qg ' + qgItemId + ' ' + qgAvatar, session, 'Qg');
+
+          logRequest(req, 'Qg', qgDrive, qgItemId, session, { success: true });
+          return respondRetro(res, 'OK' + qgItemId + qgZ);
+        }
+        default:
+          return respondRetro(res, 'XXUnknown item type for Qg');
+      }
+    }
+
+    case 'Qn':
+    case 'Qs':
+    case 'Qe':
+    case 'Qw': {
+      // Movement commands: rename the session's player file to a new z-location.
+      // Grid: 8 tiles wide (columns 0-7), 12 tiles tall (rows 0-11), z range 0-95.
+      // Zero-response design: server updates world state silently; client observes via RF.
+      var mvOwner = _playerOwnership[session];
+      if (!mvOwner) { res.writeHead(204); return res.end(); }
+
+      var mvDrive  = mvOwner.drive;
+      var mvItemId = mvOwner.itemId;
+      var mvMapId  = mvOwner.mapId;
+
+      if (!isValidDriveName(mvDrive) || !drives[mvDrive]) { res.writeHead(204); return res.end(); }
+
+      // Find the current player file in the map directory
+      var mvDir = (mvMapId === '_L') ? 'w' : 'w/' + mvMapId;
+      var mvList = fileList(mvDrive, mvDir, null, session);
+      var mvCurrentFile = null;
+      var mvCurrentZ    = -1;
+      var mvAvatarPart  = '';
+
+      if (mvList.success && mvList.listing) {
+        var mvFiles = mvList.listing.split('\n');
+        for (var mvi = 0; mvi < mvFiles.length; mvi++) {
+          var mvF = mvFiles[mvi].trim();
+          if (!mvF) continue;
+          var mvB = mvF.substring(mvF.lastIndexOf('/') + 1);
+          var mvMatch = mvB.match(/^([A-Z][a-z])(\d{2})(.*)\.txt$/);
+          if (mvMatch && mvMatch[1] === mvItemId) {
+            mvCurrentFile = mvB;
+            mvCurrentZ    = parseInt(mvMatch[2], 10);
+            mvAvatarPart  = mvMatch[3];
+            break;
+          }
+        }
+      }
+
+      if (!mvCurrentFile || mvCurrentZ < 0) {
+        // Player file not found – no response (zero-response design)
+        res.writeHead(204);
+        return res.end();
+      }
+
+      // Calculate new z-location with boundary checking (8 wide, 12 tall, 0-95)
+      var GFX_COLS = 8;
+      var GFX_TOTAL_TILES = 96; // 8 * 12
+      var mvNewZ = mvCurrentZ;
+      var mvCol  = mvCurrentZ % GFX_COLS;
+
+      if (cmd === 'Qn') { mvNewZ = mvCurrentZ - GFX_COLS; }
+      if (cmd === 'Qs') { mvNewZ = mvCurrentZ + GFX_COLS; }
+      if (cmd === 'Qe') { if (mvCol < GFX_COLS - 1) { mvNewZ = mvCurrentZ + 1; } }
+      if (cmd === 'Qw') { if (mvCol > 0)             { mvNewZ = mvCurrentZ - 1; } }
+
+      // Boundary check: z must be within 0-95
+      if (mvNewZ < 0 || mvNewZ >= GFX_TOTAL_TILES || mvNewZ === mvCurrentZ) {
+        // Invalid move – do nothing (zero-response)
+        res.writeHead(204);
+        return res.end();
+      }
+
+      // Rename player file to new z-location: Sa33B0D0La.txt → Sa25B0D0La.txt
+      var mvNewZStr = (mvNewZ < 10 ? '0' : '') + mvNewZ;
+      var mvNewFile = mvItemId + mvNewZStr + mvAvatarPart + '.txt';
+      var mvRename  = fileRename(mvDrive, '/', mvDir + '/' + mvCurrentFile, mvDir + '/' + mvNewFile, session);
+
+      // Zero-response regardless of success
+      logRequest(req, cmd, mvDrive, mvItemId + ':' + mvCurrentZ + '->' + mvNewZ, session, { success: mvRename.success });
+      res.writeHead(204);
+      return res.end();
     }
 
     default:
@@ -1659,9 +1881,23 @@ var server = http.createServer(function (req, res) {
 
   if (reqPathname === '/qandyland.js' && req.method === 'POST') {
     var contentType = (req.headers['content-type'] || '').toLowerCase();
+    if (contentType.indexOf('text/plain') >= 0) {
+      // New unified command string protocol: body = commandString, drive = ?d= query param
+      var driveParam = '';
+      try {
+        var reqUrl2 = new URL(req.url, 'http://localhost');
+        driveParam = reqUrl2.searchParams.get('d') || '';
+      } catch (e) { /* ignore */ }
+      readBody(req).then(function (raw) {
+        handleCommand(req, res, raw, driveParam);
+      }).catch(function (err) {
+        respond(res, { success: false, error: 'server error: ' + err.message });
+      });
+      return;
+    }
     if (contentType.indexOf('application/x-www-form-urlencoded') >= 0) {
       readBody(req).then(function (raw) {
-        handleCommand(req, res, raw);
+        handleCommand(req, res, raw, null);
       }).catch(function (err) {
         respond(res, { success: false, error: 'server error: ' + err.message });
       });
