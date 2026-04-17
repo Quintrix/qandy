@@ -80,37 +80,9 @@ async function showServers() {
     
   } catch (e) {
     await print("Connection failed: " + e.message + "\n");
-    await print("Retrying in 5 seconds...\n");
-    setTimeout(() => showServerSelectionAndConnect(), 5000);
+    setTimeout(() => startup(), 5000);
   }
 }
-
-
-
-// Replace the entire flagConnect function with:
-window.flagConnect = async function(serverIp) {
-  try {
-    await print("Connecting to server...\n");
-    
-    // gfx.js handles all connection logic and starts the loop
-    var result = await gfxConnect(serverIp);
-    
-    await print("Connected! Game state: " + window.gameState + "\n");
-    
-    // Show avatar selection or game UI
-    if (window.gameState === "just starting") {
-      await print("Select your avatar and click a player hat to join!\n");
-      NewChar(''); // Start avatar selection
-    } else {
-      await print("Game in progress. Select a hat to join!\n");
-    }
-    
-  } catch (e) {
-    await print("Connection failed: " + e.message + "\n");
-    await print("Retrying in 5 seconds...\n");
-    setTimeout(() => flagConnect(serverIp), 5000);
-  }
-};
 
 window.NewChar = function(a) {
  PopForce="visible";
@@ -149,8 +121,7 @@ window.NewChar = function(a) {
    }
   }
  }
-};
-
+}
 function mainloop() {
  // Avatar selection complete - PObj holds the 4-character avatar string
 }
