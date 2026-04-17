@@ -1,6 +1,11 @@
 
 window.GFX = 0; // set to true when gfx.js ready to use
 
+var _serverUrl = 'http://localhost:8080/qandyland.js';
+var _registryUrl = 'https://qandy.vercel.app/api/servers';
+var _gfxDrive = 'gfx'; // current drive context; set by gfxCreation / gfxGameState
+
+
 var PopAlign = "click"; // "center", "click"
 var PopUpVis = "hidden"; // current target visibility
 var PForce = "visible";   // forced visibility on mouseout in your original code
@@ -9,9 +14,7 @@ var PUV;                 // timeout id (used to clear/set the timeout)
 var mapx=7;
 var mapy=11;
 
-var _serverUrl = 'http://localhost:8080/qandyland.js';
-var _registryUrl = 'https://qandy.vercel.app/api/servers';
-var _gfxDrive = 'gfx'; // current drive context; set by gfxCreation / gfxGameState
+window.gfxDo = "RF"; // Default refresh command
 
 // Initialization state tracking
 window._gfxInitialized = false;

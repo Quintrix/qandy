@@ -193,29 +193,23 @@ window.itemdown = function(fullItemString) {
 // Step 3 of join flow: send Qg (Get/Join Game) command with chosen ItemID + z + avatar.
 // Server checks item ownership, renames player file with avatar + player hat (La),
 // records session ownership, and updates the p.txt manifest.
-window.joinGame = async function(itemRef) {
- // itemRef = itemId(2) + z(2), e.g. "Sa33"
- var itemId = itemRef.slice(0, 2);
+window.joinGame = async function(fullItemString) {
  hpop();
- playerItemId = itemId;
- try {
-  var res = await gfxPing("Qg" + itemRef + playerAvatarStr);
-  if (res.startsWith("OK")) {
-   // Start the 1-second RF (Refresh) tick for real-time lobby updates.
-   // All players begin in the lobby (_L) regardless of team.
-   if (rfInterval) clearInterval(rfInterval);
-   rfInterval = setInterval(async function() {
-    try {
-     var rfRes = await gfxPing("RF");
-     gfxPong(rfRes);
-    } catch (e) { console.error('RF tick error:', e); }
-   }, 1000);
-  } else {
-   pop("Error joining: "+res);
-  }
- } catch (e) {
-  pop("Connection error");
+ 
+ // Parse: "Sa43Za" -> itemId="Sa", zLocation="43", itemData="Za"
+ var itemId = fullItemString.slice(0, 2);
+ var zLocation = fullItemString.slice(2, 4); 
+ var itemData = fullItemString.slice(4, 6);
+ 
+ // Silent fail if hat already claimed
+ if (itemData !== "Za") {
+   hpop();
+   return;
  }
+ 
+ // Queue join command for next server tick
+ playerItemId = itemId;
+ window.gfxDo = "Qg" + itemId + zLocation + playerAvatarStr; // "QgSa43B0D0"
 };
 
 // Handle a single game console entry, updating client game state as needed.
