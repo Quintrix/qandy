@@ -482,7 +482,7 @@ function _renderPlayer(playerStr) {
  var avatarStr = (dashIdx !== -1) ? remaining.substring(0, dashIdx) : remaining;
  var movements = (dashIdx !== -1) ? remaining.substring(dashIdx + 1) : '';
  if (avatarStr.length < 2) return;
- gfxChar(playerId, zLocation, avatarStr);
+ gfxChar(playerId, avatarStr, zLocation);
 }
 function _renderPlayerAvatar(playerId, z, avatarStr, movements) {
 // Internal: render a player avatar at the given z-location by stacking 2-char part images.

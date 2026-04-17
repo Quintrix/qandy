@@ -117,7 +117,7 @@ window.itemdown = function(fullItemString) {
  switch (window.gameState) {
   case 'just starting':
    // Player slot items start with S or T (e.g. Sa, Tb)
-   if (/^[ST][a-z]$/.test(itemId)) { joinGame(fullItemString.slice(0, 4)); }
+   if (/^[ST][a-z]$/.test(itemId)) { joinGame(fullItemString); }
    break;
   case 'in progress':
    // TODO: Implement gameplay item handling
