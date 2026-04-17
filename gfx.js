@@ -261,21 +261,6 @@ window.gfxServers = async function() {
     var response = await fetch(url, { method: 'GET' });
     if (!response.ok) return { error: 'Error: registry responded with ' + response.status };
     var data = await response.json();
-    // Validate shape minimally
-    if (!data || !Array.isArray(data.servers)) return { error: 'Error: invalid registry format' };
-    return data; // e.g. { success: true, servers: [ ... ] }
-  } catch (e) {
-    return { error: 'Error: ' + (e.message || String(e)) };
-  }
-}
-
-window.gfxServers = async function() {
-  var url = _registryUrl;
-  if (!url) return { error: 'Error: no registry URL configured' };
-  try {
-    var response = await fetch(url, { method: 'GET' });
-    if (!response.ok) return { error: 'Error: registry responded with ' + response.status };
-    var data = await response.json();
     
     // Build server options
     var servers = data.servers || [];
@@ -446,47 +431,9 @@ async function gfxFetchMap(filename) {
     return false;
   }
 }
-async function renderMap(mapId) {
-  try {
-    // Load map tile data
-    var mapData = await qdosServerLoad("capflag.js/" + mapId + "/m.txt");
-    
-    // Initialize graphics if not done
-    if (!gfxInitialized) {
-      await initializeGfx();
-    }
-    
-    // Render the tiles
-    gfx(mapData);
-    
-    // Load and render any existing items on this map
-    await renderMapItems(mapId);
-    
-  } catch (error) {
-    throw new Error("Failed to render map: " + error.message);
-  }
-}
-async function renderMapItems(mapId) {
-  try {
-    // Get directory listing for this map
-    var items = await qdosServerList("capflag.js/" + mapId + "/");
-    
-    // Filter for item files (two-char codes + position + .json)
-    var itemFiles = items.split('\n').filter(f => 
-      f.length > 6 && f.endsWith('.json') && 
-      f.match(/^[A-Z][a-z]\d+\.json$/)
-    );
-    
-    // Render each item
-    for (var file of itemFiles) {
-      await renderItem(mapId, file);
-    }
-    
-  } catch (error) {
-    console.warn("Failed to render items:", error.message);
-  }
-}
+
 window.gfxItems = function(items) {
+ console.log("gfxItems "+items);
  // Remove existing sector item elements
  var oldItems = document.querySelectorAll('.item');
  for (var k = 0; k < oldItems.length; k++) {
@@ -497,6 +444,12 @@ window.gfxItems = function(items) {
  if (items) {
   for (var b = 0; b < items.length; b++) {
    var item = items[b];
+   
+   // NEW: Skip player slot items (S# and T#) - server handles these as dynamic
+   if (/^[ST][a-z]$/.test(item.id)) {
+     continue; // Skip Sa, Sb, Ta, Tb, etc.
+   }
+   
    var z = parseInt(item.z, 10);
    if (isNaN(z)) { continue; }
    var y = Math.floor(z / (mapx + 1));
@@ -520,6 +473,7 @@ window.gfxItems = function(items) {
   }
  }
 }
+
 function zToXY(z) {
  var y = Math.floor(z / (mapx + 1));
  var x = z - (y * (mapx + 1));

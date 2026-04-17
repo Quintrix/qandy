@@ -44,45 +44,14 @@ async function startup(){
       setTimeout(function() { startup(); },200);
     }
   }
+  setTimeout(function() {
+    console.log("=== RENDER DEBUG ===");
+    console.log("Static items:", window.gfxSectorData?._L?.items);
+    console.log("Dynamic items:", window.gfxSectorData?._L?.dyn);
+    console.log("All lobby elements:", document.querySelectorAll('.item, .mp-item').length);
+  }, 2000);
 }
 
-async function showServers() {
-  try {
-    await print("Welcome to Capture the Flag!\n");
-    
-    // Use the existing flagServers() function to show list and get selection
-    var server = await flagServers({ 
-      driveFilter: 'gfx', 
-      prompt: "Select server [0]: " 
-    });
-    
-    if (!server) {
-      await print("Connection cancelled.\n");
-      return;
-    }
-    
-    // Build server URL and connect via gfx.js
-    var serverUrl = "http://" + server.host + ":" + server.port + "/qandyland.js";
-    await print("Connecting to " + server.name + "...\n");
-    
-    // Let gfx.js handle the connection and start the server loop
-    var result = await gfxConnect(serverUrl);
-    
-    await print("Connected! Game state: " + window.gameState + "\n");
-    
-    // Show avatar selection or game UI
-    if (window.gameState === "just starting") {
-      await print("Select your avatar and click a player hat to join!\n");
-      NewChar(''); // Start avatar selection
-    } else {
-      await print("Game in progress. Select a hat to join!\n");
-    }
-    
-  } catch (e) {
-    await print("Connection failed: " + e.message + "\n");
-    setTimeout(() => startup(), 5000);
-  }
-}
 
 window.NewChar = function(a) {
  PopForce="visible";
@@ -208,84 +177,3 @@ window.startGame = async function(itemId, avatar) {
   console.error('Start game error:', e);
  }
 };
-
-// flagServers.js
-// opts: { driveFilter='gfx', prompt, defaultIndex=0, allowCancel=true }
-async function flagServers(opts) {
-  opts = opts || {};
-  const driveFilter = opts.driveFilter || 'gfx';
-  const prompt = opts.prompt || "Server [0]? ";
-  const defaultIndex = (typeof opts.defaultIndex === 'number') ? opts.defaultIndex : 0;
-  const allowCancel = (opts.allowCancel === false) ? false : true;
-
-  // 1) get registry
-  var res = await gfxServers();
-  if (res.error) { await print(res.error + "\n"); throw new Error(res.error); }
-
-  // 2) build options: injected localhost first, then registry servers that host the drive
-  var servers = Array.isArray(res.servers) ? res.servers : (Array.isArray(res.list) ? res.list : []);
-  var options = [{ name: 'localhost', host: 'localhost', port: 8080, drives: [] }];
-  for (var i = 0; i < servers.length; i++) {
-    var s = servers[i];
-    if (!s) continue;
-    if (!driveFilter || (Array.isArray(s.drives) && s.drives.indexOf(driveFilter) !== -1)) {
-      options.push(s);
-    }
-  }
-  window._gfxOptions = options; // optional debug handle
-
-  // 3) print options line-by-line (<=31 chars, alternating greens)
-  if (options.length === 0) {
-    await print("\x1b[38;5;28mNo servers available\x1b[0m\n");
-  } else {
-    for (var j = 0; j < options.length; j++) {
-      var e = options[j];
-      var label = (e.name && String(e.name).trim()) ? String(e.name).trim() : (String(e.host) + ':' + String(e.port || 8080));
-      var prefix = String(j) + '. ';
-      var maxLabelLen = 31 - prefix.length;
-      if (label.length > maxLabelLen) label = label.slice(0, maxLabelLen - 1) + '…';
-      var line = prefix + label;
-      var color = (j % 2 === 0) ? '\x1b[38;5;28m' : '\x1b[38;5;46m';
-      await print(color + line + '\x1b[0m\n');
-    }
-  }
-
-  // 4) prompt & input loop -> return selected server object
-  while (true) {
-    await print("\n" + prompt);
-    var i = await input();
-    i = (typeof i === 'string') ? i.trim() : '';
-
-    if (i === '') {
-      // default selects injected localhost (index 0) unless defaultIndex chosen
-      var idx = Math.max(0, Math.min(defaultIndex, options.length - 1));
-      var chosen = options[idx];
-      return { name: chosen.name, host: chosen.host, port: String(chosen.port || 8080), raw: chosen };
-    }
-
-    // numeric index
-    var n = parseInt(i, 10);
-    if (!isNaN(n) && options[n]) {
-      var s = options[n];
-      return { name: s.name, host: s.host, port: String(s.port || 8080), raw: s };
-    }
-
-    // host:port typed directly
-    if (i.indexOf(':') !== -1) {
-      var parts = i.split(':');
-      return { name: i, host: parts[0], port: String(parts[1] || '8080'), raw: { name: i, host: parts[0], port: parts[1] } };
-    }
-
-    // cancel
-    if (allowCancel && (i.toLowerCase() === 'q' || i.toLowerCase() === 'quit' || i.toLowerCase() === 'c')) {
-      return null;
-    }
-
-    await print("Invalid selection. Enter a number, host:port, or press Enter for default.\n");
-  }
-}
-
-async function flagCreate() {
-  var res = await gfxPing("BB");
-  await print(res);
-}
