@@ -140,19 +140,6 @@ window.joinGame = async function(fullItemString) {
   // No more interval management needed!
 };
 
-// Handle a single game console entry, updating client game state as needed.
-function processConsoleEntry(entry) {
- if (typeof entry !== 'string') return;
- if (entry.startsWith('Qg ') || entry.startsWith('JG ')) {
-  // "Qg <hatId> <avatar>" – a player joined via Qg (or legacy JG); refresh empty slots display
-  var entryParts = entry.split(' ');
-  var hatId = entryParts[1];
-  // Remove the newly-occupied slot from the emptySlots list
-  if (hatId) {
-   emptySlots = emptySlots.filter(function(s) { return s !== hatId; });
-  }
- }
-}
 
 // Send SG (Start Game) command to move the player from the lobby (w/) to a world
 // map, making them visible as an active player in RF responses for that map.
