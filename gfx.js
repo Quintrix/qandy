@@ -15,6 +15,7 @@ var mapx=7;
 var mapy=11;
 
 window.gfxDo = "RF"; // Default refresh command
+var gfxInterval = null; // The 1-second loop
 
 // Initialization state tracking
 window._gfxInitialized = false;
@@ -266,6 +267,64 @@ window.gfxServers = async function() {
     return { error: 'Error: ' + (e.message || String(e)) };
   }
 }
+
+// Add to gfx.js
+window.gfxConnect = async function(serverUrl) {
+  // Set server URL (optional parameter, defaults to localhost)
+  if (serverUrl) {
+    _serverUrl = serverUrl;
+  }
+  
+  try {
+    // Test connection with initial game state check
+    var gameState = await gfxPing("GS");
+    
+    if (gameState.startsWith("XW")) {
+      // No world found - need to create it
+      await print("No world found.\nCreating new world...");
+      gameState = await gfxPing("BB");
+      
+      if (gameState.startsWith("XX")) {
+        var bbErrorMsg = gameState.substring(2);
+        throw new Error("Error creating world: " + bbErrorMsg);
+      }
+      await print("\nWorld created. Game state: " + gameState);
+    }
+    
+    // Connection successful - start the 1-second server loop
+    startServerLoop();
+    
+    // Set initial game state for scripts to use
+    window.gameState = parseGameState(gameState);
+    
+    return { success: true, gameState: gameState };
+    
+  } catch (e) {
+    throw new Error("Failed to connect: " + e.message);
+  }
+};
+
+function startServerLoop() {
+  if (window.gfxInterval) clearInterval(window.gfxInterval);
+  
+  window.gfxInterval = setInterval(async function() {
+    try {
+      var command = window.gfxDo || "RF";
+      window.gfxDo = "RF"; // Reset to default
+      
+      var response = await gfxPing(command);
+      gfxPong(response);
+    } catch (e) { 
+      console.error('Server tick error:', e); 
+    }
+  }, 1000);
+}
+
+function parseGameState(gameState) {
+  // Parse "JSSa.Sb.Sc" -> return 'just starting' or 'in progress'
+  return gameState.startsWith("JS") ? "just starting" : "in progress";
+}
+
 async function gfxFetchMap(filename) {
   filename = filename || "capflag.gfx";
   try {

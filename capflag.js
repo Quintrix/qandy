@@ -35,96 +35,28 @@ function startup(){
   }
 }
 
-window.flagConnect = async function() {
+// Replace the entire flagConnect function with:
+window.flagConnect = async function(serverIp) {
   try {
-    await print("\n");
-    await print ("\x1b[36mQandyland Servers:\x1b[40m\x1b[37m\n\n");
-    // Properly capture server selection
-    gfxConnected = await flagServers("gfx");
-    if (!gfxConnected) {
-      await print("Server selection cancelled.\n");
-      return 'Connection cancelled';
+    await print("Connecting to server...\n");
+    
+    // gfx.js handles all connection logic and starts the loop
+    var result = await gfxConnect(serverIp);
+    
+    await print("Connected! Game state: " + window.gameState + "\n");
+    
+    // Show avatar selection or game UI
+    if (window.gameState === "just starting") {
+      await print("Select your avatar and click a player hat to join!\n");
+      NewChar(''); // Start avatar selection
+    } else {
+      await print("Game in progress. Select a hat to join!\n");
     }
-    await print("\nConnecting "+gfxConnected.host+":"+gfxConnected.port+"...");
-    // Fix protocol detection - localhost should use HTTP
-    var proto = 'http';
-    if (gfxConnected.host !== 'localhost' && gfxConnected.host !== '127.0.0.1') {
-      try { proto = new URL(_registryUrl).protocol.replace(':', ''); } catch (e) { proto = 'http'; }
-    }
-    _serverUrl = proto + '://' + gfxConnected.host + ':' + gfxConnected.port + '/qandyland.js';
-
-    window._gfxDrive = "gfx";
-    var gameState = await gfxPing("GS");
-    await print("\nGame state: " + gameState + "\n");
-
-    // Handle "no world" - create one with big bang, then fall through to normal handling
-    if (gameState.startsWith("XW")) {
-      await print("No world found.\nCreating new world...");
-      gameState = await gfxPing("BB");
-      if (gameState.startsWith("XX")) {
-        var bbErrorMsg = gameState.substring(2);
-        await print("Error creating world: " + bbErrorMsg + "\n");
-        return flagConnect();
-      }
-      await print("\nWorld created. Game state: " + gameState + "\n");
-      // Now fall through to normal JS/IP handling
-    }
-
-    if (gameState.startsWith("XX")) {
-      var errorMsg = gameState.substring(2);
-      await print("Error: " + errorMsg + "\n");
-      return flagConnect();
-    }
-
-    if (gameState.startsWith("IP")) {
-      window.gameState = 'in progress';
-      await print("Game in progress. Returning to server selection...\n");
-      return flagConnect();
-    }
-
-    if (gameState.startsWith("JS")) {
-    	var flagMap="capflag.gfx";
-    	await print("Loading map: " + flagMap + "\n");
-      var map = await gfxFetchMap(flagMap);
-      if (!map) {
-        await print("Failed to load map.\n");
-        return flagConnect();
-      }
-
-      var manifest = gameState.substring(2);
-      var slots = manifest.split('.');
-      emptySlots = slots.filter(function(slot) { return slot.length === 2; });
-      if (emptySlots.length === 0) {
-        await print("Server full.\n");
-        return flagConnect();
-      }
-
-      // Initialize graphics and render lobby sector tiles and items
-      await gfxInit();
-      document.getElementById('txt').style.top = '50px';
-      document.getElementById('txt').style.left = '350px';
-      gfxSector("_L");
-
-      window.gameState = 'just starting';
-
-      // Start RF polling immediately so players already in the lobby are visible
-      rfInterval = setInterval(async function() {
-       try {
-        var command = window.gfxDo || "RF";
-        window.gfxDo = "RF"; // Reset to default after use
-  
-        var rfRes = await gfxPing(command);
-        gfxPong(rfRes);
-       } catch (e) { 
-        console.error('RF tick error:', e); 
-       }
-      }, 1000);
-      NewChar("");
-      return;
-    }
-  } catch (error) {
-    await print("Connection failed: " + error.message + " " + (gfxConnected ? gfxConnected.host : '') + "\n");
-    throw error;
+    
+  } catch (e) {
+    await print("Connection failed: " + e.message + "\n");
+    await print("Retrying in 5 seconds...\n");
+    setTimeout(() => flagConnect(serverIp), 5000);
   }
 };
 
