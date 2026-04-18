@@ -205,6 +205,8 @@ window.gfxZClick=function(z, clickedElement) {
       }
     }
 
+    // HERE IS WHY I CAN'T CLICK HATS
+    // need to keep track of map 'refresh' string
     // Dynamic multiplayer items: {id, z, avatar}
     if (sector.dyn) {
       for (var di = 0; di < sector.dyn.length; di++) {
@@ -535,12 +537,6 @@ function gfxItems(rfStr) {
  var old = document.querySelectorAll('.mp-item, .mp-player');
  for (var i = 0; i < old.length; i++) { old[i].parentNode.removeChild(old[i]); }
  var dynItems = [];
- if (!rfStr) {
-  if (window.gfxCurrentSector && window.gfxSectorData && window.gfxSectorData[window.gfxCurrentSector]) {
-   window.gfxSectorData[window.gfxCurrentSector].dyn = dynItems;
-  }
-  return;
- }
  var entries = rfStr.split(',');
  for (var j = 0; j < entries.length; j++) {
   var entry = entries[j];
@@ -549,10 +545,10 @@ function gfxItems(rfStr) {
   var z = parseInt(entry.slice(2, 4), 10);
   if (isNaN(z)) continue;
   var avatar = entry.length > 4 ? entry.slice(4) : '';
-  dynItems.push({ id: iId, z: z, avatar: avatar });
   if (avatar) {
    _renderPlayer(entry); // entry is "<id><z><avatarStr>", matching _renderPlayer's expected format
   } else {
+  	// this renders dynamic item
    var coords = zToXY(z);
    var img = document.createElement('img');
    img.className = 'mp-item';
@@ -566,9 +562,6 @@ function gfxItems(rfStr) {
    })(z);
    document.body.appendChild(img);
   }
- }
- if (window.gfxCurrentSector && window.gfxSectorData && window.gfxSectorData[window.gfxCurrentSector]) {
-  window.gfxSectorData[window.gfxCurrentSector].dyn = dynItems;
  }
 }
 window.gfxChars = function(players) {
