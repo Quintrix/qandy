@@ -428,6 +428,7 @@ window.gfxItems = function(items) {
    
    // NEW: Skip player slot items (S# and T#) - server handles these as dynamic
    if (/^[ST][a-z]$/.test(item.id)) {
+     console.log("skip "+item.id);
      continue; // Skip Sa, Sb, Ta, Tb, etc.
    }
    
@@ -615,9 +616,7 @@ window.gfxSector = function(sectorId) {
  
  var sector = window.gfxSectorData[sectorId];
 
- if (sector.tiles && sector.tiles.length > 0) {
-  gfxTiles(sector.tiles.join(""));
- }
+ if (sector.tiles && sector.tiles.length > 0) { gfxTiles(sector.tiles.join("")); }
 
  console.log("639 gfxSector -> gfxItems");
  gfxItems(sector.items);
