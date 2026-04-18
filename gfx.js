@@ -335,8 +335,8 @@ function gfxTick() {
       window.gfxPong = await gfxPing(command);
       console.log(gfxPong);
       var verb = gfxPong.substring(0, 2);
-      var noun = gfxPong.substring(2, 4);
-      if (verb == "RF") { playerMap=noun.substring(4, 6); gfxItems(noun.substring(6)); }
+      var noun = gfxPong.substring(2);
+      if (verb == "RF") { playerMap=noun.substring(0, 2); gfxItems(noun.substring(2)); }
       if (verb == "XX") { }
     } catch (e) { 
       console.error('Server tick error:', e); 

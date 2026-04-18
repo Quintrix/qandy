@@ -1580,7 +1580,7 @@ function handleCommand(req, res, raw, driveName) {
       }
 
       // Prepend mapId to response so client knows which sector it received
-      var rfResponse = rfMapId + rfAllItems.join(',');
+      var rfResponse = 'RF'+rfMapId + rfAllItems.join(',');
       logRequest(req, 'RF', rfDrive, rfMapId, session, { success: true, result: rfResponse });
       return respondRetro(res, rfResponse);
     }
