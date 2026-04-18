@@ -394,13 +394,11 @@ async function gfxFetchMap(filename) {
         }
       }
       
+      // this should be saving strings not arrays?
       window.gfxSectorData[sectorId] = {
         tiles: tiles,   // 96-element array
         exits: exits,   // variable-length array of 2-char sector codes
         objs: items,     // variable-length array of {id, z, data} objects
-        items: items,   // variable-length array of {id, z, data} objects
-        chars: [],      // character/player data for this sector - no longer used
-        dyn:   []       // dynamic items for this sector - no longer used
       };
     }
     
@@ -413,8 +411,8 @@ async function gfxFetchMap(filename) {
   }
 }
 
-window.gfxItems = function(items) {
- console.log("gfxItems "+items);
+window.gfxObjects = function(items) {
+ console.log("gfxObjects "+items);
  // Remove existing sector item elements
  var oldItems = document.querySelectorAll('.item');
  for (var k = 0; k < oldItems.length; k++) {
@@ -428,7 +426,6 @@ window.gfxItems = function(items) {
    
    // NEW: Skip player slot items (S# and T#) - server handles these as dynamic
    if (/^[ST][a-z]$/.test(item.id)) {
-     console.log("skip "+item.id);
      continue; // Skip Sa, Sb, Ta, Tb, etc.
    }
    
@@ -524,7 +521,9 @@ function _processPlayerMovements(playerId, movements) {
 	// Internal: store movement buffer for a player (NSEW sequence).
  console.log('Player ' + playerId + ' movements: ' + movements);
 }
-function _renderMPItems(rfStr) {
+
+
+function gfxItems(rfStr) {
 // Internal: render all dynamic items from an RF response string.
 // rfStr is a comma-separated list of item codes.
 // Each code: "<id(2)><z(2-digit)>" for plain items/empty slots,
@@ -532,7 +531,6 @@ function _renderMPItems(rfStr) {
 // Avatar strings may include a movements suffix separated by "-": "<avatarStr>-<movements>".
 // Plain items are rendered as images from i/.
 // Items with avatar are rendered as layered character sprites via _renderPlayer.
-// Stores all parsed entries in gfxSectorData[gfxCurrentSector].dyn as {id, z, avatar} objects.
 
  var old = document.querySelectorAll('.mp-item, .mp-player');
  for (var i = 0; i < old.length; i++) { old[i].parentNode.removeChild(old[i]); }
@@ -606,7 +604,7 @@ window.gfxPong = function(rfStr) {
  if (!rfStr || rfStr.length < 2) return;
  // Strip the 2-char mapId prefix; client can track current sector if needed
  var items = rfStr.slice(2);
- _renderMPItems(items);
+ gfxItems(items);
 }
 
 window.gfxSector = function(sectorId) {
@@ -618,8 +616,8 @@ window.gfxSector = function(sectorId) {
 
  if (sector.tiles && sector.tiles.length > 0) { gfxTiles(sector.tiles.join("")); }
 
- console.log("639 gfxSector -> gfxItems");
- gfxItems(sector.items);
+ console.log("639 gfxSector -> gfxObjects");
+ gfxObjects(sector.objs);
 
  // Reset dynamic data for the sector and clear any rendered MP elements
  sector.chars = [];
