@@ -14,8 +14,9 @@ var PUV;                 // timeout id (used to clear/set the timeout)
 var mapx=7;
 var mapy=11;
 
-window.gfxDo = "RF";   // Default refresh command
-window.gfxPong = ".."; // server response
+window.gfxDo = "RF";      // Default refresh command
+window.gfxPong = "..";    // server response
+window.gfxItems = []; // dynamic items
 
 window.playerMap="_L";  // map player item is on (default lobby)
 window.playerItem=".."; // item id of object player has claimed
@@ -291,20 +292,14 @@ window.gfxServers = async function() {
 window.gfxConnect = async function(serverIndex) {
   // Get server from the list stored by gfxServers()
   var server = window._serverOptions[serverIndex || 0];
-  if (!server) {
-    server = { host: 'localhost', port: 8080 }; // Default
-  }
-  
+  if (!server) { server = { host: 'localhost', port: 8080 }; }
   _serverUrl = "http://" + server.host + ":" + server.port + "/qandyland.js";
-  
   try {
     var gameState = await gfxPing("GS");
-    
     if (gameState.startsWith("XW")) {
       await print("Creating new world...\n");
       gameState = await gfxPing("BB");
     }
-    
     await gfxInit();
     var minutes = gameState.slice(0, 2);
     var seconds = gameState.slice(2, 4);
@@ -315,15 +310,31 @@ window.gfxConnect = async function(serverIndex) {
     if (window._gameMapFile) {
       await gfxFetchMap(window._gameMapFile);
       gfxSector("_L");
+      // render tiles
+      // render objects
+      // setup tick
     }
-
     gfxTick();
-    
     return window.gameState;
-    
   } catch (e) {
     throw new Error("Failed to connect: " + e.message);
   }
+}
+
+window.gfxSector = function(sectorId) {
+ if (!window.gfxSectorData || !window.gfxSectorData[sectorId]) { return; }
+ window.gfxCurrentSector = sectorId;
+ var sector = window.gfxSectorData[sectorId];
+ if (sector.tiles && sector.tiles.length > 0) { gfxTiles(sector.tiles.join("")); }
+ console.log("639 gfxSector -> gfxObjects");
+ gfxObjects(sector.objs);
+ // Reset dynamic data for the sector and clear any rendered MP elements
+ sector.chars = [];
+ sector.dyn = [];
+ var oldPlayers = document.querySelectorAll('.mp-player');
+ for (var p = 0; p < oldPlayers.length; p++) { oldPlayers[p].parentNode.removeChild(oldPlayers[p]); }
+ var oldItems = document.querySelectorAll('.mp-item');
+ for (var q = 0; q < oldItems.length; q++) { oldItems[q].parentNode.removeChild(oldItems[q]); }
 }
 
 function gfxTick() {
@@ -336,7 +347,7 @@ function gfxTick() {
       console.log(gfxPong);
       var verb = gfxPong.substring(0, 2);
       var noun = gfxPong.substring(2);
-      if (verb == "RF") { playerMap=noun.substring(0, 2); gfxItems(noun.substring(2)); }
+      if (verb == "RF") { gfxRefresh(noun); }
       if (verb == "XX") { }
     } catch (e) { 
       console.error('Server tick error:', e); 
@@ -417,48 +428,53 @@ async function gfxFetchMap(filename) {
   }
 }
 
-window.gfxObjects = function(items) {
- // objects are 'static items' that are part of the .gfx file
- console.log("gfxObjects "+items);
- // Remove existing sector item elements
- var oldItems = document.querySelectorAll('.item');
- for (var k = 0; k < oldItems.length; k++) {
-  if (oldItems[k].parentNode) { oldItems[k].parentNode.removeChild(oldItems[k]); }
- }
 
- // Render items on top of tiles with click handlers
- if (items) {
-  for (var b = 0; b < items.length; b++) {
-   var item = items[b];
-   
-   // NEW: Skip player slot items (S# and T#) - server handles these as dynamic
-   if (/^[ST][a-z]$/.test(item.id)) {
-     continue; // Skip Sa, Sb, Ta, Tb, etc.
-   }
-   
-   var z = parseInt(item.z, 10);
-   if (isNaN(z)) { continue; }
-   var y = Math.floor(z / (mapx + 1));
-   var x = z - (y * (mapx + 1));
-   var c = document.createElement("img");
-   c.id = "i" + b;
-   c.src = "i/" + item.id + ".png";
-   c.className = "item";
-   c.style.position = "absolute";
-   c.style.top = (32 + 20 + (y * 32)) + "px";
-   c.style.left = (32 + 22 + (x * 32)) + "px";
-   c.style.zIndex = "120";
-   (function(el) {
-    el.onload = function() {
-     el.style.top = (parseInt(el.style.top) - (el.height - 32)) + "px";
-     el.style.left = (parseInt(el.style.left) - (el.width - 32)) + "px";
-    };
-   })(c);
-   c.onclick = function() { gfxZClick(z); };
-   document.body.appendChild(c);
+window.gfxObjects = function(objs) {
+  // objects are 'static items' that are part of the .gfx file
+  console.log("gfxObjects " + objs);
+  var oldObjs = document.querySelectorAll('.objs');
+  for (var k = 0; k < oldObjs.length; k++) {
+    if (oldObjs[k].parentNode) { 
+      oldObjs[k].parentNode.removeChild(oldObjs[k]); 
+    }
   }
- }
-}
+
+  // 2. Render items on top of tiles with click handlers
+  if (objs) {
+    // Split objs every 4 characters into newObjs array
+    var newObjs = objs.match(/.{1,4}/g) || [];
+
+    for (var i = 0; i < newObjs.length; i++) {
+      var entry = newObjs[i];
+      if (entry.length < 4) continue;
+
+      var iId = entry.slice(0, 2);
+      var z = parseInt(entry.slice(2, 4), 10);
+
+      if (/^[ST][a-z]$/.test(item.id)) {
+        continue; // Skip Sa, Sb, Ta, Tb, etc.
+      }
+      
+      var coords = zToXY(z);
+      var img = document.createElement('img');
+      img.className = 'objs'; // Match the selector above
+      img.src = 'i/' + iId + '.png';
+      img.style.position = 'absolute';
+      
+      // Standard grid math with your 20/22px offsets
+      img.style.top  = (32 + 20 + (coords.y * 32)) + "px";
+      img.style.left = (32 + 22 + (coords.x * 32)) + "px";
+      img.style.zIndex = '110'; // Static objs sit below dynamic items (120)
+
+      // Use a closure or let to capture the Z-location for clicks
+      img.onclick = (function(capturedZ) {
+        return function() { gfxZClick(capturedZ, this); };
+      })(z);
+
+      document.body.appendChild(img);
+    }
+  }
+};
 
 function zToXY(z) {
  var y = Math.floor(z / (mapx + 1));
@@ -530,19 +546,13 @@ function _processPlayerMovements(playerId, movements) {
 }
 
 
-function gfxItems(rfStr) {
-  console.log("gfxItems="+rfStr);
-// 'items' are dynamic items that players can pick-up and drop and include
-// 'player items' S# and T# which represent the players and their avatars
-
-// Each code: "<id(2)><z(2-digit)>" for plain items/empty slots,
-//            "<id(2)><z(2-digit)><avatarStr>" for items with avatar data (e.g. active players).
-
-// Items with avatar are rendered as layered character sprites via _renderPlayer.
- var old = document.querySelectorAll('.mp-item, .mp-player');
+function gfxRefresh(rfStr) {
+ // refresh dynamic items on display
+ playerMap=rfStr.substring(0, 2);
+ var old = document.querySelectorAll('.item');
  for (var i = 0; i < old.length; i++) { old[i].parentNode.removeChild(old[i]); }
- var dynItems = [];
- var entries = rfStr.split(',');
+
+ var gfxItems = rfStr.split(',');
  for (var j = 0; j < entries.length; j++) {
   var entry = entries[j];
   if (!entry || entry.length < 4) continue;
@@ -556,7 +566,7 @@ function gfxItems(rfStr) {
   	// this renders dynamic item
    var coords = zToXY(z);
    var img = document.createElement('img');
-   img.className = 'mp-item';
+   img.className = 'item';
    img.src = 'i/' + iId + '.png';
    img.style.position = 'absolute';
    img.style.top  = (32 + 20 + (coords.y * 32)) + 'px';
@@ -568,6 +578,39 @@ function gfxItems(rfStr) {
    document.body.appendChild(img);
   }
  }
+}
+
+function gfxRefresh(rfStr) {
+  window.playerMap = rfStr.substring(0, 2);
+  var old = document.querySelectorAll('.item');
+  for (var i = 0; i < old.length; i++) { old[i].parentNode.removeChild(old[i]); }
+  var items = rfStr.substring(2);
+  window.gfxItems = items.split(',');
+  for (var j = 0; j < window.gfxItems.length; j++) {
+    var entry = window.gfxItems[j];
+    if (!entry || entry.length < 4) continue;
+    var iId = entry.slice(0, 2);
+    var z = parseInt(entry.slice(2, 4), 10);
+    if (isNaN(z)) continue;
+    var avatar = entry.length > 4 ? entry.slice(4) : '';
+    if (avatar) {
+      // Logic for players/NPCs
+      _renderPlayer(entry); 
+    } else {
+      var coords = zToXY(z);
+      var img = document.createElement('img');
+      img.className = 'item';
+      img.src = 'i/' + iId + '.png';
+      img.style.position = 'absolute';
+      img.style.top  = (32 + 20 + (coords.y * 32)) + 'px';
+      img.style.left = (32 + 22 + (coords.x * 32)) + 'px';
+      img.style.zIndex = '120'; // Items sit below characters (150+)
+      img.onclick = (function(capturedZ) {
+        return function() { gfxZClick(capturedZ, this); };
+      })(z);
+      document.body.appendChild(img);
+    }
+  }
 }
 
 window.gfxChars = function(players) {
@@ -591,26 +634,6 @@ window.gfxChars = function(players) {
    }
   }
  }
-}
-
-window.gfxSector = function(sectorId) {
-	
- if (!window.gfxSectorData || !window.gfxSectorData[sectorId]) { return; }
- window.gfxCurrentSector = sectorId;
- 
- var sector = window.gfxSectorData[sectorId];
-
- if (sector.tiles && sector.tiles.length > 0) { gfxTiles(sector.tiles.join("")); }
-
- console.log("639 gfxSector -> gfxObjects");
- gfxObjects(sector.objs);
- // Reset dynamic data for the sector and clear any rendered MP elements
- sector.chars = [];
- sector.dyn = [];
- var oldPlayers = document.querySelectorAll('.mp-player');
- for (var p = 0; p < oldPlayers.length; p++) { oldPlayers[p].parentNode.removeChild(oldPlayers[p]); }
- var oldItems = document.querySelectorAll('.mp-item');
- for (var q = 0; q < oldItems.length; q++) { oldItems[q].parentNode.removeChild(oldItems[q]); }
 }
 
 window.gfxPing = async function(commandString) {
