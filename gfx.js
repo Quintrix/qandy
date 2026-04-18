@@ -14,15 +14,21 @@ var PUV;                 // timeout id (used to clear/set the timeout)
 var mapx=7;
 var mapy=11;
 
-window.gfxDo = "RF";      // Default refresh command
-window.gfxPong = "..";    // server response
-window.gfxItems = []; // dynamic items
+window.gfxDo = "RF";     // Default refresh command
+window.gfxPong = "..";   // server response
+window.gfxItems = [];    // dynamic items
+window.gfxObjs=[];       // statuc items
 
-window.playerMap="_L";  // map player item is on (default lobby)
-window.playerItem=".."; // item id of object player has claimed
-window.playerZ=-1;    // z-locatin of playerItem
+window.map="_L";         // map player item is on (default lobby)
+window.mapTiles=[];      // tiles on player's current map
+window.mapExits=[];
+window.mapObjs=[];       // objs on player's current map
+window.mapItems=[];      // items on player's current map
 
-var gfxInterval = null; // The 1-second loop
+window.playerItem="Za";  // item id of object player has claimed (nothing)
+window.playerZ=-1;       // z-locatin of playerItem
+
+var gfxInterval = null;  // The 1-second loop
 
 // Initialization state tracking
 window._gfxInitialized = false;
@@ -113,15 +119,31 @@ window.gfxInit = async function() {
   document.getElementById('txt').style.top = '50px';
   document.getElementById('txt').style.left = '350px';
 }
-window.gfxTiles = function(scr) { 
+
+window.gfxTiles = function(sector) { 
+ // renders tiles for map sector
  a=0;
  for (b=0; b<=mapy; b++) { 
   for (c=0; c<=mapx; c++) {
-  	 e=document.getElementById("T"+a).src="t/"+scr.charAt(a*2)+scr.charAt((a*2)+1)+".png";
+  	 e=document.getElementById("T"+a).src="t/"+mapTiles[sector].charAt(a*2)+mapTiles[sector].charAt((a*2)+1)+".png";
   	 a++;
   }
  }
 }
+
+window.gfxTiles = function(sector) {
+	// ai version 
+  var a = 0;
+  var scr = window.mapTiles[sector];
+  if (!scr) { console.error("Sector " + sector + " not found in memory!"); return; }
+  for (var b = 0; b <= mapy; b++) { 
+    for (var c = 0; c <= mapx; c++) {
+      document.getElementById("T" + a).src = "t/" + scr.charAt(a * 2) + scr.charAt((a * 2) + 1) + ".png";
+      a++;
+    }
+  }
+}
+
 window.gfxChar = function(C,O,Z) {
  let y=Math.floor(Z/(mapx+1)); let x=Z-(y*(mapx+1)); y--;
  idface="cf"+C; idbody="cb"+C; idwpn="cw"+C; idarm="ca"+C; idhat="ch"+C;
@@ -187,6 +209,7 @@ window.gfxChar = function(C,O,Z) {
   if (document.getElementById("ch"+PName)) { document.getElementById("ch"+PName).remove(); } 
  }
 }
+
 window.gfxZClick=function(z, clickedElement) {
   var zNum = parseInt(z, 10); var zStr = ('0' + zNum).slice(-2);
   if (typeof window.zdown === 'function') { window.zdown(zNum); }
@@ -309,32 +332,14 @@ window.gfxConnect = async function(serverIndex) {
     // Load the map file specified by the server
     if (window._gameMapFile) {
       await gfxFetchMap(window._gameMapFile);
-      gfxSector("_L");
-      // render tiles
-      // render objects
-      // setup tick
+      gfxTiles("_L"); // display lobby first
+      gfxObjects("_L");
     }
     gfxTick();
     return window.gameState;
   } catch (e) {
     throw new Error("Failed to connect: " + e.message);
   }
-}
-
-window.gfxSector = function(sectorId) {
- if (!window.gfxSectorData || !window.gfxSectorData[sectorId]) { return; }
- window.gfxCurrentSector = sectorId;
- var sector = window.gfxSectorData[sectorId];
- if (sector.tiles && sector.tiles.length > 0) { gfxTiles(sector.tiles.join("")); }
- console.log("639 gfxSector -> gfxObjects");
- gfxObjects(sector.objs);
- // Reset dynamic data for the sector and clear any rendered MP elements
- sector.chars = [];
- sector.dyn = [];
- var oldPlayers = document.querySelectorAll('.mp-player');
- for (var p = 0; p < oldPlayers.length; p++) { oldPlayers[p].parentNode.removeChild(oldPlayers[p]); }
- var oldItems = document.querySelectorAll('.mp-item');
- for (var q = 0; q < oldItems.length; q++) { oldItems[q].parentNode.removeChild(oldItems[q]); }
 }
 
 function gfxTick() {
@@ -356,10 +361,7 @@ function gfxTick() {
 }
 
 
-window.playerMap="_L";  // map player item is on (default lobby)
-window.playerItem=".."; // item id of object player has claimed
-window.playerZ=-1;    // z-locatin of playerItem
-
+var tiles = [];
 
 async function gfxFetchMap(filename) {
   filename = filename || "capflag.gfx";
@@ -382,44 +384,23 @@ async function gfxFetchMap(filename) {
       var rest = line.substring(eqIdx + 1);
       var dotIdx = rest.indexOf('.');
       var mapData = dotIdx >= 0 ? rest.substring(0, dotIdx) : rest;
-      var itemData = dotIdx >= 0 ? rest.substring(dotIdx + 1) : '';
+      var objData = dotIdx >= 0 ? rest.substring(dotIdx + 1) : '';
       
-      // Parse tiles (first 192 chars = 96 tiles × 2 chars each)
-      var tileString = mapData.substring(0, 192);
-      var tiles = [];
-      for (var t = 0; t < tileString.length; t += 2) {
-        tiles.push(tileString.substring(t, t + 2));
-      }
-      
-      // Parse exits (remaining chars after tiles, 2 chars each)
-      var exitString = mapData.substring(192);
-      var exits = [];
-      for (var e = 0; e < exitString.length; e += 2) {
-        exits.push(exitString.substring(e, e + 2));
-      }
-      
-      // Parse items (6 chars each: 2=id, 2=z, 2=data)
-      var items = [];
-      if (itemData) {
-        for (var j = 0; j + 6 <= itemData.length; j += 6) {
-          items.push({
-            id:   itemData.substring(j,     j + 2),
-            z:    parseInt(itemData.substring(j + 2, j + 4), 10),
-            data: itemData.substring(j + 4, j + 6)
-          });
-        }
-      }
-      
+      mapTiles[sectorId] = mapData.substring(0, 192); 
+      mapExits[sectorId] = mapData.substring(192); 
+      mapObjs[sectorId] = objData; 
+           
       // this should be saving strings not arrays?
-      window.gfxSectorData[sectorId] = {
-        tiles: tiles,   // 96-element array
-        exits: exits,   // variable-length array of 2-char sector codes
-        objs: items,     // variable-length array of {id, z, data} objects
-        itmes: "",
-      };
+      // I think this is done, no longer needed?
+      //window.gfxSectorData[sectorId] = {
+      //  tiles: tiles,   // 96-element array
+      //  exits: exits,   // variable-length array of 2-char sector codes
+      //  objs: objs,     // variable-length array of {id, z, data} objects
+      //  itmes: "",
+      //};
     }
     
-    await print("Loaded " + Object.keys(window.gfxSectorData).length + " sectors.\n");
+    //await print("Loaded " + Object.keys(window.gfxSectorData).length + " sectors.\n");
     return true;
     
   } catch (e) {
@@ -429,9 +410,11 @@ async function gfxFetchMap(filename) {
 }
 
 
-window.gfxObjects = function(objs) {
-  // objects are 'static items' that are part of the .gfx file
-  console.log("gfxObjects " + objs);
+window.gfxObjects = function(sector) {
+  // 1. Memory Lookup: Fetch the 4-char logic string for this sector
+  var objsStr = window.mapObjs[sector];
+  
+  // 2. Clear existing static objects from the DOM
   var oldObjs = document.querySelectorAll('.objs');
   for (var k = 0; k < oldObjs.length; k++) {
     if (oldObjs[k].parentNode) { 
@@ -439,10 +422,11 @@ window.gfxObjects = function(objs) {
     }
   }
 
-  // 2. Render items on top of tiles with click handlers
-  if (objs) {
-    // Split objs every 4 characters into newObjs array
-    var newObjs = objs.match(/.{1,4}/g) || [];
+  // 3. Process the "Punch Card" if it exists
+  if (objsStr) {
+    // Split into 4-character [ID][ZZ] instructions
+    var safeObjs = String(objsStr || "");
+    var newObjs = safeObjs.match(/.{1,4}/g) || [];
 
     for (var i = 0; i < newObjs.length; i++) {
       var entry = newObjs[i];
@@ -451,22 +435,24 @@ window.gfxObjects = function(objs) {
       var iId = entry.slice(0, 2);
       var z = parseInt(entry.slice(2, 4), 10);
 
-      if (/^[ST][a-z]$/.test(item.id)) {
-        continue; // Skip Sa, Sb, Ta, Tb, etc.
+      // Skip dynamic types like Hats (S/T prefixes) 
+      // since those are handled by the 1-second RF pulse
+      if (/^[ST][a-z]$/.test(iId)) {
+        continue; 
       }
       
       var coords = zToXY(z);
       var img = document.createElement('img');
-      img.className = 'objs'; // Match the selector above
+      img.className = 'objs';
       img.src = 'i/' + iId + '.png';
       img.style.position = 'absolute';
       
-      // Standard grid math with your 20/22px offsets
+      // Retro grid math (32px base + your 20/22px logical offsets)
       img.style.top  = (32 + 20 + (coords.y * 32)) + "px";
       img.style.left = (32 + 22 + (coords.x * 32)) + "px";
-      img.style.zIndex = '110'; // Static objs sit below dynamic items (120)
+      img.style.zIndex = '110'; 
 
-      // Use a closure or let to capture the Z-location for clicks
+      // Logic-centric: clicks always reference the Z-coordinate
       img.onclick = (function(capturedZ) {
         return function() { gfxZClick(capturedZ, this); };
       })(z);
