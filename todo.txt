@@ -13,10 +13,12 @@
         WI..=Wear ItemID('..') if item is in player's inventory add item to their avatar string, removing any previous item with the same starting letter
 
 
+
     mouse.js driver
       move pop() and hpop()
       inject screen cells with 'mouse' CURMOUSE
       return mouse clicks to running scripts
+
  
  
     draw.js
