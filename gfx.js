@@ -14,7 +14,9 @@ var PUV;                 // timeout id (used to clear/set the timeout)
 var mapx=7;
 var mapy=11;
 
-window.gfxDo = "RF"; // Default refresh command
+window.gfxDo = "RF";   // Default refresh command
+window.gfxPong = ".."; // server response
+
 var gfxInterval = null; // The 1-second loop
 
 // Initialization state tracking
@@ -181,61 +183,50 @@ window.gfxChar = function(C,O,Z) {
  }
 }
 window.gfxZClick=function(z, clickedElement) {
+  var zNum = parseInt(z, 10); var zStr = ('0' + zNum).slice(-2);
+  if (typeof window.zdown === 'function') { window.zdown(zNum); }
+  var htm = ''; var items = [];
+  var sector = window.gfxSectorData[window.gfxCurrentSector];
+  var item = sector.objs[gfxSector]; 
+  if (parseInt(item.z, 10) === zNum) {
+    // Example menu entry: show item name, and call ItemSelect('id') when clicked
+    htm +=
+      '<a href="javascript:void(0)" onclick="ItemSelect(\'' +
+      item.id +
+      '\')">' +
+      ItemID(item.id) +
+      "</a><br>";
+    }
   
-  var zNum = parseInt(z, 10);
-  // Map z-values are stored as 2-char strings (max z=95 for 8x12 grid)
-  var zStr = ('0' + zNum).slice(-2);
 
-  // Call zdown() if defined by the game
-  if (typeof window.zdown === 'function') {
-    window.zdown(zNum);
-  }
-
-  var htm = '';
-
-  // Collect all items at this z-location from all sector data sources
-  var items = [];
-  if (window.gfxCurrentSector && window.gfxSectorData && window.gfxSectorData[window.gfxCurrentSector]) {
-    var sector = window.gfxSectorData[window.gfxCurrentSector];
-    // Static sector items: {id, z, data}
-    if (sector.objs) {
-      for (var si = 0; si < sector.items.length; si++) {
-        var item = sector.items[si];
-        var iId = fullStr.slice(0, 2);
-        if (parseInt(item.z, 10) === zNum) {
-          htm+="<a href=\"javascript: \""+ItemID(iId)+"</a><br>";
-        }
-      }
-    }
-
-    // HERE IS WHY I CAN'T CLICK HATS
-    // need to keep track of map 'refresh' string
-    // Dynamic multiplayer items: {id, z, avatar}
-    if (sector.items) {
-      for (var di = 0; di < sector.dyn.length; di++) {
-        var dynItem = sector.dyn[di];
-        if (dynItem.z === zNum) {
-          items.push(dynItem.id + zStr + dynItem.avatar);
-        }
-      }
-    }
-
-    // Character/player data: string "Sa43B1D0C2" or object {id, outfit, z}
-    if (sector.chars) {
-      for (var ci = 0; ci < sector.chars.length; ci++) {
-        var charEntry = sector.chars[ci];
-        if (typeof charEntry === 'string' && charEntry.length >= 4) {
-          if (parseInt(charEntry.slice(2, 4), 10) === zNum) {
-            items.push(charEntry);
-          }
-        } else if (typeof charEntry === 'object' && charEntry !== null && parseInt(charEntry.z, 10) === zNum) {
-          items.push(charEntry.id + zStr + (charEntry.outfit || ''));
-        }
+  // HERE IS WHY I CAN'T CLICK HATS
+  // need to keep track of map 'refresh' string
+  // Dynamic multiplayer items: {id, z, avatar}
+  if (sector.items) {
+    for (var di = 0; di < sector.dyn.length; di++) {
+      var dynItem = sector.dyn[di];
+      if (dynItem.z === zNum) {
+        items.push(dynItem.id + zStr + dynItem.avatar);
       }
     }
   }
 
+  // Character/player data: string "Sa43B1D0C2" or object {id, outfit, z}
+  //if (sector.chars) {
+  //  for (var ci = 0; ci < sector.chars.length; ci++) {
+  //    var charEntry = sector.chars[ci];
+  //    if (typeof charEntry === 'string' && charEntry.length >= 4) {
+  //      if (parseInt(charEntry.slice(2, 4), 10) === zNum) {
+  //        items.push(charEntry);
+  //      }
+  //    } else if (typeof charEntry === 'object' && charEntry !== null && parseInt(charEntry.z, 10) === zNum) {
+  //      items.push(charEntry.id + zStr + (charEntry.outfit || ''));
+  //    }
+  //  }
+
+ 
   // placeholder for future 'walk here' menu option
+
   // Build popup HTML listing all items at this z-location
   //var htm = '';
   // for (var pi = 0; pi < items.length; pi++) {
@@ -253,6 +244,7 @@ window.gfxZClick=function(z, clickedElement) {
 
   if (htm) { pop(htm); }
 }
+
 window.gfxServers = async function() {
   var url = _registryUrl;
   if (!url) return { error: 'Error: no registry URL configured' };
@@ -336,8 +328,11 @@ function gfxTick() {
     try {
       var command = window.gfxDo || "RF";
       window.gfxDo = "RF"; // Reset to default
-      var response = await gfxPing(command);
-      gfxPong(response);
+      window.gfxPong = await gfxPing(command);
+      var verb = window.gfxPong.substring(0, 2);
+      var noun = window.gfxPong.substring(2);
+      if (verb == "RF") { gfxItems(noun); }
+      if (verb == "XX") { }
     } catch (e) { 
       console.error('Server tick error:', e); 
     }
@@ -398,6 +393,7 @@ async function gfxFetchMap(filename) {
         tiles: tiles,   // 96-element array
         exits: exits,   // variable-length array of 2-char sector codes
         objs: items,     // variable-length array of {id, z, data} objects
+        itmes: "",
       };
     }
     
@@ -531,7 +527,6 @@ function gfxItems(rfStr) {
 //            "<id(2)><z(2-digit)><avatarStr>" for items with avatar data (e.g. active players).
 
 // Items with avatar are rendered as layered character sprites via _renderPlayer.
-
  var old = document.querySelectorAll('.mp-item, .mp-player');
  for (var i = 0; i < old.length; i++) { old[i].parentNode.removeChild(old[i]); }
  var dynItems = [];
@@ -585,19 +580,6 @@ window.gfxChars = function(players) {
  }
 }
 
-window.gfxPong = function(rfStr) {
-// Process an RF server response: render all dynamic items and players.
-// rfStr format: <mapId(2)><comma-separated item codes>
-//   e.g. "_LSa43,Tb22,Sa43B1D0C2" or "A1Sa25B1D0,Tb44"
-//   mapId    – 2-char sector the server is sending (e.g. "_L", "A1")
-//   plain item / empty slot: "<id(2)><z(2-digit)>"           e.g. "Sa43"
-//   item with avatar:        "<id(2)><z(2-digit)><avatarStr>" e.g. "Sa43B1D0C2"
- if (!rfStr || rfStr.length < 2) return;
- // Strip the 2-char mapId prefix; client can track current sector if needed
- var items = rfStr.slice(2);
- gfxItems(items);
-}
-
 window.gfxSector = function(sectorId) {
 	
  if (!window.gfxSectorData || !window.gfxSectorData[sectorId]) { return; }
@@ -609,7 +591,6 @@ window.gfxSector = function(sectorId) {
 
  console.log("639 gfxSector -> gfxObjects");
  gfxObjects(sector.objs);
-
  // Reset dynamic data for the sector and clear any rendered MP elements
  sector.chars = [];
  sector.dyn = [];
@@ -618,6 +599,7 @@ window.gfxSector = function(sectorId) {
  var oldItems = document.querySelectorAll('.mp-item');
  for (var q = 0; q < oldItems.length; q++) { oldItems[q].parentNode.removeChild(oldItems[q]); }
 }
+
 window.gfxPing = async function(commandString) {
 // Universal gateway for all commands to the multiplayer server.
 // commandString – full command string, e.g. "BB", "RF", "QgSa33B0D0"
@@ -662,6 +644,7 @@ window.gfxCreation = async function(drive, mapString, players, isRound) {
   if (drive) _gfxDrive = drive;
   return await gfxPing("BB");
 }
+
 window.gfxGameState = async function(drive) {
 // Query game state and player manifest for a drive.
 // Returns the raw retro response string: e.g. "JSSa.Sb.Sc.Ta.Tb.Tc"

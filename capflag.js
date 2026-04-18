@@ -88,49 +88,28 @@ window.NewChar = function(a) {
  }
 }
 function mainloop() {
- // Avatar selection complete - PObj holds the 4-character avatar string
 }
 
-// Game-specific click handler: called by gfxZClick when a z-location is clicked.
 window.zdown = function(z) {
- // z-location received; item selection handled via itemdown()
+ // walk to z-location
 }
-// Called by gfxZClick when the player selects an item from the popup (or clicks the only item).
-// fullItemString format: itemId(2) + z(2) + data (e.g. "Sa13Za")
-window.itemdown = function(fullItemString) {
- var itemId = fullItemString.slice(0, 2);
- switch (window.gameState) {
-  case 'just starting':
-   // Player slot items start with S or T (e.g. Sa, Tb)
-   if (/^[ST][a-z]$/.test(itemId)) { joinGame(fullItemString); }
-   break;
-  case 'in progress':
-   // TODO: Implement gameplay item handling
-   break;
- }
-}
-// Step 3 of join flow: send Qg (Get/Join Game) command with chosen ItemID + z + avatar.
-// Server checks item ownership, renames player file with avatar + player hat (La),
-// records session ownership, and updates the p.txt manifest.
-window.joinGame = async function(fullItemString) {
-  hpop();
+
+window.itemdown = function(zitem) {
+  var id = zitem.slice(0, 2);
+  var z = zitem.substring(2, 4);
   
-  var itemId = fullItemString.slice(0, 2);
-  var zLocation = fullItemString.slice(2, 4); 
-  var itemData = fullItemString.slice(4, 6);
-  
-  // Silent fail if hat already claimed
-  if (itemData !== "Za") {
-    hpop();
-    return;
+  switch (zitem.charAt(0)) {
+    case 'S': joinGame(zitem); break;
+    case 'T': joinGame(zitem); break;
   }
-  
-  // Just queue the command - gfx.js handles the timing
-  playerItemId = itemId;
-  window.gfxDo = "Qg" + itemId + zLocation + playerAvatarStr;
-  
-  // No more interval management needed!
 }
+
+window.joinGame = async function(zitem) {
+  hpop(); if (itemData !== "Za") { hpop(); return; }
+  playerItemId = itemId;
+  window.gfxDo = "Qg" + zitem.substring(0,4)+playerAvatarStr;
+}
+
 // Send SG (Start Game) command to move the player from the lobby (w/) to a world
 // map, making them visible as an active player in RF responses for that map.
 // After SG succeeds, switches the RF polling interval to keep refreshing the map.
