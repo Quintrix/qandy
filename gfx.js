@@ -181,6 +181,7 @@ window.gfxChar = function(C,O,Z) {
  }
 }
 window.gfxZClick=function(z, clickedElement) {
+  
   var zNum = parseInt(z, 10);
   // Map z-values are stored as 2-char strings (max z=95 for 8x12 grid)
   var zStr = ('0' + zNum).slice(-2);
@@ -190,17 +191,19 @@ window.gfxZClick=function(z, clickedElement) {
     window.zdown(zNum);
   }
 
+  var htm = '';
+
   // Collect all items at this z-location from all sector data sources
   var items = [];
   if (window.gfxCurrentSector && window.gfxSectorData && window.gfxSectorData[window.gfxCurrentSector]) {
     var sector = window.gfxSectorData[window.gfxCurrentSector];
-
     // Static sector items: {id, z, data}
-    if (sector.items) {
+    if (sector.objs) {
       for (var si = 0; si < sector.items.length; si++) {
         var item = sector.items[si];
+        var iId = fullStr.slice(0, 2);
         if (parseInt(item.z, 10) === zNum) {
-          items.push(item.id + zStr + item.data);
+          htm+="<a href=\"javascript: \""+ItemID(iId)+"</a><br>";
         }
       }
     }
@@ -208,7 +211,7 @@ window.gfxZClick=function(z, clickedElement) {
     // HERE IS WHY I CAN'T CLICK HATS
     // need to keep track of map 'refresh' string
     // Dynamic multiplayer items: {id, z, avatar}
-    if (sector.dyn) {
+    if (sector.items) {
       for (var di = 0; di < sector.dyn.length; di++) {
         var dynItem = sector.dyn[di];
         if (dynItem.z === zNum) {
@@ -232,30 +235,24 @@ window.gfxZClick=function(z, clickedElement) {
     }
   }
 
-  // If exactly one item and itemdown() is defined, call it directly
-  if (items.length === 1 && typeof window.itemdown === 'function') {
-    window.itemdown(items[0]);
-    return;
-  }
-
+  // placeholder for future 'walk here' menu option
   // Build popup HTML listing all items at this z-location
-  var htm = '';
-  for (var pi = 0; pi < items.length; pi++) {
-    var fullStr = items[pi];
-    var iId = fullStr.slice(0, 2);
-    var rawName = (typeof window.ItemID === 'function') ? window.ItemID(iId) : iId;
-    var name = String(rawName).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    var safeStr = fullStr.replace(/'/g, '');
-    if (typeof window.itemdown === 'function') {
-      htm += "<a href=\"javascript:itemdown('" + safeStr + "')\">" + name + "</a><br>";
-    } else {
-      htm += name + "<br>";
-    }
-  }
+  //var htm = '';
+  // for (var pi = 0; pi < items.length; pi++) {
+  //  var fullStr = items[pi];
+  //  var iId = fullStr.slice(0, 2);
+  //  var rawName = (typeof window.ItemID === 'function') ? window.ItemID(iId) : iId;
+  //  var name = String(rawName).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  //  var safeStr = fullStr.replace(/'/g, '');
+  //  if (typeof window.itemdown === 'function') {
+  //    htm += "<a href=\"javascript:itemdown('" + safeStr + "')\">" + name + "</a><br>";
+  //  } else {
+  //    htm += name + "<br>";
+  //  }
+  //}
 
   if (htm) { pop(htm); }
 }
-
 window.gfxServers = async function() {
   var url = _registryUrl;
   if (!url) return { error: 'Error: no registry URL configured' };
@@ -414,6 +411,7 @@ async function gfxFetchMap(filename) {
 }
 
 window.gfxObjects = function(items) {
+ // objects are 'static items' that are part of the .gfx file
  console.log("gfxObjects "+items);
  // Remove existing sector item elements
  var oldItems = document.querySelectorAll('.item');
@@ -526,12 +524,12 @@ function _processPlayerMovements(playerId, movements) {
 
 
 function gfxItems(rfStr) {
-// Internal: render all dynamic items from an RF response string.
-// rfStr is a comma-separated list of item codes.
+// 'items' are dynamic items that players can pick-up and drop and include
+// 'player items' S# and T# which represent the players and their avatars
+
 // Each code: "<id(2)><z(2-digit)>" for plain items/empty slots,
 //            "<id(2)><z(2-digit)><avatarStr>" for items with avatar data (e.g. active players).
-// Avatar strings may include a movements suffix separated by "-": "<avatarStr>-<movements>".
-// Plain items are rendered as images from i/.
+
 // Items with avatar are rendered as layered character sprites via _renderPlayer.
 
  var old = document.querySelectorAll('.mp-item, .mp-player');
