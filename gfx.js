@@ -310,8 +310,6 @@ window.gfxConnect = async function(serverIndex) {
       gameState = await gfxPing("BB");
     }
     
-    await gfxInit();
-
     var minutes = gameState.slice(0, 2);
     var seconds = gameState.slice(2, 4);
     var mapName = gameState.slice(4);
@@ -324,6 +322,8 @@ window.gfxConnect = async function(serverIndex) {
       await gfxFetchMap(window._gameMapFile);
       gfxSector("_L");
     }
+
+    await gfxInit();
 
     gfxTick();
     

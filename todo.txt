@@ -1,4 +1,9 @@
 
+    add insert/delete to alt keyboard
+    move ctrl and alt to beside caps
+    fix missing space label
+    add insert/delete underline/block mode
+
     implement gfx.js tileset engine:
       needs gfxItems() renderer
       needs todo=variable
@@ -16,11 +21,7 @@
  
     draw.js
     
-    add insert/delete to alt keyboard
-    move ctrl and alt to beside caps
-    fix missing space label
-       
-    add insert/delete underline/block mode
+    
 
        ascii.js - improve output
         ansi.js - add 256 color codes and cursor controls
@@ -34,44 +35,17 @@
 
     DOS Update:
      
-      Allow 'sysop' view dir on mounted devices, 'mount' is weird with default localStorage, what is it's purpose? 
+      Allow 'sysop' view dir on mounted devices, 'mount' is weird with
+      default localStorage, what is it's purpose? 
       
       Add 'file' device for file://
       Add 'http' device for http://
       Add 'paste' device for cut/paste
       Add 'xmodem' device for upload/download
-      
-      clipboard device?
+      Add 'clipboard' device?
 
       add total size and number of files to localDir())
       overhaul command_js
 
 
-
-
-
-
-
-
-
-
-capflag.js - calls 'BB' (big bang) if world does not already exist by giving server
-             the map screens to create and a list of player items. But with the new
-             .gfx map editor and file format, now it should just call BB as the
-             server already had the map and just needs to create the directories 
-
-             if (gameState.startsWith("XW")) {
-               await print("No world found.\nCreating new world...");
-               gameState = await gfxPing("BB");
-               if (gameState.startsWith("XX")) {
-                 var bbErrorMsg = gameState.substring(2);
-                 await print("Error creating world: " + bbErrorMsg + "\n");
-                 return flagConnect();
-               }
-               await print("\nWorld created. Game state: " + gameState + "\n");
-               // Now fall through to normal JS/IP handling
-             }
-
-
-qandyland.js - need to update 'bigbang' to use capflag.gfx as the default map
 
