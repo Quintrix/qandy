@@ -17,6 +17,10 @@ var mapy=11;
 window.gfxDo = "RF";   // Default refresh command
 window.gfxPong = ".."; // server response
 
+window.playerMap="_L";  // map player item is on (default lobby)
+window.playerItem=".."; // item id of object player has claimed
+window.playerZ=-1;    // z-locatin of playerItem
+
 var gfxInterval = null; // The 1-second loop
 
 // Initialization state tracking
@@ -329,15 +333,22 @@ function gfxTick() {
       var command = window.gfxDo || "RF";
       window.gfxDo = "RF"; // Reset to default
       window.gfxPong = await gfxPing(command);
-      var verb = window.gfxPong.substring(0, 2);
-      var noun = window.gfxPong.substring(2);
-      if (verb == "RF") { gfxItems(noun); }
+      console.log(gfxPong);
+      var verb = gfxPong.substring(0, 2);
+      var noun = gfxPong.substring(2, 4);
+      if (verb == "RF") { playerMap=noun.substring(4, 6); gfxItems(noun.substring(6)); }
       if (verb == "XX") { }
     } catch (e) { 
       console.error('Server tick error:', e); 
     }
   }, 1000);
 }
+
+
+window.playerMap="_L";  // map player item is on (default lobby)
+window.playerItem=".."; // item id of object player has claimed
+window.playerZ=-1;    // z-locatin of playerItem
+
 
 async function gfxFetchMap(filename) {
   filename = filename || "capflag.gfx";
@@ -520,6 +531,7 @@ function _processPlayerMovements(playerId, movements) {
 
 
 function gfxItems(rfStr) {
+  console.log("gfxItems="+rfStr);
 // 'items' are dynamic items that players can pick-up and drop and include
 // 'player items' S# and T# which represent the players and their avatars
 
@@ -557,6 +569,7 @@ function gfxItems(rfStr) {
   }
  }
 }
+
 window.gfxChars = function(players) {
 // Render multiplayer characters/players from an array of player strings.
 // Each entry is a Queville player string: "[playerId][zz][avatarStr]" e.g. "Sa43B1D0".
