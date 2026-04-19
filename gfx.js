@@ -202,8 +202,6 @@ window.gfxChar = function(C,O,Z) {
    chr.style.zIndex="152";
    document.body.appendChild(chr);
   } 
- } else {
-  if (document.getElementById("ch"+PName)) { document.getElementById("ch"+PName).remove(); } 
  }
 }
 
@@ -471,6 +469,7 @@ function zToXY(z) {
  var x = z - (y * (mapx + 1));
  return { x: x, y: y };
 }
+
 function _renderPlayer(playerStr) {
 // Internal: render a single player from a Queville player string.
 // playerStr format: "[playerId][zz][avatarStr]" e.g. "Sa43B1D0C2"
@@ -485,6 +484,7 @@ function _renderPlayer(playerStr) {
  if (avatarStr.length < 2) return;
  gfxChar(playerId, avatarStr, zLocation);
 }
+
 function _renderPlayerAvatar(playerId, z, avatarStr, movements) {
 // Internal: render a player avatar at the given z-location by stacking 2-char part images.
 // Parts are categorised by their first letter (matching the gfxChar() convention):
@@ -550,8 +550,7 @@ function gfxRefresh(rfStr) {
     if (isNaN(z)) continue;
     var avatar = entry.length > 4 ? entry.slice(4) : '';
     if (avatar) {
-      // Logic for players/NPCs
-      _renderPlayer(entry); 
+      gfxChar(iId, avatar, z);       
     } else {
       var coords = zToXY(z);
       var img = document.createElement('img');
