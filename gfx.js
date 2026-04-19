@@ -18,12 +18,12 @@ window.gfxPong = "..";   // server response
 
 window.map="_L";         // map player item is on (default lobby)
 window.mapTiles=[];      // tiles on player's current map
-window.mapExits=[];
-window.mapItems=[];      // items on player's current map           //  ???  ??? ?? ??
-window.mapObjs=[];       // objs on player's current map
-
+window.mapExits=[];      // valid exits for map sectors
+window.mapObjs=[];       // objs on map sectors
+window.mapItems;         // items on player's current map
 window.playerItem="Za";  // item id of object player has claimed (nothing)
 window.playerZ=-1;       // z-locatin of playerItem
+window.playerAvatar = "";   // players avatar (ie "B0D0")
 
 var gfxInterval = null;  // The 1-second loop
 
@@ -209,43 +209,40 @@ window.gfxChar = function(C,O,Z) {
 
 window.gfxZClick = function(z, clickedElement) {
   var zNum = parseInt(z, 10);
-  var zStr = ('0' + zNum).slice(-2);
+  // Track the last clicked Z for the popup positioning logic
+  window.lastClickedZ = zNum; 
   if (typeof window.zdown === 'function') { window.zdown(zNum); }
   var htm = '';
 
-  // 1. Loop to extract each Object (separated by '.')
-  // Format: [id(2)][z(2)][avatar(var)]
-  var objsData = mapObjs[map];
+  // 1. Handle OBJS: 6-character segments (ID[2], Z[2], DATA[2])
+  // No delimiters used here
+  var objsData = mapObjs[window.map]; 
   if (objsData) {
-    var objsArray = objsData.split('.');
-    for (var i = 0; i < objsArray.length; i++) {
-      var objRaw = objsArray[i];
-      if (objRaw.length >= 4) {
-        var objId = objRaw.substring(0, 2);
-        var objZ = parseInt(objRaw.substring(2, 4), 10);
-        
-        if (objZ === zNum) {
-          htm += '<a href="javascript:void(0)">'+gfxItemID(objId)+'</a><br>';
-        }
+    for (var i = 0; i < objsData.length; i += 6) {
+      var objId = objsData.substring(i, i + 2);
+      var objZ  = parseInt(objsData.substring(i + 2, i + 4), 10);
+      
+      if (objId.charAt(0)=='S') { continue; }
+      if (objId.charAt(0)=='T') { continue; }
+      if (objZ === zNum) {
+        htm += '<a href="javascript:objdown(\''+objId+'\')">'+gfxItemID(objId)+'</a><br>';
       }
     }
   }
 
-  // 1. Loop to extract each Item (fixed 6-character segments)
-  // Format: [id(2)][z(2)][data(2)]
-  var idata = mapItems[map];
-  console.log("idata="+idata+ "map="+map);
-  if (idata) {
-    for (var j = 0; j < idata.length; j += 6) {
-      var id = idata.substring(j, j + 2);
-      var iz = parseInt(idata.substring(j + 2, j + 4), 10);
-      if (iz === zNum) {
-        htm += '<a href="javascript:void(0)">' + gfxItemID(idata) + '</a><br>';
+  // 2. Handle ITEMS: Comma-delimited strings
+  // Example: "Sa33,Sb34,Sc57"
+  if (mapItems) {
+    var items=mapItems.split(',');
+    for (var j=0; j<items.length; j++) {
+      var id=items[j].substring(0, 2);
+      var z=parseInt(items[j].substring(2, 4), 10);
+      if (z === zNum) {
+        htm += '<a href="javascript:itemdown(\''+items[j]+'\')">'+gfxItemID(id)+'</a><br>';        
       }
     }
   }
 
-  // Display the menu if any items or objects were found at this tile
   if (htm) { 
     pop(htm); 
   }
@@ -503,7 +500,7 @@ function gfxRefresh(rfStr) {
   var old = document.querySelectorAll('.item');
   for (var i = 0; i < old.length; i++) { old[i].parentNode.removeChild(old[i]); }
   var items = rfStr.substring(2);
-  mapItems[playerMap]=items;
+  mapItems=items;
   window.items = items.split(',');
   for (var j = 0; j < window.items.length; j++) {
     var entry = window.items[j];

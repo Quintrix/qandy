@@ -9,7 +9,6 @@ var gfxConnected = null;
 var emptySlots = [];        // available empty player slot codes from GS response
 var rfInterval = null;      // handle for the RF refresh timer
 var playerItemId = null;    // this client's chosen player slot ItemID (e.g. "Sa")
-var playerAvatarStr = "";   // this client's 4-char avatar string (e.g. "B0D0")
 
 // Game phase for click handler state machine.
 // 'idle'          – before connecting to a server
@@ -36,7 +35,7 @@ async function startup(){
     var selectedServer = await input();  // Get user selection  
     var gameState = await gfxConnect(selectedServer); // Connect & return game state
     
-    // should render map here
+    NewChar();
     
     
   }
@@ -77,7 +76,7 @@ window.NewChar = function(a) {
   } else {
   	if (a.length==2) {
   	 if (a.charAt(0)=="F") { PObj=a+"H0"; } else { PObj=a+"D0"; }
-    playerAvatarStr = PObj;
+    playerAvatar = PObj;
     PForce = "hidden";
     pop("Select Player<br>Hat to join game!");
   	} else {
@@ -94,42 +93,31 @@ window.zdown = function(z) {
  // walk to z-location
 }
 
-window.itemdown = function(zitem) {
-  var id = zitem.slice(0, 2);
-  var z = zitem.substring(2, 4);
-  
-  switch (zitem.charAt(0)) {
-    case 'S': joinGame(zitem); break;
-    case 'T': joinGame(zitem); break;
-  }
+window.objdown = function(objStr) {
+  if (!objStr) return;
+
+  // Parsing the 6-character byte logic
+  var i = objStr.slice(0, 2);        // ID (e.g., "Yj")
+  var z = objStr.slice(2, 4);        // Z-location
+  var d = objStr.slice(4, 6);        // Optional Data/Avatar
+
+  if (i === "Yj") { startGame(); }
 }
 
-window.joinGame = async function(zitem) {
-  hpop(); if (itemData !== "Za") { hpop(); return; }
-  playerItemId = itemId;
-  window.gfxDo = "Qg" + zitem.substring(0,4)+playerAvatarStr;
+window.itemdown = function(itemStr) {
+  if (!itemStr) return;
+  var item = itemStr.slice(0, 2);
+  var z = itemStr.substring(2, 4);
+  var avatar = itemStr.slice(4);
+  if (item.charAt(0)=='S') { joinGame(item, z); } 
+  if (item.charAt(0)=='T') { joinGame(item, z); } 
 }
 
-// Send SG (Start Game) command to move the player from the lobby (w/) to a world
-// map, making them visible as an active player in RF responses for that map.
-// After SG succeeds, switches the RF polling interval to keep refreshing the map.
-window.startGame = async function(itemId, avatar) {
- try {
-  var res = await gfxPing("SG" + itemId + avatar);
-  if (res.startsWith('OK')) {
-   // Switch RF polling to the player's world map (server tracks map via session)
-   if (rfInterval) clearInterval(rfInterval);
-   rfInterval = setInterval(async function() {
-    try {
-     var rfRes = await gfxPing("RF");
-     gfxPong(rfRes);
-    } catch (e) { console.error('RF tick error:', e); }
-   }, 1000);
-   console.log('Game started for ' + itemId + ' with avatar ' + avatar);
-  } else {
-   console.error('Start game error: ' + res);
-  }
- } catch (e) {
-  console.error('Start game error:', e);
- }
-};
+window.joinGame = async function(item, z) { 
+  console.log(item);
+  if (playerMap != '_L') { return; }
+  // validate playerItemId??
+  playerItemId=item; playerZ=z;
+  // send server command to 'get item'
+  window.gfxDo = "Qg" + item + z + playerAvatar;
+}
