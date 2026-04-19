@@ -1,4 +1,3 @@
-
 window.GFX = 0; // set to true when gfx.js ready to use
 
 var _serverUrl = 'http://localhost:8080/qandyland.js';
@@ -16,14 +15,12 @@ var mapy=11;
 
 window.gfxDo = "RF";     // Default refresh command
 window.gfxPong = "..";   // server response
-window.gfxItems = [];    // dynamic items
-window.gfxObjs=[];       // statuc items
 
 window.map="_L";         // map player item is on (default lobby)
 window.mapTiles=[];      // tiles on player's current map
 window.mapExits=[];
+window.mapItems=[];      // items on player's current map           //  ???  ??? ?? ??
 window.mapObjs=[];       // objs on player's current map
-window.mapItems=[];      // items on player's current map
 
 window.playerItem="Za";  // item id of object player has claimed (nothing)
 window.playerZ=-1;       // z-locatin of playerItem
@@ -210,69 +207,50 @@ window.gfxChar = function(C,O,Z) {
  }
 }
 
-window.gfxZClick=function(z, clickedElement) {
-  var zNum = parseInt(z, 10); var zStr = ('0' + zNum).slice(-2);
+window.gfxZClick = function(z, clickedElement) {
+  var zNum = parseInt(z, 10);
+  var zStr = ('0' + zNum).slice(-2);
   if (typeof window.zdown === 'function') { window.zdown(zNum); }
-  var htm = ''; var items = [];
-  var sector = window.gfxSectorData[window.gfxCurrentSector];
-  var item = sector.objs[gfxSector]; 
-  if (parseInt(item.z, 10) === zNum) {
-    // Example menu entry: show item name, and call ItemSelect('id') when clicked
-    htm +=
-      '<a href="javascript:void(0)" onclick="ItemSelect(\'' +
-      item.id +
-      '\')">' +
-      ItemID(item.id) +
-      "</a><br>";
-    }
-  
+  var htm = '';
 
-  // HERE IS WHY I CAN'T CLICK HATS
-  // need to keep track of map 'refresh' string
-  // Dynamic multiplayer items: {id, z, avatar}
-  if (sector.items) {
-    for (var di = 0; di < sector.dyn.length; di++) {
-      var dynItem = sector.dyn[di];
-      if (dynItem.z === zNum) {
-        items.push(dynItem.id + zStr + dynItem.avatar);
+  // 1. Loop to extract each Item (fixed 6-character segments)
+  // Format: [id(2)][z(2)][data(2)]
+  //var idata = mapItems[map];
+  //if (idata) {
+  //  for (var j = 0; j < idata.length; j += 6) {
+  //    var id = idata.substring(j, j + 2);
+  //    var iz = parseInt(idata.substring(j + 2, j + 4), 10);
+  //    if (itemZ === zNum) {
+  //      htm += '<a href="javascript:void(0)" onclick="ItemSelect(\'' + itemId + '\')">' + 
+  //        ItemID(itemId) + '</a><br>';
+  //    }
+  //  }
+  //}
+
+  // 1. Loop to extract each Object (separated by '.')
+  // Format: [id(2)][z(2)][avatar(var)]
+  var objsData = mapObjs[map];
+  console.log("objsData="+objsData);
+  if (objsData) {
+    var objsArray = objsData.split('.');
+    for (var i = 0; i < objsArray.length; i++) {
+      var objRaw = objsArray[i];
+      if (objRaw.length >= 4) {
+        var objId = objRaw.substring(0, 2);
+        var objZ = parseInt(objRaw.substring(2, 4), 10);
+        
+        if (objZ === zNum) {
+          htm += '<a href="javascript:void(0)">'+ItemID(objId)+'</a><br>';
+        }
       }
     }
   }
 
-  // Character/player data: string "Sa43B1D0C2" or object {id, outfit, z}
-  //if (sector.chars) {
-  //  for (var ci = 0; ci < sector.chars.length; ci++) {
-  //    var charEntry = sector.chars[ci];
-  //    if (typeof charEntry === 'string' && charEntry.length >= 4) {
-  //      if (parseInt(charEntry.slice(2, 4), 10) === zNum) {
-  //        items.push(charEntry);
-  //      }
-  //    } else if (typeof charEntry === 'object' && charEntry !== null && parseInt(charEntry.z, 10) === zNum) {
-  //      items.push(charEntry.id + zStr + (charEntry.outfit || ''));
-  //    }
-  //  }
-
- 
-  // placeholder for future 'walk here' menu option
-
-  // Build popup HTML listing all items at this z-location
-  //var htm = '';
-  // for (var pi = 0; pi < items.length; pi++) {
-  //  var fullStr = items[pi];
-  //  var iId = fullStr.slice(0, 2);
-  //  var rawName = (typeof window.ItemID === 'function') ? window.ItemID(iId) : iId;
-  //  var name = String(rawName).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  //  var safeStr = fullStr.replace(/'/g, '');
-  //  if (typeof window.itemdown === 'function') {
-  //    htm += "<a href=\"javascript:itemdown('" + safeStr + "')\">" + name + "</a><br>";
-  //  } else {
-  //    htm += name + "<br>";
-  //  }
-  //}
-
-  if (htm) { pop(htm); }
+  // Display the menu if any items or objects were found at this tile
+  if (htm) { 
+    pop(htm); 
+  }
 }
-
 window.gfxServers = async function() {
   var url = _registryUrl;
   if (!url) return { error: 'Error: no registry URL configured' };
@@ -409,58 +387,48 @@ async function gfxFetchMap(filename) {
   }
 }
 
-
 window.gfxObjects = function(sector) {
-  // 1. Memory Lookup: Fetch the 4-char logic string for this sector
   var objsStr = window.mapObjs[sector];
-  
-  // 2. Clear existing static objects from the DOM
+  console.log("gfxObjects "+objsStr);
   var oldObjs = document.querySelectorAll('.objs');
-  for (var k = 0; k < oldObjs.length; k++) {
-    if (oldObjs[k].parentNode) { 
-      oldObjs[k].parentNode.removeChild(oldObjs[k]); 
-    }
-  }
-
-  // 3. Process the "Punch Card" if it exists
+  for (var k = 0; k < oldObjs.length; k++) { if (oldObjs[k].parentNode) { oldObjs[k].parentNode.removeChild(oldObjs[k]); }}
   if (objsStr) {
-    // Split into 4-character [ID][ZZ] instructions
     var safeObjs = String(objsStr || "");
-    var newObjs = safeObjs.match(/.{1,4}/g) || [];
+    var newObjs = safeObjs.match(/.{1,6}/g) || [];
 
     for (var i = 0; i < newObjs.length; i++) {
       var entry = newObjs[i];
-      if (entry.length < 4) continue;
-
       var iId = entry.slice(0, 2);
       var z = parseInt(entry.slice(2, 4), 10);
-
-      // Skip dynamic types like Hats (S/T prefixes) 
-      // since those are handled by the 1-second RF pulse
-      if (/^[ST][a-z]$/.test(iId)) {
-        continue; 
-      }
+      var idata = entry.slice(4, 6);
+      
+      if (/^[ST][a-z]$/.test(iId)) { continue; }
       
       var coords = zToXY(z);
       var img = document.createElement('img');
       img.className = 'objs';
       img.src = 'i/' + iId + '.png';
       img.style.position = 'absolute';
-      
-      // Retro grid math (32px base + your 20/22px logical offsets)
-      img.style.top  = (32 + 20 + (coords.y * 32)) + "px";
-      img.style.left = (32 + 22 + (coords.x * 32)) + "px";
+      var initialTop = (32 + 20 + (coords.y * 32));
+      var initialLeft = (32 + 22 + (coords.x * 32));
+      img.style.top = initialTop + "px";
+      img.style.left = initialLeft + "px";
       img.style.zIndex = '110'; 
 
-      // Logic-centric: clicks always reference the Z-coordinate
+      // The adjustment logic
+      img.onload = function() {
+        // Subtracting the image's own dimensions from the starting coordinates
+        this.style.top = (initialTop - this.height + 32) + "px";
+        this.style.left = (initialLeft - this.width + 32) + "px";
+      }
+
       img.onclick = (function(capturedZ) {
         return function() { gfxZClick(capturedZ, this); };
       })(z);
-
       document.body.appendChild(img);
     }
   }
-};
+}
 
 function zToXY(z) {
  var y = Math.floor(z / (mapx + 1));
@@ -538,7 +506,7 @@ function gfxRefresh(rfStr) {
  var old = document.querySelectorAll('.item');
  for (var i = 0; i < old.length; i++) { old[i].parentNode.removeChild(old[i]); }
 
- var gfxItems = rfStr.split(',');
+ var mapItems = rfStr.split(',');
  for (var j = 0; j < entries.length; j++) {
   var entry = entries[j];
   if (!entry || entry.length < 4) continue;
@@ -571,9 +539,9 @@ function gfxRefresh(rfStr) {
   var old = document.querySelectorAll('.item');
   for (var i = 0; i < old.length; i++) { old[i].parentNode.removeChild(old[i]); }
   var items = rfStr.substring(2);
-  window.gfxItems = items.split(',');
-  for (var j = 0; j < window.gfxItems.length; j++) {
-    var entry = window.gfxItems[j];
+  window.mapItems = items.split(',');
+  for (var j = 0; j < window.mapItems.length; j++) {
+    var entry = window.mapItems[j];
     if (!entry || entry.length < 4) continue;
     var iId = entry.slice(0, 2);
     var z = parseInt(entry.slice(2, 4), 10);
@@ -676,7 +644,6 @@ window.gfxGameState = async function(drive) {
   return await gfxPing("GS");
 }
 splash(1000);
-qdosScript("gfx-itemid.js");
 window.hpop=function() { document.getElementById("pop").style.visibility="hidden"; }
 window.pop=function(htm) {
   const popup = document.getElementById("pop");
