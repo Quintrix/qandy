@@ -1,4 +1,4 @@
-window.ItemID=function(i) {
+window.gfxItemID=function(i) {
 if (i=="Aa") { return "Travel Boots"; }
 if (i=="Ab") { return "Hiking Boots"; }
 if (i=="Ac") { return "Swamp Boots"; }
@@ -74,3 +74,5 @@ if (i=="Zn") { return "Green"; }
 if (i=="Zo") { return "Red"; }
 return "Unknown";
 }
+
+window.ItemID=window.gfxItemID();

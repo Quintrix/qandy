@@ -213,24 +213,9 @@ window.gfxZClick = function(z, clickedElement) {
   if (typeof window.zdown === 'function') { window.zdown(zNum); }
   var htm = '';
 
-  // 1. Loop to extract each Item (fixed 6-character segments)
-  // Format: [id(2)][z(2)][data(2)]
-  //var idata = mapItems[map];
-  //if (idata) {
-  //  for (var j = 0; j < idata.length; j += 6) {
-  //    var id = idata.substring(j, j + 2);
-  //    var iz = parseInt(idata.substring(j + 2, j + 4), 10);
-  //    if (itemZ === zNum) {
-  //      htm += '<a href="javascript:void(0)" onclick="ItemSelect(\'' + itemId + '\')">' + 
-  //        ItemID(itemId) + '</a><br>';
-  //    }
-  //  }
-  //}
-
   // 1. Loop to extract each Object (separated by '.')
   // Format: [id(2)][z(2)][avatar(var)]
   var objsData = mapObjs[map];
-  console.log("objsData="+objsData);
   if (objsData) {
     var objsArray = objsData.split('.');
     for (var i = 0; i < objsArray.length; i++) {
@@ -240,8 +225,22 @@ window.gfxZClick = function(z, clickedElement) {
         var objZ = parseInt(objRaw.substring(2, 4), 10);
         
         if (objZ === zNum) {
-          htm += '<a href="javascript:void(0)">'+ItemID(objId)+'</a><br>';
+          htm += '<a href="javascript:void(0)">'+gfxItemID(objId)+'</a><br>';
         }
+      }
+    }
+  }
+
+  // 1. Loop to extract each Item (fixed 6-character segments)
+  // Format: [id(2)][z(2)][data(2)]
+  var idata = mapItems[map];
+  console.log("idata="+idata+ "map="+map);
+  if (idata) {
+    for (var j = 0; j < idata.length; j += 6) {
+      var id = idata.substring(j, j + 2);
+      var iz = parseInt(idata.substring(j + 2, j + 4), 10);
+      if (iz === zNum) {
+        htm += '<a href="javascript:void(0)">' + gfxItemID(idata) + '</a><br>';
       }
     }
   }
@@ -251,6 +250,7 @@ window.gfxZClick = function(z, clickedElement) {
     pop(htm); 
   }
 }
+
 window.gfxServers = async function() {
   var url = _registryUrl;
   if (!url) return { error: 'Error: no registry URL configured' };
@@ -337,7 +337,6 @@ function gfxTick() {
     }
   }, 1000);
 }
-
 
 var tiles = [];
 
@@ -499,49 +498,15 @@ function _processPlayerMovements(playerId, movements) {
  console.log('Player ' + playerId + ' movements: ' + movements);
 }
 
-
-function gfxRefresh(rfStr) {
- // refresh dynamic items on display
- playerMap=rfStr.substring(0, 2);
- var old = document.querySelectorAll('.item');
- for (var i = 0; i < old.length; i++) { old[i].parentNode.removeChild(old[i]); }
-
- var mapItems = rfStr.split(',');
- for (var j = 0; j < entries.length; j++) {
-  var entry = entries[j];
-  if (!entry || entry.length < 4) continue;
-  var iId = entry.slice(0, 2);
-  var z = parseInt(entry.slice(2, 4), 10);
-  if (isNaN(z)) continue;
-  var avatar = entry.length > 4 ? entry.slice(4) : '';
-  if (avatar) {
-   _renderPlayer(entry); // entry is "<id><z><avatarStr>", matching _renderPlayer's expected format
-  } else {
-  	// this renders dynamic item
-   var coords = zToXY(z);
-   var img = document.createElement('img');
-   img.className = 'item';
-   img.src = 'i/' + iId + '.png';
-   img.style.position = 'absolute';
-   img.style.top  = (32 + 20 + (coords.y * 32)) + 'px';
-   img.style.left = (32 + 22 + (coords.x * 32)) + 'px';
-   img.style.zIndex = '120';
-   img.onclick = (function(capturedZ) {
-     return function() { gfxZClick(capturedZ, this); };
-   })(z);
-   document.body.appendChild(img);
-  }
- }
-}
-
 function gfxRefresh(rfStr) {
   window.playerMap = rfStr.substring(0, 2);
   var old = document.querySelectorAll('.item');
   for (var i = 0; i < old.length; i++) { old[i].parentNode.removeChild(old[i]); }
   var items = rfStr.substring(2);
-  window.mapItems = items.split(',');
-  for (var j = 0; j < window.mapItems.length; j++) {
-    var entry = window.mapItems[j];
+  mapItems[playerMap]=items;
+  window.items = items.split(',');
+  for (var j = 0; j < window.items.length; j++) {
+    var entry = window.items[j];
     if (!entry || entry.length < 4) continue;
     var iId = entry.slice(0, 2);
     var z = parseInt(entry.slice(2, 4), 10);
