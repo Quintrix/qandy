@@ -549,6 +549,13 @@ function gfxRefresh(rfStr) {
     var z = parseInt(entry.slice(2, 4), 10);
     if (isNaN(z)) continue;
     var avatar = entry.length > 4 ? entry.slice(4) : '';
+    
+    // if item == player item, update player avatar
+    // window.playerItem="Za";     // item id of object player has claimed (nothing)
+    // window.playerZ=-1;          // z-locatin of playerItem
+    // window.playerAvatar = "";   // players avatar (ie "B0D0")
+    //
+    
     if (avatar) {
       gfxChar(iId, avatar, z);       
     } else {
