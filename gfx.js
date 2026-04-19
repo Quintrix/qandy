@@ -310,11 +310,51 @@ window.gfxConnect = async function(serverIndex) {
       gfxTiles("_L"); // display lobby first
       gfxObjects("_L");
     }
+    gfxSelectAvatar("");
     gfxTick();
     return window.gameState;
   } catch (e) {
     throw new Error("Failed to connect: " + e.message);
   }
+}
+
+window.gfxSelectAvatar = function(a) {
+ PopForce="visible";
+ if (a=="M") {
+  PUP="Select Character:<p>";
+  PUP=PUP+"<a href=\"javascript:gfxSelectAvatar(\'B0\');\"><img src=\"c/B0.png\" height=64 width=32></a> &nbsp; ";
+  PUP=PUP+"<a href=\"javascript:gfxSelectAvatar(\'B1\');\"><img src=\"c/B1.png\" height=64 width=32></a> &nbsp; ";
+  PUP=PUP+"<a href=\"javascript:gfxSelectAvatar(\'B2\');\"><img src=\"c/B2.png\" height=64 width=32></a><br>";
+  PUP=PUP+"<a href=\"javascript:gfxSelectAvatar(\'B3\');\"><img src=\"c/B3.png\" height=64 width=32></a> &nbsp; ";
+  PUP=PUP+"<a href=\"javascript:gfxSelectAvatar(\'B4\');\"><img src=\"c/B4.png\" height=64 width=32></a> &nbsp; ";
+  PUP=PUP+"<a href=\"javascript:gfxSelectAvatar(\'B5\');\"><img src=\"c/B5.png\" height=64 width=32></a> &nbsp; ";
+  PUP=PUP+"<a href=\"javascript:gfxSelectAvatar(\'B6\');\"><img src=\"c/B6.png\" height=64 width=32></a><p>";
+  PUP=PUP+"<a href=\"javascript:gfxSelectAvatar(\'\');\">Go Back</a><p>";
+  pop(PUP);
+ } else {
+  if (a=="F") {
+   PUP="Select Character:<p>";
+   PUP=PUP+"<a href=\"javascript:gfxSelectAvatar(\'F0\');\"><img src=\"c/F0.png\" height=64 width=32></a> &nbsp; ";
+   PUP=PUP+"<a href=\"javascript:gfxSelectAvatar(\'F1\');\"><img src=\"c/F1.png\" height=64 width=32></a> &nbsp; ";
+   PUP=PUP+"<a href=\"javascript:gfxSelectAvatar(\'F2\');\"><img src=\"c/F2.png\" height=64 width=32></a><br>";
+   PUP=PUP+"<a href=\"javascript:gfxSelectAvatar(\'F3\');\"><img src=\"c/F3.png\" height=64 width=32></a> &nbsp; ";
+   PUP=PUP+"<a href=\"javascript:gfxSelectAvatar(\'F4\');\"><img src=\"c/F4.png\" height=64 width=32></a> &nbsp; ";
+   PUP=PUP+"<a href=\"javascript:gfxSelectAvatar(\'F5\');\"><img src=\"c/F5.png\" height=64 width=32></a> &nbsp; ";
+   PUP=PUP+"<a href=\"javascript:gfxSelectAvatar(\'F6\');\"><img src=\"c/F6.png\" height=64 width=32></a><p>";
+   PUP=PUP+"<a href=\"javascript:gfxSelectAvatar(\'\');\">Go Back</a><p>";
+   pop(PUP);
+  } else {
+  	if (a.length==2) {
+  	 if (a.charAt(0)=="F") { PObj=a+"H0"; } else { PObj=a+"D0"; }
+    playerAvatar = PObj;
+    PForce = "hidden";
+    pop("Select Player<br>Hat to join game!");
+  	} else {
+    PX=2; PY=9; PZ=(PY*(mapx+1))+PX;
+    pop("<p>Male or Female?<br><a href=\"javascript:gfxSelectAvatar(\'M\');\"><img src=\"c/B1.png\" height=128 width=64></a> &nbsp; <a href=\"javascript:gfxSelectAvatar(\'F\');\"><img src=\"c/F5.png\" height=128 width=64></a>");
+   }
+  }
+ }
 }
 
 function gfxTick() {
