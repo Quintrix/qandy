@@ -144,17 +144,17 @@ window.gfxTiles = function(sector) {
 window.gfxChar = function(C,O,Z) {
  let y=Math.floor(Z/(mapx+1)); let x=Z-(y*(mapx+1)); y--;
  idface="cf"+C; idbody="cb"+C; idwpn="cw"+C; idarm="ca"+C; idhat="ch"+C;
- face=""; body=""; wpn=""; arm=""; hat="";
+ face=""; body=""; wpn=""; arm=""; hat=""; right=0;
 
  if (O.indexOf("A")>-1) { face="A"+O.charAt(O.indexOf("A")+1); }
- if (O.indexOf("B")>-1) { face="B"+O.charAt(O.indexOf("B")+1); }
+ if (O.indexOf("B")>-1) { face="B"+O.charAt(O.indexOf("B")+1); right=1; }
  if (O.indexOf("E")>-1) { face="E"+O.charAt(O.indexOf("E")+1); }
- if (O.indexOf("F")>-1) { face="F"+O.charAt(O.indexOf("F")+1); }
+ if (O.indexOf("F")>-1) { face="F"+O.charAt(O.indexOf("F")+1); right=1; }
 
  if (O.indexOf("C")>-1) { body="C"+O.charAt(O.indexOf("C")+1); }
- if (O.indexOf("D")>-1) { body="D"+O.charAt(O.indexOf("D")+1); }
+ if (O.indexOf("D")>-1) { body="D"+O.charAt(O.indexOf("D")+1); right=1;  }
  if (O.indexOf("G")>-1) { body="G"+O.charAt(O.indexOf("G")+1); }
- if (O.indexOf("H")>-1) { body="H"+O.charAt(O.indexOf("H")+1); }
+ if (O.indexOf("H")>-1) { body="H"+O.charAt(O.indexOf("H")+1); right=1; }
 
  if (document.getElementById("cb"+C)) {
   e=document.getElementById("cb"+C).src="c/"+body+".png";
@@ -185,8 +185,16 @@ window.gfxChar = function(C,O,Z) {
   document.body.appendChild(chr);
  }
 
- if (O.indexOf("L")>-1) { hat="L"+O.charAt(O.indexOf("M")+1); }
- if (O.indexOf("M")>-1) { hat="L"+O.charAt(O.indexOf("M")+1); }
+ // if avatar has L# (hat) then:
+ if (O.indexOf("L")>-1) {
+  itemId.charCodeAt(1)-'a'.charCodeAt(0);
+  if (right) {
+     hat="J"+O.charAt(O.indexOf("L")+1);
+  } else {
+     hat="J"+O.charAt(O.indexOf("L")+1);
+  }
+ }  
+
  if (hat) {
   if (document.getElementById("ch"+C)) {
    e=document.getElementById("ch"+C).src="c/"+hat+".png";
@@ -572,29 +580,6 @@ function gfxRefresh(rfStr) {
       document.body.appendChild(img);
     }
   }
-}
-
-window.gfxChars = function(players) {
-// Render multiplayer characters/players from an array of player strings.
-// Each entry is a Queville player string: "[playerId][zz][avatarStr]" e.g. "Sa43B1D0".
-// Also supports static characters by passing {id, outfit, z} objects (calls gfxChar()).
-// Stores the player array in gfxSectorData[gfxCurrentSector].chars when players is non-null.
- var oldPlayers = document.querySelectorAll('.mp-player');
- for (var p = 0; p < oldPlayers.length; p++) { oldPlayers[p].parentNode.removeChild(oldPlayers[p]); }
- if (players) {
-  if (window.gfxCurrentSector && window.gfxSectorData && window.gfxSectorData[window.gfxCurrentSector]) {
-   window.gfxSectorData[window.gfxCurrentSector].chars = players.slice();
-  }
-  for (var i = 0; i < players.length; i++) {
-   var player = players[i];
-   if (!player) continue;
-   if (typeof player === 'string') {
-    _renderPlayer(player);
-   } else if (typeof player === 'object' && player.id) {
-    gfxChar(player.id, player.outfit || '', player.z || 0);
-   }
-  }
- }
 }
 
 window.gfxPing = async function(commandString) {
