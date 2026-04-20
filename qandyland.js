@@ -1643,10 +1643,17 @@ function handleCommand(req, res, raw, driveName) {
           var qgPLoad = fileLoad(qgDrive, '/', 'p.txt', session);
           if (qgPLoad.success) {
             var qgEscId = qgItemId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            var qgPUpdated = qgPLoad.content.replace(
-              new RegExp('^(' + qgEscId + ')=.*$', 'm'),
-              '$1=_L' + qgAvatar + 'La'
-            );
+            
+            hat="";
+            if (qgItemType=="S") { hat="La"; }
+            if (qgItemType=="T") { hat="Lb"; }
+            
+            if (hat != "") {
+              var qgPUpdated = qgPLoad.content.replace(
+                new RegExp('^(' + qgEscId + ')=.*$', 'm'),
+                '$1=_L' + qgAvatar + hat
+              );
+            }
             fileSave(qgDrive, '/', 'p.txt', qgPUpdated, session, 'Qg');
           }
 

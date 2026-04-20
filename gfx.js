@@ -186,11 +186,15 @@ window.gfxChar = function(C,O,Z) {
  }
 
  // if avatar has L# (hat) then:
+ console.log(O);
  if (O.indexOf("L")>-1) {
+  idx = O.charAt(O.indexOf('L')+1).charCodeAt(0)-'a'.charCodeAt(0);
   if (right) {
-     hat="J"+O.charCodeAt(1)-'a'.charCodeAt(0);
+    hat = "J" + idx;
+    console.log("right hat:", hat); // e.g., 'J0'
   } else {
-     hat="K"+O.charCodeAt(1)-'a'.charCodeAt(0);
+    hat = "K" + idx;
+    console.log("left hat:", hat);  // e.g., 'K0'
   }
  }  
 
