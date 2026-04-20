@@ -187,11 +187,10 @@ window.gfxChar = function(C,O,Z) {
 
  // if avatar has L# (hat) then:
  if (O.indexOf("L")>-1) {
-  itemId.charCodeAt(1)-'a'.charCodeAt(0);
   if (right) {
-     hat="J"+O.charAt(O.indexOf("L")+1);
+     hat="J"+O.charCodeAt(1)-'a'.charCodeAt(0);
   } else {
-     hat="J"+O.charAt(O.indexOf("L")+1);
+     hat="K"+O.charCodeAt(1)-'a'.charCodeAt(0);
   }
  }  
 
