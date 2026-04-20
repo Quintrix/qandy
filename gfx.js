@@ -185,8 +185,8 @@ window.gfxChar = function(C,O,Z) {
   document.body.appendChild(chr);
  }
 
- if (O.indexOf("I")>-1) { hat="I"+O.charAt(O.indexOf("I")+1); }
- if (O.indexOf("J")>-1) { hat="J"+O.charAt(O.indexOf("J")+1); }
+ if (O.indexOf("L")>-1) { hat="L"+O.charAt(O.indexOf("M")+1); }
+ if (O.indexOf("M")>-1) { hat="L"+O.charAt(O.indexOf("M")+1); }
  if (hat) {
   if (document.getElementById("ch"+C)) {
    e=document.getElementById("ch"+C).src="c/"+hat+".png";
@@ -549,13 +549,12 @@ function gfxRefresh(rfStr) {
     var z = parseInt(entry.slice(2, 4), 10);
     if (isNaN(z)) continue;
     var avatar = entry.length > 4 ? entry.slice(4) : '';
-    
-    // if item == player item, update player avatar
-    // window.playerItem="Za";     // item id of object player has claimed (nothing)
-    // window.playerZ=-1;          // z-locatin of playerItem
-    // window.playerAvatar = "";   // players avatar (ie "B0D0")
-    //
-    
+
+    if (window.playerItem && iId === window.playerItem) {
+      window.playerZ = z;
+      window.playerAvatar = avatar;
+    }
+
     if (avatar) {
       gfxChar(iId, avatar, z);       
     } else {
