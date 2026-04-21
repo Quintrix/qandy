@@ -60,15 +60,25 @@ window.itemdown = function(itemStr) {
   var item = itemStr.slice(0, 2);
   var z = itemStr.substring(2, 4);
   var avatar = itemStr.slice(4);
-  if (item.charAt(0)=='S') { joinGame(item, z); } 
-  if (item.charAt(0)=='T') { joinGame(item, z); } 
+  if (item.charAt(0)=='S') {
+  	 if (playerItem == "Za") {
+  	 	playerAvatar=playerAvatar.replace("D0","D3");
+  	 	playerAvatar=playerAvatar.replace("H0","D3");
+  	   joinGame(item, z);
+  	 }
+  } 
+  if (item.charAt(0)=='T') {
+  	 if (playerItem == "Za") {
+      joinGame(item, z);
+    }
+  } 
 }
 
 window.joinGame = async function(item, z) { 
-  console.log(item);
+  if (playerItem != "Za") { return; }
   if (playerMap != '_L') { return; }
-  // validate playerItemId??
-  playerItemId=item; playerZ=z;
+    // validate playerItemId??
+  playerItem=item; playerZ=z; playerItemId=item; playerZ=z;
   // send server command to 'get item'
   window.gfxDo = "Qg" + item + z + playerAvatar;
 }

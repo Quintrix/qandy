@@ -1632,7 +1632,10 @@ function handleCommand(req, res, raw, driveName) {
           if (qgBase.length < 4) return respondRetro(res, 'XXNot a valid player slot');
 
           // Rename: Sa33.txt → Sa33B0D0La.txt (append avatar + player hat La)
-          var qgNewName = qgItemId + qgZ + qgAvatar + 'La.txt';
+          var hat="";
+          if (qgItemType=="S") { hat="La"; }
+          if (qgItemType=="T") { hat="Lb"; }
+          var qgNewName = qgItemId + qgZ + qgAvatar + hat+'.txt';
           var qgRename = fileRename(qgDrive, '/', 'w/' + qgSlotFile, 'w/' + qgNewName, session);
           if (!qgRename.success) return respondRetro(res, 'XXFailed to claim slot: ' + qgRename.error);
 
@@ -1643,10 +1646,6 @@ function handleCommand(req, res, raw, driveName) {
           var qgPLoad = fileLoad(qgDrive, '/', 'p.txt', session);
           if (qgPLoad.success) {
             var qgEscId = qgItemId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            
-            hat="";
-            if (qgItemType=="S") { hat="La"; }
-            if (qgItemType=="T") { hat="Lb"; }
             
             if (hat != "") {
               var qgPUpdated = qgPLoad.content.replace(

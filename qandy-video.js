@@ -85,7 +85,7 @@ function video_js() {
     var fgCode  = (typeof fg   === 'number') ? (fg   | 0) : ((typeof CURFG   === 'number') ? CURFG   : 37);
     var bgCode  = (typeof bg   === 'number') ? (bg   | 0) : ((typeof CURBG   === 'number') ? CURBG   : 40);
     var attrVal = (typeof attr === 'number') ? (attr | 0) : ((typeof CURATTR === 'number') ? CURATTR : 0);
-
+ 
     var span = cellGrid[y] && cellGrid[y][x];
     if (!span) return false;
 

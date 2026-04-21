@@ -142,78 +142,75 @@ window.gfxTiles = function(sector) {
 }
 
 window.gfxChar = function(C,O,Z) {
- let y=Math.floor(Z/(mapx+1)); let x=Z-(y*(mapx+1)); y--;
- idface="cf"+C; idbody="cb"+C; idwpn="cw"+C; idarm="ca"+C; idhat="ch"+C;
- face=""; body=""; wpn=""; arm=""; hat=""; right=0;
+  let y=Math.floor(Z/(mapx+1)); let x=Z-(y*(mapx+1)); y--;
+  idface="cf"+C; idbody="cb"+C; idwpn="cw"+C; idarm="ca"+C; idhat="ch"+C;
+  face=""; body=""; wpn=""; arm=""; hat=""; right=0;
 
- if (O.indexOf("A")>-1) { face="A"+O.charAt(O.indexOf("A")+1); }
- if (O.indexOf("B")>-1) { face="B"+O.charAt(O.indexOf("B")+1); right=1; }
- if (O.indexOf("E")>-1) { face="E"+O.charAt(O.indexOf("E")+1); }
- if (O.indexOf("F")>-1) { face="F"+O.charAt(O.indexOf("F")+1); right=1; }
+  if (O.indexOf("A")>-1) { face="A"+O.charAt(O.indexOf("A")+1); }
+  if (O.indexOf("B")>-1) { face="B"+O.charAt(O.indexOf("B")+1); right=1; }
+  if (O.indexOf("E")>-1) { face="E"+O.charAt(O.indexOf("E")+1); }
+  if (O.indexOf("F")>-1) { face="F"+O.charAt(O.indexOf("F")+1); right=1; }
 
- if (O.indexOf("C")>-1) { body="C"+O.charAt(O.indexOf("C")+1); }
- if (O.indexOf("D")>-1) { body="D"+O.charAt(O.indexOf("D")+1); right=1;  }
- if (O.indexOf("G")>-1) { body="G"+O.charAt(O.indexOf("G")+1); }
- if (O.indexOf("H")>-1) { body="H"+O.charAt(O.indexOf("H")+1); right=1; }
+  if (O.indexOf("C")>-1) { body="C"+O.charAt(O.indexOf("C")+1); }
+  if (O.indexOf("D")>-1) { body="D"+O.charAt(O.indexOf("D")+1); right=1;  }
+  if (O.indexOf("G")>-1) { body="G"+O.charAt(O.indexOf("G")+1); }
+  if (O.indexOf("H")>-1) { body="H"+O.charAt(O.indexOf("H")+1); right=1; }
 
- if (document.getElementById("cb"+C)) {
-  e=document.getElementById("cb"+C).src="c/"+body+".png";
-  e=document.getElementById("cb"+C).style.top=32+22+(y*32)+"px";
-  e=document.getElementById("cb"+C).style.left=(32+22+(x*32))+"px";
- } else {
-  let chr=document.createElement("img");
-  chr.id="cb"+C; chr.src="c/"+body+".png";
-  chr.className="char";  
-  chr.style.position="absolute"; chr.style.height=64; chr.style.width=32;
-  chr.style.top=32+22+(y*32)+"px"; chr.style.left=(32+22+(x*32))+"px";
-  chr.onclick = (function(capturedZ) { return function() { gfxZClick(capturedZ); }; })(Z);
-  chr.style.zIndex="150";  
-  document.body.appendChild(chr);
- }
- if (document.getElementById("cf"+C)) {
-  e=document.getElementById("cf"+C).src="c/"+face+".png";
-  e=document.getElementById("cf"+C).style.top=32+22+(y*32)+"px";
-  e=document.getElementById("cf"+C).style.left=(32+22+(x*32))+"px";
- } else {
-  let chr=document.createElement("img");
-  chr.id="cf"+C; chr.src="c/"+face+".png";
-  chr.className="char";  
-  chr.style.position="absolute"; chr.style.height=64; chr.style.width=32;
-  chr.style.top=32+22+(y*32)+"px"; chr.style.left=(32+22+(x*32))+"px";
-  chr.style.zIndex="151";
-  chr.onclick = (function(capturedZ) { return function() { gfxZClick(capturedZ); }; })(Z);
-  document.body.appendChild(chr);
- }
-
- // if avatar has L# (hat) then:
- console.log(O);
- if (O.indexOf("L")>-1) {
-  idx = O.charAt(O.indexOf('L')+1).charCodeAt(0)-'a'.charCodeAt(0);
-  if (right) {
-    hat = "J" + idx;
-    console.log("right hat:", hat); // e.g., 'J0'
+  if (document.getElementById("cb"+C)) {
+    e=document.getElementById("cb"+C).src="c/"+body+".png";
+    e=document.getElementById("cb"+C).style.top=32+22+(y*32)+"px";
+    e=document.getElementById("cb"+C).style.left=(32+22+(x*32))+"px";
   } else {
-    hat = "K" + idx;
-    console.log("left hat:", hat);  // e.g., 'K0'
+    let chr=document.createElement("img");
+    chr.id="cb"+C; chr.src="c/"+body+".png";
+    chr.className="char";  
+    chr.style.position="absolute"; chr.style.height=64; chr.style.width=32;
+    chr.style.top=32+22+(y*32)+"px"; chr.style.left=(32+22+(x*32))+"px";
+    chr.onclick = (function(capturedZ) { return function() { gfxZClick(capturedZ); }; })(Z);
+    chr.style.zIndex="150";  
+    document.body.appendChild(chr);
   }
- }  
-
- if (hat) {
-  if (document.getElementById("ch"+C)) {
-   e=document.getElementById("ch"+C).src="c/"+hat+".png";
-   e=document.getElementById("ch"+C).style.top=32+22+(y*32)+"px";
-   e=document.getElementById("ch"+C).style.left=(32+22+(x*32))+"px";
+  if (document.getElementById("cf"+C)) {
+    e=document.getElementById("cf"+C).src="c/"+face+".png";
+    e=document.getElementById("cf"+C).style.top=32+22+(y*32)+"px";
+    e=document.getElementById("cf"+C).style.left=(32+22+(x*32))+"px";
   } else {
-   let chr=document.createElement("img");
-   chr.id="ch"+C; chr.src="c/"+hat+".png";
-   chr.className="char";  
-   chr.style.position="absolute"; chr.style.height=64; chr.style.width=32;
-   chr.style.top=32+22+(y*32)+"px"; chr.style.left=(32+22+(x*32))+"px";
-   chr.onclick = (function(capturedZ) { return function() { gfxZClick(capturedZ); }; })(Z);
-   chr.style.zIndex="152";
-   document.body.appendChild(chr);
-  } 
- }
+    let chr=document.createElement("img");
+    chr.id="cf"+C; chr.src="c/"+face+".png";
+    chr.className="char";  
+    chr.style.position="absolute"; chr.style.height=64; chr.style.width=32;
+    chr.style.top=32+22+(y*32)+"px"; chr.style.left=(32+22+(x*32))+"px";
+    chr.style.zIndex="151";
+    chr.onclick = (function(capturedZ) { return function() { gfxZClick(capturedZ); }; })(Z);
+    document.body.appendChild(chr);
+  }
+
+  // if avatar has L# (hat) then:
+  if (O.indexOf("L")>-1) {
+    idx = O.charAt(O.indexOf('L')+1).charCodeAt(0)-'a'.charCodeAt(0);
+    if (right) {
+      hat = "J" + idx;
+    } else {
+      hat = "K" + idx;
+    }
+  }  
+
+  if (hat) {
+    if (document.getElementById("ch"+C)) {
+      e=document.getElementById("ch"+C).src="c/"+hat+".png";
+      e=document.getElementById("ch"+C).style.top=32+22+(y*32)+"px";
+      e=document.getElementById("ch"+C).style.left=(32+22+(x*32))+"px";
+    } else {
+      let chr=document.createElement("img");
+      chr.id="ch"+C; chr.src="c/"+hat+".png";
+      chr.className="char";  
+      chr.style.position="absolute"; chr.style.height=64; chr.style.width=32;
+      chr.style.top=32+22+(y*32)+"px"; chr.style.left=(32+22+(x*32))+"px";
+      chr.onclick = (function(capturedZ) { return function() { gfxZClick(capturedZ); }; })(Z);
+      chr.style.zIndex="152";
+      document.body.appendChild(chr);
+    } 
+  }
 }
 
 window.gfxZClick = function(z, clickedElement) {
@@ -373,7 +370,6 @@ function gfxTick() {
       var command = window.gfxDo || "RF";
       window.gfxDo = "RF"; // Reset to default
       window.gfxPong = await gfxPing(command);
-      console.log(gfxPong);
       var verb = gfxPong.substring(0, 2);
       var noun = gfxPong.substring(2);
       if (verb == "RF") { gfxRefresh(noun); }
@@ -434,7 +430,6 @@ async function gfxFetchMap(filename) {
 
 window.gfxObjects = function(sector) {
   var objsStr = window.mapObjs[sector];
-  console.log("gfxObjects "+objsStr);
   var oldObjs = document.querySelectorAll('.objs');
   for (var k = 0; k < oldObjs.length; k++) { if (oldObjs[k].parentNode) { oldObjs[k].parentNode.removeChild(oldObjs[k]); }}
   if (objsStr) {
@@ -481,75 +476,14 @@ function zToXY(z) {
  return { x: x, y: y };
 }
 
-function _renderPlayer(playerStr) {
-// Internal: render a single player from a Queville player string.
-// playerStr format: "[playerId][zz][avatarStr]" e.g. "Sa43B1D0C2"
- if (!playerStr || playerStr.length < 6) return;
- var playerId  = playerStr.substring(0, 2);
- var zLocation = parseInt(playerStr.substring(2, 4), 10);
- if (isNaN(zLocation)) return;
- var remaining = playerStr.substring(4);
- var dashIdx = remaining.indexOf('-');
- var avatarStr = (dashIdx !== -1) ? remaining.substring(0, dashIdx) : remaining;
- var movements = (dashIdx !== -1) ? remaining.substring(dashIdx + 1) : '';
- if (avatarStr.length < 2) return;
- gfxChar(playerId, avatarStr, zLocation);
-}
-
-function _renderPlayerAvatar(playerId, z, avatarStr, movements) {
-// Internal: render a player avatar at the given z-location by stacking 2-char part images.
-// Parts are categorised by their first letter (matching the gfxChar() convention):
-//   face/head – A B E F  (z-index 151)
-//   body      – C D G H  (z-index 150, rendered first so head appears on top)
-//   hat/other – everything else (z-index 152)
- var coords = zToXY(z);
- var top  = 32 + 20 + (coords.y * 32);
- var left = 32 + 22 + (coords.x * 32);
-
- // Split avatarStr into categorised buckets so we can render in the correct order.
- var bodyParts = [], headParts = [], hatParts = [];
- for (var k = 0; k + 2 <= avatarStr.length; k += 2) {
-  var partCode  = avatarStr.slice(k, k + 2);
-  var firstChar = partCode.charAt(0).toUpperCase();
-  if ('CDGH'.indexOf(firstChar) !== -1)      { bodyParts.push(partCode); }
-  else if ('ABEF'.indexOf(firstChar) !== -1) { headParts.push(partCode); }
-  else                                        { hatParts.push(partCode); }
- }
-
- // Render: body (base) → head → hat, each layer getting a higher z-index.
- var layers = [
-  { parts: bodyParts, zIndex: '150' },
-  { parts: headParts, zIndex: '151' },
-  { parts: hatParts,  zIndex: '152' }
- ];
- for (var li = 0; li < layers.length; li++) {
-  var layer = layers[li];
-  for (var pi = 0; pi < layer.parts.length; pi++) {
-   var img = document.createElement('img');
-   img.className = 'mp-player';
-   img.dataset.player = playerId;
-   img.src = 'c/' + layer.parts[pi] + '.png';
-   img.style.position = 'absolute';
-   img.style.top  = top + 'px';
-   img.style.left = left + 'px';
-   img.style.zIndex = layer.zIndex;
-   img.onclick = (function(capturedZ) {
-    return function() { gfxZClick(capturedZ, this); };
-   })(z);
-   document.body.appendChild(img);
-  }
- }
- if (movements) _processPlayerMovements(playerId, movements);
-}
-function _processPlayerMovements(playerId, movements) {
-	// Internal: store movement buffer for a player (NSEW sequence).
- console.log('Player ' + playerId + ' movements: ' + movements);
-}
 
 function gfxRefresh(rfStr) {
+  const oldItems = document.querySelectorAll('.item');
+  for (let i = 0; i < oldItems.length; i++) { oldItems[i].remove(); }
+  const oldChars = document.querySelectorAll('.char');
+  for (let i = 0; i < oldChars.length; i++) { oldChars[i].remove(); }
+
   window.playerMap = rfStr.substring(0, 2);
-  var old = document.querySelectorAll('.item');
-  for (var i = 0; i < old.length; i++) { old[i].parentNode.removeChild(old[i]); }
   var items = rfStr.substring(2);
   mapItems=items;
   window.items = items.split(',');
