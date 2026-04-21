@@ -1,33 +1,69 @@
-I would like to add mouse support for my Qandy Pocket Computer, we have talked about it and experimented with a couple of approaches and I using them we have figured out a much better system. The question was not how can we get our mouse.js to work like Windows 3.1, but rather what would a mouse drive look like if the Commodore 64 became the modern computer instead of Windows?
 
+//
+// ──── Qandy Mouse Driver ────────────────────────────────────────────────────────────
+//
 
+(function() {
+    // const style = document.createElement('style');
+    // style.textContent = `
+    //     .qandy-cell[data-mouse]:not([data-mouse=""]) {
+    //         text-decoration: underline !important;
+    //         text-decoration-color: #5555ff !important; /* mouse underline color */
+    //         text-decoration-thickness: 1px;
+    //         text-underline-offset: 2px;
+    //     }
+    //     .qandy-cell[data-mouse]:not([data-mouse=""]):hover {
+    //         filter: brightness(1.5);
+    //         cursor: pointer;
+    //     }
+    // `;
+    // document.head.appendChild(style);
 
-There are only 800 cells on the Qandy display, each one already has it's own DOM element which qandy-video.js initializes ... instead of refactoring the Qandy, let us write a new mouse3.js driver that will add a hidden 'mouse' field and a onclick for each cell, this way mouse.js can be installed after system boot just like mouse.sys was loaded on DOS. 
+    const txt = document.getElementById('txt');
+    if (!txt) return;
 
+    // Prevent the right-click menu so 'button 2' is usable for the developer
+    txt.addEventListener('contextmenu', e => e.preventDefault());
 
+    // Helper to extract cell info
+    const getCellData = (e) => {
+        const target = e.target;
+        const cell = target.closest('.qandy-cell');
+        if (!cell) return null;
 
-First problem: what happens when the Qandy scrolls it's text screen? The new cells won't have the 'mouse' attribute or the onclick? Will we need to inject a patch into the screen scroll in qandy-video.js? We may also need to patch into the pokeCursor() and pokeModem() functions to inject the 'mouse' attribute as text is printed to the text dispaly.
+        // Calculate x/y based on DOM structure
+        const x = Array.from(cell.parentNode.children).indexOf(cell);
+        const y = Array.from(cell.parentNode.parentNode.children).indexOf(cell.parentNode);
+        const tag = cell.dataset.mouse || "";
 
+        return { x, y, tag, button: e.button };
+    };
 
+    txt.addEventListener('mousedown', (e) => {
+        const data = getCellData(e);
+        if (data && typeof window.mousedown === 'function') {
+            window.mousedown(data.x, data.y, data.button, data.tag);
+        }
+    });
 
-So mouse3.js needs a init() function to modify the DOM and then an onclick handler. It can now look to see if any running scripts have declared mouse functions and if so direct the input to them.  I don't know what these functions should be, but based on our talks about UI and mouse functions, this is my rough idea which is trying to mimic browser mouse down events:
+    txt.addEventListener('mouseup', (e) => {
+        const data = getCellData(e);
+        if (data && typeof window.mouseup === 'function') {
+            window.mouseup(data.x, data.y, data.button, data.tag);
+        }
+    });
+})();
 
-
-
-mouseClick() - click on a screen cell with any button
-
-mouseLClick() left click
-
-mouseRClick() right click
-
-mouseMClick() middle click
-
-mouseDown() triggered when mouse button is pressed down
-
-mouseUp() triggered when mouse button is pressed down
-
-mouseHover() not sure if this is a function or a state variable, it should return z and mouse of cell mouse is hovering over
-
-
-
-How should we start this project? Pseudo code? Flow chart? Rough outline? Write the acutal code?
+//
+// to use, set CURMOUSE='tag' and print() text,
+// then define a mouseup() and/or mousedown() function
+// returns the x/y and button clicked, plus any print'd tag:
+//
+// function mousedown(x,y,button,tag) {
+//     print(x+' '+y+' '+button+' '+tag);
+// }
+//
+// function mouseup(x,y,button,tag) {
+//     print(x+' '+y+' '+button+' '+tag);
+// }
+//

@@ -70,7 +70,7 @@ function video_js() {
   
   // ──── the pokes ────────────────────────────────────────────────────
   
-  window.pokeCell=function(x, y, ch, fg, bg, attr) {
+  window.pokeCell = function(x, y, ch, fg, bg, attr, mouse) {
     var cols = getW();
     var rows = getH();
 
@@ -92,6 +92,17 @@ function video_js() {
     // Update text
     var newText = (ch === ' ') ? EMPTY_CELL : ch;
     if (span.textContent !== newText) span.textContent = newText;
+
+    // add mouse field
+    var mouseVal = (typeof mouse !== 'undefined') ? mouse : (window.CURMOUSE || "");
+    if (span.dataset.mouse !== mouseVal) {
+      // If it's empty, we remove the attribute so the CSS :not([data-mouse=""]) works perfectly
+      if (mouseVal === "") {
+        delete span.dataset.mouse;
+      } else {
+        span.dataset.mouse = mouseVal;
+      }
+    }
 
     // Update class only when it has changed
     var cls = buildCellClass(fgCode, bgCode, attrVal);
