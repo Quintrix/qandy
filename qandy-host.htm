@@ -450,7 +450,7 @@ var RUNOUT="";  // output display set by running script, gfx or txt
 
 var JSfiles=['ansi.js', 'ascii.js', 'charmap.js', 'keydown.js', 'mouse.js', 'piano.js',
              'draw.js', 'gfx.js', 'gfx-itemid.js', 'capflag.gfx', 'q.js', 'capflag.js',
-             'world.js', 'joystick.js', 'mouse3.js'];
+             'world.js', 'joystick.js', 'mouse3.js', 'whack-a-mole.js'];
 
 var runInputMode="";      // type of input qandy sends run= (line, key, or none)
 var commandHistory = [];  // Array to store command history
@@ -458,19 +458,22 @@ var historyIndex = -1;    // Current position in history (-1 = not browsing, typ
 var maxHistorySize = 50;  // Maximum number of commands to remember
 var tempCommand = "";     // Temporary storage for command being typed when browsing history
 
-var CURSOR=4; // cursor type 0=off, 1=line, 3=blink line, 4=block, 5=blink block  
-var CURX = 0;    // cursor x
-var CURY = 0;    // cursor y
-var CURP = 0;    // cursor p 
+var CURSOR=4;  // cursor type 0=off, 1=line, 3=blink line, 4=block, 5=blink block  
+var CURX = 0;  // cursor x
+var CURY = 0;  // cursor y
+var CURP = 0;  // cursor p 
 
-var CURANSI=true;   // cursor text ANSI on
-var CURFG=37;       // cursor text fg color white
-var CURBG=40;       // cursor text bg color black
-var CURATTR=0;      // cursor text attr 
-var CURBAUD=0;      // baud rate to display text
-var CURMORE=0;      // more prompt line counter: <0=disabled; >=0=enabled (counts lines, pauses at H-1)
-var MENUFG=37;      // more prompt foreground color (white)
-var MENUBG=44;      // more prompt background color (blue)
+var CURANSI=true; // cursor text ANSI on
+var CURFG=37;     // cursor text fg color white
+var CURBG=40;     // cursor text bg color black
+var CURATTR=0;    // cursor text attr 
+var CURBAUD=0;    // baud rate to display text
+var CURMORE=0;    // more prompt line counter: <0=disabled; >=0=enabled (counts lines, pauses at H-1)
+var MENUFG=37;    // more prompt foreground color (white)
+var MENUBG=44;    // more prompt background color (blue)
+
+var MOUSE=-1;     // -1 not loaded, 0=loaded, 1=enabled
+var CURMOUSE='';  // tag attached to printed text returned when clicked
 
 // video.js
 var W=32; // screen width

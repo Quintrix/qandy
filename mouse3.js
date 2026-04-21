@@ -3,21 +3,40 @@
 // ──── Qandy Mouse Driver ────────────────────────────────────────────────────────────
 //
 
-(function() {
-    // const style = document.createElement('style');
-    // style.textContent = `
+MOUSE=0;
+
+window.mouse_js=function() {
+     const style = document.createElement('style');
+     style.textContent = `
     //     .qandy-cell[data-mouse]:not([data-mouse=""]) {
     //         text-decoration: underline !important;
     //         text-decoration-color: #5555ff !important; /* mouse underline color */
     //         text-decoration-thickness: 1px;
     //         text-underline-offset: 2px;
     //     }
-    //     .qandy-cell[data-mouse]:not([data-mouse=""]):hover {
-    //         filter: brightness(1.5);
-    //         cursor: pointer;
-    //     }
-    // `;
-    // document.head.appendChild(style);
+    
+         .qandy-cell[data-mouse]:not([data-mouse=""]):hover {
+             filter: brightness(1.5);
+             cursor: none;
+         }
+         
+         .qandy-cell:hover {
+           filter: invert(100%);
+           /* Or specifically swap colors if you prefer */
+           outline: 1px solid #ffff55;
+           cursor: none; 
+         }
+    
+    #txt {
+        /* This stops the vertical I-beam cursor from appearing */
+        cursor: default;
+        user-select: none;
+        -webkit-user-select: none; /* Safari support */
+        -moz-user-select: none;    /* Firefox support */
+    }
+                  
+     `;
+     document.head.appendChild(style);
 
     const txt = document.getElementById('txt');
     if (!txt) return;
@@ -52,7 +71,12 @@
             window.mouseup(data.x, data.y, data.button, data.tag);
         }
     });
-})();
+    
+    MOUSE=1;
+    return 'Qandy Mouse Installed.';
+};
+
+print(mouse_js()+'\n');
 
 //
 // to use, set CURMOUSE='tag' and print() text,
