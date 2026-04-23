@@ -4,25 +4,10 @@
     fix missing space label
     add insert/delete underline/block mode
 
-    implement gfx.js tileset engine:
-      needs gfxItems() renderer
-      needs todo=variable
-      default todo='RF' (refresh)
-      every 1 second todo command sent to server
-      can be changed to:
-        WI..=Wear ItemID('..') if item is in player's inventory add item to their avatar string, removing any previous item with the same starting letter
+    fix gfx.js and qandyland.js
 
-
-
-    mouse.js driver
-      move pop() and hpop()
-      inject screen cells with 'mouse' CURMOUSE
-      return mouse clicks to running scripts
-
- 
- 
-    draw.js
-    
+    move pop() and hpop() to mouse.js driver
+    then finish draw.js
     
 
        ascii.js - improve output
@@ -31,7 +16,6 @@
       mkfile.js - write file to make files using keyboard
       cpanel.js - config script
     autoexec.js - batch scripts
-        draw.js - ansi draw progran (need cursor keys and/or mouse)
 
 
 
