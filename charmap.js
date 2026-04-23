@@ -69,12 +69,13 @@ cls();
 print("\n\x1b[35m──── \x1b[33mCharacter Map: \x1b[35m────────────\n\x1b[37m ");
 
 l=0; for (i=0;i<qandyString.length;i++) {
-  print(" "+qandyString.charAt(i));
+  CURMOUSE = ""; print(" ");
+  CURMOUSE = i.toString(); print(qandyString.charAt(i));
   l++;
-  if (l==14) { print("\n "); l=0; }
+  if (l==14) { CURMOUSE = ""; print("\n "); l=0; }
 }
 
-print("\n\n"); if (CURMORE>-1) { CURMORE=0; }
+CURMOUSE = ""; print("\n\n"); if (CURMORE>-1) { CURMORE=0; }
 
 charString=""; // characters the user has selected
 charPos=65;    // selected character position, default 65 A
@@ -83,11 +84,28 @@ newCoords = getCharCoordinates(charPos);
 pokeFG(newCoords.x, newCoords.y, 30, 1);  // 30 = black FG
 pokeBG(newCoords.x, newCoords.y, 103, 1); // 103 = bright yellow BG
 
+window.mousedown = function(x, y, button, tag) {
+  if (!tag) return;
+  var clickedIdx = parseInt(tag);
+  if (isNaN(clickedIdx)) return;
+
+  // Update selection to the clicked character
+  var oldPos = charPos;
+  charPos = clickedIdx;
+  updateSelection(oldPos);
+
+  // Simulate SPACE BAR: Add character to string
+  var char = CP437[charPos] || String.fromCharCode(charPos);
+  if (charPos === 0) char = ' ';
+  charString += char;
+  print(char);
+};
+
 function keydown(keyCode, event) {
   if (typeof keyCode !== 'number') return false;
   
   var oldPos = charPos;
-  
+ 
   // Cursor right: advance character position, wrap to 1 if exceeds 255
   if (keyCode === 39) {  // RIGHT arrow
     charPos++;
@@ -182,25 +200,26 @@ function keydown(keyCode, event) {
 function updateSelection(oldPos) {
   // Clear old selection (white FG, black BG)
   var oldCoords = getCharCoordinates(oldPos);
+  CURMOUSE = oldPos.toString();
   pokeFG(oldCoords.x, oldCoords.y, 37, 1);  // 37 = white FG
   pokeBG(oldCoords.x, oldCoords.y, 40, 1);  // 40 = black BG
   
   // Highlight new selection (black FG, bright yellow BG)
   var newCoords = getCharCoordinates(charPos);
+  window.CURMOUSE = charPos.toString();
   pokeFG(newCoords.x, newCoords.y, 30, 1);  // 30 = black FG
   pokeBG(newCoords.x, newCoords.y, 103, 1); // 103 = bright yellow BG
+  window.CURMOUSE = "";
+
 }
 
 function getCharCoordinates(charIndex) {
   // Calculate which row and column the charIndex appears at in the display
   // There are 14 characters per row, starting at Qandy coordinates (2, 3)
   // Each character takes up 2 screen positions (char + space)
-  
   var row = Math.floor(charIndex / 14);
   var col = charIndex % 14;
-  
   var qandyX = 2 + (col * 2);  // 2 chars wide per character (char + space)
   var qandyY = 3 + row;
-  
   return { x: qandyX, y: qandyY };
 }

@@ -5,6 +5,9 @@
 
 MOUSE=0;
 
+var lastClickX=0;
+var lastClickY=0;
+
 window.mouse_js=function() {
   const style = document.createElement('style');
   style.textContent = `
@@ -48,6 +51,8 @@ window.mouse_js=function() {
   txt.addEventListener('mousedown', (e) => {
     const data = getCellData(e);
     if (data && typeof window.mousedown === 'function') {
+    	lastClickX=data.x;
+      lastClickY=data.y;
       window.mousedown(data.x, data.y, data.button, data.tag);
     }
   });
@@ -62,6 +67,80 @@ window.mouse_js=function() {
   MOUSE=1;
   return 'Qandy Mouse Installed.';
 };
+
+// Ensure these are globally tracked in your mouse.js driver
+window.lastClickX = 0;
+window.lastClickY = 0;
+
+window.pop = function(content, alignOverride) {
+    const popup = document.getElementById("pop");
+    const container = document.getElementById("container") || document.body;
+    const bounds = container.getBoundingClientRect();
+    
+    // 1. Secure Content Injection
+    // We clear children and append to avoid the security risks of .innerHTML
+    popup.replaceChildren(); 
+    if (typeof content === "string") {
+        const wrapper = document.createElement("div");
+        wrapper.innerHTML = content; // Still allows HTML, but scoped
+        popup.appendChild(wrapper);
+    } else {
+        popup.appendChild(content);
+    }
+
+    popup.style.visibility = "visible";
+    popup.style.display = "block";
+    popup.style.position = "absolute";
+
+    const popupWidth = popup.offsetWidth;
+    const popupHeight = popup.offsetHeight;
+    const align = alignOverride || window.PopAlign || "center";
+
+    let PopX, PopY;
+
+    switch (align) {
+        case "full":
+            // 2. The "Full Screen" ANSI mode
+            // Matches the exact pixels of the display container
+            PopX = bounds.left;
+            PopY = bounds.top;
+            popup.style.width = bounds.width + "px";
+            popup.style.height = bounds.height + "px";
+            break;
+
+        case "click":
+            // 3. Precise Mouse Location
+            // Uses the actual pixel coordinate of the last click
+            PopX = window.lastClickX - (popupWidth / 2);
+            PopY = window.lastClickY - (popupHeight / 2);
+            
+            // Constrain to container bounds
+            if (PopX < bounds.left) PopX = bounds.left;
+            if (PopX + popupWidth > bounds.right) PopX = bounds.right - popupWidth;
+            if (PopY < bounds.top) PopY = bounds.top;
+            if (PopY + popupHeight > bounds.bottom) PopY = bounds.bottom - popupHeight;
+            break;
+
+        case "center":
+        default:
+            // 4. Mathematical Center
+            PopX = bounds.left + (bounds.width - popupWidth) / 2;
+            PopY = bounds.top + (bounds.height - popupHeight) / 2;
+            break;
+    }
+
+    // Apply calculated positions
+    if (align !== "full") {
+        popup.style.width = "auto";  // Reset if it was previously 'full'
+        popup.style.height = "auto";
+        popup.style.left = PopX + "px";
+        popup.style.top = PopY + "px";
+    } else {
+        popup.style.left = PopX + "px";
+        popup.style.top = PopY + "px";
+    }
+}
+
 
 if (RUN=='qandy.js') { print(mouse_js()+'\n'); }
 

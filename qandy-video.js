@@ -522,9 +522,14 @@ function video_js() {
     return;
   };
   
-  window.pokeCursor = async function(t) {
+  window.pokeCursor = async function(t, f, b, a, m) {
     if (typeof t === 'undefined' || t === null) return false;
     var str = String(t);
+
+    if (typeof f === 'number') window.CURFG = f;
+    if (typeof b === 'number') window.CURBG = b;
+    if (typeof a === 'number') window.CURATTR = a;
+    var mouseTag = (typeof m !== 'undefined') ? m : window.CURMOUSE;
 
     function parseParams(s) {
       if (!s || !s.length) return [];
@@ -606,7 +611,7 @@ function video_js() {
         idx++; 
         continue;
       }
-      pokeCell(CURX, CURY, ch, CURFG, CURBG, CURATTR);
+      pokeCell(CURX, CURY, ch, CURFG, CURBG, CURATTR, mouseTag);
       CURX++;
       if (CURX >= cols) {
         CURX = 0; 

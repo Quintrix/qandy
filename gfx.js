@@ -15,6 +15,7 @@ var mapy=11;
 
 window.gfxDo = "RF";     // Default refresh command
 window.gfxPong = "..";   // server response
+window.gfxSession = null;
 
 window.map="_L";         // map player item is on (default lobby)
 window.mapTiles=[];      // tiles on player's current map
@@ -299,6 +300,10 @@ window.gfxConnect = async function(serverIndex) {
   if (!server) { server = { host: 'localhost', port: 8080 }; }
   _serverUrl = "http://" + server.host + ":" + server.port + "/qandyland.js";
   try {
+  	
+    var res = await gfxPing("ST");
+    if (res.startsWith("ST")) { window.gfxSession = sessionResponse.substring(2); }
+
     var gameState = await gfxPing("GS");
     if (gameState.startsWith("XW")) {
       await print("Creating new world...\n");
@@ -520,34 +525,40 @@ function gfxRefresh(rfStr) {
 }
 
 window.gfxPing = async function(commandString) {
-// Universal gateway for all commands to the multiplayer server.
-// commandString – full command string, e.g. "BB", "RF", "QgSa33B0D0"
-// Drive context is automatically included via '?d=<drive>' query parameter.
-// The command string is sent as the request body with Content-Type: text/plain.
-// Drive is tracked in the module-level _gfxDrive variable (default: "gfx").
-// HOST sends directly via fetch(); GUEST proxies through HOST via postMessage.
-
   if (!commandString || commandString.length < 2) throw new Error('gfxPing: invalid command');
 
   var body = commandString;
+  // 1. Include drive context in the URL
   var url  = _serverUrl + '?d=' + encodeURIComponent(_gfxDrive);
+  
+  // 2. APPEND SESSION TOKEN TO URL instead of headers
+  if (window.gfxSession) { 
+    url += '&s=' + encodeURIComponent(window.gfxSession); 
+  }
+
+  // 3. Use standard headers to avoid CORS preflight
+  var headers = { 'Content-Type': 'text/plain' };
 
   if (typeof HOST !== 'undefined' && HOST) {
     try {
       var response = await fetch(url, {
         method:  'POST',
-        headers: { 'Content-Type': 'text/plain' },
+        headers: headers,
         body:    body
       });
       if (!response.ok) throw new Error('Server error: ' + response.status);
+      
+      // The token is no longer in the header; it will arrive as an 'ST' body response
       return await response.text();
     } catch (e) {
       throw new Error('gfxPing: ' + (e.message || String(e)));
     }
   } else {
-    return qdosXmitDos('gfxPing', { body: body, drive: _gfxDrive });
+    // Ensure Guest proxy passes the session token through correctly
+    return qdosXmitDos('gfxPing', { body: body, drive: _gfxDrive, session: window.gfxSession });
   }
 }
+
 window.gfxCreation = async function(drive, mapString, players, isRound) {
 //   drive     – server drive to build world on (e.g. "gfx")
 //   mapString – topology string of 2-char map IDs (unused; server reads capflag.gfx)
@@ -572,6 +583,7 @@ window.gfxGameState = async function(drive) {
   if (drive) _gfxDrive = drive;
   return await gfxPing("GS");
 }
+
 splash(1000);
 window.hpop=function() { document.getElementById("pop").style.visibility="hidden"; }
 window.pop=function(htm) {
@@ -628,6 +640,7 @@ window.pop=function(htm) {
   popup.style.top = PopY + "px";
   popup.style.left = PopX + "px";
 }
+
 async function splash(durationMs) {
   _CURSOR=CURSOR; CURSOR=0;
   await print("\n\n\n");

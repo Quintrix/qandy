@@ -151,4 +151,3 @@ function ansi() {
   keyon = 1;
 }
 
-window.dosExit();

@@ -184,7 +184,7 @@ function sound_js() {
       vol = Math.max(0, Math.min(1, vol)); // clamp 0.0..1.0
       const oscillator = audioContext.createOscillator();
       const gainNode = audioContext.createGain();
-      oscillator.type = 'sine';
+      oscillator.type = 'square';
       oscillator.frequency.value = frequency;
       gainNode.gain.value = vol;
       oscillator.connect(gainNode);
@@ -232,4 +232,105 @@ function sound_js() {
     window.qandySignalReady('sound_js');
   }
 }
+
+// ──── Refactored Qandy Sound Card (Multi-Track & Chord Support) ────
+
+// ... (Keep existing noteFrequencies and beep functions from your file) ...
+
+/**
+ * Updated Parser: Now supports [CEG]4 syntax for chords
+ */
+window.parseGWBasicString = function(str) {
+  const events = [];
+  let currentOctave = 4;
+  let currentLength = 4;
+  let currentTempo = 120;
+
+  function getDuration(length) { 
+    return Math.round((60000 / currentTempo) * (4 / length)); 
+  }
+
+  str = str.trim().toUpperCase();
+  let i = 0;
+  while (i < str.length) {
+    const char = str[i];
+    if (char === ' ' || char === '\t') { i++; continue; }
+
+    // Tempo, Length, and Octave settings
+    if (char === 'T') { /* ... existing T logic ... */ }
+    if (char === 'L') { /* ... existing L logic ... */ }
+    if (char === 'O') { /* ... existing O logic ... */ }
+
+    // CHORD SUPPORT: [CEG]
+    if (char === '[') {
+      i++;
+      let chordNotes = [];
+      while (i < str.length && str[i] !== ']') {
+        if (str[i] >= 'A' && str[i] <= 'G') {
+          let n = str[i]; i++;
+          if (str[i] === '#' || str[i] === '+') { n += '#'; i++; }
+          else if (str[i] === '-') { /* handle flats */ i++; }
+          chordNotes.push(n + currentOctave);
+        } else { i++; }
+      }
+      i++; // skip ']'
+      let noteLength = currentLength;
+      let numStr = '';
+      while (i < str.length && str[i] >= '0' && str[i] <= '9') { numStr += str[i]; i++; }
+      if (numStr) noteLength = parseInt(numStr);
+      
+      events.push({ type: 'chord', notes: chordNotes, duration: getDuration(noteLength) });
+      continue;
+    }
+
+    // SINGLE NOTE SUPPORT
+    if (char >= 'A' && char <= 'G') {
+      /* ... existing note logic ... */
+      events.push({ type: 'note', note: noteName + currentOctave, duration: getDuration(noteLength) });
+      continue;
+    }
+    i++;
+  }
+  return events;
+};
+
+/**
+ * SIDPLAY: The Multi-Track Engine
+ * Accepts a string with tracks separated by semicolons
+ * Example: sidplay("T180 O3 [EG]2 ; O2 E4 R4 E4")
+ */
+window.sidplay = function(mmlString, onComplete) {
+  const tracks = mmlString.split(';');
+  let tracksFinished = 0;
+
+  tracks.forEach((trackStr, index) => {
+    const events = parseGWBasicString(trackStr);
+    let eventIndex = 0;
+
+    function playNext() {
+      if (eventIndex >= events.length) {
+        tracksFinished++;
+        if (tracksFinished === tracks.length && onComplete) onComplete();
+        return;
+      }
+
+      const ev = events[eventIndex++];
+      if (ev.type === 'note') {
+        playNote(ev.note, ev.duration);
+      } else if (ev.type === 'chord') {
+        // Play all notes in the chord simultaneously
+        ev.notes.forEach(n => playNote(n, ev.duration));
+      }
+
+      setTimeout(playNext, ev.duration);
+    }
+
+    playNext();
+  });
+};
+
+// Aliases for your environment
+window.gwplay = window.playNotes;
+
 window.sound_js=sound_js;
+

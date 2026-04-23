@@ -786,34 +786,6 @@ window.press=function(event) {
     });
   }
 
-  window._qandy_print_queue = window._qandy_print_queue || { items: [], running: false };
-
-  async function _processPrintQueue() {
-    var q = window._qandy_print_queue;
-    if (q.running) return;
-    q.running = true;
-    try {
-      while (q.items.length) {
-        var job = q.items.shift();
-        // wait for any current paced output to finish
-        await waitForCursorIdle();
-        // invoke pokeCursor to print this job.text (pokeCursor is async — await it so
-        // morePrompt() pauses are respected before resolving the print job)
-        try {
-          await pokeCursor(job.text);
-        } catch (e) {
-          // If pokeCursor thrown, still resolve so callers don't hang
-        }
-        // wait for any residual paced output to finish
-        await waitForCursorIdle();
-        // resolve the enqueue promise if present
-        try { job.resolve(); } catch (e) {}
-      }
-    } finally {
-      q.running = false;
-    }
-  }
-
   window.dosExit=function() {
     // guest scripts use this to exit back to qandy.js
     print("\n[white]Exit to Qandy\n");
@@ -831,6 +803,34 @@ window.press=function(event) {
   
   // sleep(ms) or window.sleep(ms)
   window.sleep = ms => new Promise(res => setTimeout(res, ms));
+
+  window._qandy_print_queue = window._qandy_print_queue || { items: [], running: false };
+
+  async function _processPrintQueue() {
+    var q = window._qandy_print_queue;
+    if (q.running) return;
+    q.running = true;
+    try {
+      while (q.items.length) {
+        var job = q.items.shift();
+        // wait for any current paced output to finish
+        await waitForCursorIdle();
+        // invoke pokeCursor to print this job.text (pokeCursor is async — await it so
+        // morePrompt() pauses are respected before resolving the print job)
+        try {
+          await pokeCursor(job.text, job.fg, job.bg, job.attr, job.mouse);
+        } catch (e) {
+          // If pokeCursor thrown, still resolve so callers don't hang
+        }
+        // wait for any residual paced output to finish
+        await waitForCursorIdle();
+        // resolve the enqueue promise if present
+        try { job.resolve(); } catch (e) {}
+      }
+    } finally {
+      q.running = false;
+    }
+  }
 
   window.print=function(t) {
     // do your color tag replacements first
@@ -892,7 +892,15 @@ window.press=function(event) {
   
     var q = window._qandy_print_queue;
     return new Promise(function(resolve) {
-      q.items.push({ text: text, resolve: resolve });
+      // Capture the mouse tag AT THIS MOMENT
+      q.items.push({
+        text: text, 
+        fg: window.CURFG,
+        bg: window.CURBG,
+        attr: window.CURATTR,
+        mouse: window.CURMOUSE,
+        resolve: resolve 
+      });
       _processPrintQueue();
     });
   }
