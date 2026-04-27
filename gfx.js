@@ -373,6 +373,7 @@ function gfxTick() {
   window.gfxInterval = setInterval(async function() {
     try {
       var command = window.gfxDo || "RF";
+      console.log(command);
       window.gfxDo = "RF"; // Reset to default
       window.gfxPong = await gfxPing(command);
       var verb = gfxPong.substring(0, 2);

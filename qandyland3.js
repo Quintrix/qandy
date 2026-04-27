@@ -1601,11 +1601,6 @@ function handleCommand(req, res, raw, driveName) {
     }
 
     case 'Qg': {
-      // Get Item / Join Game: pick up an item from the current map sector.
-      // For player items (S or T prefix), this acts as "join game" –
-      // the player claims the hat, their avatar is assigned, and a player hat (La) is added.
-      // Body data (cmdData): itemId(2) + z(2) + avatar (e.g. "Sa33B0D0")
-      // Server renames file: Sa33.txt → Sa33B0D0La.txt
       var qgDrive  = drive;
       var qgItemId = cmdData.slice(0, 2);
       var qgZ      = cmdData.slice(2, 4);
@@ -1624,6 +1619,7 @@ function handleCommand(req, res, raw, driveName) {
         case 'T': {
           // Player hat items: claim the slot and join the game
           // Scan lobby directory (w/) for the matching unclaimed slot file
+          var manifest = _readManifest(qgDrive);
           var qgScanResult = fileList(qgDrive, 'w', null, session);
           var qgSlotFile = null;
           if (qgScanResult.success && qgScanResult.listing) {
@@ -1632,26 +1628,31 @@ function handleCommand(req, res, raw, driveName) {
               var qgSf = qgScanFiles[qgSi].trim();
               if (!qgSf) continue;
               var qgSb = qgSf.substring(qgSf.lastIndexOf('/') + 1);
-              if (qgSb.indexOf(qgItemId) === 0) {
+              if (qgSb.indexOf(qgItemId + qgZ) === 0) { // Match both ID and Z
                 qgSlotFile = qgSb;
                 break;
               }
             }
           }
 
-          if (!qgSlotFile) return respondRetro(res, 'XXNot a valid player slot');
+          if (!qgSlotFile) return respondRetro(res, 'XXItem not found');
 
           // Verify the slot is unclaimed (base name = exactly 4 chars: itemId + z)
           var qgBase = qgSlotFile.replace(/\.txt$/i, '');
           if (qgBase.length > 4) return respondRetro(res, 'XXSlot already in use');
           if (qgBase.length < 4) return respondRetro(res, 'XXNot a valid player slot');
 
+          var canonical = resolveName('w', qgSlotFile);
+          var entry = manifest.find(e => e.name === canonical);
+          if (entry && entry.session && entry.session !== '') {
+            return respondRetro(res, 'XXItem already claimed');
+          }
+
           // Rename: Sa33.txt → Sa33B0D0La.txt (append avatar + player hat La)
-          var hat="";
-          if (qgItemType=="S") { hat="La"; }
-          if (qgItemType=="T") { hat="Lb"; }
-          var qgNewName = qgItemId + qgZ + qgAvatar + hat+'.txt';
+          var hat = (qgItemId.charAt(0) == "S") ? "La" : "Lb";
+          var qgNewName = qgItemId + qgZ + qgAvatar + hat + '.txt';
           var qgRename = fileRename(qgDrive, '/', 'w/' + qgSlotFile, 'w/' + qgNewName, session);
+
           if (!qgRename.success) return respondRetro(res, 'XXFailed to claim slot: ' + qgRename.error);
 
           // Record session ownership so future move commands can be authorised
