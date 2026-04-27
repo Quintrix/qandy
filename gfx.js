@@ -302,7 +302,7 @@ window.gfxConnect = async function(serverIndex) {
   try {
   	
     var res = await gfxPing("ST");
-    if (res.startsWith("ST")) { window.gfxSession = sessionResponse.substring(2); }
+    if (res.startsWith("ST")) { window.gfxSession = res.substring(2); }
 
     var gameState = await gfxPing("GS");
     if (gameState.startsWith("XW")) {
@@ -528,34 +528,37 @@ window.gfxPing = async function(commandString) {
   if (!commandString || commandString.length < 2) throw new Error('gfxPing: invalid command');
 
   var body = commandString;
-  // 1. Include drive context in the URL
-  var url  = _serverUrl + '?d=' + encodeURIComponent(_gfxDrive);
+  // Ensure the URL matches exactly what the server is listening for
+  var url = _serverUrl + '?d=' + encodeURIComponent(_gfxDrive);
   
-  // 2. APPEND SESSION TOKEN TO URL instead of headers
+  // Pass the session token as a URL parameter to avoid CORS preflight
   if (window.gfxSession) { 
     url += '&s=' + encodeURIComponent(window.gfxSession); 
   }
 
-  // 3. Use standard headers to avoid CORS preflight
+  // Use 'text/plain' to keep it a "Simple Request" (No OPTIONS preflight required)
   var headers = { 'Content-Type': 'text/plain' };
 
-  if (typeof HOST !== 'undefined' && HOST) {
-    try {
-      var response = await fetch(url, {
-        method:  'POST',
-        headers: headers,
-        body:    body
-      });
-      if (!response.ok) throw new Error('Server error: ' + response.status);
-      
-      // The token is no longer in the header; it will arrive as an 'ST' body response
-      return await response.text();
-    } catch (e) {
-      throw new Error('gfxPing: ' + (e.message || String(e)));
+  try {
+    var response = await fetch(url, {
+      method:  'POST',
+      headers: headers,
+      body:    body
+    });
+    
+    if (!response.ok) throw new Error('Server error: ' + response.status);
+    
+    var resText = await response.text();
+    
+    // If the server returns an ST command, save it as our session
+    if (resText.startsWith("ST")) {
+      window.gfxSession = resText.substring(2);
+      console.log("Session Established:", window.gfxSession);
     }
-  } else {
-    // Ensure Guest proxy passes the session token through correctly
-    return qdosXmitDos('gfxPing', { body: body, drive: _gfxDrive, session: window.gfxSession });
+    
+    return resText;
+  } catch (e) {
+    throw new Error('gfxPing: ' + (e.message || String(e)));
   }
 }
 

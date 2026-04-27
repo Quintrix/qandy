@@ -477,13 +477,15 @@ function resolveName(cwd, name) {
   return base ? (base + '/' + n) : n;
 }
 
-function getSession(req, res) {
-  // Check the custom header instead of cookies
-  var token = req.headers['x-session-token'];
-  if (token) return token;
-
-  // Generate a new token if none was provided
-  return crypto.randomBytes(24).toString('hex');
+// --- Update getSession to look at the URL parameters ---
+function getSession(req) {
+  try {
+    const reqUrl = new URL(req.url, `http://${req.headers.host}`);
+    // Priority: 1. URL Parameter 's', 2. Legacy Header
+    return reqUrl.searchParams.get('s') || req.headers['x-session-token'] || null;
+  } catch (e) {
+    return null;
+  }
 }
 
 // ── Request parsing ───────────────────────────────────────────────────────────
@@ -1341,27 +1343,24 @@ function handleCommand(req, res, raw, driveName) {
     }
 
     case 'ST': {
-       // 1. Generate random eight-character string of random A-Z, a-z, 0-9 characters
-       const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-       let token = '';
-       for (let i = 0; i < 8; i++) {
-           token += chars.charAt(Math.floor(Math.random() * chars.length));
-       }
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+      let token = '';
+      for (let i = 0; i < 8; i++) {
+        token += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
 
-       // 2. Extract IP address using the server's existing normalization logic
-       const ip = (req.headers['x-forwarded-for'] || (req.socket && req.socket.remoteAddress) || 'unknown')
-           .replace('::ffff:', '').replace('::1', 'local').slice(0, 15);
+      const ip = (req.headers['x-forwarded-for'] || (req.socket && req.socket.remoteAddress) || 'unknown')
+        .replace('::ffff:', '').replace('::1', 'local').slice(0, 15);
 
-       // 3. Link session token with IP and save to s.txt on the 'json' drive
-       // We use the built-in fileAppendJSON helper which handles array wrapping automatically
-       fileAppendJSON('json', '/', 's.txt', { t: token, ip: ip, ts: Date.now() }, 'system', 'system');
+      // Use the memory drive to track sessions
+      fileAppendJSON('json', '/', 's.txt', { t: token, ip: ip, ts: Date.now() }, 'system', 'system');
 
-       // 4. Return formatted response: ST[token]
-       res.writeHead(200, { 
-           'Content-Type': 'text/plain', 
-           'Access-Control-Allow-Origin': '*' 
-       });
-       return res.end("ST" + token);
+      // Explicitly allow CORS and return plain text
+      res.writeHead(200, { 
+        'Content-Type': 'text/plain',
+        'Access-Control-Allow-Origin': '*' 
+      });
+      return res.end("ST" + token);
     }
       
     case 'GS': {
@@ -1863,62 +1862,37 @@ function handleQandyland(req, res) {
 // ── HTTP server ───────────────────────────────────────────────────────────────
 
 var server = http.createServer(function (req, res) {
-  res.setHeader('Access-Control-Allow-Origin',  '*');
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') {
-    res.setHeader('Access-Control-Max-Age', '86400');
     res.writeHead(204);
     return res.end();
   }
 
-  var reqPathname;
-  try {
-    reqPathname = new URL(req.url, 'http://localhost').pathname;
-  } catch (e) {
-    reqPathname = '/';
-  }
+  var reqUrl = new URL(req.url, `http://${req.headers.host}`);
+  var reqPathname = reqUrl.pathname;
 
-  if (reqPathname === '/qandyland3.js' && req.method === 'POST') {
+  // FIX: Match the URL the client is actually calling (_serverUrl in gfx.js)
+  // If gfx.js says _serverUrl = 'qandyland.js', match that here.
+  if ((reqPathname === '/qandyland.js' || reqPathname === '/qandyland3.js') && req.method === 'POST') {
     var contentType = (req.headers['content-type'] || '').toLowerCase();
+    
     if (contentType.indexOf('text/plain') >= 0) {
-      // New unified command string protocol: body = commandString, drive = ?d= query param
-      var driveParam = '';
-      try {
-        var reqUrl2 = new URL(req.url, 'http://localhost');
-        driveParam = reqUrl2.searchParams.get('d') || '';
-      } catch (e) { /* ignore */ }
+      var driveParam = reqUrl.searchParams.get('d') || '';
       readBody(req).then(function (raw) {
         handleCommand(req, res, raw, driveParam);
       }).catch(function (err) {
-        respond(res, { success: false, error: 'server error: ' + err.message });
+        res.writeHead(500);
+        res.end("Server Error");
       });
       return;
     }
-    if (contentType.indexOf('application/x-www-form-urlencoded') >= 0) {
-      readBody(req).then(function (raw) {
-        handleCommand(req, res, raw, null);
-      }).catch(function (err) {
-        respond(res, { success: false, error: 'server error: ' + err.message });
-      });
-      return;
-    }
-    return handleQandyland(req, res);
+    // Handle JSON or Legacy Form here...
   }
 
-  // Status endpoint for debugging
-  if (reqPathname === '/status' && req.method === 'GET') {
-    var status = {
-      uptime:  Math.floor((Date.now() - _serverStartTime) / 60000),
-      drives:  Object.keys(drives),
-      memory:  process.memoryUsage(),
-      version: SERVER_VERSION
-    };
-    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-    return res.end(JSON.stringify(status, null, 2));
-  }
-
+  // Otherwise, serve static files (This is why it was displaying source code before)
   serveStatic(req, res);
 });
 

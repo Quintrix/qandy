@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title id="page-title">ask Ollama Chat Assistant</title>
+    <style>
+        :root {
+            /* Light Mode Colors */
+            --background-primary: #f5f5f5;
+            --background-secondary: white;
+            --header-background: #5DADE2;
+            --text-primary: #0056b3;
+            --text-assistant: #007BFF;
+            --input-background: white;
+            --input-border: #ccc;
+            --button-background: #007BFF;
+            --button-hover: #0056b3;
+            --user-message-background: #e8f1ff;      
+            --assistant-message-background: #f0f8ff; 
+            --user-message-text: #0056b3;         
+            --assistant-message-text: #00447B;
+        }
+
+        [data-theme='dark'] {
+            /* Dark Mode Color */
+            --background-primary: #1A1A1A;    
+            --background-secondary: #2A2A2A;    
+            --header-background: #252525;       
+            --text-primary: #E0E0E0;           
+            --text-assistant: #B0D0FF;         
+            --input-background: #333333;        
+            --input-border: #444444;            
+            --button-background: #3A3A3A;       
+            --button-hover: #4A4A4A;            
+            --user-message-background: #2C3E50;    
+            --assistant-message-background: #1E4A70; 
+            --user-message-text: #E0E0E0;          
+            --assistant-message-text: #E0E0E0;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            background-color: var(--background-primary);
+            color: var(--text-primary);
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        header {
+            background-color: var(--header-background);
+            color: white;
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 1.5em;
+        }
+
+        .header-buttons {
+            display: flex;
+            gap: 16px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            background: var(--button-background);
+            color: white;
+        }
+
+        .btn:hover {
+            background: var(--button-hover);
+        }
+
+        #chat {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            border: 1px solid var(--input-border);
+            background-color: var(--background-secondary);
+            margin: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .message {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+            line-height: 1.4;
+        }
+
+        .message.user {
+            text-align: right;
+            background-color: var(--user-message-background);
+            color: var(--user-message-text);
+        }
+
+        .message.assistant {
+            text-align: left;
+            background-color: var(--assistant-message-background);
+            color: var(--assistant-message-text);
+        }
+
+        .message p {
+            margin: 0;
+            white-space: pre-wrap;
+        }
+
+        #input-container {
+            display: flex;
+            padding: 10px 20px;
+            background-color: var(--background-secondary);
+            box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.1);
+            align-items: flex-start;
+        }
+
+        #user-input {
+            flex: 1;
+            min-height: 60px;
+            max-height: 150px;
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid var(--input-border);
+            border-radius: 4px;
+            background-color: var(--input-background);
+            color: var(--text-primary);
+            resize: none;
+            overflow-y: auto;
+            line-height: 1.4;
+        }
+
+        #input-container button {
+            margin-left: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            border: 1px solid var(--input-border);
+            border-radius: 4px;
+            background-color: var(--button-background);
+            color: white;
+            cursor: pointer;
+        }
+
+        #input-container button:hover {
+            background-color: var(--button-hover);
+        }
+
+        #spinner {
+            display: none;
+            margin-right: 10px;
+            order: -1;
+            align-self: center;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #007BFF;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+
+        #theme-toggle {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 2.5em;
+            cursor: pointer;
+            margin-left: 10px;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        #model-selector {
+            margin-right: 10px;
+            padding: 8px;
+            border-radius: 4px;
+            background-color: var(--input-background);
+            color: var(--text-primary);
+            border: 1px solid var(--input-border);
+            font-size: 16px;
+            appearance: none;
+            background-image: url("data:image/svg+xml;utf8,<svg fill='black' height='24' viewBox='0 0 24 24' width='24' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/><path d='M0 0h24v24H0z' fill='none'/></svg>");
+            background-repeat: no-repeat;
+            background-position-x: 100%;
+            background-position-y: 50%;
+            padding-right: 30px;
+        }
+
+        [data-theme='dark'] #model-selector {
+            background-image: url("data:image/svg+xml;utf8,<svg fill='white' height='24' viewBox='0 0 24 24' width='24' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/><path d='M0 0h24v24H0z' fill='none'/></svg>");
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1 id="header-title">ask Ollama Chat Assistant</h1>
+        <div class="header-buttons">
+            <select id="model-selector" style="display: none;">
+                <option disabled selected>Select Model</option>
+            </select>
+            <button class="btn" onclick="window.location.href='notes.html'">Notes</button>
+            <button id="theme-toggle">◐</button>
+        </div>
+    </header>
+    <div id="chat"></div>
+    <div id="input-container">
+        <div id="spinner"></div>
+        <textarea id="user-input" placeholder="Enter message..." rows="2"></textarea>
+        <button id="send-button">Send</button>
+        <button id="new-button">New</button>
+    </div>
+
+    <script>
+        // Configuration parameters
+        const CHAT_TITLE = "ask Ollama Chat Assistant";
+        const CHAT_MODEL = "llama3";
+        const OLLAMA_PATH = "http://localhost:11434";
+        const DARK_MODE = false;
+        const SHOW_NOTE_APP = true;
+        const MODEL_SELECTABLE = true;
+
+        let AVAILABLE_MODELS = []; 
+
+        const version = "0.1.5";
+
+        // Function to fetch available models
+        async function fetchAvailableModels() {
+            try {
+                const response = await fetch(`${OLLAMA_PATH}/api/tags`);
+                if (!response.ok) {
+                    throw new Error('Failed to fetch models');
+                }
+                const data = await response.json();
+                
+                // Extract just the model names
+                AVAILABLE_MODELS = data.models.map(model => model.name);
+                
+                // Populate dropdown
+                const modelSelector = document.getElementById('model-selector');
+                modelSelector.innerHTML = '<option disabled>Select Model</option>'; // Reset
+                
+                AVAILABLE_MODELS.forEach(model => {
+                    const option = document.createElement('option');
+                    option.value = model;
+                    option.textContent = model;
+                    modelSelector.appendChild(option);
+                });
+
+                // Set previously selected or default model
+                const savedModel = localStorage.getItem('selectedModel') || CHAT_MODEL;
+                if (AVAILABLE_MODELS.includes(savedModel)) {
+                    modelSelector.value = savedModel;
+                }
+
+                // Show selector if models are available
+                if (AVAILABLE_MODELS.length > 0) {
+                    modelSelector.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Error fetching models:', error);
+                // Fallback to default model if fetch fails
+                AVAILABLE_MODELS = [CHAT_MODEL];
+            }
+        }
+
+        // Show button note app
+        const notesButton = document.querySelector('.btn[onclick="window.location.href=\'notes.html\'"]');
+        if (!SHOW_NOTE_APP && notesButton) {
+            notesButton.style.display = 'none';
+        }
+        
+        // Theme toggle functionality
+        const themeToggle = document.getElementById('theme-toggle');
+        
+        function setTheme(isDark) {
+            document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
+        }
+
+        // Initialize theme
+        function initTheme() {
+            if (DARK_MODE) {
+                // If DARK_MODE is true, always start in dark mode
+                setTheme(true);
+            } else {
+                // Otherwise, use user's last preference or default to light
+                const savedTheme = localStorage.getItem('theme');
+                setTheme(savedTheme === 'dark');
+            }
+        }
+
+        // Theme toggle event listener
+        themeToggle.addEventListener('click', () => {
+            const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
+            setTheme(!isDarkMode);
+        });
+
+        // Set title on page load
+        document.getElementById('page-title').textContent = CHAT_TITLE;
+        document.getElementById('header-title').textContent = CHAT_TITLE;
+
+        // Initialize the theme when the page loads
+        initTheme();
+
+        // Markdown parsing function
+        function parseMarkdown(text) {
+            // First, handle nested formatting (bold inside italic or vice versa)
+            // Replace **_text_** and *__text__*
+            text = text.replace(/\*\*_(.*?)_\*\*/g, '<strong><em>$1</em></strong>');
+            text = text.replace(/\*__(.*)__\*/g, '<em><strong>$1</strong></em>');
+            
+            // Then handle standard bold and italic
+            text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            text = text.replace(/\*(.*?)\*/g, '<em>$1</em>');
+            
+            return text;
+        }
+
+        async function ollamaRespond(userMessage) {
+
+            // Retrieve selected model from localStorage or use default
+            const selectedModel = localStorage.getItem('selectedModel') || CHAT_MODEL;
+
+            const messages = {
+                model: selectedModel,
+                messages: all_messages,
+                stream: true,
+                max_token: 300
+            };
+
+            try {
+                const response = await fetch(`${OLLAMA_PATH}/v1/chat/completions`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(messages)
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('Complete error response:', errorText);
+                    throw new Error(`HTTP error! status: ${response.status}, ${errorText}`);
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let partialMessage = '';
+                addMessage(partialMessage, 'assistant', false);
+
+                while (true) {
+                    const { done, value } = await reader.read();
+
+                    if (done) break;
+
+                    const chunk = decoder.decode(value, { stream: true });
+
+                    try {
+                        // Parsing JSON streaming output
+                        const lines = chunk.split('\n').filter(line => line.trim() !== '');
+                        for (const line of lines) {
+                            if (line.startsWith('data:')) {
+                                const data = line.substring(5).trim();
+
+                                if (data === '[DONE]') {
+                                    // Stream end reached
+                                    all_messages.push({
+                                        role: 'assistant', 
+                                        content: partialMessage
+                                    });
+                                    break;
+                                }
+
+                                const jsonData = JSON.parse(data);
+                                if (jsonData.choices && jsonData.choices[0].delta && jsonData.choices[0].delta.content) {
+                                    partialMessage += jsonData.choices[0].delta.content;
+
+                                    // Update message in chat
+                                    addMessage(partialMessage, 'assistant', true);
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        console.error('Error parsing stream:', e);
+                    }
+                }
+
+                return partialMessage;
+
+            } catch (error) {
+                console.error('Error:', error);
+                addMessage("There was a problem connecting to the chat.", 'assistant');
+            }
+        }
+
+        // Messages
+        let all_messages = [];
+
+        // DOM elements
+        const chatContainer = document.getElementById('chat');
+        const userInput = document.getElementById('user-input');
+        const sendButton = document.getElementById('send-button');
+        const newButton = document.getElementById('new-button');
+        const spinner = document.getElementById('spinner');
+
+        // Function to add or update a message in the chat
+        function addMessage(text, sender, update = false) {
+            // Parse Markdown
+            const parsedText = parseMarkdown(text);
+
+            if (update && sender === 'assistant') {
+                const assistantMessages = chatContainer.getElementsByClassName('message assistant');
+                if (assistantMessages.length > 0) {
+                    const messageElement = assistantMessages[assistantMessages.length - 1].querySelector('p');
+                    messageElement.innerHTML = parsedText;
+                    return;
+                }
+            }
+
+            const message = document.createElement('div');
+            message.className = `message ${sender}`;
+
+            const messageText = document.createElement('p');
+            messageText.innerHTML = parsedText;
+
+            message.appendChild(messageText);
+            chatContainer.appendChild(message);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        // Show spinner
+        function showSpinner() {
+            spinner.style.display = 'block';
+        }
+
+        // Hide spinner
+        function hideSpinner() {
+            spinner.style.display = 'none';
+        }
+
+        // Disable input field and button
+        function disableInput() {
+            userInput.disabled = true;
+            sendButton.disabled = true;
+        }
+
+        // Enable input field and button
+        function enableInput() {
+            userInput.disabled = false;
+            sendButton.disabled = false;
+            userInput.focus();
+        }
+
+        // Send button event listener
+        sendButton.addEventListener('click', async () => {
+            const userMessage = userInput.value.trim();
+            if (!userMessage) return;
+
+            // Add user message
+            all_messages.push({
+                role: 'user', 
+                content: userMessage
+            });
+
+            addMessage(userMessage, 'user');
+            userInput.value = '';
+
+            // Show spinner and disable input
+            showSpinner();
+            disableInput();
+
+            // Get response from Ollama and add
+            await ollamaRespond(userMessage);
+
+            // Hide spinner and enable input
+            hideSpinner();
+            enableInput();
+        });
+
+        userInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && e.shiftKey) {
+                return;
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                sendButton.click();
+            }
+        });
+
+        // New button event listener
+        newButton.addEventListener('click', () => {
+            all_messages = []; // Deletes all saved messages
+            chatContainer.innerHTML = ''; // Clears chat area
+            userInput.value = ''; // Clears text input field
+            userInput.focus();
+        });
+
+        // Model selector
+        document.addEventListener('DOMContentLoaded', function() {
+            const modelSelector = document.getElementById('model-selector');
+            
+            if (MODEL_SELECTABLE) {
+                // Fetch models when page loads
+                fetchAvailableModels();
+
+                modelSelector.addEventListener('change', function() {
+                    localStorage.setItem('selectedModel', this.value);
+                });
+            }
+        });
+    </script>
+    
+<!-- adb forward tcp:11434 tcp:11434 -->    
+
+</body>
+</html>
