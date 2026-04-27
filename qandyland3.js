@@ -1087,7 +1087,7 @@ function bigbang(driveName, session) {
     if (lSeenIds[lItemId]) continue;
     lSeenIds[lItemId] = true;
     var lFile   = lItemId + lItemZ + '.txt';
-    var lResult = fileSave(driveName, '/', 'w/' + lFile, '', session, 'bigbang');
+    var lResult = fileSave(driveName, '/', 'w/' + lFile, '', '', 'bigbang');
     if (lResult.success) {
       created.push('lobby: ' + lFile);
     } else {
@@ -1113,7 +1113,7 @@ function bigbang(driveName, session) {
     // one 6-char file per static item (filename encodes id+z+data, content empty)
     for (var ii = 0; ii < sector.items.length; ii++) {
       var itemFile = sector.items[ii];
-      var iResult  = fileSave(driveName, '/', dirPath + '/' + itemFile, '', session, 'bigbang');
+      var iResult = fileSave(driveName, '/', dirPath + '/' + itemFile, '', '', 'bigbang');
       if (!iResult.success) errors.push(dirPath + '/' + itemFile + ': ' + iResult.error);
     }
 
@@ -1142,7 +1142,7 @@ function bigbang(driveName, session) {
   if (!playerSlots) {
     errors.push('p.txt: no player codes found in _L sector');
   } else {
-    var pResult = fileSave(driveName, '/', 'p.txt', playerSlots, session, 'bigbang');
+    var pResult = fileSave(driveName, '/', 'p.txt', playerSlots, '', 'bigbang'); 
     if (!pResult.success) errors.push('p.txt: ' + pResult.error);
   }
 
