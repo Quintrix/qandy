@@ -379,6 +379,16 @@ function gfxTick() {
       var verb = gfxPong.substring(0, 2);
       var noun = gfxPong.substring(2);
       if (verb == "RF") { gfxRefresh(noun); }
+      if (verb == "Mp") { 
+        window.map = noun;
+        const oldStage = document.querySelectorAll('.item, .char');
+        for (let i = 0; i < oldStage.length; i++) { oldStage[i].remove(); }
+        gfxTiles(noun);
+        gfxObjects(noun);
+        window.gfxDo = "RF";
+        hpop();
+      }      
+      
       if (verb == "XX") { }
     } catch (e) { 
       console.error('Server tick error:', e); 
