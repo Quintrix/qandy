@@ -76,6 +76,52 @@ window.objdown = function(objStr) {
   }
 }
 
+// --- Handle keyboard input from Qandy's virtual keyboard or physical keyboard ---
+window.keydown = function(key, e) {
+
+  console.log(key, e);
+
+  // Support both direct string inputs (virtual keyboard) and standard Event objects
+  var key = (typeof e === 'object' && e.key) ? e.key : e;
+  
+  // Only allow movement if the player has claimed a slot (joined)
+  // "Za" is the default unassigned state.
+  if (window.playerItem === "Za") return;
+
+  var todo = null;
+
+  switch (key) {
+    case "ArrowUp":
+    case "w":
+    case "W":
+      todo = "Qn"; // Move North
+      break;
+      
+    case "ArrowDown":
+    case "s":
+    case "S":
+      todo = "Qs"; // Move South
+      break;
+      
+    case "ArrowLeft":
+    case "a":
+    case "A":
+      todo = "Qw"; // Move West
+      break;
+      
+    case "ArrowRight":
+    case "d":
+    case "D":
+      todo = "Qe"; // Move East
+      break;
+  }
+
+  if (todo) {
+    // Set the 'todo' variable for the 1-second gfxTick() refresh
+    window.gfxDo = todo;
+  }
+};
+
 window.joinGame = async function(item, z) { 
   if (playerItem != "Za") { return; }
   if (playerMap != '_L') { return; }

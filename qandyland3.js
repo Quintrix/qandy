@@ -1683,59 +1683,68 @@ function handleCommand(req, res, raw, driveName) {
       }
     }
 
-    case 'Qu': {
-      // Qu: Use Object (e.g., Flagpole Yj)
-      // Body: itemId (2 chars, e.g., "Yj")
+case 'Qu': {
       var objToUse = cmdData.slice(0, 2);
       var mvOwner = _playerOwnership[session];
-      
       if (!mvOwner) return respondRetro(res, 'XXNot logged in');
       
       var qDrive = mvOwner.drive;
-      var qItemId = mvOwner.itemId; // The player's ID (e.g., "Sa")
-      var qMapId = mvOwner.mapId;   // Current sector (e.g., "_L")
+      var qItemId = mvOwner.itemId; 
+      var qMapId = mvOwner.mapId;
 
-      // 1. Validate the object (Flagpole) exists in the current sector
-      var sectorObjs = mapObjs[qMapId] || ""; 
-      // Note: mapObjs is the in-memory cache populated during bigbang
-      // If using the drive storage directly:
-      var drive = drives[qDrive];
-      var manifest = _readManifest(qDrive);
-      
-      // Check if Flagpole is in this sector's object list
-      // In bigbang logic, objects are files in w/[sector]/IDZDATA.txt
+      // Define the path based on current location
       var qPath = (qMapId === '_L') ? 'w' : 'w/' + qMapId;
-      var qList = fileList(qDrive, qPath, objToUse + '*', session);
-      if (!qList.success || !qList.listing) {
-        return respondRetro(res, 'XXObject not found here');
-      }
 
-      // 2. Determine Destination Sector based on Team
+      // 2. Determine Destination
       var destSector = (qItemId.charAt(0) === 'S') ? 'A1' : 'L8';
 
-      // 3. Find the current player file
-      var pList = fileList(qDrive, qPath, qItemId + '*', session);
-      if (!pList.success || !pList.listing) return respondRetro(res, 'XXPlayer file not found');
-      var currentFile = pList.listing.split('\n')[0].trim();
-      var fileNameOnly = currentFile.substring(currentFile.lastIndexOf('/') + 1);
+      // 3. Find Player File (Using robust iteration instead of fragile pattern matching)
+      var pList = fileList(qDrive, qPath, null, session);
+      var currentFile = null;
+      var fileNameOnly = null;
+      var avatarPart = '';
 
-      // 4. Relocate Player File
-      // Move from w/[old]/file.txt to w/[new]/file.txt
-      var destPath = 'w/' + destSector + '/' + fileNameOnly;
+      if (pList.success && pList.listing) {
+        var pFiles = pList.listing.split('\n');
+        for (var i = 0; i < pFiles.length; i++) {
+          var pf = pFiles[i].trim();
+          if (!pf) continue;
+          
+          var pb = pf.substring(pf.lastIndexOf('/') + 1);
+          
+          // Match standard player file structure: ID(2) + Z(2 digits) + Avatar(var) + .txt
+          var match = pb.match(/^([A-Z][a-z])(\d{2})(.*)\.txt$/);
+          if (match && match[1] === qItemId) {
+            currentFile = pf;        // e.g., "w/A1/Sa33B0D0.txt"
+            fileNameOnly = pb;       // e.g., "Sa33B0D0.txt"
+            avatarPart = match[3];   // e.g., "B0D0"
+            break;
+          }
+        }
+      }
+
+      // If no match was found, return the error
+      if (!currentFile) {
+          return respondRetro(res, 'XXPlayer file not found');
+      }
+      
+      // 4. Relocate Player File (Respecting the _L special path)
+      var targetDir = (destSector === '_L') ? 'w' : 'w/' + destSector;
+      var destPath = targetDir + '/' + fileNameOnly;
+      
       var moveResult = fileRename(qDrive, '/', currentFile, destPath, session);
 
       if (moveResult.success) {
-        // Update Session Tracking
         _playerOwnership[session].mapId = destSector;
 
-        // Update p.txt (the global player registry)
+        // Update p.txt
         var pLoad = fileLoad(qDrive, '/', 'p.txt', session);
-        if (pLoad.success) {
+        if (pLoad.success && pLoad.content) {
           var escId = qItemId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-          var avatarPart = fileNameOnly.substring(4).replace('.txt', '');
+          
           var pUpdated = pLoad.content.replace(
             new RegExp('^(' + escId + ')=.*$', 'm'),
-            '$1=' + destSector + avatarPart
+            '$1=' + destSector + avatarPart // Safely appends the clean avatar string
           );
           fileSave(qDrive, '/', 'p.txt', pUpdated, session, 'Qu');
         }

@@ -373,9 +373,9 @@ function gfxTick() {
   window.gfxInterval = setInterval(async function() {
     try {
       var command = window.gfxDo || "RF";
-      console.log(command);
       window.gfxDo = "RF"; // Reset to default
       window.gfxPong = await gfxPing(command);
+      if (command != "RF") { console.log(command+" = "+gfxPong); }
       var verb = gfxPong.substring(0, 2);
       var noun = gfxPong.substring(2);
       if (verb == "RF") { gfxRefresh(noun); }
@@ -558,13 +558,13 @@ window.gfxPing = async function(commandString) {
     });
     
     if (!response.ok) throw new Error('Server error: ' + response.status);
+    //console.log(response.status+" "+response.text);
     
     var resText = await response.text();
     
     // If the server returns an ST command, save it as our session
     if (resText.startsWith("ST")) {
       window.gfxSession = resText.substring(2);
-      console.log("Session Established:", window.gfxSession);
     }
     
     return resText;
