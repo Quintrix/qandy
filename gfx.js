@@ -526,19 +526,26 @@ function gfxRefresh(rfStr) {
   const oldChars = document.querySelectorAll('.char');
   for (let i = 0; i < oldChars.length; i++) { oldChars[i].remove(); }
 
+  // New wire format: [mapId(2)][zLocation(2)][items]
   window.playerMap = rfStr.substring(0, 2);
-  var items = rfStr.substring(2);
+  var serverPlayerZ = rfStr.length >= 4 ? parseInt(rfStr.substring(2, 4), 10) : NaN;
+  var items = rfStr.length >= 4 ? rfStr.substring(4) : '';
   mapItems = items;
   window.items = items.split(',');
 
   var oldPlayerQueue = [];
-  var oldPlayerZ = window.playerZ;
   if (window.movingItems && window.movingItems[window.playerItem]) {
       oldPlayerQueue = window.movingItems[window.playerItem].queue;
   }
+
+  // Use authoritative server z when no local movement is in-flight.
+  var resolvedPlayerZ = (!isNaN(serverPlayerZ) && oldPlayerQueue.length === 0)
+      ? serverPlayerZ
+      : window.playerZ;
+
   window.movingItems = {};
   if (window.playerItem && window.playerItem !== "Za") {
-      window.movingItems[window.playerItem] = { z: oldPlayerZ, queue: oldPlayerQueue, avatar: window.playerAvatar };
+      window.movingItems[window.playerItem] = { z: resolvedPlayerZ, queue: oldPlayerQueue, avatar: window.playerAvatar };
   }
 
   for (var j = 0; j < window.items.length; j++) {
@@ -562,10 +569,8 @@ function gfxRefresh(rfStr) {
 
     if (iId === window.playerItem) {
       window.playerAvatar = avatar;
-      if (oldPlayerQueue.length === 0) {
-          window.playerZ = destZ;
-          window.movingItems[iId].z = destZ;
-      }
+      window.playerZ = resolvedPlayerZ;
+      window.movingItems[iId].z = resolvedPlayerZ;
       gfxChar(iId, avatar, window.playerZ);
     } else {
       if (avatar) {

@@ -1259,8 +1259,9 @@ function buildGameState() {
 //   RF – Refresh: return map sector items for the session's current location.
 //        No client map parameter; server uses _playerOwnership[session].mapId.
 //        Defaults to lobby (_L) if no ownership record exists.
-//        Response: <mapId><items>  e.g. "A1Sa25B1D0,Tb44,Yj22Sa"
+//        Response: <mapId><zLocation><items>  e.g. "A125Sa25B1D0,Tb44,Yj22Sa"
 //          mapId      – 2-char sector prefix
+//          zLocation  – 2-digit authoritative player z (00 when no player claimed)
 //          items      – comma-separated "<id(2)><z(2-digit)>[avatarStr]"
 //
 //   ST – request Session Token
@@ -1542,7 +1543,15 @@ function handleCommand(req, res, raw, driveName) {
             }
           }
         }
-        return respondRetro(res, 'RF' + finalMap + mvRfItems.join(','));
+        // Determine authoritative player z from the just-built sector list.
+        var mvRfPlayerZ = '00';
+        for (var mvRfi2 = 0; mvRfi2 < mvRfItems.length; mvRfi2++) {
+          if (mvRfItems[mvRfi2].slice(0, 2) === mvItemId && /^\d{2}$/.test(mvRfItems[mvRfi2].slice(2, 4))) {
+            mvRfPlayerZ = mvRfItems[mvRfi2].slice(2, 4);
+            break;
+          }
+        }
+        return respondRetro(res, 'RF' + finalMap + mvRfPlayerZ + mvRfItems.join(','));
       }
     }
   }
@@ -1820,7 +1829,21 @@ function handleCommand(req, res, raw, driveName) {
         }
       }
 
-      var rfResponse = 'RF'+rfMapId + rfAllItems.join(',');
+      // Determine authoritative player z from the player's own item entry in the sector.
+      // rfOwner.itemId (2 chars) matches the first 2 chars of each rfAllItems entry.
+      // Items in rfAllItems are always built from regex-matched filenames guaranteeing \d{2} at [2-4].
+      var rfPlayerZ = '00';
+      if (rfOwner && rfOwner.itemId) {
+        for (var rfi2 = 0; rfi2 < rfAllItems.length; rfi2++) {
+          if (rfAllItems[rfi2].slice(0, 2) === rfOwner.itemId && /^\d{2}$/.test(rfAllItems[rfi2].slice(2, 4))) {
+            rfPlayerZ = rfAllItems[rfi2].slice(2, 4);
+            break;
+          }
+        }
+      }
+
+      // Response: RF + mapId(2) + playerZ(2) + items
+      var rfResponse = 'RF'+rfMapId + rfPlayerZ + rfAllItems.join(',');
       logRequest(req, 'RF', rfDrive, rfMapId, session, { success: true, result: rfResponse });
       return respondRetro(res, rfResponse);
     }
