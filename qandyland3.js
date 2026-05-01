@@ -1489,11 +1489,13 @@ function handleCommand(req, res, raw, driveName) {
         // which is the root fix for the movement ghosting / snapback bug.
         var newFile = mvItemId + newZStr + mvPureAvatar + '.txt';
 
-        // Step 3: Load player file content before rename (future inventory support).
+        // Step 3: Load player file content before rename.
+        // When inventory is added, apply changes to mvFileContent here, then
+        // call fileSave on the new path after the rename to persist those changes.
+        // For now content is always empty, so we just note the position for the rename.
         var mvFileLoad = fileLoad(mvDrive, '/', mvDir + '/' + mvCurrentFile, session);
-        var mvFileContent = mvFileLoad.success ? mvFileLoad.content : '';
 
-        // Step 4: Rename to canonical path; fileRename preserves file content.
+        // Step 4: Rename to canonical path; fileRename preserves the file's content.
         var renameRes = fileRename(mvDrive, '/', mvDir + '/' + mvCurrentFile, newDir + '/' + newFile, session);
         if (renameRes.success) {
           if (scrolled) {
