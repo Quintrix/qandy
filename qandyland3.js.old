@@ -1299,6 +1299,7 @@ function getNewZ(currentZ, cmd, cols) {
     return currentZ;
 }
 
+
 function handleCommand(req, res, raw, driveName) {
   var session = getSession(req); 
   var cmd, cmdData, drive;
@@ -1387,100 +1388,43 @@ function handleCommand(req, res, raw, driveName) {
       var GFX_ROWS = 12;
       var GFX_TOTAL_TILES = GFX_COLS * GFX_ROWS;
 
-      var GFX_COLS = 8;
-      var GFX_ROWS = 12;
-      var GFX_TOTAL_TILES = GFX_COLS * GFX_ROWS;
-
       while (ptr < fullCmdString.length) {
         var chunk = fullCmdString.slice(ptr, ptr + 2);
         if (['Qn', 'Qs', 'Qe', 'Qw'].includes(chunk)) {
           var col = finalZ % GFX_COLS;
           var row = Math.floor(finalZ / GFX_COLS);
-          
-          var targetZ = finalZ;
+          var newZ = finalZ;
           var isEdge = false;
-          var dirChar = '';
-          var moveBlocked = false;
+          var dirIndex = -1; 
 
-          // Check destination tile (targetZ) and trigger scroll if landing on an edge.
-          if (chunk === 'Qn') { 
-              if (row === 0) { 
-                  moveBlocked = true; // "Airlock" rule: Already on North edge, can't move North
-              } else {
-                  targetZ = finalZ - GFX_COLS;
-                  if (Math.floor(targetZ / GFX_COLS) === 0) { isEdge = true; dirChar = 'N'; }
-              }
-          }
-          else if (chunk === 'Qs') { 
-              if (row === GFX_ROWS - 1) { 
-                  moveBlocked = true; // "Airlock" rule: Already on South edge, can't move South
-              } else {
-                  targetZ = finalZ + GFX_COLS;
-                  if (Math.floor(targetZ / GFX_COLS) === GFX_ROWS - 1) { isEdge = true; dirChar = 'S'; }
-              }
-          }
-          else if (chunk === 'Qe') { 
-              if (col === GFX_COLS - 1) { 
-                  moveBlocked = true; // "Airlock" rule: Already on East edge, can't move East
-              } else {
-                  targetZ = finalZ + 1;
-                  if (targetZ % GFX_COLS === GFX_COLS - 1) { isEdge = true; dirChar = 'E'; }
-              }
-          }
-          else if (chunk === 'Qw') { 
-              if (col === 0) { 
-                  moveBlocked = true; // "Airlock" rule: Already on West edge, can't move West
-              } else {
-                  targetZ = finalZ - 1;
-                  if (targetZ % GFX_COLS === 0) { isEdge = true; dirChar = 'W'; }
-              }
-          }
-
-          if (moveBlocked) {
-              console.log("Move blocked: " + mvItemId + " already standing on boundary for " + chunk);
-              ptr += 2;
-              continue; // Drop the illegal move entirely
-          }
+          if (chunk === 'Qn') { if (row === 0) { isEdge = true; dirIndex = 0; } else { newZ = finalZ - GFX_COLS; } }
+          else if (chunk === 'Qs') { if (row === GFX_ROWS - 1) { isEdge = true; dirIndex = 1; } else { newZ = finalZ + GFX_COLS; } }
+          else if (chunk === 'Qe') { if (col === GFX_COLS - 1) { isEdge = true; dirIndex = 2; } else { newZ = finalZ + 1; } }
+          else if (chunk === 'Qw') { if (col === 0) { isEdge = true; dirIndex = 3; } else { newZ = finalZ - 1; } }
 
           if (isEdge) {
             var eLoad = fileLoad(mvDrive, '/', mvDir + '/e.txt', session);
             var exits = (eLoad.success && eLoad.content) ? eLoad.content : '';
-            
-            // Mathematically calculate the expected target sector
-            var targetSector = calculateTargetSector(finalMap, dirChar);
-            var nextMap = '..';
-
-            if (targetSector) {
-                // Loop through e.txt in 2-character chunks to see if target is permitted
-                for (var ei = 0; ei < exits.length; ei += 2) {
-                    if (exits.substring(ei, ei + 2) === targetSector) {
-                        nextMap = targetSector;
-                        break;
-                    }
-                }
-            }
-            
-            console.log("Map: " + mvMapId + ", Attempted scroll " + dirChar + " -> Expected: " + targetSector + " -> Permitted: '" + nextMap + "'");
+            var exitOffset = dirIndex * 2;
+            var nextMap = exits.length >= exitOffset + 2 ? exits.substring(exitOffset, exitOffset + 2) : '..';
 
             if (nextMap && nextMap !== '..' && nextMap !== '  ' && nextMap !== '00') {
-              // Apply wrap-around math to targetZ (the edge tile they stepped onto)
-              if (chunk === 'Qn') { finalZ = targetZ + GFX_TOTAL_TILES - GFX_COLS; }
-              else if (chunk === 'Qs') { finalZ = targetZ - GFX_TOTAL_TILES + GFX_COLS; }
-              else if (chunk === 'Qe') { finalZ = targetZ - GFX_COLS + 1; }
-              else if (chunk === 'Qw') { finalZ = targetZ + GFX_COLS - 1; }
+              if (chunk === 'Qn') { newZ = finalZ + GFX_TOTAL_TILES - GFX_COLS; }
+              else if (chunk === 'Qs') { newZ = finalZ - GFX_TOTAL_TILES + GFX_COLS; }
+              else if (chunk === 'Qe') { newZ = finalZ - GFX_COLS + 1; }
+              else if (chunk === 'Qw') { newZ = finalZ + GFX_COLS - 1; }
 
               finalMap = nextMap;
+              finalZ = newZ;
               scrolled = true;
               movesExecuted += chunk;
               ptr += 2;
               break; 
             } else {
-              console.log("Scroll denied (blocked by map exit)");
-              ptr += 2; // Block the step because the edge leads nowhere (Acts as a wall)
+              ptr += 2; // Invalid edge drop
             }
           } else {
-            // Normal step inside the map bounds
-            finalZ = targetZ;
+            finalZ = newZ;
             movesExecuted += chunk;
             ptr += 2;
           }
@@ -1492,7 +1436,8 @@ function handleCommand(req, res, raw, driveName) {
       if (movesExecuted.length > 0) {
         var newZStr = (finalZ < 10 ? '0' : '') + finalZ;
         var newDir = (finalMap === '_L') ? 'w' : 'w/' + finalMap;
-        var newFile = mvItemId + newZStr + mvPureAvatar + movesExecuted + '.txt';
+        var allMoves = mvOldMoves + movesExecuted; // Append new moves to existing queue
+        var newFile = mvItemId + newZStr + mvPureAvatar + allMoves + '.txt';
 
         var renameRes = fileRename(mvDrive, '/', mvDir + '/' + mvCurrentFile, newDir + '/' + newFile, session);
         if (renameRes.success) {
@@ -1509,8 +1454,6 @@ function handleCommand(req, res, raw, driveName) {
             }
             movementResponse = 'Ma' + finalMap;
           }
-        } else {
-            console.error("Rename failed during movement:", renameRes.error);
         }
       }
 
@@ -1741,7 +1684,7 @@ function handleCommand(req, res, raw, driveName) {
       return respondRetro(res, 'OK' + sgItemId);
     }
 
-    	case 'RF': {
+    case 'RF': {
       var rfDrive, rfMapId;
 
       var rfOwner = _playerOwnership[session];
@@ -1961,82 +1904,99 @@ function handleCommand(req, res, raw, driveName) {
         // Player file not found or session mismatch
         res.writeHead(204);
         return res.end();
-      }}
+      }
+
+      // Grid geometry
+      var GFX_COLS = 8;
+      var GFX_ROWS = 12;
+      var GFX_TOTAL_TILES = GFX_COLS * GFX_ROWS; // 96
+      var mvCol = mvCurrentZ % GFX_COLS;
+      var mvRow = Math.floor(mvCurrentZ / GFX_COLS);
+
+      var isEdge = false;
+      var dirIndex = -1; // 0: North, 1: South, 2: East, 3: West
+      var mvNewZ = mvCurrentZ;
+
+      if (cmd === 'Qn') {
+        if (mvRow === 0) { isEdge = true; dirIndex = 0; }
+        else { mvNewZ = mvCurrentZ - GFX_COLS; }
+      } else if (cmd === 'Qs') {
+        if (mvRow === GFX_ROWS - 1) { isEdge = true; dirIndex = 1; }
+        else { mvNewZ = mvCurrentZ + GFX_COLS; }
+      } else if (cmd === 'Qe') {
+        if (mvCol === GFX_COLS - 1) { isEdge = true; dirIndex = 2; }
+        else { mvNewZ = mvCurrentZ + 1; }
+      } else if (cmd === 'Qw') {
+        if (mvCol === 0) { isEdge = true; dirIndex = 3; }
+        else { mvNewZ = mvCurrentZ - 1; }
+      }
+
+      // Handle scrolling to adjacent sector
+      if (isEdge) {
+        var eLoad = fileLoad(mvDrive, '/', mvDir + '/e.txt', session);
+        var exits = (eLoad.success && eLoad.content) ? eLoad.content : '';
+        
+        // Exits mapped per standard convention: N(0-1), S(2-3), E(4-5), W(6-7)
+        var exitOffset = dirIndex * 2;
+        var nextMap = exits.length >= exitOffset + 2 ? exits.substring(exitOffset, exitOffset + 2) : '..';
+
+        if (nextMap && nextMap !== '..' && nextMap !== '  ' && nextMap !== '00') {
+          // Allowed to scroll
+          if (cmd === 'Qn') { mvNewZ = mvCurrentZ + GFX_TOTAL_TILES - GFX_COLS; }
+          else if (cmd === 'Qs') { mvNewZ = mvCurrentZ - GFX_TOTAL_TILES + GFX_COLS; }
+          else if (cmd === 'Qe') { mvNewZ = mvCurrentZ - GFX_COLS + 1; }
+          else if (cmd === 'Qw') { mvNewZ = mvCurrentZ + GFX_COLS - 1; }
+
+          var mvNewZStr = (mvNewZ < 10 ? '0' : '') + mvNewZ;
+          var mvNewFile = mvItemId + mvNewZStr + mvAvatarPart + '.txt';
+          var newDir = (nextMap === '_L') ? 'w' : 'w/' + nextMap;
+
+          var mvRename = fileRename(mvDrive, '/', mvDir + '/' + mvCurrentFile, newDir + '/' + mvNewFile, session);
+
+          if (mvRename.success) {
+            _playerOwnership[session].mapId = nextMap;
+            
+            // Update global p.txt 
+            var pLoad = fileLoad(mvDrive, '/', 'p.txt', session);
+            if (pLoad.success && pLoad.content) {
+              var escId = mvItemId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              var pUpdated = pLoad.content.replace(
+                new RegExp('^(' + escId + ')=.*$', 'm'),
+                '$1=' + nextMap + mvAvatarPart
+              );
+              fileSave(mvDrive, '/', 'p.txt', pUpdated, session, 'Scroll');
+            }
+            logRequest(req, cmd, mvDrive, mvItemId + ' scroll ' + mvCurrentZ + '->' + nextMap + ':' + mvNewZStr, session, { success: true });
+            
+            // Tell client to load new map
+            return respondRetro(res, 'Ma' + nextMap);
+          }
+        }
+        
+        // Blocked scroll
+        res.writeHead(204);
+        return res.end();
+      } else {
+        // Normal move
+        var mvNewZStr = (mvNewZ < 10 ? '0' : '') + mvNewZ;
+        var mvNewFile = mvItemId + mvNewZStr + mvAvatarPart + '.txt';
+        var mvRename  = fileRename(mvDrive, '/', mvDir + '/' + mvCurrentFile, mvDir + '/' + mvNewFile, session);
+
+        logRequest(req, cmd, mvDrive, mvItemId + ':' + mvCurrentZ + '->' + mvNewZ, session, { success: mvRename.success });
+        res.writeHead(204);
+        return res.end();
+      }
+    }
+
+
+
+
 
     default:
       result = { success: false, error: 'unknown command: ' + cmd };
       logRequest(req, cmd || '(unknown)', '', '', session, result);
       return respond(res, result);
   }
-}
-
-function calculateTargetSector(currentSector, direction) {
-    if (currentSector === '_L') return null;
-
-    const yAxis = currentSector.charAt(0);
-    const xAxis = currentSector.substring(1);
-
-    let targetY = yAxis;
-    let targetX = xAxis;
-
-    if (direction === 'N') {
-        targetY = String.fromCharCode(yAxis.charCodeAt(0) - 1);
-    } else if (direction === 'S') {
-        targetY = String.fromCharCode(yAxis.charCodeAt(0) + 1);
-    } else if (direction === 'E' || direction === 'W') {
-        const isNumeric = /^\d+$/.test(xAxis);
-        if (isNumeric) {
-            let num = parseInt(xAxis, 10);
-            targetX = (direction === 'W') ? (num - 1).toString() : (num + 1).toString();
-        } else {
-            targetX = (direction === 'W') 
-                ? String.fromCharCode(xAxis.charCodeAt(0) - 1)
-                : String.fromCharCode(xAxis.charCodeAt(0) + 1);
-        }
-    }
-
-    return targetY + targetX;
-}
-
-/**
- * Processes a player's request to scroll to a new map sector.
- */
-function handlePlayerScroll(player, direction, memoryDrive) {
-    const currentSector = player.currentSector;
-
-    // 1. Calculate the target sector based on the grid math
-    const targetSector = calculateTargetSector(currentSector, direction);
-
-    // 2. Block invalid math or Lobby exits
-    if (!targetSector) {
-        return { success: false, message: "Cannot scroll from here." };
-    }
-
-    // 3. Load the e.txt from the CURRENT map sector's directory on the memory drive
-    let validExits = "";
-    try {
-        // Example path: "/ramdisk/sectors/D5/e.txt"
-        const exitsFilePath = `/ramdisk/sectors/${currentSector}/e.txt`;
-        
-        // Read the file dynamically from memory
-        validExits = memoryDrive.readFileSync(exitsFilePath, 'utf8');
-    } catch (err) {
-        // If the e.txt file doesn't exist, this sector is broken/isolated
-        return { success: false, message: "No exits found here." };
-    }
-
-    // 4. Validate: Does the target sector name exist inside this e.txt?
-    // Using regex word boundary (\b) so checking for "D5" doesn't accidentally match "D50"
-    const targetRegex = new RegExp(`\\b${targetSector}\\b`);
-
-    if (targetRegex.test(validExits)) {
-        // Valid scroll! The big bang approved this exit.
-        player.currentSector = targetSector;
-        return { success: true, newSector: targetSector };
-    } else {
-        // Invalid scroll. The math worked, but the sector isn't in e.txt (e.g., hit an ocean/wall)
-        return { success: false, message: "You cannot go that way." };
-    }
 }
 
 // ── Legacy JSON request dispatcher ────────────────────────────────────────────

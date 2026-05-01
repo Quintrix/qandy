@@ -5,18 +5,11 @@ var gfxConnected = null;
 if (typeof window.GFX === "undefined") window.GFX = 0;
 
 // Multiplayer state
-var gfxConnected = null;
-var emptySlots = [];        // available empty player slot codes from GS response
-var rfInterval = null;      // handle for the RF refresh timer
-var playerItemId = null;    // this client's chosen player slot ItemID (e.g. "Sa")
+var emptySlots = [];        
+var rfInterval = null;      
+var playerItemId = null;    
 
-// Game phase for click handler state machine.
-// 'idle'          – before connecting to a server
-// 'just starting' – connected to lobby (JS response), awaiting player slot selection
-// 'in progress'   – game active (IP response)
 window.gameState = 'idle';
-
-// Game console: master log of all game events, kept in sync with server c.txt
 window.gfxConsole = window.gfxConsole || [];
 
 qdosScript("gfx.js");
@@ -24,21 +17,19 @@ startup();
 var ts=5000;
 setTimeout(function() { startup(); },400);
 
-// In capflag.js startup():
 async function startup(){
   if (window.GFX==0) {
     ts=ts-200;
     if (ts>0) { setTimeout(function() { startup(); },200); }
     return;
   } else {
-    await gfxServers();              // Display server list
-    var selectedServer = await input();  // Get user selection  
-    var gameState = await gfxConnect(selectedServer); // Connect & return game state
+    await gfxServers();              
+    var selectedServer = await input();  
+    var gameState = await gfxConnect(selectedServer); 
   }
 }
 
-function mainloop() {
-}
+function mainloop() {}
 
 window.zdown = function(z) {
  // walk to z-location
@@ -49,84 +40,110 @@ window.itemdown = function(itemStr) {
   var item = itemStr.slice(0, 2);
   var z = itemStr.substring(2, 4);
   var avatar = itemStr.slice(4);
-  if (item.charAt(0)=='S') {
-  	 if (playerItem == "Za") { joinGame(item, z); }
-  } 
-  if (item.charAt(0)=='T') {
+  if (item.charAt(0)=='S' || item.charAt(0)=='T') {
   	 if (playerItem == "Za") { joinGame(item, z); }
   } 
 }
 
-// --- Inside capflag.js ---
-
 window.objdown = function(objStr) {
   if (!objStr) return;
 
-  var i = objStr.slice(0, 2); // ID
-  var z = objStr.slice(2, 4); // Z
-  var d = objStr.slice(4, 6); // Data
+  var i = objStr.slice(0, 2); 
+  var z = objStr.slice(2, 4); 
+  var d = objStr.slice(4, 6); 
 
   if (i === "Yj") { 
-    // If player has a team item and is in the lobby, trigger game start
     if (playerItem !== "Za" && window.map === "_L") {
-      window.gfxDo = "Qu" + i; 
+      if (window.gfxDo === "RF") window.gfxDo = "";
+      window.gfxDo += "Qu" + i; 
     } else {
       pop("You must claim a team<br>hat before starting!");
     }
   }
 }
 
-// --- Handle keyboard input from Qandy's virtual keyboard or physical keyboard ---
+// Math helpers for local movement prediction
+window.moveZ = function(z, cmd) {
+   z = parseInt(z, 10);
+   var cols = mapx + 1; // 8
+   var total = cols * (mapy + 1); // 96
+   var col = z % cols;
+   if (cmd === 'Qn' && z - cols >= 0) return z - cols;
+   if (cmd === 'Qs' && z + cols < total) return z + cols;
+   if (cmd === 'Qw' && col > 0) return z - 1;
+   if (cmd === 'Qe' && col < cols - 1) return z + 1;
+   return z; 
+}
+
+window.reverseMoveZ = function(z, cmd) {
+   if (cmd === 'Qn') return window.moveZ(z, 'Qs');
+   if (cmd === 'Qs') return window.moveZ(z, 'Qn');
+   if (cmd === 'Qw') return window.moveZ(z, 'Qe');
+   if (cmd === 'Qe') return window.moveZ(z, 'Qw');
+   return z;
+}
+
 window.keydown = function(key, e) {
-
-  console.log(key, e);
-
-  // Support both direct string inputs (virtual keyboard) and standard Event objects
-  var key = (typeof e === 'object' && e.key) ? e.key : e;
+  var keyStr = (typeof e === 'object' && e.key) ? e.key : key;
   
-  // Only allow movement if the player has claimed a slot (joined)
-  // "Za" is the default unassigned state.
-  if (window.playerItem === "Za") return;
+  if (window.playerItem === "Za" || !window.playerItem) return;
+
+  // 1. Block buffering if a non-movement command is currently queued
+  if (window.gfxDo && window.gfxDo !== "RF") {
+      var isPureMove = true;
+      for (var i = 0; i < window.gfxDo.length; i += 2) {
+          var chk = window.gfxDo.slice(i, i + 2);
+          if (!['Qn', 'Qs', 'Qe', 'Qw'].includes(chk)) {
+              isPureMove = false;
+              break;
+          }
+      }
+      if (!isPureMove) return; 
+  }
+
+  // 2. Block buffering if existing queue contains a scroll edge step
+  var testZ = window.playerZ;
+  if (window.movingItems && window.movingItems[window.playerItem]) {
+      var q = window.movingItems[window.playerItem].queue;
+      for (var qIdx = 0; qIdx < q.length; qIdx++) {
+          var qCol = testZ % (mapx + 1);
+          var qRow = Math.floor(testZ / (mapx + 1));
+          if ((q[qIdx] === 'Qn' && qRow === 0) ||
+              (q[qIdx] === 'Qs' && qRow === mapy) ||
+              (q[qIdx] === 'Qw' && qCol === 0) ||
+              (q[qIdx] === 'Qe' && qCol === mapx)) {
+              return; // We hit a scroll edge in the future, block further input
+          }
+          testZ = window.moveZ(testZ, q[qIdx]);
+      }
+  }
 
   var todo = null;
-
-  switch (key) {
-    case "ArrowUp":
-    case "w":
-    case "W":
-      todo = "Qn"; // Move North
-      break;
-      
-    case "ArrowDown":
-    case "s":
-    case "S":
-      todo = "Qs"; // Move South
-      break;
-      
-    case "ArrowLeft":
-    case "a":
-    case "A":
-      todo = "Qw"; // Move West
-      break;
-      
-    case "ArrowRight":
-    case "d":
-    case "D":
-      todo = "Qe"; // Move East
-      break;
+  switch (keyStr) {
+    case "ArrowUp":   case "w": case "W": todo = "Qn"; break;
+    case "ArrowDown": case "s": case "S": todo = "Qs"; break;
+    case "ArrowLeft": case "a": case "A": todo = "Qw"; break;
+    case "ArrowRight":case "d": case "D": todo = "Qe"; break;
   }
 
   if (todo) {
-    // Set the 'todo' variable for the 1-second gfxTick() refresh
-    window.gfxDo = todo;
+    // Append to server buffer
+    if (window.gfxDo === "RF") window.gfxDo = "";
+    window.gfxDo += todo;
+    
+    // Append to visual 200ms tick buffer
+    if (!window.movingItems) window.movingItems = {};
+    if (!window.movingItems[window.playerItem]) {
+        window.movingItems[window.playerItem] = { z: window.playerZ, queue: [], avatar: window.playerAvatar };
+    }
+    window.movingItems[window.playerItem].queue.push(todo);
   }
 };
 
 window.joinGame = async function(item, z) { 
   if (playerItem != "Za") { return; }
   if (playerMap != '_L') { return; }
-    // validate playerItemId??
   playerItem=item; playerZ=z; playerItemId=item; playerZ=z;
-  // send server command to 'get item'
-  window.gfxDo = "Qg" + item + z + playerAvatar;
+  if (window.gfxDo === "RF") window.gfxDo = "";
+  window.gfxDo += "Qg" + item + z + playerAvatar;
 }

@@ -60,6 +60,23 @@
             border-radius: 4px;
         }
         button:hover { background: #07a; }
+        #toolbar .tool-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #444;
+            padding: 4px 10px;
+            border-radius: 4px;
+        }
+        #toolbar input[type="number"] {
+            background: #222;
+            color: #0af;
+            border: 1px solid #555;
+            padding: 4px;
+            width: 45px;
+            font-family: monospace;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -160,35 +177,81 @@ function renderToolbar() {
     });
     toolbar.appendChild(select);
 
+    addButton('File', showFileTool);
     addButton('Borders', borders);
-    addButton('Fill', () => { activeTool = 'fill'; });
-    addButton('Stamp', showStampTool);    
 
+// 3. Brush Size Group
+    const sizeGroup = document.createElement('div');
+    sizeGroup.className = 'tool-group';
+    sizeGroup.innerHTML = `
+        <label style="font-size:0.8em; color:#aaa;">SIZE</label>
+        <input type="number" id="toolbarBrushSize" value="${brushSize}" min="1" max="25" 
+               onchange="syncBrushSize(this.value)">
+    `;
+    toolbar.appendChild(sizeGroup);
+        
     addButton('Brush', bigbrush);
     addButton('Flower', showFlowerTool);
-
     addButton('Terrain', showTerrainTool);
+    
+    addButton('Fill', () => { activeTool = 'fill'; });
+    addButton('Stamp', showStampTool);    
 
     addButton('Exits', () => showExitsEditor(lastEditedSector));
     addButton('Items', showItemsTool);    
     
-    addButton('Import', importMap);
-    addButton('Export', exportMap);
+}
+
+function syncBrushSize(val) {
+    brushSize = parseInt(val, 10);
+    // If the brush popup is open, update its slider and preview
+    const slider = document.getElementById('brushSizeSlider');
+    if (slider) {
+        slider.value = brushSize;
+        updateBrushSizePreview(brushSize);
+    }
+}
+
+function showFileTool() {
+    const popup = document.getElementById('toolPopup');
+    popup.innerHTML = `
+        <div id="toolPopupHeader" style="cursor:move; background:#222; padding:8px; border-radius:6px 6px 0 0; font-weight:bold; border-bottom:1px solid #444;">
+            File Operations
+            <span style="float:right;cursor:pointer;" onclick="document.getElementById('toolPopup').style.display='none'">✕</span>
+        </div>
+        <div style="padding:16px; display:flex; flex-direction:column; gap:10px;">
+            <button onclick="importMap()" style="background:#2980b9;">📥 Import from Clipboard</button>
+            <button onclick="exportMap()" style="background:#27ae60;">📤 Export to Clipboard</button>
+            <hr style="border:0; border-top:1px solid #444; margin:5px 0;">
+            <p style="font-size:0.75em; color:#888;">Map Size: ${TILE_W}x${TILE_H}<br>Format: .GFX Sector Data</p>
+        </div>
+    `;
+    popup.style.display = "block";
+    makeDraggable(popup, document.getElementById('toolPopupHeader'));
 }
 
 function showRiverTool() {
     activeTool = 'river';
-    pathMode = 1; // Reuse the path-selection state machine
+    pathMode = 1; 
     const popup = document.getElementById('toolPopup');
     popup.innerHTML = `
         <div id="toolPopupHeader" style="cursor:move; background:#005588; padding:8px; border-radius:6px 6px 0 0; font-weight:bold;">
-            Simple River Tool
+            River Generator
             <span style="float:right;cursor:pointer;" onclick="exitPathMode()">✕</span>
         </div>
         <div style="padding:16px;">
-            <p id="pathStatus">Click map for <b>River Start</b>.</p>
-            <p style="font-size:0.8em; color:#aaa;">Will draw a "drunk" path using tile Ua.</p>
-            <button onclick="exitPathMode()">Cancel</button>
+            <div style="background:#111; padding:10px; border-radius:4px; margin-bottom:10px;">
+                <b style="color:#0af;">Step 1: Draw Water</b>
+                <p id="pathStatus" style="font-size:0.9em; margin:5px 0;">Click map for <b>River Start</b>.</p>
+                <p style="font-size:0.8em; color:#aaa;">Thickness linked to Brush Size: <b>${brushSize}</b></p>
+            </div>
+            
+            <div style="background:#111; padding:10px; border-radius:4px; margin-bottom:10px;">
+                <b style="color:#2ecc71;">Step 2: Auto-Edge</b><br>
+                <button onclick="solveRiverEdges()" style="background:#27ae60; margin-top:5px; width:100%;">Fix All River Edges</button>
+            </div>
+
+            <button onclick="exitPathMode()" style="background:#555; width:100%;">Cancel / Done</button>
         </div>
     `;
     popup.style.display = "block";
@@ -240,62 +303,52 @@ function applySimpleRiver(start, end) {
 
     renderFullMap();
 }
+
 function solveRiverEdges() {
-    // Clone map so neighbor checks don't cascade and mess up calculations mid-loop
+    saveHistory();
+    // Clone map so neighbor checks aren't affected by tiles we change mid-loop
     const tempMap = mapData.map(row => [...row]);
 
-    // Helper: Is this coordinate Water? 
-    // We treat off-screen tiles as water so rivers flow cleanly off the map edges.
     const isW = (x, y) => {
         if (x < 0 || x >= TILE_W || y < 0 || y >= TILE_H) return true; 
         const t = tempMap[y][x];
+        // Treat both solid water (U) and shore tiles (A) as "Water" for connection logic
         return t.startsWith('U') || t.startsWith('A'); 
     };
 
     for (let y = 0; y < TILE_H; y++) {
         for (let x = 0; x < TILE_W; x++) {
-            // ONLY shape tiles that are already part of the water mass
+            // We only care about tiles that are currently water or shore
             if (!isW(x, y)) continue;
 
-            // Check 4 Cardinal Directions
-            const N = isW(x, y - 1);
-            const S = isW(x, y + 1);
-            const W = isW(x - 1, y);
-            const E = isW(x + 1, y);
-            
-            // Check 4 Diagonal Directions
-            const NW = isW(x - 1, y - 1);
-            const NE = isW(x + 1, y - 1);
-            const SW = isW(x - 1, y + 1);
-            const SE = isW(x + 1, y + 1);
+            const N = isW(x, y - 1), S = isW(x, y + 1), W = isW(x - 1, y), E = isW(x + 1, y);
+            const NW = isW(x - 1, y - 1), NE = isW(x + 1, y - 1), SW = isW(x - 1, y + 1), SE = isW(x + 1, y + 1);
 
-            // Count how many cardinal water neighbors this tile has
-            const edges = (N?1:0) + (S?1:0) + (W?1:0) + (E?1:0);
+            const cardinalCount = (N?1:0) + (S?1:0) + (W?1:0) + (E?1:0);
             
-            let tile = 'Ua'; // Default to full water
+            let tile = 'Ua'; // Default solid water
 
-            if (edges === 3) {
-                // Flat Shores (Grass is touching exactly one side)
-                if (!N) tile = 'Aa'; // Grass North (GG/WW)
-                if (!S) tile = 'Ab'; // Grass South (WW/GG) - Assumed
-                if (!E) tile = 'Ac'; // Grass East -> Water West (WG/WG)
-                if (!W) tile = 'Ad'; // Grass West -> Water East (GW/GW)
+            // Flat Shores (One side is land)
+            if (cardinalCount === 3) {
+                if (!N) tile = 'Aa'; // Grass North
+                if (!S) tile = 'Ab'; // Grass South
+                if (!E) tile = 'Ac'; // Grass East
+                if (!W) tile = 'Ad'; // Grass West
             } 
-            else if (edges === 2) {
-                // Outer Corners (Grass is eating two sides of the tile)
-                if (N && W) tile = 'Ae'; // Water in Top-Left (WG/GG)
-                if (S && E) tile = 'Ag'; // Water in Bottom-Right (GG/WG)
-                if (S && W) tile = 'Ah'; // Water in Bottom-Left (GG/GW) - Assumed
-                if (N && E) tile = 'Ai'; // Water in Top-Right (GW/GG) - Assumed
+            // Outer Corners (Two sides are land)
+            else if (cardinalCount === 2) {
+                if (S && E) tile = 'Ag'; 
+                if (S && W) tile = 'Ah';
+                if (N && E) tile = 'Ai';
+                if (N && W) tile = 'Ae';
             }
-            else if (edges === 4) {
-                // Inner Corners (Water on all 4 sides, but Grass peeking in from a diagonal)
-                if (!SE) tile = 'Ub'; // Grass Bottom-Right (WW/WG)
-                if (!SW) tile = 'Uc'; // Grass Bottom-Left (WW/GW)
-                if (!NE) tile = 'Ud'; // Grass Top-Right (WG/WW)
-                if (!NW) tile = 'Ue'; // Grass Top-Left (GW/WW)
+            // Inner Corners (All sides water, but diagonal is land)
+            else if (cardinalCount === 4) {
+                if (!SE) tile = 'Ub';
+                if (!SW) tile = 'Uc';
+                if (!NE) tile = 'Ud';
+                if (!NW) tile = 'Ue';
             }
-            // If edges === 1 or 0, it remains 'Ua' (a dead end or a 1x1 puddle)
 
             mapData[y][x] = tile;
         }
@@ -305,24 +358,36 @@ function solveRiverEdges() {
 
 function applyDrunkRiver(start, end) {
     let path = findPath(start, end);
-    if (!path) return;
+    if (!path) {
+        alert("No path found! Make sure the start and end aren't blocked by mountains/walls.");
+        return;
+    }
 
-    // Stage 1: The "Drunk" filling
+    saveHistory();
+
+    // Determine thickness based on global brushSize
+    const half = Math.floor(brushSize / 2);
+
     path.forEach(node => {
-        mapData[node.y][node.x] = 'Ua';
-        // Randomly widen the river
-        if (Math.random() > 0.5) {
-            const neighbors = [{x:1,y:0}, {x:-1,y:0}, {x:0,y:1}, {x:0,y:-1}];
-            const rand = neighbors[Math.floor(Math.random()*4)];
-            if (mapData[node.y + rand.y]?.[node.x + rand.x]) {
-                mapData[node.y + rand.y][node.x + rand.x] = 'Ua';
+        // Draw a block centered on the path node
+        for (let dy = -half; dy <= half; dy++) {
+            for (let dx = -half; dx <= half; dx++) {
+                const nx = node.x + dx;
+                const ny = node.y + dy;
+                
+                // Bounds check
+                if (nx >= 0 && nx < TILE_W && ny >= 0 && ny < TILE_H) {
+                    mapData[ny][nx] = 'Ua'; // Fill with standard solid water
+                }
             }
         }
     });
 
-    // Stage 2: The Edge Filter
-    solveRiverEdges();
-    exitPathMode();
+    renderFullMap();
+    
+    // Reset state for the next river segment
+    pathMode = 1; 
+    document.getElementById('pathStatus').innerHTML = "River drawn! Click for <b>New River Start</b>.";
 }
 
 function showMountainTool() {
@@ -475,8 +540,7 @@ function exitFlowerMode() {
     }
 
 function bigbrush() {
-    activeTool = 'brush'; // Selecting the brush automatically disables others
-
+    activeTool = 'brush'; 
     const group = brush[0];
     const groupTiles = Array.from({length: 16}, (_, i) => group + String.fromCharCode(97 + i));
 
@@ -489,26 +553,29 @@ function bigbrush() {
     const popup = document.getElementById('toolPopup');
     popup.innerHTML = `
         <div id="toolPopupHeader" style="cursor:move; background:#047; padding:8px; border-radius:6px 6px 0 0; font-weight:bold;">
-            Brush Tool
+            Advanced Brush Tool
             <span style="float:right;cursor:pointer;" onclick="document.getElementById('toolPopup').style.display='none'">✕</span>
         </div>
         <div style="padding:14px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                <div><b>Tile:</b> <span class="brush-info">${brush}</span></div>
-                <div id="shapeButtons">
+            <div style="margin-bottom:10px;">
+                <b>Shape:</b>
+                <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:4px; margin-top:5px;">
                     <button onclick="setBrushShape('box')" style="${brushShape==='box'?'background:#0af;':''}">Box</button>
                     <button onclick="setBrushShape('circle')" style="${brushShape==='circle'?'background:#0af;':''}">Circle</button>
+                    <button onclick="setBrushShape('triangle')" style="${brushShape==='triangle'?'background:#0af;':''}">Triangle</button>
+                    <button onclick="setBrushShape('diamond')" style="${brushShape==='diamond'?'background:#0af;':''}">Diamond</button>
+                    <button onclick="setBrushShape('hline')" style="${brushShape==='hline'?'background:#0af;':''}">H-Line</button>
+                    <button onclick="setBrushShape('vline')" style="${brushShape==='vline'?'background:#0af;':''}">V-Line</button>
                 </div>
             </div>
             
             <div style="margin-bottom:10px;">
-                <label><b>Size:</b></label>
-                <input type="range" min="1" max="7" step="2" id="brushSizeSlider" value="${brushSize}"
-                    oninput="updateBrushSizePreview(this.value)">
-                <span id="brushSizeValue">${brushSize}</span>
+                <label><b>Size:</b> <span id="brushSizeValue">${brushSize}</span></label>
+                <input type="range" min="1" max="25" step="1" id="brushSizeSlider" value="${brushSize}"
+                    style="width:100%" oninput="updateBrushSizePreview(this.value)">
             </div>
 
-            <div id="brushPreview" style="padding:10px 0; display:flex; justify-content:center; background:#111; border-radius:4px;"></div>
+            <div id="brushPreview" style="padding:10px 0; display:flex; justify-content:center; background:#111; border-radius:4px; min-height:60px;"></div>
             
             <div style="margin:10px 0 5px 0;"><b>Group:</b></div>
             <div style="display:flex; flex-wrap:wrap; gap:2px; width:170px;">${tileButtons}</div>
@@ -535,20 +602,26 @@ function updateBrushSizePreview(val) {
     
     let out = '<table style="border-collapse:collapse; background:#000;">';
     const half = Math.floor(brushSize / 2);
-    const radiusSq = half * half;
 
     for (let dy = -half; dy <= half; dy++) {
         out += '<tr>';
         for (let dx = -half; dx <= half; dx++) {
-            let isActive = true;
-            if (brushShape === 'circle') {
-                // Euclidean distance check for rounding
-                if (dx * dx + dy * dy > radiusSq + 0.1) isActive = false;
+            let isActive = false;
+            
+            if (brushShape === 'box') isActive = true;
+            else if (brushShape === 'circle') isActive = (dx * dx + dy * dy <= (half * half) + 0.5);
+            else if (brushShape === 'diamond') isActive = (Math.abs(dx) + Math.abs(dy) <= half);
+            else if (brushShape === 'hline') isActive = (dy === 0);
+            else if (brushShape === 'vline') isActive = (dx === 0);
+            else if (brushShape === 'triangle') {
+                // Triangle math: dy goes from -half to half. 
+                // At dy = -half (top), width should be 0. At dy = half (bottom), width is full.
+                let rowWidth = (dy + half); 
+                isActive = (Math.abs(dx * 2) <= rowWidth);
             }
             
             const color = isActive ? '#0af' : 'transparent';
-            const border = isActive ? '1px solid #444' : 'none';
-            out += `<td style="width:12px; height:12px; background:${color}; border:${border};"></td>`;
+            out += `<td style="width:4px; height:4px; background:${color};"></td>`;
         }
         out += '</tr>';
     }
@@ -556,9 +629,9 @@ function updateBrushSizePreview(val) {
     document.getElementById('brushPreview').innerHTML = out;
 }
 
-    function borders() {
-      drawSectorBorders(ctx, TILE_SIZE, SECTORS_WIDE, SECTORS_TALL, SECTOR_TILE_WIDTH, SECTOR_TILE_HEIGHT);
-    }
+function borders() {
+    drawSectorBorders(ctx, TILE_SIZE, SECTORS_WIDE, SECTORS_TALL, SECTOR_TILE_WIDTH, SECTOR_TILE_HEIGHT);
+}
 
 function drawSectorBorders(ctx, tileSize, sectorsWide, sectorsTall, sectorTileWidth, sectorTileHeight) {
     ctx.save();
@@ -574,17 +647,22 @@ function drawSectorBorders(ctx, tileSize, sectorsWide, sectorsTall, sectorTileWi
             const w = sectorTileWidth * tileSize;
             const h = sectorTileHeight * tileSize;
 
-            // 1. Vertical Border (Check exit to the East/Right neighbor)
+            // 1. Vertical Border (Check connection to the East/Right neighbor)
             if (c < sectorsWide - 1) {
                 const rightNeighbor = `${ROWS[r]}${c + 2}`;
                 const neighborExits = sectorExits[rightNeighbor] || "";
                 
+                // Connection exists if Current labels Right OR Right labels Current
                 const canGoNext = exits.includes(rightNeighbor);
                 const canComeBack = neighborExits.includes(currentLabel);
 
-                // If one-way OR two-way: Yellow. If blocked both ways: Red.
-                ctx.strokeStyle = (canGoNext || canComeBack) ? 'rgba(255, 255, 0, 0.6)' : 'rgba(255, 50, 50, 0.8)';
-                ctx.lineWidth = (canGoNext || canComeBack) ? 1 : 3; // Thicker red lines for visibility
+                if (canGoNext || canComeBack) {
+                    ctx.strokeStyle = 'rgba(255, 255, 0, 0.6)'; // Yellow: Connected
+                    ctx.lineWidth = 1;
+                } else {
+                    ctx.strokeStyle = 'rgba(255, 50, 50, 0.8)';  // Red: Blocked
+                    ctx.lineWidth = 3;
+                }
 
                 ctx.beginPath();
                 ctx.moveTo(x + w, y);
@@ -592,7 +670,7 @@ function drawSectorBorders(ctx, tileSize, sectorsWide, sectorsTall, sectorTileWi
                 ctx.stroke();
             }
 
-            // 2. Horizontal Border (Check exit to the South/Bottom neighbor)
+            // 2. Horizontal Border (Check connection to the South/Bottom neighbor)
             if (r < sectorsTall - 1) {
                 const downNeighbor = `${ROWS[r + 1]}${c + 1}`;
                 const neighborExits = sectorExits[downNeighbor] || "";
@@ -600,8 +678,13 @@ function drawSectorBorders(ctx, tileSize, sectorsWide, sectorsTall, sectorTileWi
                 const canGoDown = exits.includes(downNeighbor);
                 const canComeUp = neighborExits.includes(currentLabel);
 
-                ctx.strokeStyle = (canGoDown || canComeUp) ? 'rgba(255, 255, 0, 0.6)' : 'rgba(255, 50, 50, 0.8)';
-                ctx.lineWidth = (canGoDown || canComeUp) ? 1 : 3;
+                if (canGoDown || canComeUp) {
+                    ctx.strokeStyle = 'rgba(255, 255, 0, 0.6)'; // Yellow
+                    ctx.lineWidth = 1;
+                } else {
+                    ctx.strokeStyle = 'rgba(255, 50, 50, 0.8)';  // Red
+                    ctx.lineWidth = 3;
+                }
 
                 ctx.beginPath();
                 ctx.moveTo(x, y + h);
@@ -612,7 +695,6 @@ function drawSectorBorders(ctx, tileSize, sectorsWide, sectorsTall, sectorTileWi
     }
     ctx.restore();
 }
-
 
 
     function drawTile(x, y) {
@@ -629,7 +711,6 @@ function drawSectorBorders(ctx, tileSize, sectorsWide, sectorsTall, sectorTileWi
         }
     }
 
-    // Consolidated Paint Logic
     let isPainting = false;
 
 function handlePaintAction(clientX, clientY) {
@@ -638,17 +719,26 @@ function handlePaintAction(clientX, clientY) {
     const tileY = Math.floor((clientY - rect.top) / TILE_SIZE);
 
     const half = Math.floor(brushSize / 2);
-    const radiusSq = half * half;
 
     for (let dy = -half; dy <= half; dy++) {
         for (let dx = -half; dx <= half; dx++) {
-            if (brushShape === 'circle' && (dx * dx + dy * dy > radiusSq + 0.1)) continue;
+            // SHAPE LOGIC
+            let skip = false;
+            if (brushShape === 'circle' && (dx * dx + dy * dy > (half * half) + 0.5)) skip = true;
+            if (brushShape === 'diamond' && (Math.abs(dx) + Math.abs(dy) > half)) skip = true;
+            if (brushShape === 'hline' && dy !== 0) skip = true;
+            if (brushShape === 'vline' && dx !== 0) skip = true;
+            if (brushShape === 'triangle' && (Math.abs(dx * 2) > (dy + half))) skip = true;
+
+            if (skip) continue;
 
             const x = tileX + dx;
             const y = tileY + dy;
             if (x < 0 || x >= TILE_W || y < 0 || y >= TILE_H) continue;
-
-            // Switch behavior based on activeTool
+            
+            if (activeTool === 'forest') { applyForestSpray(x, y); }
+            
+            if (activeTool === 'road') { applySmartRoad(x, y); } 
 
             if (activeTool === 'mountain') {
                 applySmartMountain(x, y);
@@ -659,8 +749,12 @@ function handlePaintAction(clientX, clientY) {
                     mapData[y][x] = brush;
                     drawTile(x, y);
                 }
+            } else if (activeTool === 'path') {
+                if (!mapData[y][x].startsWith('B')) mapData[y][x] = 'Ba';
+                fixPathTile(x, y);
+                fixPathTile(x, y - 1); fixPathTile(x, y + 1);
+                fixPathTile(x - 1, y); fixPathTile(x + 1, y);
             }
-            // Note: 'path' is handled by the mousedown listener, not the drag/paint action
         }
     }
 }
@@ -739,37 +833,30 @@ canvas.addEventListener('mousedown', (e) => {
         return; 
     }
 
-if (activeTool === 'items') {
-    const sectorX = Math.floor(tx / SECTOR_TILE_WIDTH);
-    const sectorY = Math.floor(ty / SECTOR_TILE_HEIGHT);
-    const ROWS = ["A","B","C","D","E","F","G","H","I","J","K","L"];
-    const label = `${ROWS[sectorY]}${sectorX + 1}`;
+    if (activeTool === 'items') {
+        const sectorX = Math.floor(tx / SECTOR_TILE_WIDTH);
+        const sectorY = Math.floor(ty / SECTOR_TILE_HEIGHT);
+        const ROWS = ["A","B","C","D","E","F","G","H","I","J","K","L"];
+        const label = `${ROWS[sectorY]}${sectorX + 1}`;
     
-    // Calculate 0-95 index
-    const localX = tx % SECTOR_TILE_WIDTH;
-    const localY = ty % SECTOR_TILE_HEIGHT;
-    const zIndex = (localY * SECTOR_TILE_WIDTH) + localX;
-    const zStr = zIndex.toString().padStart(2, '0');
+        // Calculate 0-95 index
+        const localX = tx % SECTOR_TILE_WIDTH;
+        const localY = ty % SECTOR_TILE_HEIGHT;
+        const zIndex = (localY * SECTOR_TILE_WIDTH) + localX;
+        const zStr = zIndex.toString().padStart(2, '0');
 
-    if (!sectorItems[label]) sectorItems[label] = [];
+        if (!sectorItems[label]) sectorItems[label] = [];
 
-    // Toggle: If item exists at this Z, remove it. Otherwise, add.
-    const existingIdx = sectorItems[label].findIndex(it => it.z === zStr);
-    if (existingIdx > -1) {
-        sectorItems[label].splice(existingIdx, 1);
-    } else {
-        sectorItems[label].push({ id: currentItemCode, z: zStr, data: currentItemData });
+        // Toggle: If item exists at this Z, remove it. Otherwise, add.
+        const existingIdx = sectorItems[label].findIndex(it => it.z === zStr);
+        if (existingIdx > -1) {
+            sectorItems[label].splice(existingIdx, 1);
+        } else {
+            sectorItems[label].push({ id: currentItemCode, z: zStr, data: currentItemData });
+        }
+        renderFullMap();
+        return;
     }
-    renderFullMap();
-    return;
-}
-
-
-
-
-
-
-
 
     if (activeTool === 'select') {
         isSelecting = true;
@@ -788,13 +875,21 @@ if (activeTool === 'items') {
         return; 
     }
 
-    if (activeTool === 'river' || activeTool === 'path') {
+    if (activeTool === 'river') {
     if (pathMode === 1) {
         pathStartNode = { x: tx, y: ty };
         pathMode = 2;
         document.getElementById('pathStatus').innerHTML = "Click for <b>River End</b>.";
         return;
     } 
+    
+
+    if (activeTool === 'path') {
+        isPainting = true; // Enable the drag-paint behavior
+        handlePaintAction(e.clientX, e.clientY);
+        return;
+    }    
+    
     if (pathMode === 2) {
         if (activeTool === 'river') applyDrunkRiver(pathStartNode, { x: tx, y: ty });
         else {
@@ -876,37 +971,103 @@ function showExitsEditor(sectorLabel) {
     exitEditSector = sectorLabel;
     const currExits = sectorExits[sectorLabel] || '';
     const popup = document.getElementById('toolPopup');
+    
+    // Calculate Cardinal Neighbors
+    const ROWS = ["A","B","C","D","E","F","G","H","I","J","K","L"];
+    let rowChar = sectorLabel.charAt(0), colNum = parseInt(sectorLabel.slice(1));
+    let r = ROWS.indexOf(rowChar), c = colNum;
+
+    const n = (r > 0) ? ROWS[r-1] + c : null;
+    const s = (r < 11) ? ROWS[r+1] + c : null;
+    const w = (c > 1) ? ROWS[r] + (c-1) : null;
+    const e = (c < 8) ? ROWS[r] + (c+1) : null;
+
+    const isSelected = (code) => currExits.includes(code);
+    const btnStyle = (code) => isSelected(code) ? 'background:#0af; color:#fff; border:1px solid #fff;' : 'background:#222; color:#777; border:1px solid #444;';
+
     popup.innerHTML = `
         <div id="toolPopupHeader" style="cursor:move; background:#047; padding:8px; border-radius:6px 6px 0 0; font-weight:bold;">
-            Sector Exits Editor (${sectorLabel})
+            Sector Exits: ${sectorLabel}
             <span style="float:right;cursor:pointer;" onclick="document.getElementById('toolPopup').style.display='none'">✕</span>
         </div>
-        <div style="padding:16px;">
-            <label for="exitsInput">Exits (e.g. A2B1): </label>
-            <input type="text" id="exitsInput" maxlength="8" value="${currExits}" style="width:90px;" autocomplete="off">
-            <button onclick="resetExitsToNatural('${sectorLabel}')">Reset</button>
-            <div id="exitsValidation" style="margin-top:8px; font-size:0.9em"></div>
-            <p style="font-size:0.95em;color:#aaa;margin:7px 0 0 0;">
-              Enter 2-char sector labels concatenated: e.g. <b>A2B1</b>.<br>
-              Use <b>Reset</b> to auto-fill with the "natural" 4 exits.<br>
-              Accepts teleport/secret exits, as needed.
-            </p>
-            <p>
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom:15px;">
-                <button onclick="autoCalculateExits(false)" style="background:#27ae60;">Flat World</button>
-                <button onclick="autoCalculateExits(true)" style="background:#8e44ad;">Round World</button>
-            </div>
-            <p>
-            <button style="margin-top:12px" onclick="saveExitsInput()">Save</button>
+        <div style="padding:16px; display:flex; flex-direction:column; align-items:center; gap:15px;">
+            
+            <!-- Compass Diamond -->
+            <div style="display:grid; grid-template-columns: 50px 60px 50px; grid-template-rows: 40px 40px 40px; gap:5px; align-items:center; text-align:center; font-family:monospace;">
+                <div></div>
+                <button onclick="toggleExit('${n}')" style="${btnStyle(n)}; visibility:${n?'visible':'hidden'}">${n||''}</button>
+                <div></div>
 
+                <button onclick="toggleExit('${w}')" style="${btnStyle(w)}; visibility:${w?'visible':'hidden'}">${w||''}</button>
+                <div style="font-weight:bold; color:#0af; font-size:1.2em;">${sectorLabel}</div>
+                <button onclick="toggleExit('${e}')" style="${btnStyle(e)}; visibility:${e?'visible':'hidden'}">${e||''}</button>
+
+                <div></div>
+                <button onclick="toggleExit('${s}')" style="${btnStyle(s)}; visibility:${s?'visible':'hidden'}">${s||''}</button>
+                <div></div>
+            </div>
+
+            <div style="width:100%;">
+                <label style="font-size:0.8em; color:#aaa;">Exit String:</label>
+                <input type="text" id="exitsInput" maxlength="12" value="${currExits}" 
+                       style="width:100%; background:#111; color:#0f0; border:1px solid #444; padding:5px; font-family:monospace; letter-spacing:2px;" 
+                       autocomplete="off">
+            </div>
+
+            <div style="display:flex; gap:5px; width:100%;">
+                <button style="flex:1; background:#27ae60;" onclick="saveExitsInput()">Save Changes</button>
+                <button style="background:#555;" onclick="resetExitsToNatural('${sectorLabel}')">Reset</button>
+            </div>
+
+            <div style="display:flex; gap:5px; width:100%;">
+                <button style="flex:1; background:#444; font-size:0.75em;" onclick="autoCalculateExits(false)">Fill All (Flat)</button>
+                <button style="flex:1; background:#444; font-size:0.75em;" onclick="autoCalculateExits(true)">Fill All (Round)</button>
+            </div>
         </div>
     `;
     popup.style.display = "block";
     makeDraggable(popup, document.getElementById('toolPopupHeader'));
     document.getElementById('exitsInput').addEventListener('input', validateExitsInput);
-    validateExitsInput();
 }
 
+function toggleExit(targetCode) {
+    if (!targetCode || targetCode === 'null') return;
+    
+    let input = document.getElementById('exitsInput');
+    let val = input.value.toUpperCase();
+    
+    // Split string into 2-character chunks
+    let parts = val.match(/.{1,2}/g) || [];
+    
+    if (parts.includes(targetCode)) {
+        // Remove it
+        parts = parts.filter(p => p !== targetCode);
+    } else {
+        // Add it (max 6 exits for logic safety, though string can hold more)
+        if (parts.length < 6) parts.push(targetCode);
+    }
+    
+    input.value = parts.join("");
+    
+    // Save immediately to the data object so the UI refresh shows the change
+    sectorExits[exitEditSector] = input.value;
+    
+    // Refresh the popup to update button colors
+    showExitsEditor(exitEditSector);
+    renderFullMap();
+}
+
+function validateExitsInput() {
+    const input = document.getElementById('exitsInput');
+    input.value = input.value.toUpperCase().replace(/[^A-L1-8]/g, '');
+    sectorExits[exitEditSector] = input.value;
+    renderFullMap();
+}
+
+function saveExitsInput() {
+    // Already saved via the live-binding in this version, just close.
+    document.getElementById('toolPopup').style.display = 'none';
+}
 function autoCalculateExits(isRound) {
     const ROWS = ["A","B","C","D","E","F","G","H","I","J","K","L"];
     const rowCount = 12;
@@ -1105,20 +1266,55 @@ output += `${sectorLabel}=${sectorString}${exits}${itemString}\n`;
 
 function showPathTool() {
     activeTool = 'path';
-    pathMode = 1;
+    pathMode = 0; // Disable the old state machine
     const popup = document.getElementById('toolPopup');
     popup.innerHTML = `
         <div id="toolPopupHeader" style="cursor:move; background:#047; padding:8px; border-radius:6px 6px 0 0; font-weight:bold;">
-            Path Finder
+            Manual Path Builder
             <span style="float:right;cursor:pointer;" onclick="exitPathMode()">✕</span>
         </div>
         <div style="padding:16px;">
-            <p id="pathStatus">Click on the map to set the <b>Starting Point</b>.</p>
-            <button onclick="exitPathMode()">Cancel</button>
+            <p><b>Click and Drag</b> on the map to draw paths.</p>
+            <p style="font-size:0.85em; color:#aaa;">The tool will automatically connect corners and junctions as you draw.</p>
+            <button onclick="exitPathMode()">Done</button>
         </div>
     `;
     popup.style.display = "block";
     makeDraggable(popup, document.getElementById('toolPopupHeader'));
+}
+
+function fixPathTile(x, y) {
+    if (x < 0 || x >= TILE_W || y < 0 || y >= TILE_H) return;
+    
+    // Only "fix" tiles that are already paths
+    if (!mapData[y][x].startsWith('B')) return;
+
+    const isP = (nx, ny) => {
+        if (nx < 0 || nx >= TILE_W || ny < 0 || ny >= TILE_H) return false;
+        return mapData[ny][nx].startsWith('B');
+    };
+
+    const n = isP(x, y - 1), s = isP(x, y + 1), w = isP(x - 1, y), e = isP(x + 1, y);
+    let tile = 'Ba'; // Default vertical
+
+    if (n && s && e && w) tile = 'Bc';
+    else if (n && s && w) tile = 'Bh';
+    else if (n && s && e) tile = 'Bi';
+    else if (w && e && n) tile = 'Bj'; // Assuming Bj is T-junction North
+    else if (w && e && s) tile = 'Bk'; // Assuming Bk is T-junction South
+    else if (n && s) tile = 'Ba';
+    else if (e && w) tile = 'Bb';
+    else if (n && w) tile = 'Bd';
+    else if (n && e) tile = 'Be';
+    else if (s && e) tile = 'Bf';
+    else if (s && w) tile = 'Bg';
+    else if (n) tile = 'Bm';
+    else if (s) tile = 'Bn';
+    else if (e) tile = 'Bk';
+    else if (w) tile = 'Bl';
+
+    mapData[y][x] = tile;
+    drawTile(x, y);
 }
 
 function exitPathMode() {
@@ -1274,50 +1470,42 @@ function getSmartMountainTile(x, y) {
     const W = isMountain(x - 1, y);
     const E = isMountain(x + 1, y);
 
-    // 1. Vertical Logic (Peak/Base/Middle)
-    if (!N && S) return 'Sb'; // Peak (Grass above, Mountain below)
-    if (N && !S) return 'Sf'; // Base (Mountain above, Grass below)
-    
-    // 2. Horizontal/Edge Logic (Only if it's a middle vertical piece)
-    if (N && S) {
-        if (!W && E) return 'Sc'; // Left Edge
-        if (W && !E) return 'Sd'; // Right Edge
-        return 'Sd';              // Solid Center
-    }
+    // 1. Vertical Priority (Top/Bottom)
+    if (!N && S) return 'Sb'; // It's a Peak (nothing above, mountain below)
+    if (N && !S) return 'Sf'; // It's a Base (mountain above, nothing below)
 
-    // 3. Default/Isolated
-    return 'Sb'; // Single tiles look like rocks/peaks
+    // 2. Horizontal Priority (Left/Right)
+    if (!W && E) return 'Sc'; // It's a Left Edge
+    if (W && !E) return 'Se'; // It's a Right Edge (User's corrected 'Se')
+
+    // 3. Center or Isolated
+    if (N && S && W && E) return 'Sd'; // Solid Center
+    
+    // Default for single tiles or complex junctions
+    return 'Sb'; 
 }
 
 function applySmartMountain(x, y) {
-    // 1. Set the painted tile to mountain center by default for neighbor detection.
+    // 1. Mark the current tile as mountain so neighbors can see it
     mapData[y][x] = 'Sd'; 
 
-    // 2. Heal the painted tile and the 4 neighbors if they are mountains
+    // 2. Define the area to "Heal" (the clicked tile + its 4 cardinal neighbors)
     const pointsToUpdate = [
         {x: x, y: y},
         {x: x, y: y - 1}, {x: x, y: y + 1},
         {x: x - 1, y: y}, {x: x + 1, y: y}
     ];
 
+    // 3. Recalculate each tile in that area
     pointsToUpdate.forEach(p => {
         if (isMountain(p.x, p.y)) {
-            mapData[p.y][p.x] = getSmartMountainTile(p.x, p.y);
-            drawTile(p.x, p.y);
+            const newTile = getSmartMountainTile(p.x, p.y);
+            if (mapData[p.y][p.x] !== newTile) {
+                mapData[p.y][p.x] = newTile;
+                drawTile(p.x, p.y);
+            }
         }
     });
-
-    // 3. Handle right (east) edge for "mountain meets grass"
-    // If the tile to the right is grass, make it Se
-    const ex = x + 1;
-    if (ex < TILE_W && !isMountain(ex, y)) {
-        const rightCode = mapData[y][ex];
-        // Only convert if it is grass/noise
-        if (rightCode.startsWith('G') || rightCode === 'Ga') {
-            mapData[y][ex] = 'Se'; // left side mountain, right side grass
-            drawTile(ex, y);
-        }
-    }
 }
 
 function undo() {
@@ -1609,7 +1797,7 @@ function showTerrainTool() {
             <button onclick="showRiverTool()" style="background:#555;">River Generator</button>
             <button onclick="showMountainTool()" style="background:#555;">Mountain Ridge</button>
             <button onclick="showRoadTool()" style="background:#555;">Brick Road Builder</button>
-            <button onclick="showForest()" style="background:#555;">Forest Creator</button>
+            <button onclick="showForestTool()" style="background:#2d5a27;">Forest Creator</button>
             
             <hr style="border:0; border-top:1px solid #444; width:100%;">
             
@@ -1621,8 +1809,154 @@ function showTerrainTool() {
     makeDraggable(popup, document.getElementById('toolPopupHeader'));
 }
 
-function showRoadTool() {}
-function showForestTool() {}
+let currentForestSet = 'all'; // 'green', 'white', 'red', 'all'
+let forestDensity = 15; // Percentage chance to spawn a tree per tile per frame
+
+function showForestTool() {
+    activeTool = 'forest';
+    const popup = document.getElementById('toolPopup');
+    popup.innerHTML = `
+        <div id="toolPopupHeader" style="cursor:move; background:#2d5a27; padding:8px; border-radius:6px 6px 0 0; font-weight:bold;">
+            Forest Sprayer (2-Tile Trees)
+            <span style="float:right;cursor:pointer;" onclick="document.getElementById('toolPopup').style.display='none'">✕</span>
+        </div>
+        <div style="padding:14px;">
+            <div style="margin-bottom:12px;">
+                <b>Tree Type:</b><br>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:5px; margin-top:5px;">
+                    <button onclick="setForestSet('green')" style="${currentForestSet==='green'?'background:#2ecc71;':''}">Green</button>
+                    <button onclick="setForestSet('white')" style="${currentForestSet==='white'?'background:#ecf0f1;color:#333':''}">White</button>
+                    <button onclick="setForestSet('red')" style="${currentForestSet==='red'?'background:#e74c3c;':''}">Red</button>
+                    <button onclick="setForestSet('all')" style="${currentForestSet==='all'?'background:#f1c40f;color:#333':''}">Mixed</button>
+                </div>
+            </div>
+            
+            <div style="margin-bottom:10px;">
+                <b>Spray Density:</b><br>
+                <input type="range" min="1" max="50" value="${forestDensity}" oninput="forestDensity=parseInt(this.value)">
+            </div>
+            
+            <p style="font-size:0.8em; color:#aaa;">Requires 1x2 vertical grass space. Base (Ra/Rp) + Top (Rb/Rc/Rd).</p>
+            <button onclick="activeTool='brush'; document.getElementById('toolPopup').style.display='none'">Done</button>
+        </div>
+    `;
+    popup.style.display = "block";
+    makeDraggable(popup, document.getElementById('toolPopupHeader'));
+}
+
+function setForestSet(set) {
+    currentForestSet = set;
+    showForestTool();
+}
+
+function applyForestSpray(x, y) {
+    // 1. Density Check
+    if (Math.random() * 100 > forestDensity) return;
+
+    // 2. Bounds Check (Need space for the top)
+    if (y < 1) return;
+
+    // 3. Terrain Check (Both current tile and tile above must be grass/noise)
+    const isG = (tx, ty) => {
+        const code = mapData[ty][tx];
+        return code.startsWith('G') || code === 'Fa'; 
+    };
+
+    if (!isG(x, y) || !isG(x, y - 1)) return;
+
+    // 4. Determine Tree Type
+    let type = currentForestSet;
+    if (type === 'all') {
+        const roll = Math.random();
+        if (roll < 0.6) type = 'green';
+        else if (roll < 0.8) type = 'white';
+        else type = 'red';
+    }
+
+    let topTile = 'Rb'; // Default Green
+    let baseTile = 'Ra'; // Default Base
+
+    if (type === 'white') topTile = 'Rc';
+    if (type === 'red') {
+        topTile = 'Rd';
+        // Special rule: Rp is a variant base for Red trees (15% chance)
+        if (Math.random() < 0.15) baseTile = 'Rp';
+    }
+
+    // 5. Apply
+    mapData[y][x] = baseTile;      // Place base at click
+    mapData[y - 1][x] = topTile;   // Place top above
+    drawTile(x, y);
+    drawTile(x, y - 1);
+}
+
+function showRoadTool() {
+    activeTool = 'road';
+    const popup = document.getElementById('toolPopup');
+    popup.innerHTML = `
+        <div id="toolPopupHeader" style="cursor:move; background:#7f8c8d; padding:8px; border-radius:6px 6px 0 0; font-weight:bold;">
+            Brick Road & Plaza Tool
+            <span style="float:right;cursor:pointer;" onclick="document.getElementById('toolPopup').style.display='none'">✕</span>
+        </div>
+        <div style="padding:14px;">
+            <p>Painting with this tool connects bricks (Ea-Ei).</p>
+            <p style="font-size:0.85em; color:#aaa;">
+                - Use a small brush for narrow paths.<br>
+                - Use a large brush for open plazas.
+            </p>
+            <button onclick="activeTool='brush'; document.getElementById('toolPopup').style.display='none'">Done</button>
+        </div>
+    `;
+    popup.style.display = "block";
+    makeDraggable(popup, document.getElementById('toolPopupHeader'));
+}
+
+// Check if a tile is part of the brick series (Ea-Ei)
+function isBrick(x, y) {
+    if (x < 0 || x >= TILE_W || y < 0 || y >= TILE_H) return false;
+    return mapData[y][x].startsWith('E');
+}
+
+function getSmartBrickTile(x, y) {
+    const N = isBrick(x, y - 1);
+    const S = isBrick(x, y + 1);
+    const W = isBrick(x - 1, y);
+    const E = isBrick(x + 1, y);
+
+    // 1. Corners (Diagonal Splits)
+    if (!N && !W && S && E) return 'Ef'; // Top-Left corner (TL=Grass, BR=Bricks)
+    if (!N && !E && S && W) return 'Ei'; // Top-Right corner (TR=Grass, BL=Bricks)
+    if (!S && !W && N && E) return 'Eh'; // Bottom-Left corner (BL=Grass, TR=Bricks)
+    if (!S && !E && N && W) return 'Eg'; // Bottom-Right corner (BR=Grass, TL=Bricks)
+
+    // 2. Straight Edges
+    if (!N && S) return 'Ed'; // Top edge (Grass on top)
+    if (!S && N) return 'Ee'; // Bottom edge (Grass on bottom)
+    if (!W && E) return 'Eb'; // Left edge (Grass on left)
+    if (!E && W) return 'Ec'; // Right edge (Grass on right)
+
+    // 3. Center or Isolated
+    return 'Ea'; // All bricks
+}
+
+function applySmartRoad(x, y) {
+    // 1. Temporarily set to center bricks
+    mapData[y][x] = 'Ea'; 
+
+    // 2. Heal target and 4 neighbors
+    const pointsToUpdate = [
+        {x: x, y: y},
+        {x: x, y: y - 1}, {x: x, y: y + 1},
+        {x: x - 1, y: y}, {x: x + 1, y: y}
+    ];
+
+    pointsToUpdate.forEach(p => {
+        if (isBrick(p.x, p.y)) {
+            mapData[p.y][p.x] = getSmartBrickTile(p.x, p.y);
+            drawTile(p.x, p.y);
+        }
+    });
+}
 
 function showItemsTool() {
     activeTool = 'items';
