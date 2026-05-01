@@ -12,6 +12,9 @@ var playerItemId = null;
 window.gameState = 'idle';
 window.gfxConsole = window.gfxConsole || [];
 
+window.gfxMoveTo = null;
+window.gfxDoThis = "";
+
 qdosScript("gfx.js");
 startup();
 var ts=5000;
@@ -32,7 +35,16 @@ async function startup(){
 function mainloop() {}
 
 window.zdown = function(z) {
- // walk to z-location
+  z = parseInt(z, 10);
+  if (window.playerItem === "Za" || !window.playerItem) return;
+  if (isNaN(z)) return;
+  if (z === window.playerZ) {
+    window.gfxMoveTo = null;
+    window.gfxDoThis = "";
+    return;
+  }
+  window.gfxMoveTo = z;
+  window.gfxDoThis = "";
 }
 
 window.itemdown = function(itemStr) {
@@ -54,8 +66,8 @@ window.objdown = function(objStr) {
 
   if (i === "Yj") { 
     if (playerItem !== "Za" && window.map === "_L") {
-      if (window.gfxDo === "RF") window.gfxDo = "";
-      window.gfxDo += "Qu" + i; 
+      window.gfxMoveTo = parseInt(z, 10);
+      window.gfxDoThis = "Qu" + i;
     } else {
       pop("You must claim a team<br>hat before starting!");
     }
@@ -83,40 +95,132 @@ window.reverseMoveZ = function(z, cmd) {
    return z;
 }
 
-window.keydown = function(key, e) {
-  var keyStr = (typeof e === 'object' && e.key) ? e.key : key;
-  
-  if (window.playerItem === "Za" || !window.playerItem) return;
+window.queueMoveCommand = function(todo) {
+  if (!todo) return false;
+  if (window.playerItem === "Za" || !window.playerItem) return false;
 
-  // 1. Block buffering if a non-movement command is currently queued
+  // Block buffering if a non-movement command is currently queued
   if (window.gfxDo && window.gfxDo !== "RF") {
-      var isPureMove = true;
-      for (var i = 0; i < window.gfxDo.length; i += 2) {
-          var chk = window.gfxDo.slice(i, i + 2);
-          if (!['Qn', 'Qs', 'Qe', 'Qw'].includes(chk)) {
-              isPureMove = false;
-              break;
-          }
+    var isPureMove = true;
+    for (var i = 0; i < window.gfxDo.length; i += 2) {
+      var chk = window.gfxDo.slice(i, i + 2);
+      if (!['Qn', 'Qs', 'Qe', 'Qw'].includes(chk)) {
+        isPureMove = false;
+        break;
       }
-      if (!isPureMove) return; 
+    }
+    if (!isPureMove) return false;
   }
 
-  // 2. Block buffering if existing queue contains a scroll edge step
+  // Block buffering if existing queue contains a scroll edge step
   var testZ = window.playerZ;
   if (window.movingItems && window.movingItems[window.playerItem]) {
-      var q = window.movingItems[window.playerItem].queue;
-      for (var qIdx = 0; qIdx < q.length; qIdx++) {
-          var qCol = testZ % (mapx + 1);
-          var qRow = Math.floor(testZ / (mapx + 1));
-          if ((q[qIdx] === 'Qn' && qRow === 0) ||
-              (q[qIdx] === 'Qs' && qRow === mapy) ||
-              (q[qIdx] === 'Qw' && qCol === 0) ||
-              (q[qIdx] === 'Qe' && qCol === mapx)) {
-              return; // We hit a scroll edge in the future, block further input
-          }
-          testZ = window.moveZ(testZ, q[qIdx]);
+    var q = window.movingItems[window.playerItem].queue;
+    for (var qIdx = 0; qIdx < q.length; qIdx++) {
+      var qCol = testZ % (mapx + 1);
+      var qRow = Math.floor(testZ / (mapx + 1));
+      if ((q[qIdx] === 'Qn' && qRow === 0) ||
+          (q[qIdx] === 'Qs' && qRow === mapy) ||
+          (q[qIdx] === 'Qw' && qCol === 0) ||
+          (q[qIdx] === 'Qe' && qCol === mapx)) {
+        return false;
       }
+      testZ = window.moveZ(testZ, q[qIdx]);
+    }
   }
+
+  if (window.gfxDo === "RF") window.gfxDo = "";
+  window.gfxDo += todo;
+
+  if (!window.movingItems) window.movingItems = {};
+  if (!window.movingItems[window.playerItem]) {
+    window.movingItems[window.playerItem] = { z: window.playerZ, queue: [], avatar: window.playerAvatar };
+  }
+  window.movingItems[window.playerItem].queue.push(todo);
+  return true;
+};
+
+window.getQueuedPlayerZ = function() {
+  var z = parseInt(window.playerZ, 10);
+  if (isNaN(z)) return -1;
+  if (window.movingItems && window.movingItems[window.playerItem]) {
+    var q = window.movingItems[window.playerItem].queue;
+    for (var i = 0; i < q.length; i++) {
+      z = window.moveZ(z, q[i]);
+    }
+  }
+  return z;
+};
+
+window.getStepTowardZ = function(fromZ, toZ) {
+  fromZ = parseInt(fromZ, 10);
+  toZ = parseInt(toZ, 10);
+  var cols = mapx + 1;
+  var fromRow = Math.floor(fromZ / cols);
+  var fromCol = fromZ % cols;
+  var toRow = Math.floor(toZ / cols);
+  var toCol = toZ % cols;
+  if (fromRow > toRow) return "Qn";
+  if (fromRow < toRow) return "Qs";
+  if (fromCol > toCol) return "Qw";
+  if (fromCol < toCol) return "Qe";
+  return null;
+};
+
+window.appendActionCommand = function(cmd) {
+  if (!cmd) return false;
+  if (!window.gfxDo || window.gfxDo === "RF") {
+    window.gfxDo = cmd;
+    return true;
+  }
+  var isPureMove = true;
+  for (var i = 0; i < window.gfxDo.length; i += 2) {
+    var chk = window.gfxDo.slice(i, i + 2);
+    if (!['Qn', 'Qs', 'Qe', 'Qw'].includes(chk)) {
+      isPureMove = false;
+      break;
+    }
+  }
+  if (!isPureMove) return false;
+  window.gfxDo += cmd;
+  return true;
+};
+
+window.gfxMoveTick = function() {
+  if (window.gfxMoveTo === null || window.gfxMoveTo === undefined) return;
+  if (window.playerItem === "Za" || !window.playerItem) {
+    window.gfxMoveTo = null;
+    window.gfxDoThis = "";
+    return;
+  }
+  var currentZ = window.getQueuedPlayerZ();
+  if (currentZ < 0) return;
+
+  if (currentZ === window.gfxMoveTo) {
+    if (window.gfxDoThis) {
+      if (!window.appendActionCommand(window.gfxDoThis)) {
+        return; // buffer busy, retry next tick
+      }
+    }
+    window.gfxMoveTo = null;
+    window.gfxDoThis = "";
+    return;
+  }
+
+  var nextCmd = window.getStepTowardZ(currentZ, window.gfxMoveTo);
+  if (!nextCmd) {
+    window.gfxMoveTo = null;
+    window.gfxDoThis = "";
+    return;
+  }
+
+  window.queueMoveCommand(nextCmd);
+};
+
+window.keydown = function(key, e) {
+  var keyStr = (typeof e === 'object' && e.key) ? e.key : key;
+
+  if (window.playerItem === "Za" || !window.playerItem) return;
 
   var todo = null;
   switch (keyStr) {
@@ -127,16 +231,9 @@ window.keydown = function(key, e) {
   }
 
   if (todo) {
-    // Append to server buffer
-    if (window.gfxDo === "RF") window.gfxDo = "";
-    window.gfxDo += todo;
-    
-    // Append to visual 200ms tick buffer
-    if (!window.movingItems) window.movingItems = {};
-    if (!window.movingItems[window.playerItem]) {
-        window.movingItems[window.playerItem] = { z: window.playerZ, queue: [], avatar: window.playerAvatar };
-    }
-    window.movingItems[window.playerItem].queue.push(todo);
+    window.gfxMoveTo = null;
+    window.gfxDoThis = "";
+    window.queueMoveCommand(todo);
   }
 };
 

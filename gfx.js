@@ -390,6 +390,8 @@ function gfxTick() {
         for (let i = 0; i < oldStage.length; i++) { oldStage[i].remove(); }
         
         window.movingItems = {}; // Clear old visual movement queues
+        window.gfxMoveTo = null; // Invalidate click-to-move target (z is screen-local)
+        window.gfxDoThis = "";
         
         gfxTiles(noun);
         gfxObjects(noun);
@@ -407,6 +409,7 @@ function gfxTick() {
 }
 
 window.gfxVisualTick = function() {
+    if (typeof window.gfxMoveTick === 'function') window.gfxMoveTick();
     if (!window.movingItems) window.movingItems = {};
     for (var iId in window.movingItems) {
         var mi = window.movingItems[iId];
