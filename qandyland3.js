@@ -1279,7 +1279,9 @@ function buildGameState() {
 //   Qs – Move South: rename player file z+8.
 //   Qe – Move East:  rename player file z+1 (boundary: x must be < 7).
 //   Qw – Move West:  rename player file z-1 (boundary: x must be > 0).
-//        Movement: zero-response; server updates world state silently.
+//        Movement: authoritative pipeline – strips stale Q suffix, applies move,
+//        saves canonical filename (no Q suffix), returns RF state immediately.
+//        Map scroll returns Ma<mapId> so the client can reload tiles first.
 //
 //   Qu - Use Object
 //
@@ -1346,7 +1348,6 @@ function handleCommand(req, res, raw, driveName) {
     var mvCurrentFile = null;
     var mvCurrentZ = -1;
     var mvPureAvatar = '';
-    var mvOldMoves = '';
     var prefix = (mvDir === 'w') ? 'w/' : mvDir + '/';
 
     for (var mvi = 0; mvi < manifest.length; mvi++) {
@@ -1360,16 +1361,11 @@ function handleCommand(req, res, raw, driveName) {
           mvCurrentFile = basename;
           mvCurrentZ = parseInt(mvMatch[2], 10);
           
+          // Step 2: Strip any stale Q-move suffix from the avatar part so old moves
+          // cannot be re-applied on the next tick (root fix for movement ghosting).
           var fullAvatar = mvMatch[3];
           var qIdx = fullAvatar.indexOf('Q');
-          
-          if (qIdx > -1) {
-              mvPureAvatar = fullAvatar.substring(0, qIdx);
-              mvOldMoves = fullAvatar.substring(qIdx); // Preserve existing queue from rapid requests
-          } else {
-              mvPureAvatar = fullAvatar;
-              mvOldMoves = '';
-          }
+          mvPureAvatar = (qIdx > -1) ? fullAvatar.substring(0, qIdx) : fullAvatar;
           break;
         }
       }
@@ -1382,10 +1378,6 @@ function handleCommand(req, res, raw, driveName) {
       var finalMap = mvMapId;
       var movesExecuted = '';
       var scrolled = false;
-
-      var GFX_COLS = 8;
-      var GFX_ROWS = 12;
-      var GFX_TOTAL_TILES = GFX_COLS * GFX_ROWS;
 
       var GFX_COLS = 8;
       var GFX_ROWS = 12;
@@ -1492,8 +1484,18 @@ function handleCommand(req, res, raw, driveName) {
       if (movesExecuted.length > 0) {
         var newZStr = (finalZ < 10 ? '0' : '') + finalZ;
         var newDir = (finalMap === '_L') ? 'w' : 'w/' + finalMap;
-        var newFile = mvItemId + newZStr + mvPureAvatar + movesExecuted + '.txt';
+        // Canonical filename: NO Q-move suffix appended.
+        // Stale movement commands can never survive across ticks and be re-applied,
+        // which is the root fix for the movement ghosting / snapback bug.
+        var newFile = mvItemId + newZStr + mvPureAvatar + '.txt';
 
+        // Step 3: Load player file content before rename.
+        // When inventory is added, apply changes to mvFileContent here, then
+        // call fileSave on the new path after the rename to persist those changes.
+        // For now content is always empty, so we just note the position for the rename.
+        var mvFileLoad = fileLoad(mvDrive, '/', mvDir + '/' + mvCurrentFile, session);
+
+        // Step 4: Rename to canonical path; fileRename preserves the file's content.
         var renameRes = fileRename(mvDrive, '/', mvDir + '/' + mvCurrentFile, newDir + '/' + newFile, session);
         if (renameRes.success) {
           if (scrolled) {
@@ -1518,9 +1520,29 @@ function handleCommand(req, res, raw, driveName) {
         cmd = fullCmdString.slice(ptr, ptr + 2);
         cmdData = fullCmdString.slice(ptr + 2);
       } else {
+        // Step 5: For map scrolls, return Ma so the client reloads tiles.
         if (movementResponse) return respondRetro(res, movementResponse);
-        res.writeHead(204);
-        return res.end();
+        // Step 6: Return RF immediately so the client receives authoritative state
+        // in the same transaction — no separate cleanup pass needed.
+        var mvRfPath = (finalMap === '_L') ? 'w' : 'w/' + finalMap;
+        var mvRfList = fileList(mvDrive, mvRfPath, null, session);
+        var mvRfItems = [];
+        if (mvRfList.success && mvRfList.listing) {
+          var mvRfFiles = mvRfList.listing.split('\n');
+          for (var mvRfi = 0; mvRfi < mvRfFiles.length; mvRfi++) {
+            var mvRfFile = mvRfFiles[mvRfi].trim();
+            if (!mvRfFile) continue;
+            var mvRfBase = mvRfFile.substring(mvRfFile.lastIndexOf('/') + 1);
+            if (mvRfBase.length === 8) {
+              var mvRfItemMatch = mvRfBase.match(/^([A-Z][a-z]\d{2})\.txt$/);
+              if (mvRfItemMatch) mvRfItems.push(mvRfItemMatch[1]);
+            } else if (mvRfBase.length > 8) {
+              var mvRfPlayerMatch = mvRfBase.match(/^([A-Z][a-z])(\d{2})(.+)\.txt$/);
+              if (mvRfPlayerMatch) mvRfItems.push(mvRfPlayerMatch[1] + mvRfPlayerMatch[2] + mvRfPlayerMatch[3]);
+            }
+          }
+        }
+        return respondRetro(res, 'RF' + finalMap + mvRfItems.join(','));
       }
     }
   }
@@ -1749,7 +1771,9 @@ function handleCommand(req, res, raw, driveName) {
         rfDrive = rfOwner.drive;
         rfMapId = rfOwner.mapId;
         
-        // IMPORTANT: Strip movement history (Q items) off the user's file before listing
+        // Safety fallback: strip any stale Q-move suffix that may have survived.
+        // Under normal operation, movement commands now save a canonical filename
+        // (no Q suffix) and return RF immediately, so this strip is rarely needed.
         var rfDir = (rfMapId === '_L') ? 'w' : 'w/' + rfMapId;
         var rfManifest = _readManifest(rfDrive);
         var rfPrefix = (rfDir === 'w') ? 'w/' : rfDir + '/';
