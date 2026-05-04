@@ -606,14 +606,12 @@ window.gfxPing = async function(commandString) {
   var body = commandString;
   // Ensure the URL matches exactly what the server is listening for
   var url = _serverUrl + '?d=' + encodeURIComponent(_gfxDrive);
-  
-  // Pass the session token as a URL parameter to avoid CORS preflight
-  if (window.gfxSession) { 
-    url += '&s=' + encodeURIComponent(window.gfxSession); 
-  }
 
-  // Use 'text/plain' to keep it a "Simple Request" (No OPTIONS preflight required)
+  // Send the session token in a header instead of the URL for better security
   var headers = { 'Content-Type': 'text/plain' };
+  if (window.gfxSession) {
+    headers['X-Session-Token'] = window.gfxSession;
+  }
 
   try {
     var response = await fetch(url, {
