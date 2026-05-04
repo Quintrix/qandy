@@ -143,23 +143,23 @@ window.gfxTiles = function(sector) {
 }
 
 window.gfxChar = function(charID, avatarStr, zPos) {
-  // Positioning math
   const y = Math.floor(zPos / (mapx + 1));
   const x = zPos % (mapx + 1);
   const topPos = (32 + 22 + (y - 1) * 32) + "px";
   const leftPos = (32 + 22 + x * 32) + "px";
 
-  // Configuration for parts and their specific ID prefixes
-  const partOrder = ['head', 'body', 'hat', 'sword', 'shield'];
+  // Reordered: Bottom layer first, top layer last
+  const partOrder = ['body', 'head', 'hat', 'sword', 'shield'];
+  
   const idPrefixes = { 
-    head: 'f',   // f for face
-    body: 'b',   // b for body
-    hat: 'h',    // h for hat
-    sword: 's',  // s for sword
-    shield: 'a'  // a for armor/shield
+    body: 'b',   // Base layer
+    head: 'f',   // Face sits on body
+    hat: 'h',    // Hat sits on head
+    sword: 's',  // Weapon
+    shield: 'a'  // Shield/Armor outermost
   };
 
-  const currentParts = { head: null, body: null, hat: null, sword: null, shield: null };
+  const currentParts = { body: null, head: null, hat: null, sword: null, shield: null };
   
   const typeMap = {
     'A': 'head', 'B': 'head', 'E': 'head', 'F': 'head',
@@ -169,7 +169,6 @@ window.gfxChar = function(charID, avatarStr, zPos) {
     'O': 'shield', 'P': 'shield'
   };
 
-  // Extract valid parts from the string
   for (let i = 0; i < avatarStr.length; i += 2) {
     const partCode = avatarStr.substring(i, i + 2);
     const type = typeMap[partCode.charAt(0)];
@@ -178,10 +177,8 @@ window.gfxChar = function(charID, avatarStr, zPos) {
     }
   }
 
-  // Iterate through the order and manage DOM elements
   partOrder.forEach((type, index) => {
     const partCode = currentParts[type];
-    // Generates IDs like cfSb, cbSb, chSb, csSb, caSb
     const domId = "c" + idPrefixes[type] + charID; 
     let el = document.getElementById(domId);
 
@@ -200,10 +197,10 @@ window.gfxChar = function(charID, avatarStr, zPos) {
       el.src = "c/" + partCode + ".png";
       el.style.top = topPos;
       el.style.left = leftPos;
+      // Body is 150, Head is 151, Hat is 152, etc.
       el.style.zIndex = 150 + index; 
       el.style.display = "block";
     } else if (el) {
-      // Hide elements if the part is removed/null
       el.style.display = "none";
     }
   });
