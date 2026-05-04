@@ -2190,7 +2190,7 @@ function handleQandyland(req, res) {
 var server = http.createServer(function (req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Session-Token');
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
@@ -2218,6 +2218,8 @@ var server = http.createServer(function (req, res) {
       return;
     }
     // Handle JSON or Legacy Form here...
+    handleQandyland(req, res);
+    return;
   }
 
 
