@@ -1302,6 +1302,34 @@ function getNewZ(currentZ, cmd, cols) {
     return currentZ;
 }
 
+// ── Avatar direction flip ─────────────────────────────────────────────────────
+// Avatar codes are 2-char: letter (category/direction) + numeral (variant 0-9).
+// Left/right pairs are consecutive ASCII values: A↔B, C↔D, E↔F, G↔H,
+// I↔J, K↔L, M↔N, O↔P.
+// Since the second character of every avatar code is always a numeral (0-9),
+// a regex on just the uppercase letters is safe — no false matches possible.
+//
+// flipAvatarDirection(avatarStr, cmd)
+//   avatarStr – e.g. "A0C1I0M4O3"
+//   cmd       – 'Qe' (face right) or 'Qw' (face left)
+// Returns the avatar string with all direction-sensitive codes rewritten to
+// face the direction implied by cmd. Non-directional codes pass through unchanged.
+
+function flipAvatarDirection(avatarStr, cmd) {
+  if (!avatarStr || (cmd !== 'Qe' && cmd !== 'Qw')) return avatarStr;
+  if (cmd === 'Qe') {
+    // Left → Right: A→B, C→D, E→F, G→H, I→J, K→L, M→N, O→P
+    return avatarStr.replace(/[ACEGIKMO]/g, function(c) {
+      return String.fromCharCode(c.charCodeAt(0) + 1);
+    });
+  } else {
+    // Right → Left: B→A, D→C, F→E, H→G, J→I, L→K, N→M, P→O
+    return avatarStr.replace(/[BDFHJLNP]/g, function(c) {
+      return String.fromCharCode(c.charCodeAt(0) - 1);
+    });
+  }
+}
+
 function handleCommand(req, res, raw, driveName) {
   var session = getSession(req); 
   var cmd, cmdData, drive;
@@ -1483,6 +1511,17 @@ function handleCommand(req, res, raw, driveName) {
       }
 
       if (movesExecuted.length > 0) {
+        // ── Flip avatar to face the direction of the last east/west move ──────
+        var lastEWCmd = null;
+        for (var edi = movesExecuted.length - 2; edi >= 0; edi -= 2) {
+          var ediCmd = movesExecuted.slice(edi, edi + 2);
+          if (ediCmd === 'Qe' || ediCmd === 'Qw') { lastEWCmd = ediCmd; break; }
+        }
+        if (lastEWCmd) {
+          mvPureAvatar = flipAvatarDirection(mvPureAvatar, lastEWCmd);
+        }
+        // ─────────────────────────────────────────────────────────────────────
+
         var newZStr = (finalZ < 10 ? '0' : '') + finalZ;
         var newDir = (finalMap === '_L') ? 'w' : 'w/' + finalMap;
         // Canonical filename: NO Q-move suffix appended.
