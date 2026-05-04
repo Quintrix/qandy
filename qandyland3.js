@@ -1490,15 +1490,15 @@ function handleCommand(req, res, raw, driveName) {
         // which is the root fix for the movement ghosting / snapback bug.
         var newFile = mvItemId + newZStr + mvPureAvatar + '.txt';
 
-        // Step 3: Load player file content before rename.
-        // When inventory is added, apply changes to mvFileContent here, then
-        // call fileSave on the new path after the rename to persist those changes.
-        // For now content is always empty, so we just note the position for the rename.
+        // Step 3: Load player inventory from the current player file.
         var mvFileLoad = fileLoad(mvDrive, '/', mvDir + '/' + mvCurrentFile, session);
+        var mvFileContent = (mvFileLoad.success && mvFileLoad.content) ? mvFileLoad.content : '';
 
-        // Step 4: Rename to canonical path; fileRename preserves the file's content.
-        var renameRes = fileRename(mvDrive, '/', mvDir + '/' + mvCurrentFile, newDir + '/' + newFile, session);
-        if (renameRes.success) {
+        // Step 4: Save inventory to the new path then delete the old file.
+        var saveRes = fileSave(mvDrive, '/', newDir + '/' + newFile, mvFileContent, session, 'Move');
+        if (saveRes.success) {
+          var delRes = fileDelete(mvDrive, '/', mvDir + '/' + mvCurrentFile, session);
+          if (!delRes.success) console.error("Delete of old player file failed:", mvDir + '/' + mvCurrentFile, delRes.error);
           if (scrolled) {
             _playerOwnership[session].mapId = finalMap;
             var pLoad = fileLoad(mvDrive, '/', 'p.txt', session);
@@ -1510,10 +1510,9 @@ function handleCommand(req, res, raw, driveName) {
               );
               fileSave(mvDrive, '/', 'p.txt', pUpdated, session, 'Move');
             }
-            movementResponse = 'Ma' + finalMap;
           }
         } else {
-            console.error("Rename failed during movement:", renameRes.error);
+            console.error("Save failed during movement:", saveRes.error);
         }
       }
 
@@ -1521,9 +1520,7 @@ function handleCommand(req, res, raw, driveName) {
         cmd = fullCmdString.slice(ptr, ptr + 2);
         cmdData = fullCmdString.slice(ptr + 2);
       } else {
-        // Step 5: For map scrolls, return Ma so the client reloads tiles.
-        if (movementResponse) return respondRetro(res, movementResponse);
-        // Step 6: Return RF immediately so the client receives authoritative state
+        // Step 5: Return RF immediately so the client receives authoritative state
         // in the same transaction — no separate cleanup pass needed.
         var mvRfPath = (finalMap === '_L') ? 'w' : 'w/' + finalMap;
         var mvRfList = fileList(mvDrive, mvRfPath, null, session);
