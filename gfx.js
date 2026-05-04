@@ -142,77 +142,72 @@ window.gfxTiles = function(sector) {
   }
 }
 
-window.gfxChar = function(C,O,Z) {
-  let y=Math.floor(Z/(mapx+1)); let x=Z-(y*(mapx+1)); y--;
-  idface="cf"+C; idbody="cb"+C; idwpn="cw"+C; idarm="ca"+C; idhat="ch"+C;
-  face=""; body=""; wpn=""; arm=""; hat=""; right=0;
+window.gfxChar = function(charID, avatarStr, zPos) {
+  // Positioning math
+  const y = Math.floor(zPos / (mapx + 1));
+  const x = zPos % (mapx + 1);
+  const topPos = (32 + 22 + (y - 1) * 32) + "px";
+  const leftPos = (32 + 22 + x * 32) + "px";
 
-  if (O.indexOf("A")>-1) { face="A"+O.charAt(O.indexOf("A")+1); }
-  if (O.indexOf("B")>-1) { face="B"+O.charAt(O.indexOf("B")+1); right=1; }
-  if (O.indexOf("E")>-1) { face="E"+O.charAt(O.indexOf("E")+1); }
-  if (O.indexOf("F")>-1) { face="F"+O.charAt(O.indexOf("F")+1); right=1; }
+  // Configuration for parts and their specific ID prefixes
+  const partOrder = ['head', 'body', 'hat', 'sword', 'shield'];
+  const idPrefixes = { 
+    head: 'f',   // f for face
+    body: 'b',   // b for body
+    hat: 'h',    // h for hat
+    sword: 's',  // s for sword
+    shield: 'a'  // a for armor/shield
+  };
 
-  if (O.indexOf("C")>-1) { body="C"+O.charAt(O.indexOf("C")+1); }
-  if (O.indexOf("D")>-1) { body="D"+O.charAt(O.indexOf("D")+1); right=1;  }
-  if (O.indexOf("G")>-1) { body="G"+O.charAt(O.indexOf("G")+1); }
-  if (O.indexOf("H")>-1) { body="H"+O.charAt(O.indexOf("H")+1); right=1; }
+  const currentParts = { head: null, body: null, hat: null, sword: null, shield: null };
+  
+  const typeMap = {
+    'A': 'head', 'B': 'head', 'E': 'head', 'F': 'head',
+    'C': 'body', 'D': 'body', 'G': 'body', 'H': 'body',
+    'I': 'hat',  'J': 'hat',  'K': 'hat',  'L': 'hat',
+    'M': 'sword', 'N': 'sword',
+    'O': 'shield', 'P': 'shield'
+  };
 
-  if (document.getElementById("cb"+C)) {
-    e=document.getElementById("cb"+C).src="c/"+body+".png";
-    e=document.getElementById("cb"+C).style.top=32+22+(y*32)+"px";
-    e=document.getElementById("cb"+C).style.left=(32+22+(x*32))+"px";
-  } else {
-    let chr=document.createElement("img");
-    chr.id="cb"+C; chr.src="c/"+body+".png";
-    chr.className="char";  
-    chr.style.position="absolute"; chr.style.height=64; chr.style.width=32;
-    chr.style.top=32+22+(y*32)+"px"; chr.style.left=(32+22+(x*32))+"px";
-    chr.onclick = (function(capturedZ) { return function() { gfxZClick(capturedZ); }; })(Z);
-    chr.style.zIndex="150";  
-    document.body.appendChild(chr);
-  }
-  if (document.getElementById("cf"+C)) {
-    e=document.getElementById("cf"+C).src="c/"+face+".png";
-    e=document.getElementById("cf"+C).style.top=32+22+(y*32)+"px";
-    e=document.getElementById("cf"+C).style.left=(32+22+(x*32))+"px";
-  } else {
-    let chr=document.createElement("img");
-    chr.id="cf"+C; chr.src="c/"+face+".png";
-    chr.className="char";  
-    chr.style.position="absolute"; chr.style.height=64; chr.style.width=32;
-    chr.style.top=32+22+(y*32)+"px"; chr.style.left=(32+22+(x*32))+"px";
-    chr.style.zIndex="151";
-    chr.onclick = (function(capturedZ) { return function() { gfxZClick(capturedZ); }; })(Z);
-    document.body.appendChild(chr);
-  }
-
-  // if avatar has L# (hat) then:
-  if (O.indexOf("L")>-1) {
-    idx = O.charAt(O.indexOf('L')+1).charCodeAt(0)-'a'.charCodeAt(0);
-    if (right) {
-      hat = "J" + idx;
-    } else {
-      hat = "K" + idx;
+  // Extract valid parts from the string
+  for (let i = 0; i < avatarStr.length; i += 2) {
+    const partCode = avatarStr.substring(i, i + 2);
+    const type = typeMap[partCode.charAt(0)];
+    if (type && !currentParts[type]) {
+      currentParts[type] = partCode;
     }
-  }  
-
-  if (hat) {
-    if (document.getElementById("ch"+C)) {
-      e=document.getElementById("ch"+C).src="c/"+hat+".png";
-      e=document.getElementById("ch"+C).style.top=32+22+(y*32)+"px";
-      e=document.getElementById("ch"+C).style.left=(32+22+(x*32))+"px";
-    } else {
-      let chr=document.createElement("img");
-      chr.id="ch"+C; chr.src="c/"+hat+".png";
-      chr.className="char";  
-      chr.style.position="absolute"; chr.style.height=64; chr.style.width=32;
-      chr.style.top=32+22+(y*32)+"px"; chr.style.left=(32+22+(x*32))+"px";
-      chr.onclick = (function(capturedZ) { return function() { gfxZClick(capturedZ); }; })(Z);
-      chr.style.zIndex="152";
-      document.body.appendChild(chr);
-    } 
   }
-}
+
+  // Iterate through the order and manage DOM elements
+  partOrder.forEach((type, index) => {
+    const partCode = currentParts[type];
+    // Generates IDs like cfSb, cbSb, chSb, csSb, caSb
+    const domId = "c" + idPrefixes[type] + charID; 
+    let el = document.getElementById(domId);
+
+    if (partCode) {
+      if (!el) {
+        el = document.createElement("img");
+        el.id = domId;
+        el.className = "char";
+        el.style.position = "absolute";
+        el.style.height = "64px";
+        el.style.width = "32px";
+        el.onclick = function() { gfxZClick(zPos); };
+        document.body.appendChild(el);
+      }
+      
+      el.src = "c/" + partCode + ".png";
+      el.style.top = topPos;
+      el.style.left = leftPos;
+      el.style.zIndex = 150 + index; 
+      el.style.display = "block";
+    } else if (el) {
+      // Hide elements if the part is removed/null
+      el.style.display = "none";
+    }
+  });
+};
 
 window.gfxZClick = function(z, clickedElement) {
   var zNum = parseInt(z, 10);
