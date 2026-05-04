@@ -2205,19 +2205,23 @@ var server = http.createServer(function (req, res) {
   if ((reqPathname === '/qandyland.js' || reqPathname === '/qandyland3.js') && req.method === 'POST') {
     var contentType = (req.headers['content-type'] || '').toLowerCase();
     
-    if (contentType.indexOf('text/plain') >= 0) {
-      var driveParam = reqUrl.searchParams.get('d') || '';
+    var isTextPlain     = contentType.indexOf('text/plain') >= 0;
+    var isFormEncoded   = contentType.indexOf('application/x-www-form-urlencoded') >= 0;
+
+    if (isTextPlain || isFormEncoded) {
+      // text/plain: new protocol – drive comes from the ?d= query param
+      // form-encoded: legacy protocol – drive is embedded in the body (c=CMD&d=DRIVE)
+      var driveParam = isTextPlain ? (reqUrl.searchParams.get('d') || '') : null;
       readBody(req).then(function (raw) {
         handleCommand(req, res, raw, driveParam);
       }).catch(function (err) {
         console.error(err.stack || err);
-        // 2. Send the exact error message back to the Web Client so you can see it in F12 Network tab
         res.writeHead(500, { 'Content-Type': 'text/plain' });
         res.end("Server Error: " + (err.stack || err.message || err));
       });
       return;
     }
-    // Handle JSON or Legacy Form here...
+    // Handle JSON or other content types
     handleQandyland(req, res);
     return;
   }
