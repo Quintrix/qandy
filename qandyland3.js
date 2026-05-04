@@ -1933,7 +1933,10 @@ function handleCommand(req, res, raw, driveName) {
           }
 
           // Rename: Sa33.txt → Sa33B0D0La.txt (append avatar + player hat La)
-          var hat = (qgItemId.charAt(0) == "S") ? "La" : "Lb";
+          var hat='';
+          if (qgItemId=="Sa") { hat="I0"; }
+          if (qgItemId=="Sb") { hat="I1"; }
+          console.log("qgItemId="+qgItemId);
           var qgNewName = qgItemId + qgZ + qgAvatar + hat + '.txt';
           var qgRename = fileRename(qgDrive, '/', 'w/' + qgSlotFile, 'w/' + qgNewName, session);
 
