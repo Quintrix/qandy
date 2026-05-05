@@ -1086,7 +1086,7 @@ function bigbang(driveName, session) {
     if (!lIsSlot) continue; // Static items (flagpoles etc.) use the static map; only slots need server files
     if (lSeenIds[lItemId]) continue;
     lSeenIds[lItemId] = true;
-    var lFile   = lItemId + lItemZ + '.txt';
+    var lFile   = lItemId + lItemZ + lItemData + '.txt';    
     var lResult = fileSave(driveName, '/', 'w/' + lFile, '', '', 'bigbang');
     if (lResult.success) {
       created.push('lobby: ' + lFile);
@@ -1113,7 +1113,7 @@ function bigbang(driveName, session) {
     // one 6-char file per static item (filename encodes id+z+data, content empty)
     for (var ii = 0; ii < sector.items.length; ii++) {
       var itemFile = sector.items[ii];
-      var iResult = fileSave(driveName, '/', dirPath + '/' + itemFile, '', '', 'bigbang');
+      var iResult = fileSave(driveName, '/', dirPath + '/' + itemFile+'.txt', '', '', 'bigbang');
       if (!iResult.success) errors.push(dirPath + '/' + itemFile + ': ' + iResult.error);
     }
 
@@ -1241,7 +1241,7 @@ function buildGameState() {
 // ── Unified command string handler ────────────────────────────────────────────
 //
 // POST /qandyland.js?d=<drive>  Content-Type: text/plain
-//   body = commandString  (e.g. "BB", "GS", "RF", "QgSa33B0D0", "Qn")
+//   body = commandString  (e.g. "BB", "GS", "Rf", "QgSa33B0D0", "Qn")
 //
 // Also handles legacy form-encoded requests (Content-Type: application/x-www-form-urlencoded)
 // when driveName is null (backward compatibility).
@@ -1587,7 +1587,7 @@ function handleCommand(req, res, raw, driveName) {
             break;
           }
         }
-        return respondRetro(res, 'RF' + finalMap + mvRfPlayerZ + mvRfItems.join(','));
+        return respondRetro(res, 'Rf' + finalMap + mvRfPlayerZ + mvRfItems.join(','));
       }
     }
   }
@@ -1808,7 +1808,7 @@ function handleCommand(req, res, raw, driveName) {
       return respondRetro(res, 'OK' + sgItemId);
     }
 
-    	case 'RF': {
+  	case 'Rf': {
       var rfDrive, rfMapId;
 
       var rfOwner = _playerOwnership[session];
@@ -1854,7 +1854,13 @@ function handleCommand(req, res, raw, driveName) {
           var rfFile = rfFiles[rfi].trim();
           if (!rfFile) continue;
           var rfBase = rfFile.substring(rfFile.lastIndexOf('/') + 1);
-
+          
+          var match = rfBase.match(/^([A-Z][a-z])(\d{2})(.*)\.txt$/);
+          if (match) {
+            // match[1]=ID, match[2]=Z, match[3]=AvatarData
+            rfAllItems.push(match[1] + match[2] + match[3]);
+          }
+          
           if (rfBase.length === 8) {
             var rfItemMatch = rfBase.match(/^([A-Z][a-z]\d{2})\.txt$/);
             if (rfItemMatch) rfAllItems.push(rfItemMatch[1]); 
@@ -1879,8 +1885,8 @@ function handleCommand(req, res, raw, driveName) {
       }
 
       // Response: RF + mapId(2) + playerZ(2) + items
-      var rfResponse = 'RF'+rfMapId + rfPlayerZ + rfAllItems.join(',');
-      logRequest(req, 'RF', rfDrive, rfMapId, session, { success: true, result: rfResponse });
+      var rfResponse = 'Rf'+rfMapId + rfAllItems.join(',');
+      logRequest(req, 'Rf', rfDrive, rfMapId, session, { success: true, result: rfResponse });
       return respondRetro(res, rfResponse);
     }
 
