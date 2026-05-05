@@ -2,7 +2,7 @@ window.GFX = 0; // set to true when gfx.js ready to use
 
 var _serverUrl = 'http://localhost:8080/qandyland3.js';
 var _registryUrl = 'https://qandy.vercel.app/api/servers';
-var _gfxDrive = 'gfx'; // current drive context; set by gfxCreation / gfxGameState
+var _gfxDrive = 'gfx.js'; // current drive context; set by gfxCreation / gfxGameState
 
 
 var PopAlign = "click"; // "center", "click"
@@ -13,7 +13,7 @@ var PUV;                 // timeout id (used to clear/set the timeout)
 var mapx=7;
 var mapy=11;
 
-window.gfxDo = "RF";     // Default refresh command
+window.gfxDo = "Rf";     // Default refresh command
 window.gfxPong = "..";   // server response
 window.gfxSession = null;
 
@@ -25,6 +25,7 @@ window.mapItems;         // items on player's current map
 window.playerItem="Za";  // item id of object player has claimed (nothing)
 window.playerZ=-1;       // z-locatin of playerItem
 window.playerAvatar = "";   // players avatar (ie "B0D0")
+window.playerInventory = [];  // current player inventory item codes
 
 var gfxInterval = null;  // The 1-second loop
 
@@ -365,16 +366,17 @@ function gfxTick() {
   if (window.gfxInterval) clearInterval(window.gfxInterval);
   window.gfxInterval = setInterval(async function() {
     try {
-      var command = window.gfxDo || "RF";
-      if (command === "") command = "RF";
-      window.gfxDo = "RF"; 
+      var command = window.gfxDo || "Rf";
+      if (command === "") command = "Rf";
+      window.gfxDo = "Rf"; 
       
       window.gfxPong = await gfxPing(command);
-      if (command != "RF") { console.log(command+" = "+window.gfxPong); }
+      if (command != "Rf") { console.log(command+" = "+window.gfxPong); }
       var verb = window.gfxPong.substring(0, 2);
       var noun = window.gfxPong.substring(2);
       
-      if (verb == "RF") { gfxRefresh(noun); }
+      if (verb == "Rf") { gfxRefresh(noun); }
+      if (verb == "In") { gfxInventory(noun); }
       // FIX: Added "Mp" to handle the Qu map transition!
       if (verb == "Lm" || verb == "Ma" || verb == "Mp") { 
         window.map = noun;
@@ -385,7 +387,7 @@ function gfxTick() {
         
         gfxTiles(noun);
         gfxObjects(noun);
-        window.gfxDo = "RF";
+        window.gfxDo = "Rf";
         hpop();
       }      
     } catch (e) { 
@@ -591,6 +593,34 @@ function gfxRefresh(rfStr) {
     }
   }
 }
+
+window.gfxInventory = function(str) {
+  // Parse inventory response: item codes (2 chars each) terminated by 'Za'
+  // Example: "LaAfZa" → ['La', 'Af']
+  var inv = [];
+  for (var i = 0; i + 1 < str.length; i += 2) {
+    var code = str.substring(i, i + 2);
+    if (code === 'Za') break;
+    inv.push(code);
+  }
+  window.playerInventory = inv;
+
+  // Build popup HTML showing inventory items
+  if (inv.length === 0) {
+    pop('Inventory: (empty)');
+  } else {
+    var htm = 'Inventory:<br>';
+    for (var j = 0; j < inv.length; j++) {
+      var label = (typeof gfxItemID === 'function') ? gfxItemID(inv[j]) : inv[j];
+      htm += inv[j] + ' ' + label + '<br>';
+    }
+    pop(htm);
+  }
+};
+
+window.gfxGetInventory = async function() {
+  window.gfxDo = "In";
+};
 
 window.gfxPing = async function(commandString) {
   if (!commandString || commandString.length < 2) throw new Error('gfxPing: invalid command');
