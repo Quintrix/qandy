@@ -4,7 +4,7 @@
                              qandyland.js
                 ────────────────────────────────────────
                 
-                           Qandyland Server 
+                           Qandyland 
 
                       Multiplayer Graphics Engine
                      for the Qandy Pocket Computer
@@ -14,9 +14,9 @@
 
     Server Console Commands: 
 
-    create [drive-name] [P|T] — create a new drive via wizard
+                          exit — shut down the server (asks for confirmation)
     
-                         list — list drives
+                          list — list drives
     
                  delete <name> — delete a drive when no drive mounted, or
                                  delete <filename> when a drive is mounted
@@ -67,6 +67,7 @@
     dir — directory listing (detailed)
     list — file listing (names)
     bigbang — world generation helper
+    Rf — refresh: return map sector items for current session location
 
 
 Qandyland
