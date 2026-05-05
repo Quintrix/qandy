@@ -477,22 +477,18 @@ function resolveName(cwd, name) {
   return base ? (base + '/' + n) : n;
 }
 
-// Get/create a session token from cookie header
-function getSession(req, res) {
-  var cookieHeader = req.headers['cookie'] || '';
-  var match = cookieHeader.match(new RegExp('(?:^|;)\\s*' + SESSION_COOKIE + '=([^;]+)'));
-  if (match) return match[1];
-
-  var token = crypto.randomBytes(24).toString('hex');
-  res.setHeader('Set-Cookie',
-    SESSION_COOKIE + '=' + token +
-    '; HttpOnly; SameSite=Lax; Path=/; Max-Age=86400'
-  );
-  return token;
+// --- Update getSession to look at the URL parameters ---
+function getSession(req) {
+  try {
+    const reqUrl = new URL(req.url, `http://${req.headers.host}`);
+    // Priority: 1. URL Parameter 's', 2. Legacy Header
+    return reqUrl.searchParams.get('s') || req.headers['x-session-token'] || null;
+  } catch (e) {
+    return null;
+  }
 }
 
 // ── Request parsing ───────────────────────────────────────────────────────────
-
 function readBody(req) {
   return new Promise(function (resolve, reject) {
     var chunks = [];
@@ -1091,7 +1087,7 @@ function bigbang(driveName, session) {
     if (lSeenIds[lItemId]) continue;
     lSeenIds[lItemId] = true;
     var lFile   = lItemId + lItemZ + '.txt';
-    var lResult = fileSave(driveName, '/', 'w/' + lFile, '', session, 'bigbang');
+    var lResult = fileSave(driveName, '/', 'w/' + lFile, '', '', 'bigbang');
     if (lResult.success) {
       created.push('lobby: ' + lFile);
     } else {
@@ -1117,7 +1113,7 @@ function bigbang(driveName, session) {
     // one 6-char file per static item (filename encodes id+z+data, content empty)
     for (var ii = 0; ii < sector.items.length; ii++) {
       var itemFile = sector.items[ii];
-      var iResult  = fileSave(driveName, '/', dirPath + '/' + itemFile, '', session, 'bigbang');
+      var iResult = fileSave(driveName, '/', dirPath + '/' + itemFile, '', '', 'bigbang');
       if (!iResult.success) errors.push(dirPath + '/' + itemFile + ': ' + iResult.error);
     }
 
@@ -1146,7 +1142,7 @@ function bigbang(driveName, session) {
   if (!playerSlots) {
     errors.push('p.txt: no player codes found in _L sector');
   } else {
-    var pResult = fileSave(driveName, '/', 'p.txt', playerSlots, session, 'bigbang');
+    var pResult = fileSave(driveName, '/', 'p.txt', playerSlots, '', 'bigbang'); 
     if (!pResult.success) errors.push('p.txt: ' + pResult.error);
   }
 
@@ -1215,21 +1211,17 @@ function _formatTimestampHuman(ts) {
 
 // ── Request dispatcher ────────────────────────────────────────────────────────
 
-function respond(res, obj) {
+function respond(res, obj, session) {
+  if (session) res.setHeader('X-Session-Token', session); // Return token to client
   var body = JSON.stringify(obj);
-  res.writeHead(200, {
-    'Content-Type':  'application/json',
-    'Cache-Control': 'no-store'
-  });
+  res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
   res.end(body);
 }
 
 // Send a plain-text retro-style response (used by 2-char commands like GS).
-function respondRetro(res, text) {
-  res.writeHead(200, {
-    'Content-Type':  'text/plain',
-    'Cache-Control': 'no-store'
-  });
+function respondRetro(res, text, session) {
+  if (session) res.setHeader('X-Session-Token', session); // Return token to client
+  res.writeHead(200, { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' });
   res.end(String(text));
 }
 
@@ -1272,6 +1264,8 @@ function buildGameState() {
 //          zLocation  – 2-digit authoritative player z (00 when no player claimed)
 //          items      – comma-separated "<id(2)><z(2-digit)>[avatarStr]"
 //
+//   ST – request Session Token
+//
 //   JG – Join Game (legacy): claim a player slot.
 //        Parameters encoded in body: id=itemId, av=avatar
 //
@@ -1286,39 +1280,76 @@ function buildGameState() {
 //   Qs – Move South: rename player file z+8.
 //   Qe – Move East:  rename player file z+1 (boundary: x must be < 7).
 //   Qw – Move West:  rename player file z-1 (boundary: x must be > 0).
-//        Movement: zero-response; server updates world state silently.
+//        Movement: authoritative pipeline – strips stale Q suffix, applies move,
+//        saves canonical filename (no Q suffix), returns RF state immediately.
+//        Map scroll returns Ma<mapId> so the client can reload tiles first.
+//
+//   Qu - Use Object
+//
 
 // Returns true if the drive name contains only safe filesystem characters.
 function isValidDriveName(drive) {
   return !!(drive && /^[A-Za-z0-9_-]+$/.test(drive) && drive.length <= 64);
 }
 
+function getNewZ(currentZ, cmd, cols) {
+    let row = Math.floor(currentZ / cols);
+    let col = currentZ % cols;
+    if (cmd === 'Qn' && row > 0) return currentZ - cols;
+    if (cmd === 'Qs' && row < 11) return currentZ + cols; // Assuming 12 rows (0-11)
+    if (cmd === 'Qe' && col < cols - 1) return currentZ + 1;
+    if (cmd === 'Qw' && col > 0) return currentZ - 1;
+    return currentZ;
+}
+
+// ── Avatar direction flip ─────────────────────────────────────────────────────
+// Avatar codes are 2-char: letter (category/direction) + numeral (variant 0-9).
+// Left/right pairs are consecutive ASCII values: A↔B, C↔D, E↔F, G↔H,
+// I↔J, K↔L, M↔N, O↔P.
+// Since the second character of every avatar code is always a numeral (0-9),
+// a regex on just the uppercase letters is safe — no false matches possible.
+//
+// flipAvatarDirection(avatarStr, cmd)
+//   avatarStr – e.g. "A0C1I0M4O3"
+//   cmd       – 'Qe' (face right) or 'Qw' (face left)
+// Returns the avatar string with all direction-sensitive codes rewritten to
+// face the direction implied by cmd. Non-directional codes pass through unchanged.
+
+function flipAvatarDirection(avatarStr, cmd) {
+  if (!avatarStr || (cmd !== 'Qe' && cmd !== 'Qw')) return avatarStr;
+  if (cmd === 'Qe') {
+    // Left → Right: A→B, C→D, E→F, G→H, I→J, K→L, M→N, O→P
+    return avatarStr.replace(/[ACEGIKMO]/g, function(c) {
+      return String.fromCharCode(c.charCodeAt(0) + 1);
+    });
+  } else {
+    // Right → Left: B→A, D→C, F→E, H→G, J→I, L→K, N→M, P→O
+    return avatarStr.replace(/[BDFHJLNP]/g, function(c) {
+      return String.fromCharCode(c.charCodeAt(0) - 1);
+    });
+  }
+}
+
 function handleCommand(req, res, raw, driveName) {
-  var session = getSession(req, res);
+  var session = getSession(req); 
   var cmd, cmdData, drive;
 
   if (driveName !== null && driveName !== undefined) {
-    // New unified command string protocol: first 2 chars = command, rest = data
     cmd     = String(raw).slice(0, 2);
     cmdData = String(raw).slice(2);
     drive   = String(driveName || '');
   } else {
-    // Legacy form-encoded protocol: parse c=<cmd>&d=<drive>&... once and cache
     var legacyParams = {};
     var pairs = String(raw).split('&');
     for (var i = 0; i < pairs.length; i++) {
       var idx = pairs[i].indexOf('=');
-      if (idx > 0) {
-        legacyParams[pairs[i].slice(0, idx)] = pairs[i].slice(idx + 1);
-      }
+      if (idx > 0) legacyParams[pairs[i].slice(0, idx)] = pairs[i].slice(idx + 1);
     }
     cmd     = String(legacyParams.c || '').toUpperCase();
     cmdData = '';
     drive   = String(legacyParams.d || '');
   }
 
-  // Helper: extract a parameter from pre-parsed legacy form-encoded body.
-  // Returns '' when using the new unified command string protocol.
   function legacyParam(key) {
     if (driveName !== null && driveName !== undefined) return '';
     if (typeof legacyParams !== 'undefined') return String(legacyParams[key] || '');
@@ -1326,6 +1357,240 @@ function handleCommand(req, res, raw, driveName) {
   }
 
   var result;
+
+// NEW MOVEMENT PARSER: Intercepts & processes buffers BEFORE standard commands
+  var movementResponse = null;
+
+  var isMove = ['Qn', 'Qs', 'Qe', 'Qw'].includes(cmd); 
+
+  if (isMove) {
+    var mvOwner = _playerOwnership[session];
+    if (!mvOwner) { res.writeHead(204); return res.end(); }
+
+    var mvDrive = mvOwner.drive;
+    var mvItemId = mvOwner.itemId;
+    var mvMapId = mvOwner.mapId;
+    if (!isValidDriveName(mvDrive) || !drives[mvDrive]) { res.writeHead(204); return res.end(); }
+
+    var mvDir = (mvMapId === '_L') ? 'w' : 'w/' + mvMapId;
+    var manifest = _readManifest(mvDrive);
+    var mvCurrentFile = null;
+    var mvCurrentZ = -1;
+    var mvPureAvatar = '';
+    var prefix = (mvDir === 'w') ? 'w/' : mvDir + '/';
+
+    for (var mvi = 0; mvi < manifest.length; mvi++) {
+      var entry = manifest[mvi];
+      if (entry.name.startsWith(prefix) && entry.name.indexOf('/', prefix.length) === -1) {
+        var basename = entry.name.substring(prefix.length);
+        
+        // Match base structure: ID(2) + Z(2) + FullAvatar
+        var mvMatch = basename.match(/^([A-Z][a-z])(\d{2})(.*?)\.txt$/);
+        if (mvMatch && mvMatch[1] === mvItemId && entry.session === session) {
+          mvCurrentFile = basename;
+          mvCurrentZ = parseInt(mvMatch[2], 10);
+          
+          // Step 2: Strip any stale Q-move suffix from the avatar part so old moves
+          // cannot be re-applied on the next tick (root fix for movement ghosting).
+          var fullAvatar = mvMatch[3];
+          var qIdx = fullAvatar.indexOf('Q');
+          mvPureAvatar = (qIdx > -1) ? fullAvatar.substring(0, qIdx) : fullAvatar;
+          break;
+        }
+      }
+    }
+
+    if (mvCurrentFile && mvCurrentZ >= 0) {
+      var ptr = 0;
+      var fullCmdString = String(raw);
+      var finalZ = mvCurrentZ;
+      var finalMap = mvMapId;
+      var movesExecuted = '';
+      var scrolled = false;
+
+      var GFX_COLS = 8;
+      var GFX_ROWS = 12;
+      var GFX_TOTAL_TILES = GFX_COLS * GFX_ROWS;
+
+      while (ptr < fullCmdString.length) {
+        var chunk = fullCmdString.slice(ptr, ptr + 2);
+        if (['Qn', 'Qs', 'Qe', 'Qw'].includes(chunk)) {
+          var col = finalZ % GFX_COLS;
+          var row = Math.floor(finalZ / GFX_COLS);
+          
+          var targetZ = finalZ;
+          var isEdge = false;
+          var dirChar = '';
+          var moveBlocked = false;
+
+          // Check destination tile (targetZ) and trigger scroll if landing on an edge.
+          if (chunk === 'Qn') { 
+              if (row === 0) { 
+                  moveBlocked = true; // "Airlock" rule: Already on North edge, can't move North
+              } else {
+                  targetZ = finalZ - GFX_COLS;
+                  if (Math.floor(targetZ / GFX_COLS) === 0) { isEdge = true; dirChar = 'N'; }
+              }
+          }
+          else if (chunk === 'Qs') { 
+              if (row === GFX_ROWS - 1) { 
+                  moveBlocked = true; // "Airlock" rule: Already on South edge, can't move South
+              } else {
+                  targetZ = finalZ + GFX_COLS;
+                  if (Math.floor(targetZ / GFX_COLS) === GFX_ROWS - 1) { isEdge = true; dirChar = 'S'; }
+              }
+          }
+          else if (chunk === 'Qe') { 
+              if (col === GFX_COLS - 1) { 
+                  moveBlocked = true; // "Airlock" rule: Already on East edge, can't move East
+              } else {
+                  targetZ = finalZ + 1;
+                  if (targetZ % GFX_COLS === GFX_COLS - 1) { isEdge = true; dirChar = 'E'; }
+              }
+          }
+          else if (chunk === 'Qw') { 
+              if (col === 0) { 
+                  moveBlocked = true; // "Airlock" rule: Already on West edge, can't move West
+              } else {
+                  targetZ = finalZ - 1;
+                  if (targetZ % GFX_COLS === 0) { isEdge = true; dirChar = 'W'; }
+              }
+          }
+
+          if (moveBlocked) {
+              console.log("Move blocked: " + mvItemId + " already standing on boundary for " + chunk);
+              ptr += 2;
+              continue; // Drop the illegal move entirely
+          }
+
+          if (isEdge) {
+            var eLoad = fileLoad(mvDrive, '/', mvDir + '/e.txt', session);
+            var exits = (eLoad.success && eLoad.content) ? eLoad.content : '';
+            
+            // Mathematically calculate the expected target sector
+            var targetSector = calculateTargetSector(finalMap, dirChar);
+            var nextMap = '..';
+
+            if (targetSector) {
+                // Loop through e.txt in 2-character chunks to see if target is permitted
+                for (var ei = 0; ei < exits.length; ei += 2) {
+                    if (exits.substring(ei, ei + 2) === targetSector) {
+                        nextMap = targetSector;
+                        break;
+                    }
+                }
+            }
+            
+            console.log("Map: " + mvMapId + ", Attempted scroll " + dirChar + " -> Expected: " + targetSector + " -> Permitted: '" + nextMap + "'");
+
+            if (nextMap && nextMap !== '..' && nextMap !== '  ' && nextMap !== '00') {
+              // Apply wrap-around math to targetZ (the edge tile they stepped onto)
+              if (chunk === 'Qn') { finalZ = targetZ + GFX_TOTAL_TILES - GFX_COLS; }
+              else if (chunk === 'Qs') { finalZ = targetZ - GFX_TOTAL_TILES + GFX_COLS; }
+              else if (chunk === 'Qe') { finalZ = targetZ - GFX_COLS + 1; }
+              else if (chunk === 'Qw') { finalZ = targetZ + GFX_COLS - 1; }
+
+              finalMap = nextMap;
+              scrolled = true;
+              movesExecuted += chunk;
+              ptr += 2;
+              break; 
+            } else {
+              console.log("Scroll denied (blocked by map exit)");
+              ptr += 2; // Block the step because the edge leads nowhere (Acts as a wall)
+            }
+          } else {
+            // Normal step inside the map bounds
+            finalZ = targetZ;
+            movesExecuted += chunk;
+            ptr += 2;
+          }
+        } else {
+          break; // Non-movement command
+        }
+      }
+
+      if (movesExecuted.length > 0) {
+        // ── Flip avatar to face the direction of the last east/west move ──────
+        var lastEWCmd = null;
+        for (var edi = movesExecuted.length - 2; edi >= 0; edi -= 2) {
+          var ediCmd = movesExecuted.slice(edi, edi + 2);
+          if (ediCmd === 'Qe' || ediCmd === 'Qw') { lastEWCmd = ediCmd; break; }
+        }
+        if (lastEWCmd) {
+          mvPureAvatar = flipAvatarDirection(mvPureAvatar, lastEWCmd);
+        }
+        // ─────────────────────────────────────────────────────────────────────
+
+        var newZStr = (finalZ < 10 ? '0' : '') + finalZ;
+        var newDir = (finalMap === '_L') ? 'w' : 'w/' + finalMap;
+        // Canonical filename: NO Q-move suffix appended.
+        // Stale movement commands can never survive across ticks and be re-applied,
+        // which is the root fix for the movement ghosting / snapback bug.
+        var newFile = mvItemId + newZStr + mvPureAvatar + '.txt';
+
+        // Step 3: Load player inventory from the current player file.
+        var mvFileLoad = fileLoad(mvDrive, '/', mvDir + '/' + mvCurrentFile, session);
+        var mvFileContent = (mvFileLoad.success && mvFileLoad.content) ? mvFileLoad.content : '';
+
+        // Step 4: Save inventory to the new path then delete the old file.
+        var saveRes = fileSave(mvDrive, '/', newDir + '/' + newFile, mvFileContent, session, 'Move');
+        if (saveRes.success) {
+          var delRes = fileDelete(mvDrive, '/', mvDir + '/' + mvCurrentFile, session);
+          if (!delRes.success) console.error("Delete of old player file failed:", mvDir + '/' + mvCurrentFile, delRes.error);
+          if (scrolled) {
+            _playerOwnership[session].mapId = finalMap;
+            var pLoad = fileLoad(mvDrive, '/', 'p.txt', session);
+            if (pLoad.success && pLoad.content) {
+              var escId = mvItemId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              var pUpdated = pLoad.content.replace(
+                new RegExp('^(' + escId + ')=.*$', 'm'),
+                '$1=' + finalMap + mvPureAvatar
+              );
+              fileSave(mvDrive, '/', 'p.txt', pUpdated, session, 'Move');
+            }
+          }
+        } else {
+            console.error("Save failed during movement:", saveRes.error);
+        }
+      }
+
+      if (ptr < fullCmdString.length && !scrolled) {
+        cmd = fullCmdString.slice(ptr, ptr + 2);
+        cmdData = fullCmdString.slice(ptr + 2);
+      } else {
+        // Step 5: Return RF immediately so the client receives authoritative state
+        // in the same transaction — no separate cleanup pass needed.
+        var mvRfPath = (finalMap === '_L') ? 'w' : 'w/' + finalMap;
+        var mvRfList = fileList(mvDrive, mvRfPath, null, session);
+        var mvRfItems = [];
+        if (mvRfList.success && mvRfList.listing) {
+          var mvRfFiles = mvRfList.listing.split('\n');
+          for (var mvRfi = 0; mvRfi < mvRfFiles.length; mvRfi++) {
+            var mvRfFile = mvRfFiles[mvRfi].trim();
+            if (!mvRfFile) continue;
+            var mvRfBase = mvRfFile.substring(mvRfFile.lastIndexOf('/') + 1);
+            if (mvRfBase.length === 8) {
+              var mvRfItemMatch = mvRfBase.match(/^([A-Z][a-z]\d{2})\.txt$/);
+              if (mvRfItemMatch) mvRfItems.push(mvRfItemMatch[1]);
+            } else if (mvRfBase.length > 8) {
+              var mvRfPlayerMatch = mvRfBase.match(/^([A-Z][a-z])(\d{2})(.+)\.txt$/);
+              if (mvRfPlayerMatch) mvRfItems.push(mvRfPlayerMatch[1] + mvRfPlayerMatch[2] + mvRfPlayerMatch[3]);
+            }
+          }
+        }
+        // Determine authoritative player z from the just-built sector list.
+        var mvRfPlayerZ = '00';
+        for (var mvRfi2 = 0; mvRfi2 < mvRfItems.length; mvRfi2++) {
+          if (mvRfItems[mvRfi2].slice(0, 2) === mvItemId && /^\d{2}$/.test(mvRfItems[mvRfi2].slice(2, 4))) {
+            mvRfPlayerZ = mvRfItems[mvRfi2].slice(2, 4);
+            break;
+          }
+        }
+        return respondRetro(res, 'RF' + finalMap + mvRfPlayerZ + mvRfItems.join(','));
+      }
+    }
+  }
 
   switch (cmd) {
     case 'BB': {
@@ -1349,6 +1614,27 @@ function handleCommand(req, res, raw, driveName) {
       return respondRetro(res, buildGameState());
     }
 
+    case 'ST': {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+      let token = '';
+      for (let i = 0; i < 8; i++) {
+        token += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+
+      const ip = (req.headers['x-forwarded-for'] || (req.socket && req.socket.remoteAddress) || 'unknown')
+        .replace('::ffff:', '').replace('::1', 'local').slice(0, 15);
+
+      // Use the memory drive to track sessions
+      fileAppendJSON('json', '/', 's.txt', { t: token, ip: ip, ts: Date.now() }, 'system', 'system');
+
+      // Explicitly allow CORS and return plain text
+      res.writeHead(200, { 
+        'Content-Type': 'text/plain',
+        'Access-Control-Allow-Origin': '*' 
+      });
+      return res.end("ST" + token);
+    }
+      
     case 'GS': {
       // Game State: return compact game state: MMSSmapname
       var gsDrive = drive || legacyParam('d');
@@ -1522,28 +1808,35 @@ function handleCommand(req, res, raw, driveName) {
       return respondRetro(res, 'OK' + sgItemId);
     }
 
-    case 'RF': {
-      // Refresh: return current map sector items for the session's location.
-      // Server determines map from _playerOwnership[session].mapId (secure).
-      // Defaults to lobby (_L) if no ownership record exists.
-      // Response format: <mapId><zLocation><items>  e.g. "A125Sa25B1D0,Tb44,Yj22Sa"
-      //   mapId     – 2-char sector prefix
-      //   zLocation – 2-digit authoritative player z (00 when no player claimed)
-      //   items     – comma-separated "<id(2)><z(2-digit)>[avatarStr]"
-      //
-      // Filename length determines content type:
-      //   8 chars total ("Sa43.txt")               → plain item or empty player slot
-      //   >8 chars total ("Sa43B1D0C2.txt")         → item with avatar
-      //   >8 chars with dash ("Sa43B1D0C2-NSW.txt") → item with avatar and movements
+    	case 'RF': {
       var rfDrive, rfMapId;
 
-      // Use session ownership to determine drive and map (secure: client cannot choose)
       var rfOwner = _playerOwnership[session];
       if (rfOwner && rfOwner.drive && rfOwner.mapId) {
         rfDrive = rfOwner.drive;
         rfMapId = rfOwner.mapId;
+        
+        // Safety fallback: strip any stale Q-move suffix that may have survived.
+        // Under normal operation, movement commands now save a canonical filename
+        // (no Q suffix) and return RF immediately, so this strip is rarely needed.
+        var rfDir = (rfMapId === '_L') ? 'w' : 'w/' + rfMapId;
+        var rfManifest = _readManifest(rfDrive);
+        var rfPrefix = (rfDir === 'w') ? 'w/' : rfDir + '/';
+        for (var mvi = 0; mvi < rfManifest.length; mvi++) {
+          var entry = rfManifest[mvi];
+          if (entry.session === session && entry.name.startsWith(rfPrefix) && entry.name.indexOf('/', rfPrefix.length) === -1) {
+            var basename = entry.name.substring(rfPrefix.length);
+            
+            // Start searching for 'Q' AFTER the ID(2) and Z(2) to be safe
+            var qIdx = basename.indexOf('Q', 4); 
+            if (qIdx > -1) {
+              var strippedName = basename.substring(0, qIdx) + '.txt';
+              fileRename(rfDrive, '/', rfDir + '/' + basename, rfDir + '/' + strippedName, session);
+            }
+            break;
+          }
+        }
       } else {
-        // No ownership: use query-param drive and default to lobby
         rfDrive = drive || legacyParam('d');
         rfMapId = '_L';
       }
@@ -1551,10 +1844,8 @@ function handleCommand(req, res, raw, driveName) {
       if (!isValidDriveName(rfDrive))  return respondRetro(res, 'XXInvalid drive');
       if (!drives[rfDrive])            return respondRetro(res, 'XXDrive not found');
 
-      // Determine directory: lobby (_L) maps to w/, world maps to w/[mapId]/
       var rfPath = (rfMapId === '_L') ? 'w' : 'w/' + rfMapId;
 
-      // List all files in the map directory and build the comma-separated response
       var rfList = fileList(rfDrive, rfPath, null, session);
       var rfAllItems = [];
       if (rfList.success && rfList.listing) {
@@ -1565,18 +1856,11 @@ function handleCommand(req, res, raw, driveName) {
           var rfBase = rfFile.substring(rfFile.lastIndexOf('/') + 1);
 
           if (rfBase.length === 8) {
-            // "Sa43.txt" = plain item or empty player slot
             var rfItemMatch = rfBase.match(/^([A-Z][a-z]\d{2})\.txt$/);
-            if (rfItemMatch) {
-              rfAllItems.push(rfItemMatch[1]); // e.g. "Sa43"
-            }
+            if (rfItemMatch) rfAllItems.push(rfItemMatch[1]); 
           } else if (rfBase.length > 8) {
-            // "Sa43B1D0C2.txt" or "Sa43B1D0C2-NSW.txt" = item with avatar (e.g. active player)
             var rfPlayerMatch = rfBase.match(/^([A-Z][a-z])(\d{2})(.+)\.txt$/);
-            if (rfPlayerMatch) {
-              // Build full item entry: "<id><z><avatarAndMoves>"
-              rfAllItems.push(rfPlayerMatch[1] + rfPlayerMatch[2] + rfPlayerMatch[3]);
-            }
+            if (rfPlayerMatch) rfAllItems.push(rfPlayerMatch[1] + rfPlayerMatch[2] + rfPlayerMatch[3]);
           }
         }
       }
@@ -1601,11 +1885,6 @@ function handleCommand(req, res, raw, driveName) {
     }
 
     case 'Qg': {
-      // Get Item / Join Game: pick up an item from the current map sector.
-      // For player items (S or T prefix), this acts as "join game" –
-      // the player claims the hat, their avatar is assigned, and a player hat (La) is added.
-      // Body data (cmdData): itemId(2) + z(2) + avatar (e.g. "Sa33B0D0")
-      // Server renames file: Sa33.txt → Sa33B0D0La.txt
       var qgDrive  = drive;
       var qgItemId = cmdData.slice(0, 2);
       var qgZ      = cmdData.slice(2, 4);
@@ -1624,6 +1903,7 @@ function handleCommand(req, res, raw, driveName) {
         case 'T': {
           // Player hat items: claim the slot and join the game
           // Scan lobby directory (w/) for the matching unclaimed slot file
+          var manifest = _readManifest(qgDrive);
           var qgScanResult = fileList(qgDrive, 'w', null, session);
           var qgSlotFile = null;
           if (qgScanResult.success && qgScanResult.listing) {
@@ -1632,26 +1912,33 @@ function handleCommand(req, res, raw, driveName) {
               var qgSf = qgScanFiles[qgSi].trim();
               if (!qgSf) continue;
               var qgSb = qgSf.substring(qgSf.lastIndexOf('/') + 1);
-              if (qgSb.indexOf(qgItemId) === 0) {
+              if (qgSb.indexOf(qgItemId + qgZ) === 0) { // Match both ID and Z
                 qgSlotFile = qgSb;
                 break;
               }
             }
           }
 
-          if (!qgSlotFile) return respondRetro(res, 'XXNot a valid player slot');
+          if (!qgSlotFile) return respondRetro(res, 'XXItem not found');
 
           // Verify the slot is unclaimed (base name = exactly 4 chars: itemId + z)
           var qgBase = qgSlotFile.replace(/\.txt$/i, '');
           if (qgBase.length > 4) return respondRetro(res, 'XXSlot already in use');
           if (qgBase.length < 4) return respondRetro(res, 'XXNot a valid player slot');
 
+          var canonical = resolveName('w', qgSlotFile);
+          var entry = manifest.find(e => e.name === canonical);
+          if (entry && entry.session && entry.session !== '') {
+            return respondRetro(res, 'XXItem already claimed');
+          }
+
           // Rename: Sa33.txt → Sa33B0D0La.txt (append avatar + player hat La)
-          var hat="";
-          if (qgItemType=="S") { hat="La"; }
-          if (qgItemType=="T") { hat="Lb"; }
-          var qgNewName = qgItemId + qgZ + qgAvatar + hat+'.txt';
+          var hat='';
+          if (qgItemType=="S") { hat="J0"; }
+          if (qgItemType=="T") { hat="J1"; }
+          var qgNewName = qgItemId + qgZ + qgAvatar + hat + '.txt';
           var qgRename = fileRename(qgDrive, '/', 'w/' + qgSlotFile, 'w/' + qgNewName, session);
+
           if (!qgRename.success) return respondRetro(res, 'XXFailed to claim slot: ' + qgRename.error);
 
           // Record session ownership so future move commands can be authorised
@@ -1682,79 +1969,84 @@ function handleCommand(req, res, raw, driveName) {
       }
     }
 
-    case 'Qn':
-    case 'Qs':
-    case 'Qe':
-    case 'Qw': {
-      // Movement commands: rename the session's player file to a new z-location.
-      // Grid: 8 tiles wide (columns 0-7), 12 tiles tall (rows 0-11), z range 0-95.
-      // Zero-response design: server updates world state silently; client observes via RF.
+    case 'Qu': {
+      var objToUse = cmdData.slice(0, 2);
       var mvOwner = _playerOwnership[session];
-      if (!mvOwner) { res.writeHead(204); return res.end(); }
+      if (!mvOwner) return respondRetro(res, 'XXNot logged in');
+      
+      var qDrive = mvOwner.drive;
+      var qItemId = mvOwner.itemId; 
+      var qMapId = mvOwner.mapId;
 
-      var mvDrive  = mvOwner.drive;
-      var mvItemId = mvOwner.itemId;
-      var mvMapId  = mvOwner.mapId;
+      // Define the path based on current location
+      var qPath = (qMapId === '_L') ? 'w' : 'w/' + qMapId;
 
-      if (!isValidDriveName(mvDrive) || !drives[mvDrive]) { res.writeHead(204); return res.end(); }
+      // 2. Determine Destination
+      var destSector = (qItemId.charAt(0) === 'S') ? 'A1' : 'L8';
 
-      // Find the current player file in the map directory
-      var mvDir = (mvMapId === '_L') ? 'w' : 'w/' + mvMapId;
-      var mvList = fileList(mvDrive, mvDir, null, session);
-      var mvCurrentFile = null;
-      var mvCurrentZ    = -1;
-      var mvAvatarPart  = '';
+      // 3. Find Player File (Using robust iteration instead of fragile pattern matching)
+      var pList = fileList(qDrive, qPath, null, session);
+      var currentFile = null;
+      var fileNameOnly = null;
+      var avatarPart = '';
 
-      if (mvList.success && mvList.listing) {
-        var mvFiles = mvList.listing.split('\n');
-        for (var mvi = 0; mvi < mvFiles.length; mvi++) {
-          var mvF = mvFiles[mvi].trim();
-          if (!mvF) continue;
-          var mvB = mvF.substring(mvF.lastIndexOf('/') + 1);
-          var mvMatch = mvB.match(/^([A-Z][a-z])(\d{2})(.*)\.txt$/);
-          if (mvMatch && mvMatch[1] === mvItemId) {
-            mvCurrentFile = mvB;
-            mvCurrentZ    = parseInt(mvMatch[2], 10);
-            mvAvatarPart  = mvMatch[3];
+      if (pList.success && pList.listing) {
+        var pFiles = pList.listing.split('\n');
+        for (var i = 0; i < pFiles.length; i++) {
+          var pf = pFiles[i].trim();
+          if (!pf) continue;
+          
+          var pb = pf.substring(pf.lastIndexOf('/') + 1);
+          
+          // Match standard player file structure: ID(2) + Z(2 digits) + Avatar(var) + .txt
+          var match = pb.match(/^([A-Z][a-z])(\d{2})(.*)\.txt$/);
+          if (match && match[1] === qItemId) {
+            currentFile = pf;        // e.g., "w/A1/Sa33B0D0.txt"
+            fileNameOnly = pb;       // e.g., "Sa33B0D0.txt"
+            avatarPart = match[3];   // e.g., "B0D0"
             break;
           }
         }
       }
 
+      // If no match was found, return the error
+      if (!currentFile) {
+          return respondRetro(res, 'XXPlayer file not found');
+      }
+      
+      // 4. Relocate Player File (Respecting the _L special path)
+      var targetDir = (destSector === '_L') ? 'w' : 'w/' + destSector;
+      var destPath = targetDir + '/' + fileNameOnly;
+      
+      var moveResult = fileRename(qDrive, '/', currentFile, destPath, session);
+
+      if (moveResult.success) {
+        _playerOwnership[session].mapId = destSector;
+
+        // Update p.txt
+        var pLoad = fileLoad(qDrive, '/', 'p.txt', session);
+        if (pLoad.success && pLoad.content) {
+          var escId = qItemId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          
+          var pUpdated = pLoad.content.replace(
+            new RegExp('^(' + escId + ')=.*$', 'm'),
+            '$1=' + destSector + avatarPart // Safely appends the clean avatar string
+          );
+          fileSave(qDrive, '/', 'p.txt', pUpdated, session, 'Qu');
+        }
+
+        logRequest(req, 'Qu', qDrive, qItemId + ' to ' + destSector, session, { success: true });
+        return respondRetro(res, 'Mp' + destSector);
+      } else {
+        return respondRetro(res, 'XXMove failed: ' + moveResult.error);
+      }
+
+    
       if (!mvCurrentFile || mvCurrentZ < 0) {
-        // Player file not found – no response (zero-response design)
+        // Player file not found or session mismatch
         res.writeHead(204);
         return res.end();
-      }
-
-      // Calculate new z-location with boundary checking (8 wide, 12 tall, 0-95)
-      var GFX_COLS = 8;
-      var GFX_TOTAL_TILES = 96; // 8 * 12
-      var mvNewZ = mvCurrentZ;
-      var mvCol  = mvCurrentZ % GFX_COLS;
-
-      if (cmd === 'Qn') { mvNewZ = mvCurrentZ - GFX_COLS; }
-      if (cmd === 'Qs') { mvNewZ = mvCurrentZ + GFX_COLS; }
-      if (cmd === 'Qe') { if (mvCol < GFX_COLS - 1) { mvNewZ = mvCurrentZ + 1; } }
-      if (cmd === 'Qw') { if (mvCol > 0)             { mvNewZ = mvCurrentZ - 1; } }
-
-      // Boundary check: z must be within 0-95
-      if (mvNewZ < 0 || mvNewZ >= GFX_TOTAL_TILES || mvNewZ === mvCurrentZ) {
-        // Invalid move – do nothing (zero-response)
-        res.writeHead(204);
-        return res.end();
-      }
-
-      // Rename player file to new z-location: Sa33B0D0La.txt → Sa25B0D0La.txt
-      var mvNewZStr = (mvNewZ < 10 ? '0' : '') + mvNewZ;
-      var mvNewFile = mvItemId + mvNewZStr + mvAvatarPart + '.txt';
-      var mvRename  = fileRename(mvDrive, '/', mvDir + '/' + mvCurrentFile, mvDir + '/' + mvNewFile, session);
-
-      // Zero-response regardless of success
-      logRequest(req, cmd, mvDrive, mvItemId + ':' + mvCurrentZ + '->' + mvNewZ, session, { success: mvRename.success });
-      res.writeHead(204);
-      return res.end();
-    }
+      }}
 
     default:
       result = { success: false, error: 'unknown command: ' + cmd };
@@ -1763,17 +2055,89 @@ function handleCommand(req, res, raw, driveName) {
   }
 }
 
+function calculateTargetSector(currentSector, direction) {
+    if (currentSector === '_L') return null;
+
+    const yAxis = currentSector.charAt(0);
+    const xAxis = currentSector.substring(1);
+
+    let targetY = yAxis;
+    let targetX = xAxis;
+
+    if (direction === 'N') {
+        targetY = String.fromCharCode(yAxis.charCodeAt(0) - 1);
+    } else if (direction === 'S') {
+        targetY = String.fromCharCode(yAxis.charCodeAt(0) + 1);
+    } else if (direction === 'E' || direction === 'W') {
+        const isNumeric = /^\d+$/.test(xAxis);
+        if (isNumeric) {
+            let num = parseInt(xAxis, 10);
+            targetX = (direction === 'W') ? (num - 1).toString() : (num + 1).toString();
+        } else {
+            targetX = (direction === 'W') 
+                ? String.fromCharCode(xAxis.charCodeAt(0) - 1)
+                : String.fromCharCode(xAxis.charCodeAt(0) + 1);
+        }
+    }
+
+    return targetY + targetX;
+}
+
+/**
+ * Processes a player's request to scroll to a new map sector.
+ */
+function handlePlayerScroll(player, direction, memoryDrive) {
+    const currentSector = player.currentSector;
+
+    // 1. Calculate the target sector based on the grid math
+    const targetSector = calculateTargetSector(currentSector, direction);
+
+    // 2. Block invalid math or Lobby exits
+    if (!targetSector) {
+        return { success: false, message: "Cannot scroll from here." };
+    }
+
+    // 3. Load the e.txt from the CURRENT map sector's directory on the memory drive
+    let validExits = "";
+    try {
+        // Example path: "/ramdisk/sectors/D5/e.txt"
+        const exitsFilePath = `/ramdisk/sectors/${currentSector}/e.txt`;
+        
+        // Read the file dynamically from memory
+        validExits = memoryDrive.readFileSync(exitsFilePath, 'utf8');
+    } catch (err) {
+        // If the e.txt file doesn't exist, this sector is broken/isolated
+        return { success: false, message: "No exits found here." };
+    }
+
+    // 4. Validate: Does the target sector name exist inside this e.txt?
+    // Using regex word boundary (\b) so checking for "D5" doesn't accidentally match "D50"
+    const targetRegex = new RegExp(`\\b${targetSector}\\b`);
+
+    if (targetRegex.test(validExits)) {
+        // Valid scroll! The big bang approved this exit.
+        player.currentSector = targetSector;
+        return { success: true, newSector: targetSector };
+    } else {
+        // Invalid scroll. The math worked, but the sector isn't in e.txt (e.g., hit an ocean/wall)
+        return { success: false, message: "You cannot go that way." };
+    }
+}
+
 // ── Legacy JSON request dispatcher ────────────────────────────────────────────
 // (legacy reference – new protocol uses form-encoded 2-char commands above)
 
-function handleQandyland(req, res) {
-  var session = getSession(req, res);
+// ── Legacy JSON request dispatcher ────────────────────────────────────────────
 
+function handleQandyland(req, res) {
   readBody(req).then(function (raw) {
     var pkt;
     try { pkt = JSON.parse(raw); } catch (e) {
       return respond(res, { success: false, error: 'invalid JSON' });
     }
+    
+    // FIX 3: Properly extract session, falling back to the JSON payload
+    var session = getSession(req) || pkt.session || null;
 
     var method   = normName(pkt.method   || '').toLowerCase();
     var drive    = normName(pkt.drive    || '');
@@ -1789,132 +2153,122 @@ function handleQandyland(req, res) {
     switch (method) {
       case 'create':
         logRequest(req, method, name || drive, '', session, { success: false, error: 'restricted' });
-        return respond(res, { success: false, error: 'Drive creation restricted to server administrator. Use the server console.' });
+        return respond(res, { success: false, error: 'Drive creation restricted to server administrator. Use the server console.' }, session);
 
       case 'mount':
         result = driveMount(name || drive, session);
         logRequest(req, method, name || drive, '', session, result);
-        return respond(res, result);
+        return respond(res, result, session);
 
       case 'save':
         result = fileSave(drive, cwd, name, content, session, owner);
         logRequest(req, method, drive, name, session, result);
-        return respond(res, result);
+        return respond(res, result, session);
 
       case 'load':
         result = fileLoad(drive, cwd, name, session);
         logRequest(req, method, drive, name, session, result);
-        return respond(res, result);
+        return respond(res, result, session);
 
       case 'delete':
         result = fileDelete(drive, cwd, name, session);
         logRequest(req, method, drive, name, session, result);
-        return respond(res, result);
+        return respond(res, result, session);
 
       case 'rename':
         result = fileRename(drive, cwd, name, dest, session);
         logRequest(req, method, drive, name, session, result);
-        return respond(res, result);
+        return respond(res, result, session);
 
       case 'exists':
         result = fileExists(drive, cwd, name, session);
         logRequest(req, method, drive, name, session, result);
-        return respond(res, result);
+        return respond(res, result, session);
 
       case 'mkdir':
         result = dirMake(drive, cwd, name, session);
         logRequest(req, method, drive, name, session, result);
-        return respond(res, result);
+        return respond(res, result, session);
 
       case 'chdir':
         result = dirChange(drive, cwd, name, session);
         logRequest(req, method, drive, name, session, result);
-        return respond(res, result);
+        return respond(res, result, session);
 
       case 'rmdir':
         result = dirRemove(drive, cwd, name, session);
         logRequest(req, method, drive, name, session, result);
-        return respond(res, result);
+        return respond(res, result, session);
 
       case 'dir':
         result = dirList(drive, cwd, pattern, switches, session);
         logRequest(req, method, drive, pattern, session, result);
-        return respond(res, result);
+        return respond(res, result, session);
 
       case 'list':
         result = fileList(drive, cwd, pattern, session);
         logRequest(req, method, drive, pattern, session, result);
-        return respond(res, result);
+        return respond(res, result, session);
 
       default:
         result = { success: false, error: 'unknown method: ' + method };
         logRequest(req, method || '(unknown)', drive, name, session, result);
-        return respond(res, result);
+        return respond(res, result, session);
     }
   }).catch(function (err) {
+    // Safely catch body parsing limits or actual server errors
     respond(res, { success: false, error: 'server error: ' + err.message });
   });
+  
+  // FIX 1 & 2: The trailing, synchronous `return respond(...)` has been deleted entirely.
 }
 
 // ── HTTP server ───────────────────────────────────────────────────────────────
 
 var server = http.createServer(function (req, res) {
-  res.setHeader('Access-Control-Allow-Origin',  '*');
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Session-Token');
 
   if (req.method === 'OPTIONS') {
-    res.setHeader('Access-Control-Max-Age', '86400');
     res.writeHead(204);
     return res.end();
   }
 
-  var reqPathname;
-  try {
-    reqPathname = new URL(req.url, 'http://localhost').pathname;
-  } catch (e) {
-    reqPathname = '/';
-  }
+  var reqUrl = new URL(req.url, `http://${req.headers.host}`);
+  var reqPathname = reqUrl.pathname;
 
-  if (reqPathname === '/qandyland.js' && req.method === 'POST') {
+  // FIX: Match the URL the client is actually calling (_serverUrl in gfx.js)
+  // If gfx.js says _serverUrl = 'qandyland.js', match that here.
+  if ((reqPathname === '/qandyland.js' || reqPathname === '/qandyland3.js') && req.method === 'POST') {
     var contentType = (req.headers['content-type'] || '').toLowerCase();
-    if (contentType.indexOf('text/plain') >= 0) {
-      // New unified command string protocol: body = commandString, drive = ?d= query param
-      var driveParam = '';
-      try {
-        var reqUrl2 = new URL(req.url, 'http://localhost');
-        driveParam = reqUrl2.searchParams.get('d') || '';
-      } catch (e) { /* ignore */ }
+    
+    var isTextPlain     = contentType.indexOf('text/plain') >= 0;
+    var isFormEncoded   = contentType.indexOf('application/x-www-form-urlencoded') >= 0;
+
+    if (isTextPlain || isFormEncoded) {
+      // text/plain: new protocol – drive comes from the ?d= query param
+      // form-encoded: legacy protocol – drive is embedded in the body (c=CMD&d=DRIVE)
+      var driveParam = isTextPlain ? (reqUrl.searchParams.get('d') || '') : null;
       readBody(req).then(function (raw) {
         handleCommand(req, res, raw, driveParam);
       }).catch(function (err) {
-        respond(res, { success: false, error: 'server error: ' + err.message });
+        console.error(err.stack || err);
+        res.writeHead(500, { 'Content-Type': 'text/plain' });
+        res.end("Server Error: " + (err.stack || err.message || err));
       });
       return;
     }
-    if (contentType.indexOf('application/x-www-form-urlencoded') >= 0) {
-      readBody(req).then(function (raw) {
-        handleCommand(req, res, raw, null);
-      }).catch(function (err) {
-        respond(res, { success: false, error: 'server error: ' + err.message });
-      });
-      return;
-    }
-    return handleQandyland(req, res);
+    // Handle JSON or other content types
+    handleQandyland(req, res);
+    return;
   }
 
-  // Status endpoint for debugging
-  if (reqPathname === '/status' && req.method === 'GET') {
-    var status = {
-      uptime:  Math.floor((Date.now() - _serverStartTime) / 60000),
-      drives:  Object.keys(drives),
-      memory:  process.memoryUsage(),
-      version: SERVER_VERSION
-    };
-    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-    return res.end(JSON.stringify(status, null, 2));
-  }
 
+
+
+
+  // Otherwise, serve static files (This is why it was displaying source code before)
   serveStatic(req, res);
 });
 
@@ -2493,4 +2847,12 @@ process.on('SIGTERM', function () {
   deregisterFromRegistry();
   if (_heartbeatTimer) clearInterval(_heartbeatTimer);
   process.exit(0);
+});
+
+process.on('uncaughtException', function(err) {
+  console.error("UNCAUGHT EXCEPTION:", err.stack || err);
+});
+
+process.on('unhandledRejection', function(reason, p) {
+  console.error("UNHANDLED PROMISE REJECTION:", reason.stack || reason);
 });
