@@ -1855,34 +1855,29 @@ function handleCommand(req, res, raw, driveName) {
           if (!rfFile) continue;
           var rfBase = rfFile.substring(rfFile.lastIndexOf('/') + 1);
           
-          var match = rfBase.match(/^([A-Z][a-z])(\d{2})(.*)\.txt$/);
+          // This regex captures everything: ID(2) + Z(2) + optional Data
+          var match = rfBase.match(/^([A-Z][a-z]\d{2}.*)\.txt$/i);
           if (match) {
-            // match[1]=ID, match[2]=Z, match[3]=AvatarData
-            rfAllItems.push(match[1] + match[2] + match[3]);
-          }
-          
-          if (rfBase.length === 8) {
-            var rfItemMatch = rfBase.match(/^([A-Z][a-z]\d{2})\.txt$/);
-            if (rfItemMatch) rfAllItems.push(rfItemMatch[1]); 
-          } else if (rfBase.length > 8) {
-            var rfPlayerMatch = rfBase.match(/^([A-Z][a-z])(\d{2})(.+)\.txt$/);
-            if (rfPlayerMatch) rfAllItems.push(rfPlayerMatch[1] + rfPlayerMatch[2] + rfPlayerMatch[3]);
+            rfAllItems.push(match[1]);
           }
         }
       }
 
+      //
+      // THERE IS NO PLAYER!! THERE ARE ONLY ITEMS!! STOP UNCOMMENTING THIS CODE!!
+      //
       // Determine authoritative player z from the player's own item entry in the sector.
       // rfOwner.itemId (2 chars) matches the first 2 chars of each rfAllItems entry.
       // Items in rfAllItems are always built from regex-matched filenames guaranteeing \d{2} at [2-4].
-      var rfPlayerZ = '00';
-      if (rfOwner && rfOwner.itemId) {
-        for (var rfi2 = 0; rfi2 < rfAllItems.length; rfi2++) {
-          if (rfAllItems[rfi2].slice(0, 2) === rfOwner.itemId && /^\d{2}$/.test(rfAllItems[rfi2].slice(2, 4))) {
-            rfPlayerZ = rfAllItems[rfi2].slice(2, 4);
-            break;
-          }
-        }
-      }
+      //var rfPlayerZ = '00';
+      //if (rfOwner && rfOwner.itemId) {
+      //  for (var rfi2 = 0; rfi2 < rfAllItems.length; rfi2++) {
+      //    if (rfAllItems[rfi2].slice(0, 2) === rfOwner.itemId && /^\d{2}$/.test(rfAllItems[rfi2].slice(2, 4))) {
+      //      rfPlayerZ = rfAllItems[rfi2].slice(2, 4);
+      //      break;
+      //    }
+      //  }
+      //}
 
       // Response: RF + mapId(2) + playerZ(2) + items
       var rfResponse = 'Rf'+rfMapId + rfAllItems.join(',');
@@ -1929,8 +1924,8 @@ function handleCommand(req, res, raw, driveName) {
 
           // Verify the slot is unclaimed (base name = exactly 4 chars: itemId + z)
           var qgBase = qgSlotFile.replace(/\.txt$/i, '');
-          if (qgBase.length > 4) return respondRetro(res, 'XXSlot already in use');
-          if (qgBase.length < 4) return respondRetro(res, 'XXNot a valid player slot');
+          if (qgAvatar!="Za") return respondRetro(res, 'XXSlot already in use');
+          //if (qgBase.length < 4) return respondRetro(res, 'XXNot a valid player slot');
 
           var canonical = resolveName('w', qgSlotFile);
           var entry = manifest.find(e => e.name === canonical);

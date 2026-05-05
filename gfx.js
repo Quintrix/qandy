@@ -537,6 +537,7 @@ window.gfxRefresh = function(rfStr) {
     
     // Parse Avatar and check for server-side move history (Q-commands)
     var rawAvatar = entry.length > 4 ? entry.slice(4) : '';
+    if (rawAvatar === "Za") rawAvatar = "";
     var avatar = rawAvatar;
     var moves = [];
     
