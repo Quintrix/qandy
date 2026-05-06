@@ -1086,7 +1086,7 @@ function bigbang(driveName, session) {
     if (!lIsSlot) continue; // Static items (flagpoles etc.) use the static map; only slots need server files
     if (lSeenIds[lItemId]) continue;
     lSeenIds[lItemId] = true;
-    var lFile   = lItemId + lItemZ + '.txt';
+    var lFile   = lItemId + lItemZ + 'Za.txt';
     var lResult = fileSave(driveName, '/', 'w/' + lFile, '', '', 'bigbang');
     if (lResult.success) {
       created.push('lobby: ' + lFile);
@@ -1879,7 +1879,7 @@ function handleCommand(req, res, raw, driveName) {
       }
 
       // Response: RF + mapId(2) + playerZ(2) + items
-      var rfResponse = 'RF'+rfMapId + rfAllItems.join(',');
+      var rfResponse = 'RF'+rfMapId + rfPlayerZ + rfAllItems.join(',');
       logRequest(req, 'RF', rfDrive, rfMapId, session, { success: true, result: rfResponse });
       return respondRetro(res, rfResponse);
     }

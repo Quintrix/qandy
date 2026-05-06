@@ -13,7 +13,7 @@ var PUV;                 // timeout id (used to clear/set the timeout)
 var mapx=7;
 var mapy=11;
 
-window.gfxDo = "Rf";     // Default refresh command
+window.gfxDo = "RF";     // Default refresh command
 window.gfxPong = "..";   // server response
 window.gfxSession = null;
 
@@ -364,27 +364,59 @@ window.gfxSelectAvatar = function(a) {
 function gfxTick() {
   if (window.gfxInterval) clearInterval(window.gfxInterval);
   window.gfxInterval = setInterval(async function() {
-    try {
-      var command = window.gfxDo || "Rf";
-      if (command === "") command = "Rf";
-      window.gfxDo = "Rf"; 
+    //try {
+      var command = window.gfxDo || "RF";
+      window.gfxDo = "RF"; 
       
-      window.gfxPong = await gfxPing(command);
-      //if (command != "Rf") { console.log(command+" = "+window.gfxPong); }
-      console.log(command+" = "+window.gfxPong);
-      var verb = window.gfxPong.substring(0, 2);
-      var noun = window.gfxPong.substring(2);
-      if (verb == "Rf") { gfxRefresh(noun); }
+      var gfxPong = await gfxPing(command);
       
-            
-    } catch (e) { 
-      console.error('Server tick error:', e); 
-    }
-  }, 1000);
+      let ptr = 0;
+      while (ptr < gfxPong.length) {
+        let verb = gfxPong.substring(ptr, ptr + 2);
+        ptr += 2;
 
-  if (!window.gfxVisualInterval) {
-     window.gfxVisualInterval = setInterval(window.gfxVisualTick, 200);
-  }
+        // TERMINAL VERB: RF (Refresh)
+        // This is always the last command. It consumes the rest of the string.
+        if (verb === "RF") {
+          let noun = gfxPong.substring(ptr);
+          gfxRefresh(noun); 
+          break; // Exit loop, processing finished
+        }
+
+        // MAP TRANSITION VERBS: Lm, Ma, Mp, etc.
+        // Noun is always 2 characters (the Map ID)
+        //if (verb === "Lm" || verb === "Ma" || verb === "Mp") {
+        //  let newMap = s.substring(ptr, ptr + 2);
+        //  ptr += 2;
+        //  processMapChange(newMap);
+        //  continue;
+        //}
+
+        // ACTION VERBS: Fs (Fish), Mn (Mine), In (Inventory)
+        // These look for the 'Za' delimiter
+        if (verb === "Fs" || verb === "Mn" || verb === "In") {
+          let endIdx = gfxPong.indexOf("Za", ptr);
+          if (endIdx === -1) {
+            // Safety: if Za is missing, skip or log error
+            ptr = gfxPong.length; 
+          } else {
+            let data = gfxPong.substring(ptr, endIdx);
+            alert(verb+" "+data);
+            //processAction(verb, data);
+            ptr = endIdx + 2; // Skip the data and the 'Za'
+          }
+          continue;
+        }
+
+        // If we don't recognize the verb, we have a "sync error" or unknown card
+        // For safety, if we don't know the verb, we stop to prevent infinite loops
+        console.warn("Unknown punch card verb:", verb);
+        break;
+      }
+    //} catch (e) { 
+    //  console.error('Server tick error:', e); 
+    //}
+  }, 1000);
 }
 
 window.gfxVisualTick = function() {
@@ -501,80 +533,71 @@ function zToXY(z) {
  return { x: x, y: y };
 }
 
-window.gfxRefresh = function(rfStr) {
-  // 1. Clear the stage
+function gfxRefresh(rfStr) {
   const oldItems = document.querySelectorAll('.item');
   for (let i = 0; i < oldItems.length; i++) { oldItems[i].remove(); }
   const oldChars = document.querySelectorAll('.char');
   for (let i = 0; i < oldChars.length; i++) { oldChars[i].remove(); }
 
-  // 2. Parse Header: [mapId(2)][items...]
-  // Example: _LSa33,Sb34... -> mapId is _L, items start at index 2
+  // New wire format: [mapId(2)][zLocation(2)][items]
   window.playerMap = rfStr.substring(0, 2);
-  var itemsStr = rfStr.length >= 2 ? rfStr.substring(2) : '';
-  window.mapItems = itemsStr;
-  window.items = itemsStr ? itemsStr.split(',') : [];
+  var serverPlayerZ = rfStr.length >= 4 ? parseInt(rfStr.substring(2, 4), 10) : NaN;
+  var items = rfStr.length >= 4 ? rfStr.substring(4) : '';
+  mapItems = items;
+  window.items = items.split(',');
 
-  // 3. Preserve the local movement prediction queue
-  // We keep this so the player doesn't "snap back" to the server position 
-  // until the local steps are exhausted.
   var oldPlayerQueue = [];
-  if (window.playerItem && window.movingItems && window.movingItems[window.playerItem]) {
+  if (window.movingItems && window.movingItems[window.playerItem]) {
       oldPlayerQueue = window.movingItems[window.playerItem].queue;
   }
 
-  // Reset the tracked items for this sync tick
-  window.movingItems = {};
+  // Use authoritative server z when no local movement is in-flight.
+  var resolvedPlayerZ = (!isNaN(serverPlayerZ) && oldPlayerQueue.length === 0)
+      ? serverPlayerZ
+      : window.playerZ;
 
-  // 4. Iterate through all items in the sector
+  window.movingItems = {};
+  if (window.playerItem && window.playerItem !== "Za") {
+      window.movingItems[window.playerItem] = { z: resolvedPlayerZ, queue: oldPlayerQueue, avatar: window.playerAvatar };
+  }
+
   for (var j = 0; j < window.items.length; j++) {
     var entry = window.items[j];
     if (!entry || entry.length < 4) continue;
-    
-    var iId = entry.slice(0, 2);           // e.g., "Sa"
-    var destZ = parseInt(entry.slice(2, 4), 10); // e.g., 33
+    var iId = entry.slice(0, 2);
+    var destZ = parseInt(entry.slice(2, 4), 10);
     if (isNaN(destZ)) continue;
     
-    // Parse Avatar and check for server-side move history (Q-commands)
     var rawAvatar = entry.length > 4 ? entry.slice(4) : '';
-    if (rawAvatar === "Za") rawAvatar = "";
     var avatar = rawAvatar;
     var moves = [];
     
+    // NO DASH: Find the first 'Q' command in the avatar string
     var qIdx = rawAvatar.indexOf('Q');
     if (qIdx > -1) {
         avatar = rawAvatar.substring(0, qIdx);
         var historyStr = rawAvatar.substring(qIdx);
-        moves = historyStr.match(/Q[nsew]/g) || [];
+        moves = historyStr.match(/Q[nsew]/g) || []; // Extract movement items
     }
 
-    // 5. Is this item controlled by the user?
     if (iId === window.playerItem) {
       window.playerAvatar = avatar;
-      window.playerZ = destZ;
-      
-      // Update the prediction engine with the server's authoritative starting point
-      // but keep the user's pending keypresses (the queue).
-      window.movingItems[iId] = { 
-        z: destZ, 
-        queue: oldPlayerQueue, 
-        avatar: avatar 
-      };
-      
+      window.playerZ = resolvedPlayerZ;
+      window.movingItems[iId].z = resolvedPlayerZ;
       gfxChar(iId, avatar, window.playerZ);
     } else {
-      // 6. It's another item or another player character
       if (avatar) {
-        // Character with an avatar: handle interpolation for smooth movement
         var startZ = destZ;
         for (var k = moves.length - 1; k >= 0; k--) {
             startZ = window.reverseMoveZ(startZ, moves[k]);
         }
-        
-        window.movingItems[iId] = { z: startZ, destZ: destZ, queue: moves, avatar: avatar };
-        gfxChar(iId, avatar, startZ);
+        if (moves.length > 0) {
+            window.movingItems[iId] = { z: startZ, destZ: destZ, queue: moves, avatar: avatar };
+            gfxChar(iId, avatar, startZ);
+        } else {
+            gfxChar(iId, avatar, destZ);
+        }
       } else {
-        // Static item/object: just place it
         var coords = zToXY(destZ);
         var img = document.createElement('img');
         img.className = 'item';
@@ -588,7 +611,7 @@ window.gfxRefresh = function(rfStr) {
       }
     }
   }
-};
+}
 
 window.gfxPing = async function(commandString) {
   if (!commandString || commandString.length < 2) throw new Error('gfxPing: invalid command');
