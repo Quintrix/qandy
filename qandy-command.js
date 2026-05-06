@@ -367,7 +367,6 @@ function command_js() {
         else if (typeof res === 'object') {
           try { res = JSON.stringify(res); } catch (e) { res = String(res); }
         } else res = String(res);
-        console.log("qdosLoad "+filename+" "+res);
         return res;
       } catch (e) {
         return Promise.reject(new Error((e && e.message) ? e.message : String(e)));
