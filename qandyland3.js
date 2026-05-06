@@ -1876,10 +1876,10 @@ function handleCommand(req, res, raw, driveName) {
             break;
           }
         }
-      }
+     }
 
       // Response: RF + mapId(2) + playerZ(2) + items
-      var rfResponse = 'RF'+rfMapId + rfAllItems.join(',');
+      var rfResponse = 'RF'+rfMapId + rfPlayerZ + rfAllItems.join(',');
       logRequest(req, 'RF', rfDrive, rfMapId, session, { success: true, result: rfResponse });
       return respondRetro(res, rfResponse);
     }

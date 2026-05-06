@@ -142,7 +142,7 @@ window.keydown = function(key, e) {
 
 window.joinGame = async function(item, z) { 
   if (playerItem != "Za") { return; }
-  if (playerMap != '_L') { return; }
+  if (map != '_L') { return; }
   playerItem=item; playerZ=z; playerItemId=item; playerZ=z;
   if (window.gfxDo === "RF") window.gfxDo = "";
   window.gfxDo += "Qg" + item + z + playerAvatar;

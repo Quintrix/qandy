@@ -309,6 +309,7 @@ window.gfxConnect = async function(serverIndex) {
     window._gameMapFile = mapName + '.gfx';
     // Load the map file specified by the server
     if (window._gameMapFile) {
+    	console.log("Loading Map "+window._gameMapFile);
       await gfxFetchMap(window._gameMapFile);
       gfxTiles("_L"); // display lobby first
       gfxObjects("_L");
@@ -417,6 +418,9 @@ function gfxTick() {
     //  console.error('Server tick error:', e); 
     //}
   }, 1000);
+    if (!window.gfxVisualInterval) {
+     window.gfxVisualInterval = setInterval(window.gfxVisualTick, 200);
+  }
 }
 
 window.gfxVisualTick = function() {
@@ -441,9 +445,11 @@ var tiles = [];
 
 async function gfxFetchMap(filename) {
   filename = filename || "capflag.gfx";
+  filename = "capflag2.gfx";
   try {
     await print("Loading " + filename + "...\n");
     var gfxContent = await qdosLoad(filename);
+    console.log(gfxContent);
     if (!gfxContent) { throw new Error("Failed to load " + filename); }
 
     var lines = gfxContent.split('\n').filter(line => line.trim());
@@ -540,7 +546,13 @@ function gfxRefresh(rfStr) {
   for (let i = 0; i < oldChars.length; i++) { oldChars[i].remove(); }
 
   // New wire format: [mapId(2)][zLocation(2)][items]
-  window.playerMap = rfStr.substring(0, 2);
+  if (window.map != rfStr.substring(0, 2)) {
+    var oldObjs = document.querySelectorAll('.objs');
+    for (var k = 0; k < oldObjs.length; k++) { if (oldObjs[k].parentNode) { oldObjs[k].parentNode.removeChild(oldObjs[k]); }}
+    window.map = rfStr.substring(0, 2);
+    gfxTiles(map);   
+  }
+  	
   var serverPlayerZ = rfStr.length >= 4 ? parseInt(rfStr.substring(2, 4), 10) : NaN;
   var items = rfStr.length >= 4 ? rfStr.substring(4) : '';
   mapItems = items;
