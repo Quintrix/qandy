@@ -445,7 +445,6 @@ var tiles = [];
 
 async function gfxFetchMap(filename) {
   filename = filename || "capflag.gfx";
-  filename = "capflag2.gfx";
   try {
     await print("Loading " + filename + "...\n");
     var gfxContent = await qdosLoad(filename);

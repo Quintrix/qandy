@@ -169,34 +169,60 @@ function command_js() {
     }
 
     switch (c) {
-      // ── Raw memory-drive commands are server-terminal only ────────────────
-      // These commands (dir, mkdir, cd, rmdir, delete, rename, mount, etc.)
-      // give direct access to the memory drive and are intentionally disabled
-      // on the browser client. Use the server console (qandyland3.js) for
-      // drive administration.
       case "dir":
-      case "list":
-      case "ls":
-      case "delete":
-      case "del":
-      case "rm":
-      case "rename":
-      case "ren":
-      case "mount":
-      case "qpaste":
-      case "qcopy":
-      case "mkdir":
-      case "md":
-      case "chdir":
-      case "cd":
-      case "rmdir":
-      case "rd":
-        print("Not available on client.\n");
+        print(await qdosDir(f, d));
         return;
-      // ─────────────────────────────────────────────────────────────────────
+      case "list":
+        print(await qdosList()); 
+        return;
+      case "ls": 
+        print(await qdosList()); 
+        return;
       case "load":
         print(await qdosLoad(f));
         return;
+      case "delete":
+        print(await qdosDelete(f)+"\n"); 
+        return;
+      case "del":
+        print(await qdosDelete(f)+"\n");
+        return;
+      case "rm":
+        print(await qdosDelete(f)+"\n");
+        return;
+      case "rename":
+        print(await qdosRename(f,d)+"\n");
+        return; 
+      case "ren":
+        print(await qdosRename(f,d)+"\n");
+        return; 
+      case "mount":
+        print(await qdosMount(f)+"\n");
+        return;
+      case "qpaste":
+        print(await qdosPaste(f)+"\n");
+        return;
+      case "qcopy":
+        print(await qdosCopy(f)+"\n");
+        return;
+      case "mkdir":
+        print(await qdosMkDir(f)+"\n");
+        return;     
+      case "md":
+        print(await qdosMkDir(f)+"\n");
+        return;     
+      case "chdir":
+        print(await qdosChDir(f)+"\n");
+        return;     
+      case "cd":
+        print(await qdosChDir(f)+"\n");
+        return;     
+      case "rmdir":
+        print(await qdosRmDir(f)+"\n");
+        return;     
+      case "rd":
+        print(await qdosRmDir(f)+"\n");
+        return;     
       case "exists":
         print(await qdosExists(f)+"\n");
         return;
@@ -569,18 +595,21 @@ function command_js() {
   }
 
   // expose to global guest runtime
-  // Raw memory-drive functions (qdosDir, qdosMkDir, qdosChDir, qdosRmDir,
-  // qdosDelete, qdosRename, qdosMount, qdosPaste, qdosCopy, qdosList) are
-  // intentionally NOT exported — client browser access to the memory drive is
-  // restricted. Server-terminal administration is handled in qandyland3.js.
   window.qdosXmitDos = qdosXmitDos;
   window.qdosScript = qdosScript;
+  window.qdosDir = qdosDir;
+  window.qdosList = qdosList; 
   window.qdosLoad = qdosLoad;
   window.qdosSave = qdosSave;
+  window.qdosDelete = qdosDelete;
+  window.qdosRename = qdosRename; 
+  window.qdosMount = qdosMount;
+  window.qdosPaste = qdosPaste;
+  window.qdosCopy = qdosCopy;
   window.qdosExists = qdosExists;
-  window.qdosValidateFilename = qdosValidateFilename;
-  window._normalizeResult = _normalizeResult;
-  window._pending = _pending;
+  window.qdosMkDir = window.qdosMkDir;
+  window.qdosChDir = window.qdosChDir;
+  window.qdosRmDir = window.qdosRmDir;
 
   window.command_js = command_js;
   window.command = command;
@@ -588,6 +617,25 @@ function command_js() {
   window.extractCmdParts = extractCmdParts;
   window.__qandy_pending = __qandy_pending;
   window.__qandy_reqCounter = __qandy_reqCounter;
+  window.qdosXmitDos = qdosXmitDos;
+  window.qdosScript = qdosScript;
+  window.qdosDir = qdosDir;
+  window.qdosList = qdosList;
+  window.qdosLoad = qdosLoad;
+  window.qdosSave = qdosSave;
+  window.qdosDelete = qdosDelete;
+  window.qdosRename = qdosRename;
+  window.qdosMount = qdosMount;
+  window.qdosPaste = qdosPaste;
+  window.qdosCopy = qdosCopy;
+  window.qdosExists = qdosExists;
+  window.qdosMkDir = qdosMkDir;
+  window.qdosChDir = qdosChDir;
+  window.qdosRmDir = qdosRmDir;
+  window.qdosValidateFilename = qdosValidateFilename;
+  window._normalizeResult = _normalizeResult;
+  window._pending = _pending;
+
 
   // Signal that command.js is ready
   if (typeof window.qandySignalReady === 'function') {

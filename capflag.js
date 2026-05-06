@@ -1,5 +1,7 @@
 RUN="capflag.js";
 
+// We are working on capflag.js which is a game of 'capture the flag' that uses the gfx.js 'multiplayer graphics engine' to connect to the qandyland3.js server.
+
 var gfxConnected = null;
 
 if (typeof window.GFX === "undefined") window.GFX = 0;
