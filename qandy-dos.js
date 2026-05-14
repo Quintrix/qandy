@@ -5,6 +5,9 @@
 
 /**
  *   SECURITY MODEL:
+ *
+ *  "The HOST may treat localStorage as a data-bin, but it must NEVER treat
+ *  it as a source of logic."
  * 
  *   HOST (sysop):
  *    - Can execute scripts from mounted drives (File Access API - user-granted)
@@ -481,6 +484,17 @@ var DEVICE = 'none';
   // ── Public API ────────────────────────────────────────────────────────────
   global.DOS = true;
   global.DEVICE = global.DEVICE || 'none';
+
+  global.dosFetch = async function(file) {
+    try {
+      const url = new URL(file, location.href).href;
+      const resp = await fetch(url, { cache: 'no-store' });
+      if (!resp.ok) return null;
+      return await resp.text();
+    } catch (err) {
+      return null;
+    }
+  };
 
   global.dosMount = async function (device) {
     if (!device || typeof device !== 'string') return global.DEVICE;

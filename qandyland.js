@@ -45,6 +45,7 @@ var SESSION_COOKIE = 'q';
 var VALID_NAME_RE        = /^(?!\.)[A-Za-z0-9 \-_.()+=!]+$/;
 var VALID_SERVER_NAME_RE = /^(?!\.)[A-Za-z0-9 \-_.()+=]+$/; // server/drive names (no !)
 var MAX_SERVER_NAME_LEN  = 24;
+var SERVER_CONFIG_FILE = 'qandyland.json';   // Server config file in the working directory
 
 var MAX_PLAYERS    = 100;
 
@@ -59,7 +60,7 @@ var DEFAULT_SPAWN_Z = '43';
 // ── Server discovery / registry ───────────────────────────────────────────────
 
 // Configurable via command-line: node qandyland2.js [port] [--name "..."] [--registry "url"] [--maxPlayers N]
-var SERVER_NAME    = 'Qandyland';
+var SERVER_NAME    = 'Qandyland Server';
 var SERVER_VERSION = '2.0';
 var REGISTRY_URL   = 'https://qandy.vercel.app/api/servers';
 var _serverId = null;          // assigned by registry on first POST
@@ -329,6 +330,29 @@ function formatBytes(bytes) {
   if (bytes < 1024) return bytes + 'B';
   if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + 'KB';
   return Math.round(bytes / (1024 * 1024)) + 'MB';
+}
+
+// ── Server configuration ──────────────────────────────────────────────────────
+
+// Load server configuration from the working directory.
+// Returns the parsed config object, or {} if no config file exists.
+function loadServerConfig() {
+  var configPath = path.join(process.cwd(), SERVER_CONFIG_FILE);
+  try {
+    var raw = fs.readFileSync(configPath, 'utf8');
+    return JSON.parse(raw);
+  } catch (e) {}
+  return {};
+}
+
+// Save server configuration to the working directory.
+// Only saves serverName and drives list (no sensitive path information).
+function saveServerConfig(cfg) {
+  try {
+    fs.writeFileSync(path.join(process.cwd(), SERVER_CONFIG_FILE), JSON.stringify(cfg, null, 2));
+  } catch (e) {
+    console.warn('Failed to save server config: ' + (e.message || String(e)));
+  }
 }
 
 // ── Console display ───────────────────────────────────────────────────────────
@@ -1017,18 +1041,19 @@ function bigbang(driveName, session) {
     var itemData  = dotIdx >= 0 ? rest.substring(dotIdx + 1) : '';
 
     // tiles are first 192 chars (96 × 2); exits are the remainder
+    var tiles = mapData.substring(0, 192); // tiles are first 192 chars
     var exitStr = mapData.substring(192);
 
     // parse items (6 chars each: 2=id, 2=z, 2=data)
     var items = [];
     for (var ji = 0; ji + 6 <= itemData.length; ji += 6) {
       items.push(itemData.substring(ji, ji + 6));
-    }
+    } 
 
     if (sectorId === '_L') {
       // _L is the lobby sector: its items define the player-slot positions and
       // game objects.  Files for these items are created in the w/ directory
-      // (lobby gateway) so that Rf with m="_L" can return the lobby state.
+      // (lobby gateway) so that RF with m="_L" can return the lobby state.
       lobbyItems = items;
     } else {
       sectors.push({ id: sectorId, exits: exitStr, items: items });
@@ -1217,7 +1242,7 @@ function buildGameState() {
 // ── Unified command string handler ────────────────────────────────────────────
 //
 // POST /qandyland.js?d=<drive>  Content-Type: text/plain
-//   body = commandString  (e.g. "BB", "GS", "Rf", "QgSa33B0D0", "Qn")
+//   body = commandString  (e.g. "BB", "GS", "RF", "QgSa33B0D0", "Qn")
 //
 // Also handles legacy form-encoded requests (Content-Type: application/x-www-form-urlencoded)
 // when driveName is null (backward compatibility).
@@ -1232,7 +1257,7 @@ function buildGameState() {
 //          SS      = seconds (00-59)
 //          mapname = .gfx filename without extension (e.g. "capflag")
 //
-//   Rf – Refresh: return map sector items for the session's current location.
+//   RF – Refresh: return map sector items for the session's current location.
 //        No client map parameter; server uses _playerOwnership[session].mapId.
 //        Defaults to lobby (_L) if no ownership record exists.
 //        Response: <mapId><zLocation><items>  e.g. "A125Sa25B1D0,Tb44,Yj22Sa"
@@ -1248,6 +1273,8 @@ function buildGameState() {
 //   SG – Start Game: move player from lobby to world map.
 //        Body data: itemId(2) + avatar
 //
+//   Ql – Look Mode
+//
 //   Qg – Get Item / Join Game: pick up an item (player hat = join game).
 //        Body data: itemId(2) + z(2) + avatar
 //        Player items (S/T prefix): renamed with avatar + "La" hat, session ownership set.
@@ -1257,7 +1284,7 @@ function buildGameState() {
 //   Qe – Move East:  rename player file z+1 (boundary: x must be < 7).
 //   Qw – Move West:  rename player file z-1 (boundary: x must be > 0).
 //        Movement: authoritative pipeline – strips stale Q suffix, applies move,
-//        saves canonical filename (no Q suffix), returns Rf state immediately.
+//        saves canonical filename (no Q suffix), returns RF state immediately.
 //        Map scroll returns Ma<mapId> so the client can reload tiles first.
 //
 //   Qu - Use Object
@@ -1434,6 +1461,7 @@ function handleCommand(req, res, raw, driveName) {
           }
 
           if (moveBlocked) {
+              console.log("Move blocked: " + mvItemId + " already standing on boundary for " + chunk);
               ptr += 2;
               continue; // Drop the illegal move entirely
           }
@@ -1456,6 +1484,8 @@ function handleCommand(req, res, raw, driveName) {
                 }
             }
             
+            console.log("Map: " + mvMapId + ", Attempted scroll " + dirChar + " -> Expected: " + targetSector + " -> Permitted: '" + nextMap + "'");
+
             if (nextMap && nextMap !== '..' && nextMap !== '  ' && nextMap !== '00') {
               // Apply wrap-around math to targetZ (the edge tile they stepped onto)
               if (chunk === 'Qn') { finalZ = targetZ + GFX_TOTAL_TILES - GFX_COLS; }
@@ -1469,6 +1499,7 @@ function handleCommand(req, res, raw, driveName) {
               ptr += 2;
               break; 
             } else {
+              console.log("Scroll denied (blocked by map exit)");
               ptr += 2; // Block the step because the edge leads nowhere (Acts as a wall)
             }
           } else {
@@ -1531,7 +1562,7 @@ function handleCommand(req, res, raw, driveName) {
         cmd = fullCmdString.slice(ptr, ptr + 2);
         cmdData = fullCmdString.slice(ptr + 2);
       } else {
-        // Step 5: Return Rf immediately so the client receives authoritative state
+        // Step 5: Return RF immediately so the client receives authoritative state
         // in the same transaction — no separate cleanup pass needed.
         var mvRfPath = (finalMap === '_L') ? 'w' : 'w/' + finalMap;
         var mvRfList = fileList(mvDrive, mvRfPath, null, session);
@@ -1559,12 +1590,53 @@ function handleCommand(req, res, raw, driveName) {
             break;
           }
         }
-        return respondRetro(res, 'Rf' + finalMap + mvRfPlayerZ + mvRfItems.join(','));
+        return respondRetro(res, 'RF' + finalMap + mvRfPlayerZ + mvRfItems.join(','));
       }
     }
   }
 
   switch (cmd) {
+  	 case 'Ql': {
+      const mvOwner = _playerOwnership[session];
+      if (!mvOwner) return respondRetro(res, 'XXNot logged in');
+
+      const qDrive = mvOwner.drive;
+      const pLoad = fileLoad(qDrive, '/', 'p.txt', session);
+      if (!pLoad.success) return respondRetro(res, 'XXMap error');
+
+      // Parse all players: ID=SectorAvatar...
+      const players = [];
+      const lines = pLoad.content.split('\n');
+      lines.forEach(line => {
+        // Regex matches e.g. "Sa=A1B0D0" -> ID: Sa, Sector: A1
+        const m = line.match(/^([A-Z][a-z])=([A-Z][a-z0-9])(.*)$/);
+        if (m) {
+          const id = m[1];
+          const sector = m[2];
+          // We need the Z. In qandyland, Z is currently kept in the filename in /w/sector/
+          // For efficiency, we can assume spawn Z or attempt to find the file.
+          // Let's look for the player file to get the real Z.
+          const pPath = (sector === '_L') ? 'w' : 'w/' + sector;
+          const pList = fileList(qDrive, pPath, id + '*', session);
+          let z = "00"; 
+          if (pList.success && pList.listing) {
+            const pb = pList.listing.split('\n')[0];
+            const zMatch = pb.match(/[A-Z][a-z](\d{2})/);
+            if (zMatch) z = zMatch[1];
+          }
+          players.push(`${id}${sector}${z}`);
+        }
+      });
+
+      // Response: Ql + currentMap + currentZ + csv
+      // We determine currentZ by finding mvOwner.itemId in our new players list
+      const self = players.find(p => p.startsWith(mvOwner.itemId)) || `Za${mvOwner.mapId}00`;
+      const currentZ = self.substring(4, 6);
+
+      logRequest(req, 'Ql', qDrive, mvOwner.itemId, session, { success: true });
+      return respondRetro(res, 'Ql' + mvOwner.mapId + currentZ + players.join(','));
+    }
+
     case 'BB': {
       // Big Bang: create a new multiplayer world using server-side capflag.gfx.
       // Drive comes from query param (new protocol) or legacy d= field.
@@ -1716,10 +1788,10 @@ function handleCommand(req, res, raw, driveName) {
         sgAvatar = legacyParam('av');
       }
 
-      if (!isValidDriveName(sgDrive))                        return respondRetro(res, 'XXInvalid drive');
-      if (!/^[A-Z][a-z]$/.test(sgItemId))                   return respondRetro(res, 'XXInvalid item ID');
-      if (!/^[A-Za-z0-9]{2,20}$/.test(sgAvatar))            return respondRetro(res, 'XXInvalid avatar');
-      if (!drives[sgDrive])                                  return respondRetro(res, 'XXDrive not found');
+      if (!isValidDriveName(sgDrive)) return respondRetro(res, 'XXInvalid drive');
+      if (!/^[A-Z][a-z]$/.test(sgItemId)) return respondRetro(res, 'XXInvalid item ID');
+      if (!/^[A-Za-z0-9]{2,20}$/.test(sgAvatar)) return respondRetro(res, 'XXInvalid avatar');
+      if (!drives[sgDrive]) return respondRetro(res, 'XXDrive not found');
 
       // Verify session owns this player slot (set during Qg/JG)
       var sgOwner = _playerOwnership[session];
@@ -1746,8 +1818,8 @@ function handleCommand(req, res, raw, driveName) {
 
       if (!sgLobbyBase) return respondRetro(res, 'XXPlayer not found in lobby');
 
-      // Determine target world map: Team S → A1, Team T → L8
-      var sgMapId = (sgItemId.charAt(0) === 'S') ? 'A1' : 'L8';
+      // Determine target world map: Team S → A1, Team T → H8
+      var sgMapId = (sgItemId.charAt(0) === 'S') ? 'A1' : 'H8';
 
       // Create the active player file in the world map directory
       var sgWorldFile = 'w/' + sgMapId + '/' + sgItemId + sgZLocation + sgAvatar + '.txt';
@@ -1780,7 +1852,7 @@ function handleCommand(req, res, raw, driveName) {
       return respondRetro(res, 'OK' + sgItemId);
     }
 
-    	case 'Rf': {
+    	case 'RF': {
       var rfDrive, rfMapId;
 
       var rfOwner = _playerOwnership[session];
@@ -1790,7 +1862,7 @@ function handleCommand(req, res, raw, driveName) {
         
         // Safety fallback: strip any stale Q-move suffix that may have survived.
         // Under normal operation, movement commands now save a canonical filename
-        // (no Q suffix) and return Rf immediately, so this strip is rarely needed.
+        // (no Q suffix) and return RF immediately, so this strip is rarely needed.
         var rfDir = (rfMapId === '_L') ? 'w' : 'w/' + rfMapId;
         var rfManifest = _readManifest(rfDrive);
         var rfPrefix = (rfDir === 'w') ? 'w/' : rfDir + '/';
@@ -1848,11 +1920,11 @@ function handleCommand(req, res, raw, driveName) {
             break;
           }
         }
-      }
+     }
 
-      // Response: Rf + mapId(2) + playerZ(2) + items
-      var rfResponse = 'Rf'+rfMapId + rfPlayerZ + rfAllItems.join(',');
-      logRequest(req, 'Rf', rfDrive, rfMapId, session, { success: true, result: rfResponse });
+      // Response: RF + mapId(2) + playerZ(2) + items
+      var rfResponse = 'RF'+rfMapId + rfPlayerZ + rfAllItems.join(',');
+      logRequest(req, 'RF', rfDrive, rfMapId, session, { success: true, result: rfResponse });
       return respondRetro(res, rfResponse);
     }
 
@@ -1954,7 +2026,7 @@ function handleCommand(req, res, raw, driveName) {
       var qPath = (qMapId === '_L') ? 'w' : 'w/' + qMapId;
 
       // 2. Determine Destination
-      var destSector = (qItemId.charAt(0) === 'S') ? 'A1' : 'L8';
+      var destSector = (qItemId.charAt(0) === 'S') ? 'A1' : 'H8';
 
       // 3. Find Player File (Using robust iteration instead of fragile pattern matching)
       var pList = fileList(qDrive, qPath, null, session);
@@ -2251,7 +2323,7 @@ if (process.stdin.isTTY) {
 
   var _serverMountedDrive = null;
   var _serverCwd = '/';
-  var _pendingExit = false;
+  var _createWizard = null;  // active wizard state (or null)
 
   // ── QDOS navigation command handlers ────────────────────────────────────────
 
@@ -2461,6 +2533,10 @@ if (process.stdin.isTTY) {
     }
   }
 
+  function _wizardPrompt(msg) {
+    process.stdout.write(msg);
+  }
+
   // Parse a command line into tokens, respecting double-quoted strings.
   function parseQuotedArgs(str) {
     var tokens = [];
@@ -2484,6 +2560,70 @@ if (process.stdin.isTTY) {
     return tokens;
   }
 
+  // Print the prompt for the current wizard step.
+  function _wizardShowPrompt() {
+    var w = _createWizard;
+    if (!w) return;
+    if (w.step === 'drive_name') {
+      _wizardPrompt('Input name of drive to create [' + w.defaultDrive + ']: ');
+    }
+  }
+
+  // Echo a pre-supplied argument as if the user typed and submitted it.
+  function _wizardEchoStep(val) {
+    var w = _createWizard;
+    if (!w) return;
+    if (w.step === 'drive_name') {
+      process.stdout.write('Drive name: ' + val + '\n');
+    }
+  }
+
+  // Automatically advance wizard steps using pre-supplied arguments.
+  function _wizardAutoAdvance() {
+    var w = _createWizard;
+    if (!w || !w.args || !w.args.length) {
+      _wizardShowPrompt();
+      return;
+    }
+    var val = w.args.shift();
+    _wizardEchoStep(val);
+    _wizardStep(val);
+  }
+
+  // Process one line of input while the drive creation wizard is active.
+  function _wizardStep(line) {
+    var w = _createWizard;
+    if (!w) return;
+    var trimmed = line.trim();
+
+    if (w.step === 'drive_name') {
+      w.driveName = trimmed || w.defaultDrive;
+      // Create the drive immediately (no persistence step in v2)
+      var cr = driveCreate(w.driveName, 'console');
+      if (cr.success) {
+        process.stdout.write('\n\u2713 Created drive \'' + w.driveName + '\' (memory-only).\n');
+      } else {
+        process.stdout.write('\n\u2717 Error: ' + cr.error + '\n');
+      }
+      _createWizard = null;
+      process.stdout.write('\nqandyland2.js ');
+    }
+  }
+
+  // Start the drive creation wizard. args may pre-supply [driveName].
+  function _startCreateWizard(args) {
+    var defaultName = 'newdrive';
+    _createWizard = {
+      step:         'drive_name',
+      defaultDrive: defaultName,
+      driveName:    null,
+      args:         (args || []).slice()
+    };
+    process.stdout.write('\nCreate a new drive\n');
+    process.stdout.write('──────────────────\n');
+    _wizardAutoAdvance();
+  }
+
   var _stdinBuf = '';
   process.stdin.on('data', function (chunk) {
     _stdinBuf += chunk;
@@ -2494,18 +2634,9 @@ if (process.stdin.isTTY) {
       var trimmed = line.trim();
       if (!trimmed) return;
 
-      // If waiting for exit confirmation, handle it first
-      if (_pendingExit) {
-        _pendingExit = false;
-        if (trimmed.toLowerCase() === 'y' || trimmed.toLowerCase() === 'yes') {
-          process.stdout.write('Shutting down...\n');
-          deregisterFromRegistry();
-          if (_heartbeatTimer) clearInterval(_heartbeatTimer);
-          process.exit(0);
-        } else {
-          process.stdout.write('Exit cancelled.\n');
-          process.stdout.write('qandyland2.js ');
-        }
+      // If wizard is active, route input there
+      if (_createWizard) {
+        _wizardStep(line);
         return;
       }
 
@@ -2600,6 +2731,10 @@ if (process.stdin.isTTY) {
           break;
         }
 
+        case 'create':
+          _startCreateWizard(allTokens.slice(1));
+          break;
+
         case 'list': {
           var names = Object.keys(drives);
           if (names.length === 0) {
@@ -2671,15 +2806,10 @@ if (process.stdin.isTTY) {
           }
           break;
 
-        case 'exit':
-          process.stdout.write('Are you sure you want to exit? (y/n) ');
-          _pendingExit = true;
-          return;
-
         case 'help':
           process.stdout.write(
             'Server console commands:\n' +
-            '  exit                 - Shut down the server (asks for confirmation)\n' +
+            '  create [drive-name]  - Create a new memory-only drive\n' +
             '  list                 - List all drives\n' +
             '  delete <name>        - Delete a drive (no drive mounted) or a file (drive mounted)\n' +
             '  serverstorage [drv]  - Show raw storage contents of a drive\n' +
@@ -2709,9 +2839,17 @@ if (process.stdin.isTTY) {
 // ── Server initialization ─────────────────────────────────────────────────────
 
 function _proceedWithStartup() {
-  // Auto-create and mount the gfx.js drive (memory-only, no config file needed)
-  driveCreate('gfx.js', 'console');
-  if (process.stdin.isTTY) { _serverMountedDrive = 'gfx.js'; }
+  var cfg = loadServerConfig();
+  var driveList = (cfg.drives && Array.isArray(cfg.drives) && cfg.drives.length > 0) ? cfg.drives : ['gfx'];
+
+  // Create blank memory-only drives from config (drives always start empty on restart)
+  for (var i = 0; i < driveList.length; i++) {
+    var dn = normName(driveList[i]);
+    if (dn && validateName(dn).ok) {
+      var cr = driveCreate(dn, 'console');
+      if (!cr.success) { console.warn('Warning: could not create drive "' + dn + '": ' + cr.error); }
+    }
+  }
 
   server.listen(PORT, function () {
     if (REGISTRY_URL) {
@@ -2731,7 +2869,15 @@ function _proceedWithStartup() {
   });
 }
 
+function _applyServerConfig() {
+  var cfg = loadServerConfig();
+  if (cfg.serverName && !_cliName) { SERVER_NAME = cfg.serverName; }
+  return cfg;
+}
+
 (function _initializeServer() {
+  _applyServerConfig();
+  if (!SERVER_NAME) SERVER_NAME = 'Qandyland Server';
   _proceedWithStartup();
 })();
 

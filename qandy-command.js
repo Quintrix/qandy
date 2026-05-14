@@ -268,21 +268,32 @@ function command_js() {
   var _pending = window.__qandy_pending;
 
   async function qdosScript(name) {
-    if (typeof HOST !== 'undefined' && HOST) {
+
+    // AI proposed security update, human review needed
+    // if (HOST && DEVICE === 'local' && c.endsWith('.js')) {
+    //   print("Error: No sysop execute from localHost sandbox\n");
+    //   return;
+    // }
+  
+    const isActuallyHost = (window.self === window.top && window.HOST === 1);
+    
+    if (HOST) {
       f=0; for (let i=0; i<JSfiles.length; i++) {
         const JSfile=JSfiles[i];
         if (name===JSfile) {
           f=1;
           var js=document.createElement('script');
           js.id=JSfile;
-          js.src=JSfile;
+          js.src = './' + JSfile;          
           document.head.appendChild(js);
         }
       }
       if (f<1) { return "Error: file not found"; }
       return true;
     } 
-    
+
+    if (window.self === window.top) { return; }
+    // load from localStorage
     var nm = (typeof name === 'string') ? name.trim() : '';
     if (!nm) return "Error: invalid filename";
     function _isValid(n) {
@@ -403,6 +414,30 @@ function command_js() {
       if (result === null || typeof result === 'undefined') return '';
       if (typeof result === 'string') return result;
       try { return String(result); } catch (e) { return JSON.stringify(result); }
+    });
+  }
+
+  async function qdosLoad(filename, timeoutMs) {
+    var valid = (typeof qdosValidateFilename === 'function') ? qdosValidateFilename(filename) :
+              (typeof filename === 'string' ? filename.trim() : null);
+    if (!valid) return Promise.reject(new Error('invalid filename'));
+
+    // --- HOST ROUTING ---
+    if (typeof HOST !== 'undefined' && HOST) {
+      // Force the HOST to use the physical fetch loader
+      if (typeof dosFetch === 'function') {
+        try {
+          var res = await dosFetch(valid); 
+          return res;
+        } catch (e) {
+          return Promise.reject(new Error("Host file not found: " + valid));
+        }
+      }
+      return Promise.reject(new Error('Error: Physical DOS (dosFetch) not available'));
+    }
+    // The Guest remains isolated, requesting localStorage via the host-bridge
+    return qdosXmitDos('localLoad', { file: valid }, timeoutMs).then(function (result) {
+      return _normalizeResult(result);
     });
   }
 

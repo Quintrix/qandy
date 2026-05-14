@@ -2,8 +2,133 @@
 // ──── Qandy Core ─────────────────────────────────────────────────────────────────────
 //
 
+window.PopAlign = "center"; // "center", "click", or "full"
+window.PopUpVis = "hidden"; // current target visibility
+window.PopForce = "hidden";   // forced visibility on mouseout
+window.PUV = null;           // timeout id
+window.lastClickedZ = 0;     // last grid coordinate clicked
+
 function qandy_js() {
   RUN="qandy.js"; 
+
+  const popStyle = document.createElement('style');
+  popStyle.textContent = `
+    .pop { position:absolute; top:260; left:190; z-index:249;
+           font-family: arial; font-size: 14px; weight: bold;
+           color: navy;
+           background-color: rgba(221, 221, 221, 0.95);
+           visibility:hidden;
+           text-align: center;
+           padding: 8px;
+         }
+    .pop a { color: navy; text-decoration: none; }
+    .pop a:hover { color: blue; text-decoration: underline; }
+  `;
+  document.head.appendChild(popStyle);
+
+  window.popup = document.createElement('div');
+  popup.id = 'pop';
+  popup.className = 'pop';
+  popup.style.visibility = "hidden";
+  popup.addEventListener('mouseover', () => {
+     window.PopUpVis = "visible";
+     popup.style.visibility = "visible";
+  });
+  popup.addEventListener('mouseout', () => {
+    window.PopUpVis = window.PopForce;
+    clearTimeout(window.PUV);
+    window.PUV = setTimeout(() => { popup.style.visibility = window.PopUpVis; }, 100);
+  });
+  document.body.appendChild(popup);
+  
+  window.hpop = function() { 
+    const p = document.getElementById("pop");
+    if (p) p.style.visibility = "hidden"; 
+    window.PopUpVis = "hidden";
+};
+
+window.pop = function(htm) {
+	  console.log(PopAlign);
+    const popup = document.getElementById("pop");
+    if (!popup) return;
+    
+    popup.innerHTML = htm;
+    
+    // Qandy Display Constants (Matching your GFX offsets)
+    const ScreenTop = 50; 
+    const ScreenLeft = 54;
+    const ScreenWidth = 256;
+    const ScreenHeight = 384;
+    
+    popup.style.visibility = "visible"; 
+    
+    let PopX, PopY, PopW, PopH;
+    
+    // Reset sizes to auto first to measure content
+    popup.style.width = "auto";
+    popup.style.height = "auto";
+    
+    const measureW = popup.offsetWidth;
+    const measureH = popup.offsetHeight;
+    
+    switch (window.PopAlign) {
+        case "full":
+            PopX = ScreenLeft;
+            PopY = ScreenTop;
+            PopW = ScreenWidth;
+            PopH = ScreenHeight;
+            break;
+            
+        case "center":
+            PopW = Math.min(measureW, ScreenWidth);
+            PopH = Math.min(measureH, ScreenHeight);
+            PopX = ScreenLeft + ((ScreenWidth - PopW) / 2);
+            PopY = ScreenTop + ((ScreenHeight - PopH) / 2);
+            break;
+            
+        case "click":
+            // Requires mapx to be defined, otherwise defaults to center
+            const mX = (window.mapx || 7) + 1;
+            PopW = measureW;
+            PopH = measureH;
+            
+            if (typeof window.lastClickedZ !== 'undefined') {
+                const clickY = Math.floor(window.lastClickedZ / mX);
+                const clickX = window.lastClickedZ % mX;
+                PopX = ScreenLeft + (clickX * 32);
+                PopY = ScreenTop + (clickY * 32);
+                
+                // Boundary Enforcement: Keep inside Qandy Screen
+                if (PopX + PopW > ScreenLeft + ScreenWidth) {
+                    PopX = (ScreenLeft + ScreenWidth) - PopW;
+                }
+                if (PopY + PopH > ScreenTop + ScreenHeight) {
+                    PopY = (ScreenTop + ScreenHeight) - PopH;
+                }
+                if (PopX < ScreenLeft) PopX = ScreenLeft;
+                if (PopY < ScreenTop) PopY = ScreenTop;
+            } else {
+                // Fallback to center
+                PopX = ScreenLeft + ((ScreenWidth - PopW) / 2);
+                PopY = ScreenTop + ((ScreenHeight - PopH) / 2);
+            }
+            break;
+            
+        default:
+            PopX = ScreenLeft + ((ScreenWidth - measureW) / 2);
+            PopY = ScreenTop + ((ScreenHeight - measureH) / 2);
+    }
+    
+    popup.style.top = PopY + "px";
+    popup.style.left = PopX + "px";
+    if (window.PopAlign === "full") {
+        popup.style.width = PopW + "px";
+        popup.style.height = PopH + "px";
+    }
+};
+
+window.hpop=function() { document.getElementById("pop").style.visibility="hidden"; }
+
   window.button=function(b, event) {
     pokeCursorOff(); 
     var virtualclick=!!(event && event.source === 'virtual'); 

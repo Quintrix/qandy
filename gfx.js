@@ -5,11 +5,6 @@ var _registryUrl = 'https://qandy.vercel.app/api/servers';
 var _gfxDrive = 'gfx'; // current drive context; set by gfxCreation / gfxGameState
 
 
-var PopAlign = "click"; // "center", "click"
-var PopUpVis = "hidden"; // current target visibility
-var PForce = "visible";   // forced visibility on mouseout in your original code
-var PUV;                 // timeout id (used to clear/set the timeout)
-
 var mapx=7;
 var mapy=11;
 
@@ -34,6 +29,7 @@ window._gfxInitializing = false;
 window._gfxInitQueue = []; // Pending callbacks waiting for initialization
 
 window.gfxInit = async function() {
+	
   if (window._gfxInitialized) { return; }
   if (window._gfxInitializing) {
     // Queue a promise that resolves when current initialization completes
@@ -85,52 +81,14 @@ window.gfxInit = async function() {
     var queue = window._gfxInitQueue.splice(0);
     for (var i = 0; i < queue.length; i++) { queue[i](); }
   }
-  const style = document.createElement('style');
-  style.textContent = `
-  .pop { position:absolute; top:260; left:190; z-index:249;
-         font-family: arial; font-size: 14px; weight: bold;
-         color: navy; background-color: #999; visibility:hidden;
-         text-align: center;
-         padding-top: 0px; padding-bottom: 0px;  
-         padding-right: 4px; padding-left: 4px; }
-  .tile { position: absolute; top: 0px; left: 0px; }
-  .item { position: absolute; top: 0px; left: 0px; }
-  .char { position: absolute; top: 0px; left: 0px; }
-  `;
-  document.head.appendChild(style);
 
-  const popup = document.createElement('div');
-  popup.id = 'pop';
-  popup.className = 'pop';
-  popup.style.visibility = PopUpVis;
-  popup.addEventListener('mouseover', () => {
-    PopUpVis = "visible";
-    popup.style.visibility = PopUpVis;
-  });
-  popup.addEventListener('mouseout', () => {
-    PopUpVis = PForce;
-    clearTimeout(PUV);
-    PUV = setTimeout(() => { popup.style.visibility = PopUpVis; }, 100);
-  });
   document.body.appendChild(popup);
   // move txt screen over to reveal gfx
   document.getElementById('txt').style.top = '50px';
   document.getElementById('txt').style.left = '350px';
 }
 
-window.gfxTiles = function(sector) { 
- // renders tiles for map sector
- a=0;
- for (b=0; b<=mapy; b++) { 
-  for (c=0; c<=mapx; c++) {
-  	 e=document.getElementById("T"+a).src="t/"+mapTiles[sector].charAt(a*2)+mapTiles[sector].charAt((a*2)+1)+".png";
-  	 a++;
-  }
- }
-}
-
 window.gfxTiles = function(sector) {
-	// ai version 
   var a = 0;
   var scr = window.mapTiles[sector];
   if (!scr) { console.error("Sector " + sector + " not found in memory!"); return; }
@@ -204,8 +162,7 @@ window.gfxChar = function(charID, avatarStr, zPos) {
       el.style.display = "none";
     }
   });
-};
-
+}
 window.gfxZClick = function(z, clickedElement) {
   var zNum = parseInt(z, 10);
   // Track the last clicked Z for the popup positioning logic
@@ -324,7 +281,11 @@ window.gfxConnect = async function(serverIndex) {
 }
 
 window.gfxSelectAvatar = function(a) {
- PopForce="visible";
+
+ window.PopAlign = "center";
+ window.PopUpVis = "hidden";
+ window.PopForce = "visible"; 
+
  if (a=="M") {
   PUP="Select Character:<p>";
   PUP=PUP+"<a href=\"javascript:gfxSelectAvatar(\'B0\');\"><img src=\"c/B0.png\" height=64 width=32></a> &nbsp; ";
@@ -352,8 +313,9 @@ window.gfxSelectAvatar = function(a) {
   	if (a.length==2) {
   	 if (a.charAt(0)=="F") { PObj=a+"H0"; } else { PObj=a+"D0"; }
     playerAvatar = PObj;
-    PForce = "hidden";
+    PopForce = "hidden";
     pop("Select Player<br>Hat to join game!");
+    PopAlign='click';
   	} else {
     PX=2; PY=9; PZ=(PY*(mapx+1))+PX;
     pop("<p>Male or Female?<br><a href=\"javascript:gfxSelectAvatar(\'M\');\"><img src=\"c/B1.png\" height=128 width=64></a> &nbsp; <a href=\"javascript:gfxSelectAvatar(\'F\');\"><img src=\"c/F5.png\" height=128 width=64></a>");
@@ -366,8 +328,10 @@ function gfxTick() {
   if (window.gfxInterval) clearInterval(window.gfxInterval);
   window.gfxInterval = setInterval(async function() {
     //try {
-      var command = window.gfxDo || "RF";
-      window.gfxDo = "RF"; 
+      
+      var command = window.gfxDo || "RF"; window.gfxDo = "RF";
+
+      if (isLooking === true) { command="Ql"; window.gfxDo = "Ql"; }
       
       var gfxPong = await gfxPing(command);
       
@@ -376,12 +340,19 @@ function gfxTick() {
         let verb = gfxPong.substring(ptr, ptr + 2);
         ptr += 2;
 
-        // TERMINAL VERB: RF (Refresh)
-        // This is always the last command. It consumes the rest of the string.
         if (verb === "RF") {
           let noun = gfxPong.substring(ptr);
           gfxRefresh(noun); 
-          break; // Exit loop, processing finished
+          break;
+        }
+
+        if (verb === "Ql") {
+        	 isLooking=true;
+          let myMap = gfxPong.substring(ptr, ptr + 2);
+          let myZ = gfxPong.substring(ptr + 2, ptr + 4);
+          let playerData = gfxPong.substring(ptr + 4);
+          gfxRenderGlobalCanvas(myMap, myZ, playerData);
+          break;
         }
 
         // MAP TRANSITION VERBS: Lm, Ma, Mp, etc.
@@ -423,6 +394,42 @@ function gfxTick() {
   }
 }
 
+window.gfxPing = async function(commandString) {
+  if (!commandString || commandString.length < 2) throw new Error('gfxPing: invalid command');
+
+  var body = commandString;
+  // Ensure the URL matches exactly what the server is listening for
+  var url = _serverUrl + '?d=' + encodeURIComponent(_gfxDrive);
+
+  // Send the session token in a header instead of the URL for better security
+  var headers = { 'Content-Type': 'text/plain' };
+  if (window.gfxSession) {
+    headers['X-Session-Token'] = window.gfxSession;
+  }
+
+  try {
+    var response = await fetch(url, {
+      method:  'POST',
+      headers: headers,
+      body:    body
+    });
+    
+    if (!response.ok) throw new Error('Server error: ' + response.status);
+    //console.log(response.status+" "+response.text);
+    
+    var resText = await response.text();
+    
+    // If the server returns an ST command, save it as our session
+    if (resText.startsWith("ST")) {
+      window.gfxSession = resText.substring(2);
+    }
+    
+    return resText;
+  } catch (e) {
+    throw new Error('gfxPing: ' + (e.message || String(e)));
+  }
+}
+ 
 window.gfxVisualTick = function() {
     if (!window.movingItems) window.movingItems = {};
     for (var iId in window.movingItems) {
@@ -447,6 +454,7 @@ async function gfxFetchMap(filename) {
   filename = filename || "capflag.gfx";
   try {
     await print("Loading " + filename + "...\n");
+    
     var gfxContent = await qdosLoad(filename);
     console.log(gfxContent);
     if (!gfxContent) { throw new Error("Failed to load " + filename); }
@@ -470,18 +478,7 @@ async function gfxFetchMap(filename) {
       mapTiles[sectorId] = mapData.substring(0, 192); 
       mapExits[sectorId] = mapData.substring(192); 
       mapObjs[sectorId] = objData; 
-           
-      // this should be saving strings not arrays?
-      // I think this is done, no longer needed?
-      //window.gfxSectorData[sectorId] = {
-      //  tiles: tiles,   // 96-element array
-      //  exits: exits,   // variable-length array of 2-char sector codes
-      //  objs: objs,     // variable-length array of {id, z, data} objects
-      //  itmes: "",
-      //};
     }
-    
-    //await print("Loaded " + Object.keys(window.gfxSectorData).length + " sectors.\n");
     return true;
     
   } catch (e) {
@@ -539,6 +536,9 @@ function zToXY(z) {
 }
 
 function gfxRefresh(rfStr) {
+  window.isLooking = false; // Receiving a standard RF turns off Look Mode
+  if (window.lookCanvas) window.lookCanvas.style.display = 'none';
+	
   const oldItems = document.querySelectorAll('.item');
   for (let i = 0; i < oldItems.length; i++) { oldItems[i].remove(); }
   const oldChars = document.querySelectorAll('.char');
@@ -624,41 +624,90 @@ function gfxRefresh(rfStr) {
   }
 }
 
-window.gfxPing = async function(commandString) {
-  if (!commandString || commandString.length < 2) throw new Error('gfxPing: invalid command');
+window.isLooking = false;
+window.terrainCache = null;
 
-  var body = commandString;
-  // Ensure the URL matches exactly what the server is listening for
-  var url = _serverUrl + '?d=' + encodeURIComponent(_gfxDrive);
+window.gfxRenderGlobalCanvas = function(myMap, myZ, playerData) {
 
-  // Send the session token in a header instead of the URL for better security
-  var headers = { 'Content-Type': 'text/plain' };
-  if (window.gfxSession) {
-    headers['X-Session-Token'] = window.gfxSession;
+  const oldItems = document.querySelectorAll('.item');
+  for (let i = 0; i < oldItems.length; i++) { oldItems[i].remove(); }
+  const oldChars = document.querySelectorAll('.char');
+  for (let i = 0; i < oldChars.length; i++) { oldChars[i].remove(); }
+
+  if (!window.lookCanvas) {
+    window.lookCanvas = document.createElement('canvas');
+    window.lookCanvas.id = 'lookCanvas';
+    window.lookCanvas.width = 256; 
+    window.lookCanvas.height = 384;
+    window.lookCanvas.style.position = 'absolute';
+    window.lookCanvas.style.top = '50px';
+    window.lookCanvas.style.left = '54px';
+    window.lookCanvas.style.zIndex = '1000';
+    document.body.appendChild(window.lookCanvas);
   }
+    
+  window.lookCanvas.style.display = 'block';
+  const ctx = window.lookCanvas.getContext('2d');
 
-  try {
-    var response = await fetch(url, {
-      method:  'POST',
-      headers: headers,
-      body:    body
-    });
-    
-    if (!response.ok) throw new Error('Server error: ' + response.status);
-    //console.log(response.status+" "+response.text);
-    
-    var resText = await response.text();
-    
-    // If the server returns an ST command, save it as our session
-    if (resText.startsWith("ST")) {
-      window.gfxSession = resText.substring(2);
+  // 1. Pre-render Terrain if not cached
+  if (!window.terrainCache) {
+    window.terrainCache = document.createElement('canvas');
+    window.terrainCache.width = 256;
+    window.terrainCache.height = 384;
+    const tCtx = window.terrainCache.getContext('2d');
+    const sectorsY = "ABCDEFGH".split("");
+
+        for (let sy = 0; sy < 8; sy++) {
+            for (let sx = 0; sx < 8; sx++) {
+                const sectorId = sectorsY[sy] + (sx + 1);
+                const data = window.mapTiles[sectorId];
+                if (!data) continue;
+
+                for (let t = 0; t < 96; t++) {
+                    const tileId = data.substring(t * 2, t * 2 + 2);
+                    const tx = t % 8;
+                    const ty = Math.floor(t / 8);
+                    
+                    const img = new Image();
+                    img.src = 'm/' + tileId + '.png';
+                    img.onload = function() {
+                        tCtx.drawImage(img, (sx * 32) + (tx * 4), (sy * 48) + (ty * 4));
+                    };
+                }
+            }
+        }
     }
-    
-    return resText;
-  } catch (e) {
-    throw new Error('gfxPing: ' + (e.message || String(e)));
-  }
-}
+
+    // 2. Draw Cached Terrain
+    ctx.drawImage(window.terrainCache, 0, 0);
+
+    // 3. Draw Players (CSV: ID2,Map2,Z2)
+    const pList = playerData.split(',');
+    pList.forEach(p => {
+        if (p.length < 6) return;
+        const id = p.substring(0, 2);
+        const sec = p.substring(2, 4);
+        const z = parseInt(p.substring(4, 6), 10);
+        
+        const sy = sec.charCodeAt(0) - 65; 
+        const sx = parseInt(sec.charAt(1), 10) - 1; 
+        const tx = z % 8;
+        const ty = Math.floor(z / 8);
+
+        // Team Logic
+        if (id.charAt(0) === 'S') ctx.fillStyle = '#00FFFF'; // Team S: Cyan/Blue
+        else if (id.charAt(0) === 'T') ctx.fillStyle = '#FF00FF'; // Team T: Magenta/Red
+        else ctx.fillStyle = '#FFFFFF';
+
+        // Local Player Highlight
+        if (id === window.playerItem) {
+            ctx.fillStyle = '#FFFF00'; // Yellow for self
+            ctx.fillRect((sx * 32) + (tx * 4) - 1, (sy * 48) + (ty * 4) - 1, 6, 6);
+        } else {
+            ctx.fillRect((sx * 32) + (tx * 4), (sy * 48) + (ty * 4), 4, 4);
+        }
+    });
+};
 
 window.gfxCreation = async function(drive, mapString, players, isRound) {
 //   drive     – server drive to build world on (e.g. "gfx")
@@ -686,61 +735,6 @@ window.gfxGameState = async function(drive) {
 }
 
 splash(1000);
-window.hpop=function() { document.getElementById("pop").style.visibility="hidden"; }
-window.pop=function(htm) {
-  const popup = document.getElementById("pop");
-  popup.innerHTML = "<p>" + htm;
-  
-  const TopYPos = 32 + 22; 
-  const TopXPos = 32 + 22;
-  
-  // Get popup dimensions after setting content
-  popup.style.visibility = "visible"; // Make visible to measure
-  const popupWidth = popup.offsetWidth;
-  const popupHeight = popup.offsetHeight;
-  
-  let PopX, PopY;
-  
-  switch (PopAlign) {
-    case "center":
-      // Center on the 256x384 game screen
-      PopX = TopXPos + ((256 - popupWidth) / 2);
-      PopY = TopYPos + ((384 - popupHeight) / 2);
-      break;
-      
-    case "click":
-      // Display at the clicked z-location
-      if (typeof lastClickedZ !== 'undefined') {
-        const clickY = Math.floor(lastClickedZ / (mapx + 1));
-        const clickX = lastClickedZ - (clickY * (mapx + 1));
-        PopX = TopXPos + (clickX * 32);
-        PopY = TopYPos + (clickY * 32);
-        
-        // Keep popup within screen bounds
-        if (PopX + popupWidth > TopXPos + 256) {
-          PopX = TopXPos + 256 - popupWidth;
-        }
-        if (PopY + popupHeight > TopYPos + 384) {
-          PopY = TopYPos + 384 - popupHeight;
-        }
-        if (PopX < TopXPos) PopX = TopXPos;
-      } else {
-        // Fallback to center if no click location
-        PopX = TopXPos + ((256 - popupWidth) / 2);
-        if (PopY < TopYPos) PopY = TopYPos;
-        PopY = TopYPos + ((384 - popupHeight) / 2);
-      }
-      break;
-      
-    default:
-      // Default to center
-      PopX = TopXPos + ((256 - popupWidth) / 2);
-      PopY = TopYPos + ((384 - popupHeight) / 2);
-  }
-  
-  popup.style.top = PopY + "px";
-  popup.style.left = PopX + "px";
-}
 
 async function splash(durationMs) {
   _CURSOR=CURSOR; CURSOR=0;

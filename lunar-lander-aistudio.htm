@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JS Lunar Lander</title>
+    <style>
+        body {
+            margin: 0;
+            background: #000;
+            color: #0f0;
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        canvas {
+            border: 2px solid #333;
+            background: #000;
+        }
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            pointer-events: none;
+        }
+        .msg {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            font-size: 24px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ui">
+        FUEL: <span id="fuel">1000</span><br>
+        H.SPEED: <span id="hspeed">0</span><br>
+        V.SPEED: <span id="vspeed">0</span><br>
+        ALTITUDE: <span id="alt">0</span>
+    </div>
+
+    <div id="msg" class="msg"></div>
+
+    <canvas id="gameCanvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const fuelDisplay = document.getElementById('fuel');
+    const hSpeedDisplay = document.getElementById('hspeed');
+    const vSpeedDisplay = document.getElementById('vspeed');
+    const altDisplay = document.getElementById('alt');
+    const msgDisplay = document.getElementById('msg');
+
+    // Game Constants
+    const GRAVITY = 0.015;
+    const THRUST = 0.04;
+    const ROTATION_SPEED = 0.05;
+    const SAFE_V_SPEED = 1.0;
+    const SAFE_ANGLE = 0.2; // Radians
+
+    // Setup Canvas
+    canvas.width = 800;
+    canvas.height = 600;
+
+    let ship, terrain, gameActive, keys;
+
+    function init() {
+        ship = {
+            x: 100,
+            y: 50,
+            vx: 1.5,
+            vy: 0,
+            angle: Math.PI / 2, // Facing right
+            fuel: 1000,
+            width: 15,
+            height: 20
+        };
+
+        terrain = generateTerrain();
+        gameActive = true;
+        keys = {};
+        msgDisplay.style.display = 'none';
+        requestAnimationFrame(update);
+    }
+
+    function generateTerrain() {
+        const points = [];
+        const segments = 20;
+        const padWidth = 60;
+        const padX = Math.random() * (canvas.width - 200) + 100;
+        
+        for (let i = 0; i <= segments; i++) {
+            let x = (canvas.width / segments) * i;
+            let y = canvas.height - (Math.random() * 150 + 50);
+            
+            // Create a flat landing pad
+            if (x > padX && x < padX + padWidth) {
+                y = canvas.height - 80; // Fixed height for pad
+                points.push({x: padX, y: y, isPad: true});
+                points.push({x: padX + padWidth, y: y, isPad: true});
+                i += 2; // Skip a bit to keep the pad flat
+            } else {
+                points.push({x: x, y: y, isPad: false});
+            }
+        }
+        return points.sort((a, b) => a.x - b.x);
+    }
+
+    window.addEventListener('keydown', e => keys[e.code] = true);
+    window.addEventListener('keyup', e => keys[e.code] = false);
+
+    function update() {
+        if (!gameActive) return;
+
+        // Input Handling
+        if (ship.fuel > 0) {
+            if (keys['ArrowUp']) {
+                ship.vx += Math.cos(ship.angle) * THRUST;
+                ship.vy += Math.sin(ship.angle) * THRUST;
+                ship.fuel -= 2;
+            }
+            if (keys['ArrowLeft']) ship.angle -= ROTATION_SPEED;
+            if (keys['ArrowRight']) ship.angle += ROTATION_SPEED;
+        }
+
+        // Physics
+        ship.vy += GRAVITY;
+        ship.x += ship.vx;
+        ship.y += ship.vy;
+
+        // UI update
+        fuelDisplay.innerText = Math.max(0, Math.floor(ship.fuel));
+        hSpeedDisplay.innerText = ship.vx.toFixed(2);
+        vSpeedDisplay.innerText = ship.vy.toFixed(2);
+        
+        checkCollision();
+        draw();
+
+        if (gameActive) requestAnimationFrame(update);
+    }
+
+    function checkCollision() {
+        // Out of bounds
+        if (ship.x < 0 || ship.x > canvas.width) {
+            gameOver("CRASHED: LEFT LUNAR ORBIT");
+            return;
+        }
+
+        // Check terrain collision
+        for (let i = 0; i < terrain.length - 1; i++) {
+            let p1 = terrain[i];
+            let p2 = terrain[i+1];
+
+            if (ship.x >= p1.x && ship.x <= p2.x) {
+                // Linear interpolation to find Y of terrain at ship X
+                let groundY = p1.y + (p2.y - p1.y) * ((ship.x - p1.x) / (p2.x - p1.x));
+                
+                altDisplay.innerText = Math.floor(groundY - ship.y);
+
+                if (ship.y + ship.height/2 >= groundY) {
+                    // We hit the ground
+                    const isLevel = Math.abs(ship.angle + Math.PI/2) < SAFE_ANGLE || Math.abs(ship.angle - 3*Math.PI/2) < SAFE_ANGLE;
+                    const isSlow = Math.abs(ship.vy) < SAFE_V_SPEED && Math.abs(ship.vx) < SAFE_V_SPEED;
+                    
+                    if (p1.isPad && p2.isPad && isLevel && isSlow) {
+                        gameOver("THE EAGLE HAS LANDED!", true);
+                    } else {
+                        gameOver("CRASHED ON IMPACT");
+                    }
+                }
+            }
+        }
+    }
+
+    function gameOver(txt, success = false) {
+        gameActive = false;
+        msgDisplay.innerHTML = `${txt}<br><span style="font-size:14px">Press SPACE to try again</span>`;
+        msgDisplay.style.display = 'block';
+        msgDisplay.style.color = success ? '#0f0' : '#f00';
+    }
+
+    window.addEventListener('keydown', e => {
+        if (e.code === 'Space' && !gameActive) init();
+    });
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Draw Terrain
+        ctx.beginPath();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.moveTo(terrain[0].x, terrain[0].y);
+        for (let p of terrain) {
+            ctx.lineTo(p.x, p.y);
+            if (p.isPad) {
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = "#0f0";
+            } else {
+                ctx.shadowBlur = 0;
+            }
+        }
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        // Draw Ship
+        ctx.save();
+        ctx.translate(ship.x, ship.y);
+        ctx.rotate(ship.angle);
+        
+        ctx.strokeStyle = '#fff';
+        ctx.beginPath();
+        // Simple Lander Shape
+        ctx.moveTo(10, 0);
+        ctx.lineTo(-10, -7);
+        ctx.lineTo(-10, 7);
+        ctx.closePath();
+        ctx.stroke();
+
+        // Draw Thrust Flame
+        if (keys['ArrowUp'] && ship.fuel > 0) {
+            ctx.beginPath();
+            ctx.strokeStyle = '#f00';
+            ctx.moveTo(-10, 0);
+            ctx.lineTo(-20, 0);
+            ctx.stroke();
+        }
+        ctx.restore();
+    }
+
+    init();
+</script>
+</body>
+</html>

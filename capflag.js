@@ -43,7 +43,7 @@ window.itemdown = function(itemStr) {
   var z = itemStr.substring(2, 4);
   var avatar = itemStr.slice(4);
   if (item.charAt(0)=='S' || item.charAt(0)=='T') {
-  	 if (playerItem == "Za") { joinGame(item, z); }
+  	 if (playerItem == "Za") { joinGame(item, z); pop('Tag Flagpole<br>to enter game!'); }
   } 
 }
 
@@ -57,7 +57,7 @@ window.objdown = function(objStr) {
   if (i === "Yj") { 
     if (playerItem !== "Za" && window.map === "_L") {
       if (window.gfxDo === "RF") window.gfxDo = "";
-      window.gfxDo += "Qu" + i; 
+      window.gfxDo += "Qu" + i;
     } else {
       pop("You must claim a team<br>hat before starting!");
     }
@@ -89,6 +89,11 @@ window.keydown = function(key, e) {
   var keyStr = (typeof e === 'object' && e.key) ? e.key : key;
   
   if (window.playerItem === "Za" || !window.playerItem) return;
+
+  if (keyStr === "l" || keyStr === "L") {
+    if (window.gfxDo === "RF") window.gfxDo = "";
+    window.gfxDo += "Ql";
+  }
 
   // 1. Block buffering if a non-movement command is currently queued
   if (window.gfxDo && window.gfxDo !== "RF") {

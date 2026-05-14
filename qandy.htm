@@ -450,7 +450,9 @@ var RUNOUT="";  // output display set by running script, gfx or txt
 
 var JSfiles=['ansi.js', 'ascii.js', 'charmap.js', 'keydown.js', 'mouse.js', 'piano.js',
              'draw.js', 'gfx.js', 'gfx-itemid.js', 'capflag.gfx', 'q.js', 'capflag.js',
-             'world.js', 'joystick.js', 'mouse3.js', 'whack-a-mole.js'];
+             'world.js', 'joystick.js', 'www.js', 'whack-a-mole.js'];
+             
+Object.freeze(JSfiles); // JSFiles can no longer be modified at runtime, security to protect the whitelist
 
 var runInputMode="";      // type of input qandy sends run= (line, key, or none)
 var commandHistory = [];  // Array to store command history
@@ -1850,7 +1852,7 @@ async function startup() {
 
 async function systemReady() {
   // system ready
-  print("\n[bgreen]Qandy Pocket\nComputer v.1l\n\n");
+  print("\n[bgreen]Qandy Pocket\nComputer v.1m\n\n");
   print("[cyan]Alpha Testing\nPrototype Release\n\n");
   if (GUEST) {
     // guest system ready
