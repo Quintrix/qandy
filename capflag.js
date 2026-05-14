@@ -58,6 +58,7 @@ window.objdown = function(objStr) {
     if (playerItem !== "Za" && window.map === "_L") {
       if (window.gfxDo === "RF") window.gfxDo = "";
       window.gfxDo += "Qu" + i;
+      pop('Joining Game...');
     } else {
       pop("You must claim a team<br>hat before starting!");
     }

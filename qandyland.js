@@ -1604,37 +1604,23 @@ function handleCommand(req, res, raw, driveName) {
       const pLoad = fileLoad(qDrive, '/', 'p.txt', session);
       if (!pLoad.success) return respondRetro(res, 'XXMap error');
 
-      // Parse all players: ID=SectorAvatar...
-      const players = [];
-      const lines = pLoad.content.split('\n');
+  	 	const myTeam = mvOwner.itemId.charAt(0);
+      const visibleSectors = new Set();
+      // First pass: Find where my team is
       lines.forEach(line => {
-        // Regex matches e.g. "Sa=A1B0D0" -> ID: Sa, Sector: A1
-        const m = line.match(/^([A-Z][a-z])=([A-Z][a-z0-9])(.*)$/);
-        if (m) {
-          const id = m[1];
-          const sector = m[2];
-          // We need the Z. In qandyland, Z is currently kept in the filename in /w/sector/
-          // For efficiency, we can assume spawn Z or attempt to find the file.
-          // Let's look for the player file to get the real Z.
-          const pPath = (sector === '_L') ? 'w' : 'w/' + sector;
-          const pList = fileList(qDrive, pPath, id + '*', session);
-          let z = "00"; 
-          if (pList.success && pList.listing) {
-            const pb = pList.listing.split('\n')[0];
-            const zMatch = pb.match(/[A-Z][a-z](\d{2})/);
-            if (zMatch) z = zMatch[1];
-          }
-          players.push(`${id}${sector}${z}`);
-        }
+          const m = line.match(/^([A-Z][a-z])=([A-Z][a-z0-9])/);
+          if (m && m[1].charAt(0) === myTeam) visibleSectors.add(m[2]);
       });
 
-      // Response: Ql + currentMap + currentZ + csv
-      // We determine currentZ by finding mvOwner.itemId in our new players list
-      const self = players.find(p => p.startsWith(mvOwner.itemId)) || `Za${mvOwner.mapId}00`;
-      const currentZ = self.substring(4, 6);
+      const filteredPlayers = players.filter(p => {
+          const pID = p.substring(0, 2);
+          const pSector = p.substring(2, 4);
+          if (pID.charAt(0) === myTeam) return true; // Always see teammates
+          return visibleSectors.has(pSector); // Only see opponents in shared sectors
+      });
+      const sectorList = Array.from(visibleSectors).join('');
+      return respondRetro(res, 'Ql' + mvOwner.mapId + currentZ + filteredPlayers.join(',') + ':' + sectorList);
 
-      logRequest(req, 'Ql', qDrive, mvOwner.itemId, session, { success: true });
-      return respondRetro(res, 'Ql' + mvOwner.mapId + currentZ + players.join(','));
     }
 
     case 'BB': {

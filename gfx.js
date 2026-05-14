@@ -328,24 +328,19 @@ function gfxTick() {
   if (window.gfxInterval) clearInterval(window.gfxInterval);
   window.gfxInterval = setInterval(async function() {
     //try {
-      
       var command = window.gfxDo || "RF"; window.gfxDo = "RF";
-
       if (isLooking === true) { command="Ql"; window.gfxDo = "Ql"; }
-      
       var gfxPong = await gfxPing(command);
-      
+      console.log(command+' = '+gfxPong);
       let ptr = 0;
       while (ptr < gfxPong.length) {
         let verb = gfxPong.substring(ptr, ptr + 2);
         ptr += 2;
-
         if (verb === "RF") {
           let noun = gfxPong.substring(ptr);
           gfxRefresh(noun); 
           break;
         }
-
         if (verb === "Ql") {
         	 isLooking=true;
           let myMap = gfxPong.substring(ptr, ptr + 2);
@@ -354,7 +349,6 @@ function gfxTick() {
           gfxRenderGlobalCanvas(myMap, myZ, playerData);
           break;
         }
-
         // MAP TRANSITION VERBS: Lm, Ma, Mp, etc.
         // Noun is always 2 characters (the Map ID)
         //if (verb === "Lm" || verb === "Ma" || verb === "Mp") {
@@ -628,11 +622,13 @@ window.isLooking = false;
 window.terrainCache = null;
 
 window.gfxRenderGlobalCanvas = function(myMap, myZ, playerData) {
-
-  const oldItems = document.querySelectorAll('.item');
-  for (let i = 0; i < oldItems.length; i++) { oldItems[i].remove(); }
-  const oldChars = document.querySelectorAll('.char');
-  for (let i = 0; i < oldChars.length; i++) { oldChars[i].remove(); }
+  // 1. Setup Constants and Canvas
+  const sectorsY = "ABCDEFGH".split("");
+  
+  // Split the data: [0] is the CSV player list, [1] is the visible sectors string
+  const parts = playerData.split(':');
+  const pCSV = parts[0];
+  const knownSectors = parts[1] || ""; 
 
   if (!window.lookCanvas) {
     window.lookCanvas = document.createElement('canvas');
@@ -649,64 +645,64 @@ window.gfxRenderGlobalCanvas = function(myMap, myZ, playerData) {
   window.lookCanvas.style.display = 'block';
   const ctx = window.lookCanvas.getContext('2d');
 
-  // 1. Pre-render Terrain if not cached
+  // 2. Pre-render Terrain Cache if missing
   if (!window.terrainCache) {
     window.terrainCache = document.createElement('canvas');
     window.terrainCache.width = 256;
     window.terrainCache.height = 384;
     const tCtx = window.terrainCache.getContext('2d');
-    const sectorsY = "ABCDEFGH".split("");
 
-        for (let sy = 0; sy < 8; sy++) {
-            for (let sx = 0; sx < 8; sx++) {
-                const sectorId = sectorsY[sy] + (sx + 1);
-                const data = window.mapTiles[sectorId];
-                if (!data) continue;
-
-                for (let t = 0; t < 96; t++) {
-                    const tileId = data.substring(t * 2, t * 2 + 2);
-                    const tx = t % 8;
-                    const ty = Math.floor(t / 8);
-                    
-                    const img = new Image();
-                    img.src = 'm/' + tileId + '.png';
-                    img.onload = function() {
-                        tCtx.drawImage(img, (sx * 32) + (tx * 4), (sy * 48) + (ty * 4));
-                    };
-                }
-            }
+    var tileId="";
+    for (let sy = 0; sy < 8; sy++) {
+      for (let sx = 0; sx < 8; sx++) {
+        const sectorId = sectorsY[sy] + (sx + 1);
+        const data = window.mapTiles[sectorId];
+        if (!data) continue;
+        for (let t = 0; t < 96; t++) {
+        	 if (!knownSectors.includes(sectorId)) {
+        	 	tileId = 'Qf';
+        	 } else {
+            tileId = data.substring(t * 2, t * 2 + 2);
+          }
+          const tx = t % 8; const ty = Math.floor(t / 8);
+          const img = new Image();
+          img.src = 'm/' + tileId + '.png';
+          img.onload = function() {
+            tCtx.drawImage(img, (sx * 32) + (tx * 4), (sy * 48) + (ty * 4));
+          }
         }
+      }
     }
+  }
 
-    // 2. Draw Cached Terrain
-    ctx.drawImage(window.terrainCache, 0, 0);
+  // 3. DRAWING PHASE
+  // A. Draw full terrain first
+  ctx.drawImage(window.terrainCache, 0, 0);
 
-    // 3. Draw Players (CSV: ID2,Map2,Z2)
-    const pList = playerData.split(',');
-    pList.forEach(p => {
-        if (p.length < 6) return;
-        const id = p.substring(0, 2);
-        const sec = p.substring(2, 4);
-        const z = parseInt(p.substring(4, 6), 10);
-        
-        const sy = sec.charCodeAt(0) - 65; 
-        const sx = parseInt(sec.charAt(1), 10) - 1; 
-        const tx = z % 8;
-        const ty = Math.floor(z / 8);
 
-        // Team Logic
-        if (id.charAt(0) === 'S') ctx.fillStyle = '#00FFFF'; // Team S: Cyan/Blue
-        else if (id.charAt(0) === 'T') ctx.fillStyle = '#FF00FF'; // Team T: Magenta/Red
-        else ctx.fillStyle = '#FFFFFF';
+  // C. Draw Players
+  const pList = pCSV.split(',');
+  pList.forEach(p => {
+    if (p.length < 6) return;
+    const id = p.substring(0, 2);
+    const sec = p.substring(2, 4);
+    const z = parseInt(p.substring(4, 6), 10);
+    
+    const sy = sec.charCodeAt(0) - 65; 
+    const sx = parseInt(sec.charAt(1), 10) - 1; 
+    const tx = z % 8; const ty = Math.floor(z / 8);
 
-        // Local Player Highlight
-        if (id === window.playerItem) {
-            ctx.fillStyle = '#FFFF00'; // Yellow for self
-            ctx.fillRect((sx * 32) + (tx * 4) - 1, (sy * 48) + (ty * 4) - 1, 6, 6);
-        } else {
-            ctx.fillRect((sx * 32) + (tx * 4), (sy * 48) + (ty * 4), 4, 4);
-        }
-    });
+    if (id.charAt(0) === 'S') ctx.fillStyle = '#00FFFF';
+    else if (id.charAt(0) === 'T') ctx.fillStyle = '#FF00FF';
+    else ctx.fillStyle = '#FFFFFF';
+
+    if (id === window.playerItem) {
+        ctx.fillStyle = '#FFFF00';
+        ctx.fillRect((sx * 32) + (tx * 4) - 1, (sy * 48) + (ty * 4) - 1, 6, 6);
+    } else {
+        ctx.fillRect((sx * 32) + (tx * 4), (sy * 48) + (ty * 4), 4, 4);
+    }
+  });
 };
 
 window.gfxCreation = async function(drive, mapString, players, isRound) {
