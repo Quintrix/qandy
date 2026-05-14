@@ -1597,31 +1597,42 @@ function handleCommand(req, res, raw, driveName) {
 
   switch (cmd) {
   	 case 'Ql': {
-      const mvOwner = _playerOwnership[session];
-      if (!mvOwner) return respondRetro(res, 'XXNot logged in');
+  const mvOwner = _playerOwnership[session];
+  if (!mvOwner) return respondRetro(res, 'XXNot logged in');
 
-      const qDrive = mvOwner.drive;
-      const pLoad = fileLoad(qDrive, '/', 'p.txt', session);
-      if (!pLoad.success) return respondRetro(res, 'XXMap error');
+  const qDrive = mvOwner.drive;
+  const pLoad = fileLoad(qDrive, '/', 'p.txt', session);
+  if (!pLoad.success) return respondRetro(res, 'XXMap error');
 
-  	 	const myTeam = mvOwner.itemId.charAt(0);
-      const visibleSectors = new Set();
-      // First pass: Find where my team is
-      lines.forEach(line => {
-          const m = line.match(/^([A-Z][a-z])=([A-Z][a-z0-9])/);
-          if (m && m[1].charAt(0) === myTeam) visibleSectors.add(m[2]);
-      });
-
-      const filteredPlayers = players.filter(p => {
-          const pID = p.substring(0, 2);
-          const pSector = p.substring(2, 4);
-          if (pID.charAt(0) === myTeam) return true; // Always see teammates
-          return visibleSectors.has(pSector); // Only see opponents in shared sectors
-      });
-      const sectorList = Array.from(visibleSectors).join('');
-      return respondRetro(res, 'Ql' + mvOwner.mapId + currentZ + filteredPlayers.join(',') + ':' + sectorList);
-
+  const myTeam = mvOwner.itemId.charAt(0);
+  const visibleSectors = new Set();
+  
+  // Parse p.txt content into lines
+  const lines = (pLoad.content || '').split('\n');
+  const players = [];
+  let currentZ = '00';
+  
+  // First pass: Find where my team is and collect player data
+  lines.forEach(line => {
+    const m = line.match(/^([A-Z][a-z])=([A-Z][a-z0-9])/);
+    if (m) {
+      players.push(m[1]);
+      if (m[1].charAt(0) === myTeam) {
+        visibleSectors.add(m[2]);
+      }
     }
+  });
+
+  const filteredPlayers = players.filter(p => {
+    const pID = p.substring(0, 2);
+    const pSector = p.substring(2, 4);
+    if (pID.charAt(0) === myTeam) return true; // Always see teammates
+    return visibleSectors.has(pSector); // Only see opponents in shared sectors
+  });
+  
+  const sectorList = Array.from(visibleSectors).join('');
+  return respondRetro(res, 'Ql' + mvOwner.mapId + currentZ + filteredPlayers.join(',') + ':' + sectorList);
+}
 
     case 'BB': {
       // Big Bang: create a new multiplayer world using server-side capflag.gfx.
