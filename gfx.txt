@@ -1,59 +1,60 @@
 
+Quintrix and Crew Software
+Multiplayer Graphics Engine
 
 
-                      Quintrix and Crew Software
-                      Multiplayer Graphics Engine
-                      Stand Alone DevTeam Tools:
+Our gfx.js engine processes text files the way a mainframe
+processes punch cards, giving it a level of speed that most
+engines only dream of.
+
+The fastest file storage is the operating system's DOS, any
+database is an extra layer that can only slow things down,
+thus we used the file system as the database. The map is
+divided into 'sectors' which can run from Aa-Az or A0-Z9,
+or Aa-Z9. Each sector is given a directory and inside that
+directory any items, objects, avatars, and config are stored
+as files. The filename contain everything the client needs
+to render that sector, so a 'dir' command reveals the entire
+sector.  
+
+The server moves players by renaming their file, or moving 
+it to a new map sector directory. The server can change items
+by renaming, so if a player uses a 'switch off' the server
+can turn it into a 'switch on'. 
+
+There are 36 'X" registers (Xa-X9) and 36 'W' registers (Wa-W99).
+The 'X' registers are used as 'verbs' (commands) and the 
+'W' registers are used for storing stats. Because these registers
+are actually 'items' they can be stored in a players inventory 
+or placed on the world map itself.
+
+In the future, these registers will be used to allow human-players
+to 'program' bot-players. 
 
 
-    gfx-bigbang.htm — lets user 'paint' each map sector with a default tilebase
-                      then generates 'noise' so each map is unique. Copies output
-                      to clipboard which can then be imported into.....
-
-     gfx-editor.htm — Displays entire world and lets user edit each tile. Right-click
-                      a tile and it becomes the 'brush', left-click a tile paints that
-                      tile to the brush. You can hold the mouse down to draw lines and
-                      file areas. Input capital letter to change the first character
-                      of the tile, input lower case letter to change the second character
-                      of the tile. Again, copies output to clipboard which can be imported...
-                      
-     gfx-viewer.htm — Renders entire world on a 'canvas image' at either full size
-                      32x32 tiles, or mini-size 4x4 tiles. This image can compatiable
-                      with 'Save As'. 
-                      
-    gfx-tileset.htm — Displays entire tileset including tiles, characters, and items.
-     
-     ——————————————————————————————————————————————————————————————————————————————————————————
-
-                         server:// — serverStorage 
-                         
-         (gfx=game name) gfx drive — server://gfx/
-         
-             world map directories — server://gfx/w/
-             
-                   player manifest — server://gfx/p.txt
-                   
-                                     text flat file one entry per line populated with
-                                     qandy-style two-character ID codes with no seperators
-
-     ——————————————————————————————————————————————————————————————————————————————————————————
-
-               Server Commands:              Server Responses:
-                  
-         BB — Big Bang                     XW — No World Found  
-         GS — Game State                   XX — Error
-         
-                           
-                    
-
-
-             
-How player manifest should work: every 'player' in the game is an 'item' and is assigned a two character item code, the file gfx-itemid.js has the 'master list' of all items ID codes, each code has a corasponding image a qandy-host.htm subdirectory 'i' (for items). Players fill the rows Sa-Sz and Ta-Tz which gives each team 26 players. 
-
-The first thing that needs to happen is capflag.js needs to ping the server for the 'lobby' map. That map will be a small map consisting of two or four (haven't figured out which yet) map screens that will have all player 'items' on them.  This means I'll need to update images from Sa-Tz to be a 'grey player' that has the shape of a player but no colors to indicate it is an 'inactive player'. 
-
-So the client itself is not considered a 'player' yet, the user will need to click on one of the 'player' items on the ground and select 'Join Game' at which point they will become that item and it will be changed from a simple one-image item into the player's rendered avatar string. The list of player's avatar strings is saved in the player manifest file at server://gfx/p.txt and is in this format: [PlayerID][head[body][hat][sword][shield]-[name] ... each of these fields (except name) is a two-character ItemID code that can all be rendered on top of each other via the 'paper doll' character engine. The /p.txt file is the full manifest for server use, each map directory will have it's own p.txt player manifest with the player's on that screen ... this way the client is only downloading the players they can 'see' (the ones on the same map screen). 
-
-The 'name' field is not to be considered 'unique', it is not an ID. All names should be pre-populated as 'Team S Player x' or 'Team T Player x' with x being their number 1-26 (a-z). We'll add a command where players can change their name in the future, let's get this working before we add bells and whistles. 
-
-
+    Xa                 Wa armband (hits)
+    Xb                 Wb
+    Xc                 Wc
+    Xd                 Wd
+    Xe east            We
+    Xf food (eat)      Wf
+    Xg                 Wg
+    Xh                 Wh
+    Xi inventory       Wi
+    Xj                 Wj
+    Xk                 Wk
+    Xl look            Wl
+    Xm                 Wm moves
+    Xn north           Wn
+    Xo ore (mine)      Wo
+    Xp pier (fish)     Wp
+    Xq                 Wq
+    Xr                 Wr
+    Xs south           Ws
+    Xt teleport        Wt
+    Xu use (item)      Wu
+    Xv                 Wv
+    Xw west            Ww
+    Xx                 Wx
+    Xy                 Wy
+    Xz                 Wz

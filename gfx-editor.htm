@@ -124,7 +124,9 @@ const SECTORS_WIDE = 8, SECTORS_TALL = 12;
     
     let pathMode = 0; // 0: Off, 1: Select Start, 2: Select End
     let pathStartNode = null;
-
+    
+    let sectorLOS = {}; // Format: { "A1": "Ga", "B1": "Sa", ... }
+    
     let sectorItems = {}; // Format: { "A1": [{id: "I1", z: "05", data: "01"}, ...] }
     let currentItemCode = "I1";
     let currentItemData = "00";
@@ -453,15 +455,12 @@ function exitFlowerMode() {
     document.getElementById('toolPopup').style.display = 'none';
 }    
 
-
-
-
-    function setTileSize(size) {
-        TILE_SIZE = size;
-        canvas.width = TILE_W * TILE_SIZE;
-        canvas.height = TILE_H * TILE_SIZE;
-        renderFullMap();
-    }
+function setTileSize(size) {
+    TILE_SIZE = size;
+    canvas.width = TILE_W * TILE_SIZE;
+    canvas.height = TILE_H * TILE_SIZE;
+      renderFullMap();
+}
 
     // no longer used
     // renderSidebar();
@@ -757,6 +756,48 @@ function handlePaintAction(clientX, clientY) {
             }
         }
     }
+}
+
+function showLOSTool() {
+    activeTool = 'terrain';
+    const ROWS = ["A","B","C","D","E","F","G","H","I","J","K","L"];
+    const terrains = { "Ga": "Grass (Clear)", "Ra": "Forest (Dense)", "Sa": "Mountain (High)", "Ta": "Swamp (Low)", "Ya": "Wall (Block)" };
+    
+    let gridHtml = `<div style="display:grid; grid-template-columns:repeat(8, 30px); gap:2px; background:#111; padding:5px;">`;
+    
+    for (let r = 0; r < 12; r++) {
+        for (let c = 0; c < 8; c++) {
+            const label = `${ROWS[r]}${c+1}`;
+            const type = sectorLOS[label] || "Ga";
+            gridHtml += `<div onclick="cycleLOS('${label}')" title="${label}: ${terrains[type]}" 
+                style="width:30px; height:30px; cursor:pointer; background:url('t/${type}.png'); background-size:cover; border:1px solid #444; font-size:9px; color:white; text-shadow:1px 1px black;">${label}</div>`;
+        }
+    }
+    gridHtml += `</div>`;
+
+    const popup = document.getElementById('toolPopup');
+    popup.innerHTML = `
+        <div id="toolPopupHeader" style="cursor:move; background:#2c3e50; padding:8px; border-radius:6px 6px 0 0; font-weight:bold;">
+            World Lines of Sight
+            <span style="float:right;cursor:pointer;" onclick="document.getElementById('toolPopup').style.display='none'">✕</span>
+        </div>
+        <div style="padding:15px;">
+            <p style="font-size:0.8em; color:#aaa; margin-top:0;">Click a sector to cycle terrain type:</p>
+            ${gridHtml}
+            <div style="margin-top:10px; font-size:0.75em; color:#0af;">Ga: Grass | Ra: Forest | Sa: Mtn | Ta: Swamp | Ya: Wall</div>
+            <button onclick="document.getElementById('toolPopup').style.display='none'" style="margin-top:10px; width:100%;">Done</button>
+        </div>
+    `;
+    popup.style.display = "block";
+    makeDraggable(popup, document.getElementById('toolPopupHeader'));
+}
+
+function cycleLOS(label) {
+    const sequence = ["Ga", "Ra", "Sa", "Ta", "Ya"];
+    let current = sectorLOS[label] || "Ga";
+    let next = sequence[(sequence.indexOf(current) + 1) % sequence.length];
+    sectorLOS[label] = next;
+    showLOSTool(); // Refresh grid
 }
 
 function updateToolbarUI() {
@@ -1234,6 +1275,7 @@ function exportMap() {
         for (let c = 0; c < 8; c++) { // Horizontal sectors
             const sectorLabel = `${ROWS[r]}${c + 1}`;
             let sectorString = "";
+            const los = sectorLOS[sectorLabel] || "Ga"; // Get LOS
 
             // Get tiles in this sector
             for (let sy = 0; sy < SECTOR_H; sy++) {
@@ -1247,12 +1289,14 @@ function exportMap() {
             // --- Add the exits string ---
             var exits = sectorExits[sectorLabel] || ""; // fallback to "" if undefined
             
+            
 let itemString = "";
 if (sectorItems[sectorLabel] && sectorItems[sectorLabel].length > 0) {
     itemString = "." + sectorItems[sectorLabel].map(it => `${it.id}${it.z}${it.data}`).join("");
 }
 
-output += `${sectorLabel}=${sectorString}${exits}${itemString}\n`;            
+//output += `${sectorLabel}=${sectorString}${exits}${itemString}\n`;            
+output += `${sectorLabel}=${sectorString}${los}${exits}${itemString}\n`; // Insert los here
             
         }
     }
@@ -1798,6 +1842,8 @@ function showTerrainTool() {
             <button onclick="showMountainTool()" style="background:#555;">Mountain Ridge</button>
             <button onclick="showRoadTool()" style="background:#555;">Brick Road Builder</button>
             <button onclick="showForestTool()" style="background:#2d5a27;">Forest Creator</button>
+            <button onclick="showLOSTool()" style="background:#555;;">Edit Lines Of Sight</button>
+            
             
             <hr style="border:0; border-top:1px solid #444; width:100%;">
             

@@ -5,7 +5,7 @@
 // Simplified server storage using a single array per drive.
 // Fixes manifest saving issues by eliminating the dual-state manifest/files.
 //
-// Usage: node qandyland2.js [port]
+// Usage: node qandyland.js [port]
 // Default port: 8080
 //
 // Storage structure: drive.storage = [[key, value], ...]
@@ -59,7 +59,7 @@ var DEFAULT_SPAWN_Z = '43';
 
 // ── Server discovery / registry ───────────────────────────────────────────────
 
-// Configurable via command-line: node qandyland2.js [port] [--name "..."] [--registry "url"] [--maxPlayers N]
+// Configurable via command-line: node qandyland.js [port] [--name "..."] [--registry "url"] [--maxPlayers N]
 var SERVER_NAME    = 'Qandyland Server';
 var SERVER_VERSION = '2.0';
 var REGISTRY_URL   = 'https://qandy.vercel.app/api/servers';
@@ -1004,10 +1004,11 @@ function matchPattern(name, pattern) {
 //   .       – separator before item list
 //   items   – 6-char entries: 2=id, 2=z-location, 2=data
 //
-// Creates server://{drive}/w/{sectorId}/  for each non-_L sector, with:
-//   e.txt – valid exit sector codes
-//   <id><z><data> – one 6-char file per static item in the sector
-// Creates server://{drive}/p.txt with empty player slots derived from _L items.
+// A system file will always be 1 character 
+// A static object filename will always be 6 characters (item z-location data)
+// A dynamic item filename will always be 4 characters (item z-location)
+// A player item will always be at least 8 characters (item a-location face body)
+//
 
 var GFX_FILE = 'capflag.gfx';
 
@@ -1087,7 +1088,7 @@ function bigbang(driveName, session) {
     if (!lIsSlot) continue; // Static items (flagpoles etc.) use the static map; only slots need server files
     if (lSeenIds[lItemId]) continue;
     lSeenIds[lItemId] = true;
-    var lFile   = lItemId + lItemZ + '.txt';
+    var lFile   = lItemId + lItemZ;
     var lResult = fileSave(driveName, '/', 'w/' + lFile, '', '', 'bigbang');
     if (lResult.success) {
       created.push('lobby: ' + lFile);
@@ -1388,7 +1389,7 @@ function handleCommand(req, res, raw, driveName) {
         var basename = entry.name.substring(prefix.length);
         
         // Match base structure: ID(2) + Z(2) + FullAvatar
-        var mvMatch = basename.match(/^([A-Z][a-z])(\d{2})(.*?)\.txt$/);
+        var mvMatch = basename.match(/^([A-Z][a-z])(\d{2})(.*)$/);
         if (mvMatch && mvMatch[1] === mvItemId && entry.session === session) {
           mvCurrentFile = basename;
           mvCurrentZ = parseInt(mvMatch[2], 10);
@@ -1530,7 +1531,7 @@ function handleCommand(req, res, raw, driveName) {
         // Canonical filename: NO Q-move suffix appended.
         // Stale movement commands can never survive across ticks and be re-applied,
         // which is the root fix for the movement ghosting / snapback bug.
-        var newFile = mvItemId + newZStr + mvPureAvatar + '.txt';
+        var newFile = mvItemId + newZStr + mvPureAvatar;
 
         // Step 3: Load player inventory from the current player file.
         var mvFileLoad = fileLoad(mvDrive, '/', mvDir + '/' + mvCurrentFile, session);
@@ -1573,13 +1574,19 @@ function handleCommand(req, res, raw, driveName) {
             var mvRfFile = mvRfFiles[mvRfi].trim();
             if (!mvRfFile) continue;
             var mvRfBase = mvRfFile.substring(mvRfFile.lastIndexOf('/') + 1);
-            if (mvRfBase.length === 8) {
-              var mvRfItemMatch = mvRfBase.match(/^([A-Z][a-z]\d{2})\.txt$/);
-              if (mvRfItemMatch) mvRfItems.push(mvRfItemMatch[1]);
-            } else if (mvRfBase.length > 8) {
-              var mvRfPlayerMatch = mvRfBase.match(/^([A-Z][a-z])(\d{2})(.+)\.txt$/);
-              if (mvRfPlayerMatch) mvRfItems.push(mvRfPlayerMatch[1] + mvRfPlayerMatch[2] + mvRfPlayerMatch[3]);
+            
+            if (rfBase.length === 4) {
+                // Dynamic Item: Sa33 (Now length 4)
+                var mvRfItemMatch = rfBase.match(/^([A-Z][a-z]\d{2})$/);
+                if (mvRfItemMatch) mvRfItems.push(mvRfItemMatch[1]);
+            } else if (rfBase.length >= 8) {
+                // Player: Sa33B0D0 (Now length 8+)
+                var mvRfPlayerMatch = rfBase.match(/^([A-Z][a-z])(\d{2})(.+)$/);
+                if (mvRfPlayerMatch) {
+                    mvRfItems.push(mvRfPlayerMatch[1] + mvRfPlayerMatch[2] + mvRfPlayerMatch[3]);
+                }
             }
+            
           }
         }
         // Determine authoritative player z from the just-built sector list.
@@ -1743,7 +1750,7 @@ function handleCommand(req, res, raw, driveName) {
 
       // Rename: append the avatar string to claim the slot (e.g. "Sa33B0D0.txt")
       var jgZ = jgBase.substring(2); // 2-digit z-position encoded in slot filename
-      var jgNewName = jgBase + jgAvatar + '.txt';
+      var jgNewName = jgBase + jgAvatar;
       var jgRename = fileRename(jgDrive, '/', 'w/' + jgSlotFile, 'w/' + jgNewName, session);
       if (!jgRename.success) return respondRetro(res, 'XXFailed to claim slot: ' + jgRename.error);
 
@@ -1819,7 +1826,7 @@ function handleCommand(req, res, raw, driveName) {
       var sgMapId = (sgItemId.charAt(0) === 'S') ? 'A1' : 'H8';
 
       // Create the active player file in the world map directory
-      var sgWorldFile = 'w/' + sgMapId + '/' + sgItemId + sgZLocation + sgAvatar + '.txt';
+      var sgWorldFile = 'w/' + sgMapId + '/' + sgItemId + sgZLocation + sgAvatar;
       var sgWorldSave = fileSave(sgDrive, '/', sgWorldFile, '', session, 'SG');
       if (!sgWorldSave.success) return respondRetro(res, 'XXFailed to create world player: ' + sgWorldSave.error);
 
@@ -1849,17 +1856,13 @@ function handleCommand(req, res, raw, driveName) {
       return respondRetro(res, 'OK' + sgItemId);
     }
 
-    	case 'RF': {
+    case 'RF': {
       var rfDrive, rfMapId;
-
       var rfOwner = _playerOwnership[session];
       if (rfOwner && rfOwner.drive && rfOwner.mapId) {
         rfDrive = rfOwner.drive;
         rfMapId = rfOwner.mapId;
-        
         // Safety fallback: strip any stale Q-move suffix that may have survived.
-        // Under normal operation, movement commands now save a canonical filename
-        // (no Q suffix) and return RF immediately, so this strip is rarely needed.
         var rfDir = (rfMapId === '_L') ? 'w' : 'w/' + rfMapId;
         var rfManifest = _readManifest(rfDrive);
         var rfPrefix = (rfDir === 'w') ? 'w/' : rfDir + '/';
@@ -1867,11 +1870,10 @@ function handleCommand(req, res, raw, driveName) {
           var entry = rfManifest[mvi];
           if (entry.session === session && entry.name.startsWith(rfPrefix) && entry.name.indexOf('/', rfPrefix.length) === -1) {
             var basename = entry.name.substring(rfPrefix.length);
-            
             // Start searching for 'Q' AFTER the ID(2) and Z(2) to be safe
             var qIdx = basename.indexOf('Q', 4); 
             if (qIdx > -1) {
-              var strippedName = basename.substring(0, qIdx) + '.txt';
+              var strippedName = basename.substring(0, qIdx);
               fileRename(rfDrive, '/', rfDir + '/' + basename, rfDir + '/' + strippedName, session);
             }
             break;
@@ -1889,19 +1891,16 @@ function handleCommand(req, res, raw, driveName) {
 
       var rfList = fileList(rfDrive, rfPath, null, session);
       var rfAllItems = [];
+
       if (rfList.success && rfList.listing) {
         var rfFiles = rfList.listing.split('\n');
         for (var rfi = 0; rfi < rfFiles.length; rfi++) {
           var rfFile = rfFiles[rfi].trim();
           if (!rfFile) continue;
-          var rfBase = rfFile.substring(rfFile.lastIndexOf('/') + 1);
-
-          if (rfBase.length === 8) {
-            var rfItemMatch = rfBase.match(/^([A-Z][a-z]\d{2})\.txt$/);
-            if (rfItemMatch) rfAllItems.push(rfItemMatch[1]); 
-          } else if (rfBase.length > 8) {
-            var rfPlayerMatch = rfBase.match(/^([A-Z][a-z])(\d{2})(.+)\.txt$/);
-            if (rfPlayerMatch) rfAllItems.push(rfPlayerMatch[1] + rfPlayerMatch[2] + rfPlayerMatch[3]);
+          var rfBase = rfFile.substring(rfFile.lastIndexOf('/') + 1).replace('.txt', '');
+          if (rfBase.length === 6) continue; // Skip Static Objects (Terrain, Signs)
+          if (rfBase.length === 4 || rfBase.length >= 8) {
+            rfAllItems.push(rfBase);
           }
         }
       }
@@ -1963,7 +1962,7 @@ function handleCommand(req, res, raw, driveName) {
           if (!qgSlotFile) return respondRetro(res, 'XXItem not found');
 
           // Verify the slot is unclaimed (base name = exactly 4 chars: itemId + z)
-          var qgBase = qgSlotFile.replace(/\.txt$/i, '');
+          var qgBase = qgSlotFile;
           if (qgBase.length > 4) return respondRetro(res, 'XXSlot already in use');
           if (qgBase.length < 4) return respondRetro(res, 'XXNot a valid player slot');
 
@@ -1977,7 +1976,7 @@ function handleCommand(req, res, raw, driveName) {
           var hat='';
           if (qgItemType=="S") { hat="J0"; }
           if (qgItemType=="T") { hat="J1"; }
-          var qgNewName = qgItemId + qgZ + qgAvatar + hat + '.txt';
+          var qgNewName = qgItemId + qgZ + qgAvatar + hat;
           var qgRename = fileRename(qgDrive, '/', 'w/' + qgSlotFile, 'w/' + qgNewName, session);
 
           if (!qgRename.success) return respondRetro(res, 'XXFailed to claim slot: ' + qgRename.error);
@@ -2040,10 +2039,10 @@ function handleCommand(req, res, raw, driveName) {
           var pb = pf.substring(pf.lastIndexOf('/') + 1);
           
           // Match standard player file structure: ID(2) + Z(2 digits) + Avatar(var) + .txt
-          var match = pb.match(/^([A-Z][a-z])(\d{2})(.*)\.txt$/);
+          var match = pb.match(/^([A-Z][a-z])(\d{2})(.*)$/);
           if (match && match[1] === qItemId) {
-            currentFile = pf;        // e.g., "w/A1/Sa33B0D0.txt"
-            fileNameOnly = pb;       // e.g., "Sa33B0D0.txt"
+            currentFile = pf;        // e.g., "w/A1/Sa33B0D0"
+            fileNameOnly = pb;       // e.g., "Sa33B0D0"
             avatarPart = match[3];   // e.g., "B0D0"
             break;
           }
@@ -2603,7 +2602,7 @@ if (process.stdin.isTTY) {
         process.stdout.write('\n\u2717 Error: ' + cr.error + '\n');
       }
       _createWizard = null;
-      process.stdout.write('\nqandyland2.js ');
+      process.stdout.write('\nqandyland.js ');
     }
   }
 
@@ -2828,7 +2827,7 @@ if (process.stdin.isTTY) {
           process.stdout.write('Unknown command "' + cmd + '". Type "help" for commands.\n');
       }
 
-      process.stdout.write('qandyland2.js ');
+      process.stdout.write('qandyland.js ');
     });
   });
 }
@@ -2856,12 +2855,12 @@ function _proceedWithStartup() {
           var regStatus = regErr ? 'Failed' : 'Connected';
           displayStartupBanner(_publicIp, regStatus, _serverId);
           startHeartbeat();
-          if (process.stdin.isTTY) { process.stdout.write('\nqandyland2.js '); }
+          if (process.stdin.isTTY) { process.stdout.write('\nqandyland.js '); }
         });
       });
     } else {
       displayStartupBanner(null, 'Disabled', null);
-      if (process.stdin.isTTY) { process.stdout.write('\nqandyland2.js '); }
+      if (process.stdin.isTTY) { process.stdout.write('\nqandyland.js '); }
     }
   });
 }

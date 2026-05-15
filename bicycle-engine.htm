@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CycleOS v1.0</title>
+    <link rel="manifest" href="manifest.json">
+    <style>
+        :root { --glow: #0f0; --bg: #000; }
+        body { 
+            background: var(--bg); 
+            color: var(--glow); 
+            font-family: 'Courier New', Courier, monospace; 
+            margin: 0; 
+            display: flex; 
+            flex-direction: column; 
+            height: 100vh;
+            overflow: hidden;
+            text-shadow: 0 0 5px var(--glow);
+        }
+
+        /* Speedometer Section */
+        #dashboard {
+            flex: 2;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            border-bottom: 2px solid var(--glow);
+        }
+        #speed { font-size: 8rem; font-weight: bold; line-height: 1; }
+        #unit { font-size: 1.5rem; margin-top: -10px; }
+
+        /* Odometer Section */
+        #stats {
+            flex: 0.5;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            padding: 10px;
+            background: #111;
+        }
+        .stat-box { text-align: center; }
+        .stat-label { font-size: 0.8rem; color: #888; }
+        .stat-val { font-size: 1.5rem; }
+
+        /* Controls Section */
+        #controls {
+            flex: 1.5;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            padding: 10px;
+        }
+        button {
+            background: transparent;
+            border: 2px solid var(--glow);
+            color: var(--glow);
+            font-family: inherit;
+            font-size: 1.2rem;
+            text-transform: uppercase;
+            cursor: pointer;
+        }
+        button:active { background: var(--glow); color: var(--bg); }
+        #hornBtn { grid-column: span 2; font-size: 2rem; background: #220000; border-color: #f00; color: #f00; text-shadow: 0 0 5px #f00; }
+        #hornBtn:active { background: #f00; color: #000; }
+        
+        .small-btn { padding: 5px; font-size: 0.7rem; margin-top: 5px; border-width: 1px; display: block; }
+    </style>
+</head>
+<body>
+
+    <div id="dashboard">
+        <div id="speed">00</div>
+        <div id="unit">MPH</div>
+    </div>
+
+    <div id="stats">
+        <div class="stat-box">
+            <div class="stat-label">ODOMETER</div>
+            <div class="stat-val" id="odo">0.00</div>
+            <button class="small-btn" onclick="resetOdo()">RESET</button>
+        </div>
+        <div class="stat-box">
+            <div class="stat-label">ENGINE</div>
+            <div class="stat-val" id="engStatus">OFF</div>
+        </div>
+    </div>
+
+    <div id="controls">
+        <button id="toggleBtn">Start Engine</button>
+        <button id="hornBtn">HORN</button>
+    </div>
+
+    <script>
+        let audioCtx = null, oscillator = null, gainNode = null, filter = null, lfo = null, lfoGain = null;
+        let running = false;
+        let lastPos = null;
+        let totalMiles = parseFloat(localStorage.getItem('bikeOdo')) || 0;
+
+        const speedEl = document.getElementById('speed');
+        const odoEl = document.getElementById('odo');
+        const engStatus = document.getElementById('engStatus');
+        const toggleBtn = document.getElementById('toggleBtn');
+        const hornBtn = document.getElementById('hornBtn');
+
+        // Initialize Odometer display
+        odoEl.innerText = totalMiles.toFixed(2);
+
+        function initAudio() {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            
+            oscillator = audioCtx.createOscillator();
+            oscillator.type = 'sawtooth';
+            oscillator.frequency.value = 50;
+
+            filter = audioCtx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.value = 400;
+
+            gainNode = audioCtx.createGain();
+            gainNode.gain.value = 0.1;
+
+            lfo = audioCtx.createOscillator();
+            lfo.type = 'square';
+            lfo.frequency.value = 4;
+
+            lfoGain = audioCtx.createGain();
+            lfoGain.gain.value = 0.5;
+
+            lfo.connect(lfoGain);
+            lfoGain.connect(gainNode.gain);
+            oscillator.connect(filter);
+            filter.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            oscillator.start();
+            lfo.start();
+        }
+
+        function playHorn() {
+            if (!audioCtx) initAudio();
+            const now = audioCtx.currentTime;
+            
+            // Create two oscillators for a thick, dissonant "honk"
+            const osc1 = audioCtx.createOscillator();
+            const osc2 = audioCtx.createOscillator();
+            const hornGain = audioCtx.createGain();
+
+            osc1.type = 'square';
+            osc2.type = 'square';
+            osc1.frequency.setValueAtTime(440, now);
+            osc2.frequency.setValueAtTime(445, now); // Slightly detuned
+
+            hornGain.gain.setValueAtTime(0, now);
+            hornGain.gain.linearRampToValueAtTime(0.3, now + 0.05);
+            hornGain.gain.linearRampToValueAtTime(0, now + 0.5);
+
+            osc1.connect(hornGain);
+            osc2.connect(hornGain);
+            hornGain.connect(audioCtx.destination);
+
+            osc1.start();
+            osc2.start();
+            osc1.stop(now + 0.5);
+            osc2.stop(now + 0.5);
+        }
+
+        function updateLogic(pos) {
+            const coords = pos.coords;
+            // Convert m/s to MPH
+            const mph = (coords.speed || 0) * 2.23694;
+            speedEl.innerText = Math.round(mph).toString().padStart(2, '0');
+
+            // Distance Tracking
+            if (lastPos) {
+                const dist = calculateDistance(
+                    lastPos.latitude, lastPos.longitude,
+                    coords.latitude, coords.longitude
+                );
+                totalMiles += dist;
+                localStorage.setItem('bikeOdo', totalMiles);
+                odoEl.innerText = totalMiles.toFixed(2);
+            }
+            lastPos = coords;
+
+            // Audio Updates
+            if (running) {
+                const clampedMps = Math.min(Math.max(coords.speed || 0, 0), 15);
+                oscillator.frequency.setTargetAtTime(50 + (clampedMps * 8), audioCtx.currentTime, 0.1);
+                lfo.frequency.setTargetAtTime(4 + (clampedMps * 1.5), audioCtx.currentTime, 0.1);
+            }
+        }
+
+        // Haversine-lite for distance in miles
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const p = 0.017453292519943295; // Math.PI / 180
+            const c = Math.cos;
+            const a = 0.5 - c((lat2 - lat1) * p)/2 + 
+                    c(lat1 * p) * c(lat2 * p) * 
+                    (1 - c((lon2 - lon1) * p))/2;
+            return 7917.5 * Math.asin(Math.sqrt(a)); // 7917.5 is diameter of earth in miles
+        }
+
+        function resetOdo() {
+            totalMiles = 0;
+            localStorage.setItem('bikeOdo', 0);
+            odoEl.innerText = "0.00";
+        }
+
+let wakeLock = null;
+
+async function requestWakeLock() {
+    try {
+        wakeLock = await navigator.wakeLock.request('screen');
+    } catch (err) {
+        console.error(`${err.name}, ${err.message}`);
+    }
+}
+
+        toggleBtn.addEventListener('click', () => {
+            if (!audioCtx) initAudio();
+            if (!running) {
+                audioCtx.resume();
+                running = true;
+                engStatus.innerText = "ON";
+                toggleBtn.innerText = "Kill Engine";
+            } else {
+                audioCtx.suspend();
+                running = false;
+                engStatus.innerText = "OFF";
+                toggleBtn.innerText = "Start Engine";
+            }
+        });
+
+        hornBtn.addEventListener('mousedown', playHorn);
+        hornBtn.addEventListener('touchstart', (e) => { e.preventDefault(); playHorn(); });
+
+        // GPS Activation
+        navigator.geolocation.watchPosition(updateLogic, 
+            (err) => console.error(err), 
+            { enableHighAccuracy: true }
+        );
+    </script>
+</body>
+</html>

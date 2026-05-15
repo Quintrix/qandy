@@ -43,7 +43,16 @@ window.itemdown = function(itemStr) {
   var z = itemStr.substring(2, 4);
   var avatar = itemStr.slice(4);
   if (item.charAt(0)=='S' || item.charAt(0)=='T') {
-  	 if (playerItem == "Za") { joinGame(item, z); pop('Tag Flagpole<br>to enter game!'); }
+  	 if (playerItem == "Za") {
+  	 	if (item.charAt(0)=='S') {
+  	 	  playerAvatar=playerAvatar.replace(/B0/g, 'B3');
+  	 	  playerAvatar=playerAvatar.replace(/D0/g, 'D3');
+        playerAvatar=playerAvatar.replace(/H0/g, 'H3');
+        playerAvatar=playerAvatar.replace(/J0/g, 'J3');
+
+  	 	}
+  	 	joinGame(item, z); pop('Tag Flagpole<br>to enter game!');
+  	 }
   } 
 }
 
@@ -155,3 +164,4 @@ window.joinGame = async function(item, z) {
   if (window.gfxDo === "RF") window.gfxDo = "";
   window.gfxDo += "Qg" + item + z + playerAvatar;
 }
+
