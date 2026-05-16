@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CycleOS v1.0 - Dash</title>
+    <link rel="manifest" href="manifest.json">
+    <style>
+        :root { --glow: #0f0; --bg: #000; --alert: #f00; }
+        * { box-sizing: border-box; }
+        
+        body { 
+            background: var(--bg); 
+            color: var(--glow); 
+            font-family: 'Courier New', Courier, monospace; 
+            margin: 0; 
+            padding: 10px;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            text-shadow: 0 0 5px var(--glow);
+        }
+
+        /* Landscape Grid Layout */
+        #dash-container {
+            display: grid;
+            grid-template-columns: 1.2fr 1fr;
+            gap: 15px;
+            height: 100%;
+            width: 100%;
+        }
+
+        /* Left Column: Speedometer */
+        #gauge-pane {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            border: 2px solid var(--glow);
+            background: #050505;
+            position: relative;
+            padding: 5px;
+        }
+        canvas {
+            max-width: 100%;
+            max-height: 75%;
+        }
+        #digital-display {
+            text-align: center;
+            margin-top: -30px; /* Pulls text up into the gauge opening */
+            z-index: 10;
+        }
+        #speed { font-size: 4.5rem; font-weight: bold; line-height: 1; }
+        #unit { font-size: 1.2rem; letter-spacing: 2px; }
+
+        /* Right Column: Telemetry & Controls */
+        #side-pane {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            height: 100%;
+        }
+
+        /* Stats Blocks */
+        #stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            background: #111;
+            border: 1px solid #333;
+            padding: 8px;
+        }
+        .stat-box { text-align: center; }
+        .stat-label { font-size: 0.75rem; color: #888; letter-spacing: 1px; margin-bottom: 2px; }
+        .stat-val { font-size: 1.3rem; font-weight: bold; }
+        
+        /* GPS Tracking Display */
+        #gps-box {
+            background: #111;
+            border: 1px solid #333;
+            padding: 6px;
+            text-align: center;
+        }
+        #gps-coords {
+            font-size: 0.85rem;
+            margin-top: 3px;
+            color: var(--glow);
+            font-weight: bold;
+        }
+
+        /* Interactive Controls */
+        #controls {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+            flex-grow: 1;
+        }
+        button {
+            background: transparent;
+            border: 2px solid var(--glow);
+            color: var(--glow);
+            font-family: inherit;
+            font-size: 1.1rem;
+            text-transform: uppercase;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:active { background: var(--glow); color: var(--bg); }
+        
+        #hornBtn { 
+            font-size: 1.6rem; 
+            background: #220000; 
+            border-color: var(--alert); 
+            color: var(--alert); 
+            text-shadow: 0 0 5px var(--alert); 
+        }
+        #hornBtn:active { background: var(--alert); color: #000; }
+        
+        .small-btn { 
+            padding: 2px 8px; 
+            font-size: 0.65rem; 
+            margin: 4px auto 0 auto; 
+            border-width: 1px; 
+            display: inline-block; 
+        }
+    </style>
+</head>
+<body>
+
+    <div id="dash-container">
+        
+        <div id="gauge-pane">
+            <canvas id="gauge" width="320" height="220"></canvas>
+            <div id="digital-display">
+                <div id="speed">00</div>
+                <div id="unit">MPH</div>
+            </div>
+        </div>
+
+        <div id="side-pane">
+            <div id="stats">
+                <div class="stat-box">
+                    <div class="stat-label">ODOMETER</div>
+                    <div class="stat-val" id="odo">0.00</div>
+                    <button class="small-btn" onclick="resetOdo()">RESET</button>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">ENGINE</div>
+                    <div class="stat-val" id="engStatus">OFF</div>
+                </div>
+            </div>
+
+            <div id="gps-box">
+                <div class="stat-label">GPS LOCATION</div>
+                <div id="gps-coords">LAT: --.------ | LON: --.------</div>
+            </div>
+
+            <div id="controls">
+                <button id="toggleBtn">Start Engine</button>
+                <button id="hornBtn">HORN</button>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        let audioCtx = null, oscillator = null, gainNode = null, filter = null, lfo = null, lfoGain = null;
+        let running = false;
+        let lastPos = null;
+        let totalMiles = parseFloat(localStorage.getItem('bikeOdo')) || 0;
+
+        const speedEl = document.getElementById('speed');
+        const odoEl = document.getElementById('odo');
+        const engStatus = document.getElementById('engStatus');
+        const toggleBtn = document.getElementById('toggleBtn');
+        const hornBtn = document.getElementById('hornBtn');
+        const gpsCoordsEl = document.getElementById('gps-coords');
+        
+        const canvas = document.getElementById('gauge');
+        const ctx = canvas.getContext('2d');
+
+        // Initialize Odometer and Canvas
+        odoEl.innerText = totalMiles.toFixed(2);
+        drawGauge(0);
+
+        function initAudio() {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            
+            oscillator = audioCtx.createOscillator();
+            oscillator.type = 'sawtooth';
+            oscillator.frequency.value = 50;
+
+            filter = audioCtx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.value = 400;
+
+            gainNode = audioCtx.createGain();
+            gainNode.gain.value = 0.1;
+
+            lfo = audioCtx.createOscillator();
+            lfo.type = 'square';
+            lfo.frequency.value = 4;
+
+            lfoGain = audioCtx.createGain();
+            lfoGain.gain.value = 0.5;
+
+            lfo.connect(lfoGain);
+            lfoGain.connect(gainNode.gain);
+            oscillator.connect(filter);
+            filter.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            oscillator.start();
+            lfo.start();
+        }
+
+        function playHorn() {
+            if (!audioCtx) initAudio();
+            const now = audioCtx.currentTime;
+            
+            const osc1 = audioCtx.createOscillator();
+            const osc2 = audioCtx.createOscillator();
+            const hornGain = audioCtx.createGain();
+
+            osc1.type = 'square';
+            osc2.type = 'square';
+            osc1.frequency.setValueAtTime(440, now);
+            osc2.frequency.setValueAtTime(445, now); 
+
+            hornGain.gain.setValueAtTime(0, now);
+            hornGain.gain.linearRampToValueAtTime(0.3, now + 0.05);
+            hornGain.gain.linearRampToValueAtTime(0, now + 0.5);
+
+            osc1.connect(hornGain);
+            osc2.connect(hornGain);
+            hornGain.connect(audioCtx.destination);
+
+            osc1.start();
+            osc2.start();
+            osc1.stop(now + 0.5);
+            osc2.stop(now + 0.5);
+        }
+
+        // Custom HTML5 Canvas Gauge Renderer
+        function drawGauge(mph) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            const cx = canvas.width / 2;
+            const cy = canvas.height * 0.68;
+            const radius = 95;
+            const startAngle = 0.75 * Math.PI; 
+            const endAngle = 2.25 * Math.PI;   
+            const totalAngle = endAngle - startAngle;
+            const maxSpeed = 30; // 30 MPH ceiling configuration
+
+            // Outer Arc Profile
+            ctx.strokeStyle = '#0f0';
+            ctx.lineWidth = 3;
+            ctx.shadowBlur = 6;
+            ctx.shadowColor = '#0f0';
+            ctx.beginPath();
+            ctx.arc(cx, cy, radius, startAngle, endAngle);
+            ctx.stroke();
+
+            // Render Tick Intervals & Scales
+            ctx.fillStyle = '#0f0';
+            ctx.font = 'bold 11px "Courier New"';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            for (let i = 0; i <= maxSpeed; i += 5) {
+                const angle = startAngle + (i / maxSpeed) * totalAngle;
+                
+                const x1 = cx + Math.cos(angle) * radius;
+                const y1 = cy + Math.sin(angle) * radius;
+                const x2 = cx + Math.cos(angle) * (radius - 8);
+                const y2 = cy + Math.sin(angle) * (radius - 8);
+                
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
+                ctx.stroke();
+
+                // Project text inside ticks
+                const lx = cx + Math.cos(angle) * (radius - 20);
+                const ly = cy + Math.sin(angle) * (radius - 20);
+                ctx.fillText(i, lx, ly);
+            }
+
+            // Needle Angle Interpolation
+            const boundedMph = Math.min(Math.max(mph, 0), maxSpeed);
+            const needleAngle = startAngle + (boundedMph / maxSpeed) * totalAngle;
+
+            // Render Red Accent Indicator Needle
+            ctx.strokeStyle = '#f00';
+            ctx.shadowColor = '#f00';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(cx, cy);
+            ctx.lineTo(cx + Math.cos(needleAngle) * (radius - 12), cy + Math.sin(needleAngle) * (radius - 12));
+            ctx.stroke();
+
+            // Center Pin
+            ctx.fillStyle = '#0f0';
+            ctx.shadowColor = '#0f0';
+            ctx.beginPath();
+            ctx.arc(cx, cy, 5, 0, 2 * Math.PI);
+            ctx.fill();
+            
+            ctx.shadowBlur = 0; // Reset execution stack shadow
+        }
+
+        function updateLogic(pos) {
+            const coords = pos.coords;
+            const mph = (coords.speed || 0) * 2.23694;
+            
+            // Sync UI Readouts
+            speedEl.innerText = Math.round(mph).toString().padStart(2, '0');
+            drawGauge(mph);
+
+            // Display Position Coordinates
+            const lat = coords.latitude.toFixed(5);
+            const lon = coords.longitude.toFixed(5);
+            gpsCoordsEl.innerText = `LATI: ${lat} | LONG: ${lon}`;
+
+            // Distance Telemetry
+            if (lastPos) {
+                const dist = calculateDistance(
+                    lastPos.latitude, lastPos.longitude,
+                    coords.latitude, coords.longitude
+                );
+                totalMiles += dist;
+                localStorage.setItem('bikeOdo', totalMiles);
+                odoEl.innerText = totalMiles.toFixed(2);
+            }
+            lastPos = coords;
+
+            // Process Web Audio Modifications
+            if (running) {
+                const clampedMps = Math.min(Math.max(coords.speed || 0, 0), 15);
+                oscillator.frequency.setTargetAtTime(50 + (clampedMps * 8), audioCtx.currentTime, 0.1);
+                lfo.frequency.setTargetAtTime(4 + (clampedMps * 1.5), audioCtx.currentTime, 0.1);
+            }
+        }
+
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const p = 0.017453292519943295;
+            const c = Math.cos;
+            const a = 0.5 - c((lat2 - lat1) * p)/2 + 
+                    c(lat1 * p) * c(lat2 * p) * (1 - c((lon2 - lon1) * p))/2;
+            return 7917.5 * Math.asin(Math.sqrt(a));
+        }
+
+        function resetOdo() {
+            totalMiles = 0;
+            localStorage.setItem('bikeOdo', 0);
+            odoEl.innerText = "0.00";
+        }
+
+        let wakeLock = null;
+        async function requestWakeLock() {
+            try {
+                if ('wakeLock' in navigator) {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                }
+            } catch (err) {
+                console.error(`${err.name}, ${err.message}`);
+            }
+        }
+
+        toggleBtn.addEventListener('click', () => {
+            if (!audioCtx) initAudio();
+            if (!running) {
+                audioCtx.resume();
+                running = true;
+                engStatus.innerText = "ON";
+                toggleBtn.innerText = "Kill Engine";
+                requestWakeLock();
+            } else {
+                audioCtx.suspend();
+                running = false;
+                engStatus.innerText = "OFF";
+                toggleBtn.innerText = "Start Engine";
+                if (wakeLock) {
+                    wakeLock.release();
+                    wakeLock = null;
+                }
+            }
+        });
+
+        hornBtn.addEventListener('mousedown', playHorn);
+        hornBtn.addEventListener('touchstart', (e) => { e.preventDefault(); playHorn(); });
+
+        // Watch Position Lifecycle Handler
+        navigator.geolocation.watchPosition(updateLogic, 
+            (err) => console.error(err), 
+            { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+        );
+    </script>
+</body>
+</html>
