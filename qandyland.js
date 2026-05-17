@@ -1575,13 +1575,13 @@ function handleCommand(req, res, raw, driveName) {
             if (!mvRfFile) continue;
             var mvRfBase = mvRfFile.substring(mvRfFile.lastIndexOf('/') + 1);
             
-            if (rfBase.length === 4) {
+            if (mvRfBase.length === 4) {
                 // Dynamic Item: Sa33 (Now length 4)
-                var mvRfItemMatch = rfBase.match(/^([A-Z][a-z]\d{2})$/);
+                var mvRfItemMatch = mvRfBase.match(/^([A-Z][a-z]\d{2})$/);
                 if (mvRfItemMatch) mvRfItems.push(mvRfItemMatch[1]);
-            } else if (rfBase.length >= 8) {
+            } else if (mvRfBase.length >= 8) {
                 // Player: Sa33B0D0 (Now length 8+)
-                var mvRfPlayerMatch = rfBase.match(/^([A-Z][a-z])(\d{2})(.+)$/);
+                var mvRfPlayerMatch = mvRfBase.match(/^([A-Z][a-z])(\d{2})(.+)$/);
                 if (mvRfPlayerMatch) {
                     mvRfItems.push(mvRfPlayerMatch[1] + mvRfPlayerMatch[2] + mvRfPlayerMatch[3]);
                 }

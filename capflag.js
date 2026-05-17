@@ -45,11 +45,10 @@ window.itemdown = function(itemStr) {
   if (item.charAt(0)=='S' || item.charAt(0)=='T') {
   	 if (playerItem == "Za") {
   	 	if (item.charAt(0)=='S') {
-  	 	  playerAvatar=playerAvatar.replace(/B0/g, 'B3');
+  	 	  playerAvatar=playerAvatar.replace(/C0/g, 'C3');
   	 	  playerAvatar=playerAvatar.replace(/D0/g, 'D3');
+        playerAvatar=playerAvatar.replace(/G0/g, 'G3');
         playerAvatar=playerAvatar.replace(/H0/g, 'H3');
-        playerAvatar=playerAvatar.replace(/J0/g, 'J3');
-
   	 	}
   	 	joinGame(item, z); pop('Tag Flagpole<br>to enter game!');
   	 }
