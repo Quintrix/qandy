@@ -539,19 +539,13 @@ function gfxRefresh(rfStr) {
   for (let i = 0; i < oldChars.length; i++) { oldChars[i].remove(); }
 
   if (window.map != rfStr.substring(0, 2)) {
-    // 1. Cleanup old objects
+    // load new map sector
     var oldObjs = document.querySelectorAll('.objs');
     for (var k = 0; k < oldObjs.length; k++) { 
         if (oldObjs[k].parentNode) { oldObjs[k].parentNode.removeChild(oldObjs[k]); }
     }
-    
-    // 2. Update map ID
     window.map = rfStr.substring(0, 2);
-    
-    // 3. Render new Tiles
     gfxTiles(map);   
-    
-    // FIX: ADD THIS LINE TO RENDER THE NEW OBJECTS (Zo, Zf, Yj, etc)
     gfxObjects(map); 
   }
   	

@@ -1604,12 +1604,12 @@ function handleCommand(req, res, raw, driveName) {
 
   switch (cmd) {
   	 case 'Ql': {
-  const mvOwner = _playerOwnership[session];
-  if (!mvOwner) return respondRetro(res, 'XXNot logged in');
+      const mvOwner = _playerOwnership[session];
+      if (!mvOwner) return respondRetro(res, 'XXNot logged in');
 
-  const qDrive = mvOwner.drive;
-  const pLoad = fileLoad(qDrive, '/', 'p.txt', session);
-  if (!pLoad.success) return respondRetro(res, 'XXMap error');
+      const qDrive = mvOwner.drive;
+      const pLoad = fileLoad(qDrive, '/', 'p.txt', session);
+      if (!pLoad.success) return respondRetro(res, 'XXMap error');
 
   const myTeam = mvOwner.itemId.charAt(0);
   const visibleSectors = new Set();
