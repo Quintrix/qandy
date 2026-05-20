@@ -109,7 +109,6 @@ function updateKeyLabels() {
         } else if (typeof normalKeys === 'object' && normalKeys.hasOwnProperty(lookup)) {
           label = normalKeys[lookup];
         } else {
-        	
           label = base;
         }
       } else if (window.shiftActive) {

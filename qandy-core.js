@@ -115,7 +115,7 @@ function qandy_js() {
     32: [' ', ' ']
   };
 
-  if (!k && keyMap[b]) { l = shift ? keyMap[b][1] : keyMap[b][0]; k = l; }
+  if (!k && keyMap[b]) { l = (shift || caps) ? keyMap[b][1] : keyMap[b][0]; k = l; }
   if (!k && b < 32) { pokeCursorOn(); return; }
 
   if (k === "caps") {
