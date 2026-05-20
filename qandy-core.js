@@ -118,6 +118,8 @@ function qandy_js() {
   if (!k && keyMap[b]) { l = (shift || caps) ? keyMap[b][1] : keyMap[b][0]; k = l; }
   if (!k && b < 32) { pokeCursorOn(); return; }
 
+alert("here");
+
   if (k === "caps") {
     caps = !caps;
     var capsEl = document.getElementById("kcaps") || document.getElementById("caps");
