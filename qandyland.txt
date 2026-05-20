@@ -70,21 +70,20 @@
     Rf — refresh: return map sector items for current session location
 
 
-Qandyland
-Quintrix and Crew Software
-Multiplayer Graphics Engine
+
+
+
+The Qandyland Multi-Player Processer:
+
+Punch cards worked because electricity could flow through the holes in the cards to produce 1's and 0's ... can you imagine a punch card machine that could close a hole so it could be re-used? That's exactly what the Qandyland server does, emulates a UNIVAC main frame that processes text files as if they were punch cards,  mimicking the IBM era of main frames where one card was input, and a new card was output, but without creating huge amounts paper waste. 
+
+With modern computing power, this turns the early main frames into highly efficient data processors that no modern json object is going to be able to compete with, one Qandyland server can process hundreds of thousands of players files every 1 second compared to 2000 per minute on an opticl card reader.
+
+Unlike modern scripting, punch cards were read from left to right like a book without jump/branch/goto/gosub commands that eliminates spaghetti code, and with a fixed 80-column width it mathematically eliminates potential for buffer overflow exploits.  
+
+Our powerful two-character bytecode language allows a 'dumb server to do smart things' giving 'players' the ability to program bot-participants in their games, and allows the 'sysop' to create complex game worlds with simple bytecode scripts.
 
 
 
 
-We are working with qandyland.js, a node.js JSON drive server that can be used to save gamestates, chatroom, and instant messages in what we call serverStorage that mimics localStorage. It has terminal DOS-like commands to naviagate the drives, and an HTTP message system to serve and save files.
-
-The startup sequence currently asks for server name and then offers to create a JSON drive, I want to change that so it automatically starts up a memory-only drive named 'gfx.js' and calls it 'Qandyland Server' ... this way the server starts with no required user input letting us call it "easy" and brag "no installation required".
-
-To do this, we need to remove all "start up wizard" code and hardcode. How do we go about this task?
-
-
-3. Add an 'exit' command to exit the server and request confirmation, currently the only known was to exit is CTRL-C. 
-
-4. Remove the current "BIGBANG DEBUG:" as the bigbang is now working and we no longer need that debug code.
 

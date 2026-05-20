@@ -525,29 +525,69 @@ var MIME = {
   '.ico':  'image/x-icon'
 };
 
+// Add index.html and 404.html logic to serveStatic
 function serveStatic(req, res) {
   var pathname;
   try {
-    pathname = new URL(req.url, 'http://localhost').pathname;
+    // 1. Decode URI and strip null bytes
+    var decodedPath = decodeURIComponent(new URL(req.url, 'http://localhost').pathname)
+                      .replace(/\0/g, '');
+    pathname = path.normalize(decodedPath);
   } catch (e) {
-    pathname = '/';
-  }
-  var filePath  = path.join(__dirname, path.normalize(pathname));
-
-  if (!filePath.startsWith(__dirname + path.sep) && filePath !== __dirname) {
-    res.writeHead(403);
-    return res.end('Forbidden');
+    pathname = '/index.html';
   }
 
-  fs.stat(filePath, function (err, stat) {
+  if (pathname === '/') pathname = '/index.htm';
+
+  // 2. Resolve the absolute path
+  var filePath = path.join(__dirname, pathname);
+
+  // 3. Resolve SYMLINKS to prevent escaping via shortcuts
+  // We use try/catch because realpath fails if the file doesn't exist
+  var realBase = fs.realpathSync(__dirname);
+  var resolvedPath;
+  try {
+    resolvedPath = fs.realpathSync(filePath);
+  } catch (e) {
+    // If file doesn't exist, just use the joined path for the 404 check
+    resolvedPath = filePath;
+  }
+
+  // 4. THE ULTIMATE GUARD: Does the REAL path start with the REAL __dirname?
+  if (!resolvedPath.startsWith(realBase)) {
+    console.error("[SECURITY] Directory Traversal Attempt:", resolvedPath);
+    return serve404(res); 
+  }
+
+  // 5. BLOCK: .sys! (Internal memory drive manifest)
+  // Even if it's open source, we don't want browsers downloading 
+  // the live system manifest files.
+  if (pathname.includes('.sys!')) {
+    return serve404(res);
+  }
+
+  fs.stat(resolvedPath, function (err, stat) {
     if (err || !stat.isFile()) {
-      res.writeHead(404);
-      return res.end('Not found');
+      return serve404(res);
     }
-    var ext  = path.extname(filePath).toLowerCase();
+    var ext = path.extname(resolvedPath).toLowerCase();
     var mime = MIME[ext] || 'application/octet-stream';
     res.writeHead(200, { 'Content-Type': mime });
-    fs.createReadStream(filePath).pipe(res);
+    fs.createReadStream(resolvedPath).pipe(res);
+  });
+}
+
+// Custom 404 Handler that looks for 404.html
+function serve404(res) {
+  var errorPage = path.join(__dirname, '404.html');
+  fs.stat(errorPage, function(err, stat) {
+    if (!err && stat.isFile()) {
+      res.writeHead(404, { 'Content-Type': 'text/html' });
+      fs.createReadStream(errorPage).pipe(res);
+    } else {
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.end('404 Not Found - No custom error page defined by Root.');
+    }
   });
 }
 

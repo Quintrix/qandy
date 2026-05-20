@@ -944,15 +944,26 @@ window.press=function(event) {
   popup.className = 'pop';
   popup.style.visibility = "hidden";
 
-  popup.addEventListener('mouseover', () => {
-     window.PopUpVis = "visible";
-     popup.style.visibility = "visible";
-  })
-  popup.addEventListener('mouseout', () => {
-    window.PopUpVis = window.PopForce;
+  window.popup.addEventListener('mouseenter', () => {
+    window.PopUserTouched = true; // User is now interacting
+    window.PopUpVis = "visible";
+    popup.style.visibility = "visible";
     clearTimeout(window.PUV);
-    window.PUV = setTimeout(() => { popup.style.visibility = window.PopUpVis; }, 100);
-  })
+  });
+
+  window.popup.addEventListener('mouseleave', () => {
+    // Only start the hide timer if the user has actually entered the popup once
+    if (window.PopUserTouched) {
+        window.PopUpVis = window.PopForce;
+        clearTimeout(window.PUV);
+        window.PUV = setTimeout(() => { 
+            // Double check we aren't hovering again before hiding
+            if (window.PopUpVis === "hidden") {
+                popup.style.visibility = "hidden"; 
+            }
+        }, 300); // 300ms buffer feels smoother than 100ms
+    }
+  });
 
   document.body.appendChild(popup);
 
@@ -981,11 +992,11 @@ const POP_WRAPPER_PREFIX = `
     </style>
 </head>
 <body>
-    <div id="content-wrapper" style="display: inline-block;">
+    <div id="content-wrapper" style="display: inline-block;"><p align=center>
 `;
 
   const POP_WRAPPER_SUFFIX = `
-    </div>
+    </p></div>
     <script>
         const wrapper = document.getElementById('content-wrapper');
         // Report size to parent whenever content changes
@@ -1006,11 +1017,11 @@ const POP_WRAPPER_PREFIX = `
             const link = e.target.closest('a');
             if (link && link.getAttribute('href')) {
                 const href = link.getAttribute('href');
-                if (href.startsWith('click:')) {
+                if (href.startsWith('gfx:')) {
                     e.preventDefault();
                     window.parent.postMessage({
-                        type: 'click',
-                        cmd: href.split('cmd:')[1]
+                        type: 'gfx',
+                        cmd: href.split('gfx:')[1]
                     }, '*');
                 }
             }
@@ -1020,7 +1031,7 @@ const POP_WRAPPER_PREFIX = `
 </html>
 `;
 
-  window.popHtml = function(htm) {
+  window.popHtm = function(htm) {
     const parentDiv = document.getElementById("pop");
     if (!parentDiv) return;
     window.hpop();
@@ -1039,19 +1050,18 @@ const POP_WRAPPER_PREFIX = `
     // 4. Inject the content
     ifr.srcdoc = POP_WRAPPER_PREFIX + htm + POP_WRAPPER_SUFFIX;
     parentDiv.appendChild(ifr);
-};
+  };
 
-// Replace your old hpop with this one
-window.hpop = function() { 
+  window.hpop = function() { 
     const p = document.getElementById("pop");
     if (p) {
-        // This is the "Destroy" step. Setting innerHTML to "" 
-        // kills the iframe and its process immediately.
         p.innerHTML = ""; 
         p.style.visibility = "hidden";
     }
     window.PopUpVis = "hidden";
-}
+    window.PopUserTouched = false; // <--- RESET THE FLAG HERE
+  }
+
 // New function to handle the math once the iframe reports its size
   function repositionPop(w, h) {
   	console.log(w+' '+h);
@@ -1124,12 +1134,8 @@ window.hpop = function() {
     const data = event.data;
     if (!data || typeof data !== 'object') return;
 
-    console.log('type='+data.type+' click = '+data.cmd);
-        
-    // Handle Resize
     if (data.type === 'resize') {
         const ifr = document.getElementById("pop-frame");
-        // We removed the event.source check temporarily to ensure it's not a timing issue
         if (ifr) {
             ifr.style.width = data.width + "px";
             ifr.style.height = data.height + "px";
@@ -1138,38 +1144,12 @@ window.hpop = function() {
     }
 
     // Handle Commands
-    if (data.type === 'click') {
-        if (typeof window.command === 'function') {
-            window.command(data.cmd);
+    if (data.type === 'gfx') {
+        if (typeof window.gfxClick === 'function') {
+            window.gfxClick(data.cmd);
         }
     }
   });
-
-// 5. The Message Listener 
-// This should be added near your other event listeners in qandy_js()
-window.addEventListener('message', function(event) {
-    const data = event.data;
-    if (!data || typeof data !== 'object') return;
-
-    // Resize event from the popup iframe
-    if (data.type === 'qandy-pop-resize') {
-        const ifr = document.getElementById("pop-frame");
-        if (ifr) {
-            ifr.style.width = data.width + "px";
-            ifr.style.height = data.height + "px";
-            repositionPop(data.width, data.height);
-        }
-    }
-
-    // Forwarded click event (e.g. <a href="cmd:OPENDIR">)
-    if (data.type === 'qandy-pop-click') {
-        console.log("Popup Command Received:", data.cmd);
-        // Call your existing command processor
-        if (typeof window.command === 'function') {
-            window.command(data.cmd);
-        }
-    }
-});
 
 const popWebStyle = document.createElement('style');
 popWebStyle.textContent = `
@@ -1231,7 +1211,7 @@ window.hpopWeb = function() {
     }
 };
 
-window.pop = popHtml;
+window.pop = popHtm;
 
 
   pokeCursorOn(); 

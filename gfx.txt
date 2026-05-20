@@ -36,9 +36,9 @@ logic gate opened. As the last bytecode, it would actually be optional,
 or more commands could be added to the string to execute after the north. 
 
 
-    Va               XaW$## add ## to W$
-    Vb                   Xb
-    Vc                   Xc chat flags (system messages)
+    Va avatar        XaW$## add ## to W$
+    Vb                   Xb 
+    Vc                   Xc character selection
     Vd                 Xd## dice roll (## sides)
     Ve east            Xe$$ if $$ is a valid exit
     Vf food (eat)        Xf
@@ -51,9 +51,9 @@ or more commands could be added to the string to execute after the north.
     Vm                 Xm$$ if item $$ is on map (dyamic items players can drop/pickup)
     Vn north             Xn not (flips next logic gate)
     Vo ore (mine)      Xo$$ if object $$ is on map (is in .gfx file)
-    Vp pier (fish)       Xp
+    Vp pier (fish)       Xp 
     Vq                   Xq
-    Vr                   Xr
+    Vr                 Xr$$ read object's data file (returns Za if item no on sector)
     Vs south         XsW$## subtract ## from W$
     Vt teleport          Xt map sectors terrain type
     Vu use (item)        Xu
@@ -68,6 +68,13 @@ W* = wildcard (Wa-Wz or W0-W9)
 $$ = byte code (Aa-Zz or A0-Z0)
 
 
+The very first thing the user has to click is a male or
+female head to select their avatar, this calls gfxSelectAvatar(a).
+We should assign 'Xc' as 'character selection' which the link
+handler can call gfxSelectAvatar() when it see's this link.
+Where do I find the link handler?? Is it not in gfx.js?? 
+
+ 
 
 Item ID Codes:
 
