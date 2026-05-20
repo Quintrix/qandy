@@ -49,6 +49,9 @@ var SERVER_CONFIG_FILE = 'qandyland.json';   // Server config file in the workin
 
 var MAX_PLAYERS    = 100;
 
+// Sysop Variables
+var sysopVision = 2; // Radius for Mountain Look
+
 // Session → { itemId, mapId, drive } ownership map: ensures a session can only
 // control the item it joined with.  Best-effort for same-origin connections.
 var _playerOwnership = {};
@@ -1603,7 +1606,76 @@ function handleCommand(req, res, raw, driveName) {
   }
 
   switch (cmd) {
-  	 case 'Ql': {
+
+    case 'RF': {
+      var rfDrive, rfMapId;
+      var rfOwner = _playerOwnership[session];
+      if (rfOwner && rfOwner.drive && rfOwner.mapId) {
+        rfDrive = rfOwner.drive;
+        rfMapId = rfOwner.mapId;
+        // Safety fallback: strip any stale Q-move suffix that may have survived.
+        var rfDir = (rfMapId === '_L') ? 'w' : 'w/' + rfMapId;
+        var rfManifest = _readManifest(rfDrive);
+        var rfPrefix = (rfDir === 'w') ? 'w/' : rfDir + '/';
+        for (var mvi = 0; mvi < rfManifest.length; mvi++) {
+          var entry = rfManifest[mvi];
+          if (entry.session === session && entry.name.startsWith(rfPrefix) && entry.name.indexOf('/', rfPrefix.length) === -1) {
+            var basename = entry.name.substring(rfPrefix.length);
+            // Start searching for 'Q' AFTER the ID(2) and Z(2) to be safe
+            var qIdx = basename.indexOf('Q', 4); 
+            if (qIdx > -1) {
+              var strippedName = basename.substring(0, qIdx);
+              fileRename(rfDrive, '/', rfDir + '/' + basename, rfDir + '/' + strippedName, session);
+            }
+            break;
+          }
+        }
+      } else {
+        rfDrive = drive || legacyParam('d');
+        rfMapId = '_L';
+      }
+
+      if (!isValidDriveName(rfDrive))  return respondRetro(res, 'XXInvalid drive');
+      if (!drives[rfDrive])            return respondRetro(res, 'XXDrive not found');
+
+      var rfPath = (rfMapId === '_L') ? 'w' : 'w/' + rfMapId;
+
+      var rfList = fileList(rfDrive, rfPath, null, session);
+      var rfAllItems = [];
+
+      if (rfList.success && rfList.listing) {
+        var rfFiles = rfList.listing.split('\n');
+        for (var rfi = 0; rfi < rfFiles.length; rfi++) {
+          var rfFile = rfFiles[rfi].trim();
+          if (!rfFile) continue;
+          var rfBase = rfFile.substring(rfFile.lastIndexOf('/') + 1).replace('.txt', '');
+          if (rfBase.length === 6) continue; // Skip Static Objects (Terrain, Signs)
+          if (rfBase.length === 4 || rfBase.length >= 8) {
+            rfAllItems.push(rfBase);
+          }
+        }
+      }
+
+      // Determine authoritative player z from the player's own item entry in the sector.
+      // rfOwner.itemId (2 chars) matches the first 2 chars of each rfAllItems entry.
+      // Items in rfAllItems are always built from regex-matched filenames guaranteeing \d{2} at [2-4].
+      var rfPlayerZ = '00';
+      if (rfOwner && rfOwner.itemId) {
+        for (var rfi2 = 0; rfi2 < rfAllItems.length; rfi2++) {
+          if (rfAllItems[rfi2].slice(0, 2) === rfOwner.itemId && /^\d{2}$/.test(rfAllItems[rfi2].slice(2, 4))) {
+            rfPlayerZ = rfAllItems[rfi2].slice(2, 4);
+            break;
+          }
+        }
+     }
+
+      // Response: RF + mapId(2) + playerZ(2) + items
+      var rfResponse = 'RF'+rfMapId + rfPlayerZ + rfAllItems.join(',');
+      logRequest(req, 'RF', rfDrive, rfMapId, session, { success: true, result: rfResponse });
+      return respondRetro(res, rfResponse);
+    }
+
+case 'Ql': {
       const mvOwner = _playerOwnership[session];
       if (!mvOwner) return respondRetro(res, 'XXNot logged in');
 
@@ -1611,35 +1683,55 @@ function handleCommand(req, res, raw, driveName) {
       const pLoad = fileLoad(qDrive, '/', 'p.txt', session);
       if (!pLoad.success) return respondRetro(res, 'XXMap error');
 
-  const myTeam = mvOwner.itemId.charAt(0);
-  const visibleSectors = new Set();
-  
-  // Parse p.txt content into lines
-  const lines = (pLoad.content || '').split('\n');
-  const players = [];
-  let currentZ = '00';
-  
-  // First pass: Find where my team is and collect player data
-  lines.forEach(line => {
-    const m = line.match(/^([A-Z][a-z])=([A-Z][a-z0-9])/);
-    if (m) {
-      players.push(m[1]);
-      if (m[1].charAt(0) === myTeam) {
-        visibleSectors.add(m[2]);
-      }
-    }
-  });
+      const mySector = mvOwner.mapId;
+      const myTeam = mvOwner.itemId.charAt(0);
+      const myTerrain = getSectorTerrain(qDrive, mySector);
 
-  const filteredPlayers = players.filter(p => {
-    const pID = p.substring(0, 2);
-    const pSector = p.substring(2, 4);
-    if (pID.charAt(0) === myTeam) return true; // Always see teammates
-    return visibleSectors.has(pSector); // Only see opponents in shared sectors
-  });
+      const visibleSectors = new Set();
+      visibleSectors.add(mySector); // Always see your own sector
+
+      const players = (pLoad.content || '').split('\n');
+      const playerManifest = [];
+
+      // Pass 1: Teammates always reveal their sectors
+      players.forEach(line => {
+        const m = line.match(/^([A-Z][a-z])=([A-Z][a-z0-9]{2})/);
+        if (m) {
+           if (m[1].charAt(0) === myTeam) visibleSectors.add(m[2]);
+        }
+      });
+
+      // Pass 2: Calculate LOS for the observer based on Diamond Pattern
+      // We check every potential sector on an 8x8 grid (A1-H8)
+      for (let y = 65; y <= 72; y++) { // A-H
+        for (let x = 1; x <= 8; x++) {
+          let checkSec = String.fromCharCode(y) + x;
+          if (visibleSectors.has(checkSec)) continue; // Already visible via teammate
+
+          let tarTerrain = getSectorTerrain(qDrive, checkSec);
+          if (canSeeTarget(mySector, checkSec, myTerrain, tarTerrain)) {
+            visibleSectors.add(checkSec);
+          }
+        }
+      }
+
+      // Pass 3: Build the return string
+      const filteredPlayers = [];
+      players.forEach(line => {
+        const m = line.match(/^([A-Z][a-z])=([A-Z][a-z0-9]{2})(.*)/);
+        if (m) {
+           const pID = m[1]; const pSec = m[2]; const pData = m[3];
+           if (visibleSectors.has(pSec)) {
+             // Return ID + Sector + Z + Data (stripped of movement Qs)
+             let cleanData = pData.indexOf('Q') > -1 ? pData.substring(0, pData.indexOf('Q')) : pData;
+             filteredPlayers.push(pID + pSec + cleanData);
+           }
+        }
+      });
   
-  const sectorList = Array.from(visibleSectors).join('');
-  return respondRetro(res, 'Ql' + mvOwner.mapId + currentZ + filteredPlayers.join(',') + ':' + sectorList);
-}
+      const sectorList = Array.from(visibleSectors).join('');
+      return respondRetro(res, 'Ql' + mySector + '00' + filteredPlayers.join(',') + ':' + sectorList);
+    }
 
     case 'BB': {
       // Big Bang: create a new multiplayer world using server-side capflag.gfx.
@@ -1856,74 +1948,6 @@ function handleCommand(req, res, raw, driveName) {
       return respondRetro(res, 'OK' + sgItemId);
     }
 
-    case 'RF': {
-      var rfDrive, rfMapId;
-      var rfOwner = _playerOwnership[session];
-      if (rfOwner && rfOwner.drive && rfOwner.mapId) {
-        rfDrive = rfOwner.drive;
-        rfMapId = rfOwner.mapId;
-        // Safety fallback: strip any stale Q-move suffix that may have survived.
-        var rfDir = (rfMapId === '_L') ? 'w' : 'w/' + rfMapId;
-        var rfManifest = _readManifest(rfDrive);
-        var rfPrefix = (rfDir === 'w') ? 'w/' : rfDir + '/';
-        for (var mvi = 0; mvi < rfManifest.length; mvi++) {
-          var entry = rfManifest[mvi];
-          if (entry.session === session && entry.name.startsWith(rfPrefix) && entry.name.indexOf('/', rfPrefix.length) === -1) {
-            var basename = entry.name.substring(rfPrefix.length);
-            // Start searching for 'Q' AFTER the ID(2) and Z(2) to be safe
-            var qIdx = basename.indexOf('Q', 4); 
-            if (qIdx > -1) {
-              var strippedName = basename.substring(0, qIdx);
-              fileRename(rfDrive, '/', rfDir + '/' + basename, rfDir + '/' + strippedName, session);
-            }
-            break;
-          }
-        }
-      } else {
-        rfDrive = drive || legacyParam('d');
-        rfMapId = '_L';
-      }
-
-      if (!isValidDriveName(rfDrive))  return respondRetro(res, 'XXInvalid drive');
-      if (!drives[rfDrive])            return respondRetro(res, 'XXDrive not found');
-
-      var rfPath = (rfMapId === '_L') ? 'w' : 'w/' + rfMapId;
-
-      var rfList = fileList(rfDrive, rfPath, null, session);
-      var rfAllItems = [];
-
-      if (rfList.success && rfList.listing) {
-        var rfFiles = rfList.listing.split('\n');
-        for (var rfi = 0; rfi < rfFiles.length; rfi++) {
-          var rfFile = rfFiles[rfi].trim();
-          if (!rfFile) continue;
-          var rfBase = rfFile.substring(rfFile.lastIndexOf('/') + 1).replace('.txt', '');
-          if (rfBase.length === 6) continue; // Skip Static Objects (Terrain, Signs)
-          if (rfBase.length === 4 || rfBase.length >= 8) {
-            rfAllItems.push(rfBase);
-          }
-        }
-      }
-
-      // Determine authoritative player z from the player's own item entry in the sector.
-      // rfOwner.itemId (2 chars) matches the first 2 chars of each rfAllItems entry.
-      // Items in rfAllItems are always built from regex-matched filenames guaranteeing \d{2} at [2-4].
-      var rfPlayerZ = '00';
-      if (rfOwner && rfOwner.itemId) {
-        for (var rfi2 = 0; rfi2 < rfAllItems.length; rfi2++) {
-          if (rfAllItems[rfi2].slice(0, 2) === rfOwner.itemId && /^\d{2}$/.test(rfAllItems[rfi2].slice(2, 4))) {
-            rfPlayerZ = rfAllItems[rfi2].slice(2, 4);
-            break;
-          }
-        }
-     }
-
-      // Response: RF + mapId(2) + playerZ(2) + items
-      var rfResponse = 'RF'+rfMapId + rfPlayerZ + rfAllItems.join(',');
-      logRequest(req, 'RF', rfDrive, rfMapId, session, { success: true, result: rfResponse });
-      return respondRetro(res, rfResponse);
-    }
-
     case 'Qg': {
       var qgDrive  = drive;
       var qgItemId = cmdData.slice(0, 2);
@@ -2121,6 +2145,45 @@ function calculateTargetSector(currentSector, direction) {
     }
 
     return targetY + targetX;
+}
+
+// Helper: Get terrain code from sector directory
+function getSectorTerrain(driveName, sectorId) {
+    var path = (sectorId === '_L') ? 'w' : 'w/' + sectorId;
+    var list = fileList(driveName, path, 'Zp*', 'system');
+    if (list.success && list.listing) {
+        // listing looks like: "Zp44Ab"
+        var items = list.listing.split('\n');
+        if (items.length > 0) {
+            return items[0].substring(4, 6); // Returns "Ab", "Ad", etc.
+        }
+    }
+    return 'none'; 
+}
+
+// Helper: Calculate distance and pattern
+function canSeeTarget(obsSec, tarSec, obsTerrain, tarTerrain) {
+    var obsY = obsSec.charCodeAt(0); var obsX = parseInt(obsSec.slice(1), 10);
+    var tarY = tarSec.charCodeAt(0); var tarX = parseInt(tarSec.slice(1), 10);
+    
+    var dy = Math.abs(obsY - tarY);
+    var dx = Math.abs(obsX - tarX);
+
+    // 1. Same sector or adjacent (3x3 square) is always seen
+    if (dx <= 1 && dy <= 1) return true;
+
+    // 2. Check if target is hiding (Forest/Swamp)
+    if (tarTerrain === 'Ab' || tarTerrain === 'Ac') return false;
+
+    // 3. Mountain Vision Logic (Diamond Pattern)
+    if (obsTerrain === 'Ad' || obsTerrain === 'Ae') {
+        // If sysopVision is 2, check cardinal points at distance 2
+        if ((dx === sysopVision && dy === 0) || (dx === 0 && dy === sysopVision)) {
+            return true;
+        }
+    }
+    
+    return false;
 }
 
 /**

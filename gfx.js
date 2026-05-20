@@ -163,6 +163,7 @@ window.gfxChar = function(charID, avatarStr, zPos) {
     }
   });
 }
+
 window.gfxZClick = function(z, clickedElement) {
   var zNum = parseInt(z, 10);
   // Track the last clicked Z for the popup positioning logic
@@ -318,7 +319,11 @@ window.gfxSelectAvatar = function(a) {
     PopAlign='click';
   	} else {
     PX=2; PY=9; PZ=(PY*(mapx+1))+PX;
-    pop("<p>Male or Female?<br><a href=\"javascript:gfxSelectAvatar(\'M\');\"><img src=\"c/B1.png\" height=128 width=64></a> &nbsp; <a href=\"javascript:gfxSelectAvatar(\'F\');\"><img src=\"c/F5.png\" height=128 width=64></a>");
+    PUP="<p align=center>Male or Female?<br>";
+    PUP=PUP+'<a href=\"javascript:gfxSelectAvatar(\'M\');\"><img src=\"c/B1.png\" height=128 width=64></a>';
+    PUP=PUP+'&nbsp;&nbsp;&nbsp;'; 
+    PUP=PUP+'<a href=\"javascript:gfxSelectAvatar(\'F\');\"><img src=\"c/F5.png\" height=128 width=64></a>';
+    pop(PUP);
    }
   }
  }

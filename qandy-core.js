@@ -2,132 +2,8 @@
 // ──── Qandy Core ─────────────────────────────────────────────────────────────────────
 //
 
-window.PopAlign = "center"; // "center", "click", or "full"
-window.PopUpVis = "hidden"; // current target visibility
-window.PopForce = "hidden";   // forced visibility on mouseout
-window.PUV = null;           // timeout id
-window.lastClickedZ = 0;     // last grid coordinate clicked
-
 function qandy_js() {
   RUN="qandy.js"; 
-
-  const popStyle = document.createElement('style');
-  popStyle.textContent = `
-    .pop { position:absolute; top:260; left:190; z-index:249;
-           font-family: arial; font-size: 14px; weight: bold;
-           color: navy;
-           background-color: rgba(221, 221, 221, 0.95);
-           visibility:hidden;
-           text-align: center;
-           padding: 8px;
-         }
-    .pop a { color: navy; text-decoration: none; }
-    .pop a:hover { color: blue; text-decoration: underline; }
-  `;
-  document.head.appendChild(popStyle);
-
-  window.popup = document.createElement('div');
-  popup.id = 'pop';
-  popup.className = 'pop';
-  popup.style.visibility = "hidden";
-  popup.addEventListener('mouseover', () => {
-     window.PopUpVis = "visible";
-     popup.style.visibility = "visible";
-  });
-  popup.addEventListener('mouseout', () => {
-    window.PopUpVis = window.PopForce;
-    clearTimeout(window.PUV);
-    window.PUV = setTimeout(() => { popup.style.visibility = window.PopUpVis; }, 100);
-  });
-  document.body.appendChild(popup);
-  
-  window.hpop = function() { 
-    const p = document.getElementById("pop");
-    if (p) p.style.visibility = "hidden"; 
-    window.PopUpVis = "hidden";
-};
-
-window.pop = function(htm) {
-	  console.log(PopAlign);
-    const popup = document.getElementById("pop");
-    if (!popup) return;
-    
-    popup.innerHTML = htm;
-    
-    // Qandy Display Constants (Matching your GFX offsets)
-    const ScreenTop = 50; 
-    const ScreenLeft = 54;
-    const ScreenWidth = 256;
-    const ScreenHeight = 384;
-    
-    popup.style.visibility = "visible"; 
-    
-    let PopX, PopY, PopW, PopH;
-    
-    // Reset sizes to auto first to measure content
-    popup.style.width = "auto";
-    popup.style.height = "auto";
-    
-    const measureW = popup.offsetWidth;
-    const measureH = popup.offsetHeight;
-    
-    switch (window.PopAlign) {
-        case "full":
-            PopX = ScreenLeft;
-            PopY = ScreenTop;
-            PopW = ScreenWidth;
-            PopH = ScreenHeight;
-            break;
-            
-        case "center":
-            PopW = Math.min(measureW, ScreenWidth);
-            PopH = Math.min(measureH, ScreenHeight);
-            PopX = ScreenLeft + ((ScreenWidth - PopW) / 2);
-            PopY = ScreenTop + ((ScreenHeight - PopH) / 2);
-            break;
-            
-        case "click":
-            // Requires mapx to be defined, otherwise defaults to center
-            const mX = (window.mapx || 7) + 1;
-            PopW = measureW;
-            PopH = measureH;
-            
-            if (typeof window.lastClickedZ !== 'undefined') {
-                const clickY = Math.floor(window.lastClickedZ / mX);
-                const clickX = window.lastClickedZ % mX;
-                PopX = ScreenLeft + (clickX * 32);
-                PopY = ScreenTop + (clickY * 32);
-                
-                // Boundary Enforcement: Keep inside Qandy Screen
-                if (PopX + PopW > ScreenLeft + ScreenWidth) {
-                    PopX = (ScreenLeft + ScreenWidth) - PopW;
-                }
-                if (PopY + PopH > ScreenTop + ScreenHeight) {
-                    PopY = (ScreenTop + ScreenHeight) - PopH;
-                }
-                if (PopX < ScreenLeft) PopX = ScreenLeft;
-                if (PopY < ScreenTop) PopY = ScreenTop;
-            } else {
-                // Fallback to center
-                PopX = ScreenLeft + ((ScreenWidth - PopW) / 2);
-                PopY = ScreenTop + ((ScreenHeight - PopH) / 2);
-            }
-            break;
-            
-        default:
-            PopX = ScreenLeft + ((ScreenWidth - measureW) / 2);
-            PopY = ScreenTop + ((ScreenHeight - measureH) / 2);
-    }
-    
-    popup.style.top = PopY + "px";
-    popup.style.left = PopX + "px";
-    if (window.PopAlign === "full") {
-        popup.style.width = PopW + "px";
-        popup.style.height = PopH + "px";
-    }
-};
-
-window.hpop=function() { document.getElementById("pop").style.visibility="hidden"; }
 
   window.button=function(b, event) {
     pokeCursorOff(); 
@@ -708,7 +584,15 @@ window.press=function(event) {
     return;
   } 
 
-  if (event.keyCode === 27) { event.preventDefault(); }
+  if (event.keyCode === 27) { 
+    event.preventDefault();
+    if (document.getElementById('popWeb') && document.getElementById('popWeb').style.visibility === "visible") {
+      hpopWeb();
+      pokeCursorOn();
+      return;
+    }
+  }
+  
   if (event.keyCode === 16) {
     if (event.source === 'virtual') {
       // Virtual SHIFT: toggle the shift lock state
@@ -1030,6 +914,326 @@ window.press=function(event) {
     });
   }
 
+//
+// ──── Qandy Pop Functions ────────────────────────────────────────────────────────
+//
+
+  window.PopAlign = "center"; // "center", "click", or "full"
+  window.PopUpVis = "hidden"; // current target visibility
+  window.PopForce = "hidden";   // forced visibility on mouseout
+  window.PUV = null;           // timeout id
+  window.lastClickedZ = 0;     // last grid coordinate clicked
+
+  const popStyle = document.createElement('style');
+  popStyle.textContent = `
+    .pop { position:absolute; top:260; left:190; z-index:300;
+           font-family: arial; font-size: 14px; weight: bold;
+           color: navy;
+           background-color: rgba(221, 221, 221, 0.95);
+           visibility:hidden;
+           text-align: center;
+           padding: 8px;
+         }
+    .pop a { color: navy; text-decoration: none; }
+    .pop a:hover { color: blue; text-decoration: underline; }
+  `;
+  document.head.appendChild(popStyle);
+
+  window.popup = document.createElement('div');
+  popup.id = 'pop';
+  popup.className = 'pop';
+  popup.style.visibility = "hidden";
+
+  popup.addEventListener('mouseover', () => {
+     window.PopUpVis = "visible";
+     popup.style.visibility = "visible";
+  })
+  popup.addEventListener('mouseout', () => {
+    window.PopUpVis = window.PopForce;
+    clearTimeout(window.PUV);
+    window.PUV = setTimeout(() => { popup.style.visibility = window.PopUpVis; }, 100);
+  })
+
+  document.body.appendChild(popup);
+
+const POP_WRAPPER_PREFIX = `
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { 
+            margin: 0; padding: 8px; 
+            font-family: arial, sans-serif; font-size: 14px; font-weight: bold;
+            color: navy; background-color: rgba(221, 221, 221, 0.95);
+            z-index: 251;
+            overflow: hidden; display: inline-block;
+            white-space: nowrap; /* Forces content to stay side-by-side */
+        }
+        a { color: navy; text-decoration: none; }
+        a:hover { color: blue; text-decoration: underline; }
+        img { 
+            max-width: 256px; 
+            height: auto; 
+            display: inline-block; /* Changed from block to inline-block */
+            vertical-align: middle; /* Aligns images with the text/spaces */
+            margin: 4px; 
+        }
+    </style>
+</head>
+<body>
+    <div id="content-wrapper" style="display: inline-block;">
+`;
+
+  const POP_WRAPPER_SUFFIX = `
+    </div>
+    <script>
+        const wrapper = document.getElementById('content-wrapper');
+        // Report size to parent whenever content changes
+        const observer = new ResizeObserver(entries => {
+            for (let entry of entries) {
+                const { width, height } = entry.contentRect;
+                window.parent.postMessage({
+                    type: 'resize',
+                    width: width + 16, 
+                    height: height + 16
+                }, '*');
+            }
+        });
+        observer.observe(wrapper);
+
+        // Forward clicks with "cmd:" prefix to the parent machine
+        document.addEventListener('click', (e) => {
+            const link = e.target.closest('a');
+            if (link && link.getAttribute('href')) {
+                const href = link.getAttribute('href');
+                if (href.startsWith('click:')) {
+                    e.preventDefault();
+                    window.parent.postMessage({
+                        type: 'click',
+                        cmd: href.split('cmd:')[1]
+                    }, '*');
+                }
+            }
+        });
+    </script>
+</body>
+</html>
+`;
+
+  window.popHtml = function(htm) {
+    const parentDiv = document.getElementById("pop");
+    if (!parentDiv) return;
+    window.hpop();
+    parentDiv.style.visibility = "visible";
+    window.PopUpVis = "visible";
+    const ifr = document.createElement('iframe');
+    ifr.id = "pop-frame";
+    ifr.setAttribute('sandbox', 'allow-scripts');
+    
+    ifr.style.border = "none";
+    ifr.style.background = "transparent";
+    ifr.style.width = "1px"; // Start tiny, ResizeObserver will fix it
+    ifr.style.height = "1px";
+    ifr.style.display = "block";
+
+    // 4. Inject the content
+    ifr.srcdoc = POP_WRAPPER_PREFIX + htm + POP_WRAPPER_SUFFIX;
+    parentDiv.appendChild(ifr);
+};
+
+// Replace your old hpop with this one
+window.hpop = function() { 
+    const p = document.getElementById("pop");
+    if (p) {
+        // This is the "Destroy" step. Setting innerHTML to "" 
+        // kills the iframe and its process immediately.
+        p.innerHTML = ""; 
+        p.style.visibility = "hidden";
+    }
+    window.PopUpVis = "hidden";
+}
+// New function to handle the math once the iframe reports its size
+  function repositionPop(w, h) {
+  	console.log(w+' '+h);
+  	
+    const popup = document.getElementById("pop");
+    const ifr = document.getElementById("pop-frame");
+    if (!popup || !w || !h) return;
+
+    const ScreenTop = 47; 
+    const ScreenLeft = 47;
+    const ScreenWidth = 256;
+    const ScreenHeight = 384;
+
+    let PopX, PopY;
+    let finalW = w;
+    let finalH = h;
+
+    // Handle "Full" mode early - it occupies the whole screen regardless of content size
+    if (window.PopAlign === "full") {
+        PopX = ScreenLeft;
+        PopY = ScreenTop;
+        finalW = ScreenWidth;
+        finalH = ScreenHeight;
+        if (ifr) {
+            ifr.style.width = ScreenWidth + "px";
+            ifr.style.height = ScreenHeight + "px";
+        }
+    } else {
+        // Standard Positioning Math
+        switch (window.PopAlign) {
+            case "center":
+                PopX = ScreenLeft + ((ScreenWidth - w) / 2);
+                PopY = ScreenTop + ((ScreenHeight - h) / 2);
+                break;
+                
+            case "click":
+                const mX = (window.mapx || 7) + 1;
+                // Default to top-left of screen if no click data
+                PopX = ScreenLeft;
+                PopY = ScreenTop;
+
+                if (typeof window.lastClickedZ !== 'undefined') {
+                    const clickY = Math.floor(window.lastClickedZ / mX);
+                    const clickX = window.lastClickedZ % mX;
+                    PopX = ScreenLeft + (clickX * 32);
+                    PopY = ScreenTop + (clickY * 32);
+                    
+                    // Keep it inside the screen boundaries
+                    if (PopX + w > ScreenLeft + ScreenWidth) PopX = (ScreenLeft + ScreenWidth) - w;
+                    if (PopY + h > ScreenTop + ScreenHeight) PopY = (ScreenTop + ScreenHeight) - h;
+                    if (PopX < ScreenLeft) PopX = ScreenLeft;
+                    if (PopY < ScreenTop) PopY = ScreenTop;
+                }
+                break;
+                
+            default: // Fallback to center
+                PopX = ScreenLeft + ((ScreenWidth - w) / 2);
+                PopY = ScreenTop + ((ScreenHeight - h) / 2);
+        }
+    }
+
+    // Apply values with "px" units (CRITICAL: ensure they are numbers)
+    popup.style.left = Math.floor(PopX) + "px";
+    popup.style.top = Math.floor(PopY) + "px";
+    popup.style.width = Math.floor(finalW) + "px";
+    popup.style.height = Math.floor(finalH) + "px";
+  }
+
+  window.addEventListener('message', function(event) {
+    const data = event.data;
+    if (!data || typeof data !== 'object') return;
+
+    console.log('type='+data.type+' click = '+data.cmd);
+        
+    // Handle Resize
+    if (data.type === 'resize') {
+        const ifr = document.getElementById("pop-frame");
+        // We removed the event.source check temporarily to ensure it's not a timing issue
+        if (ifr) {
+            ifr.style.width = data.width + "px";
+            ifr.style.height = data.height + "px";
+            repositionPop(data.width, data.height);
+        }
+    }
+
+    // Handle Commands
+    if (data.type === 'click') {
+        if (typeof window.command === 'function') {
+            window.command(data.cmd);
+        }
+    }
+  });
+
+// 5. The Message Listener 
+// This should be added near your other event listeners in qandy_js()
+window.addEventListener('message', function(event) {
+    const data = event.data;
+    if (!data || typeof data !== 'object') return;
+
+    // Resize event from the popup iframe
+    if (data.type === 'qandy-pop-resize') {
+        const ifr = document.getElementById("pop-frame");
+        if (ifr) {
+            ifr.style.width = data.width + "px";
+            ifr.style.height = data.height + "px";
+            repositionPop(data.width, data.height);
+        }
+    }
+
+    // Forwarded click event (e.g. <a href="cmd:OPENDIR">)
+    if (data.type === 'qandy-pop-click') {
+        console.log("Popup Command Received:", data.cmd);
+        // Call your existing command processor
+        if (typeof window.command === 'function') {
+            window.command(data.cmd);
+        }
+    }
+});
+
+const popWebStyle = document.createElement('style');
+popWebStyle.textContent = `
+  .popWeb { 
+    position: absolute; 
+    top: 50px; 
+    left: 54px; 
+    width: 256px; 
+    height: 384px; 
+    z-index: 400;
+    visibility: hidden;
+    background-color: #fff; 
+    border: 1px solid #444;
+    overflow: hidden; /* Hide the overflow of the large internal iframe */
+  }
+  
+  /* The Scaler simulates a 1024px wide desktop and shrinks it by 0.25 (to 256px) */
+  .popWeb-scaler {
+    width: 1024px;   /* 256 * 4 */
+    height: 1536px;  /* 384 * 4 */
+    transform: scale(0.25);
+    transform-origin: 0 0;
+  }
+
+  .popWeb-scaler iframe { 
+    width: 100%; 
+    height: 100%; 
+    border: none; 
+  }
+`;
+document.head.appendChild(popWebStyle);
+
+window.popWebContainer = document.createElement('div');
+popWebContainer.id = 'popWeb';
+popWebContainer.className = 'popWeb';
+document.body.appendChild(popWebContainer);
+
+window.popWeb = function(url) {
+    const container = document.getElementById('popWeb');
+    if (!container) return;
+    
+    // Create a scaler wrapper so the iframe "thinks" it is a large desktop
+    container.innerHTML = `
+        <div class="popWeb-scaler">
+            <iframe 
+                src="${url}" 
+                sandbox="allow-scripts allow-popups allow-forms allow-same-origin">
+            </iframe>
+        </div>`;
+    
+    container.style.visibility = "visible";
+};
+
+window.hpopWeb = function() {
+    const container = document.getElementById('popWeb');
+    if (container) {
+        container.innerHTML = ""; // Destroy iframe and stop audio/scripts
+        container.style.visibility = "hidden";
+    }
+};
+
+window.pop = popHtml;
+
+
   pokeCursorOn(); 
   
   window.qandy_js = qandy_js;
@@ -1051,4 +1255,3 @@ window.press=function(event) {
     window.qandySignalReady('qandy_js');
   }
 }
-window.qandy_js=qandy_js;

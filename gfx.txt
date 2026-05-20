@@ -22,39 +22,67 @@ it to a new map sector directory. The server can change items
 by renaming, so if a player uses a 'switch off' the server
 can turn it into a 'switch on'. 
 
-There are 36 'X" registers (Xa-X9) and 36 'W' registers (Wa-W99).
-The 'X' registers are used as 'verbs' (commands) and the 
-'W' registers are used for storing stats. Because these registers
-are actually 'items' they can be stored in a players inventory 
-or placed on the world map itself.
+There are 36 'V" registers (Xa-X9),  'W' registers (Wa-Wz), and
+36 'X' registers. The V registers are 'verbs' that are 'game
+commands'. The 'X' registers are logic gates that can be used
+to program 'bot players'. And the 'W' registers are used to store
+variables, which can be either an item id code, or a numeral from
+00-99 (we call this the 'stack', as in 'stacking inventory items').
 
-In the future, these registers will be used to allow human-players
-to 'program' bot-players. 
+So XnXiLaVnZa = if not inventory player-hat north nothing, which
+translates to 'if item La is not in player's inventory, walk north'
+The Za it the item code for 'nothing' and is used to close the
+logic gate opened. As the last bytecode, it would actually be optional,
+or more commands could be added to the string to execute after the north. 
 
 
-    Xa                 Wa armband (hits)
-    Xb                 Wb
-    Xc                 Wc
-    Xd                 Wd
-    Xe east            We
-    Xf food (eat)      Wf
-    Xg                 Wg
-    Xh                 Wh
-    Xi inventory       Wi
-    Xj                 Wj
-    Xk                 Wk
-    Xl look            Wl
-    Xm                 Wm moves
-    Xn north           Wn
-    Xo ore (mine)      Wo
-    Xp pier (fish)     Wp
-    Xq                 Wq
-    Xr                 Wr
-    Xs south           Ws
-    Xt teleport        Wt
-    Xu use (item)      Wu
-    Xv                 Wv
-    Xw west            Ww
-    Xx                 Wx
-    Xy                 Wy
-    Xz                 Wz
+    Va               XaW$## add ## to W$
+    Vb                   Xb
+    Vc                   Xc chat flags (system messages)
+    Vd                 Xd## dice roll (## sides)
+    Ve east            Xe$$ if $$ is a valid exit
+    Vf food (eat)        Xf
+    Vg               XgW*## if W$ if greater than
+    Vh                   Xh
+    Vi inventory       Xi$$ if item $$ is in inventory
+    Vj                   Xj
+    Vk                   Xk
+    Vl look          XlW$## if W$ is less than ##
+    Vm                 Xm$$ if item $$ is on map (dyamic items players can drop/pickup)
+    Vn north             Xn not (flips next logic gate)
+    Vo ore (mine)      Xo$$ if object $$ is on map (is in .gfx file)
+    Vp pier (fish)       Xp
+    Vq                   Xq
+    Vr                   Xr
+    Vs south         XsW$## subtract ## from W$
+    Vt teleport          Xt map sectors terrain type
+    Vu use (item)        Xu
+    Vv                   Xv
+    Vw west              Xw
+    Vx                   Xx
+    Vy                   Xy
+    Vz                 Xz$$ if item $$ is on z-location
+
+W* = wildcard (Wa-Wz or W0-W9)
+## = numeral 00-99
+$$ = byte code (Aa-Zz or A0-Z0)
+
+
+
+Item ID Codes:
+
+A travel items
+B pick-up items
+C pick-up items
+D pick-up items
+E pick-up items
+F food items
+J food items
+L hats
+M swords
+N shields 
+V v-verbs (game commands)
+W item registers (variables)
+X x-logic (bot commands)
+Y buildings (images can be bigger than 32x32)
+Z usable items 

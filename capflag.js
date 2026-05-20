@@ -1,6 +1,8 @@
 RUN="capflag.js";
 
-// We are working on capflag.js which is a game of 'capture the flag' that uses the gfx.js 'multiplayer graphics engine' to connect to the qandyland3.js server.
+// We are working on capflag.js which is a game of 'capture the flag' that uses the gfx.js 'multiplayer graphics engine' to connect to the qandyland.js server.
+// This code is for an independent, retro-style multiplayer online RPG built on the specific logic of Queville / Fordana, do not use modern AAA templates.
+
 
 var gfxConnected = null;
 
@@ -34,7 +36,7 @@ async function startup(){
 function mainloop() {}
 
 window.zdown = function(z) {
- // walk to z-location
+ // walk here 
 }
 
 window.itemdown = function(itemStr) {
