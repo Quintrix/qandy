@@ -1,0 +1,89 @@
+/**
+ * Unified GFX File Format Parser/Serializer
+ * Format: [sector]=[192 tile chars][4 exit chars].[6-char items]*
+ */
+
+window.gfxFile = window.gfxFile || {};
+
+// Parse a .gfx file into sectors
+gfxFile.parse = function(gfxContent) {
+  const lines = gfxContent.split('\n').filter(line => line.trim());
+  const sectors = {};
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    
+    const eqIdx = line.indexOf('=');
+    if (eqIdx < 0) continue;
+    
+    const sectorId = line.substring(0, eqIdx);
+    const rest = line.substring(eqIdx + 1);
+    const dotIdx = rest.indexOf('.');
+    
+    const mapData = dotIdx >= 0 ? rest.substring(0, dotIdx) : rest;
+    const objData = dotIdx >= 0 ? rest.substring(dotIdx + 1) : '';
+    
+    sectors[sectorId] = {
+      id: sectorId,
+      tiles: mapData.substring(0, 192),
+      exits: mapData.substring(192),
+      items: gfxFile._parseItems(objData)
+    };
+  }
+  
+  return sectors;
+};
+
+// Serialize sectors back to .gfx format
+gfxFile.serialize = function(sectors) {
+  const lines = [];
+  
+  for (const sectorId in sectors) {
+    const sector = sectors[sectorId];
+    const tiles = (sector.tiles || '').substring(0, 192).padEnd(192, 'Za');
+    const exits = (sector.exits || '').substring(0, 4).padEnd(4, '  ');
+    const itemsStr = sector.items 
+      ? sector.items.map(item => gfxFile._serializeItem(item)).join('')
+      : '';
+    
+    lines.push(`${sectorId}=${tiles}${exits}.${itemsStr}`);
+  }
+  
+  return lines.join('\n') + '\n';
+};
+
+// Parse 6-char item chunks
+gfxFile._parseItems = function(itemData) {
+  const items = [];
+  for (let i = 0; i + 6 <= itemData.length; i += 6) {
+    items.push({
+      id: itemData.substring(i, i + 2),
+      z: itemData.substring(i + 2, i + 4),
+      data: itemData.substring(i + 4, i + 6)
+    });
+  }
+  return items;
+};
+
+gfxFile._serializeItem = function(item) {
+  return (item.id || '') + (item.z || '00') + (item.data || '');
+};
+
+// Validate format
+gfxFile.validate = function(sectors) {
+  const errors = [];
+  
+  for (const sectorId in sectors) {
+    const sector = sectors[sectorId];
+    
+    if (!sector.tiles || sector.tiles.length !== 192) {
+      errors.push(`${sectorId}: tiles must be exactly 192 chars`);
+    }
+    //if (sector.exits && sector.exits.length > 4) {
+    //  errors.push(`${sectorId}: exits should be ≤4 chars`);
+    //}
+  }
+  
+  return errors;
+};

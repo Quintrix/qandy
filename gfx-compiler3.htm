@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>PUNCH CODE COMPILER</title>
+    <style>
+        body { background: #222; color: #eee; font-family: sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        #toolbar { background: #333; padding: 10px; display: flex; align-items: center; gap: 15px; border-bottom: 1px solid #444; }
+        #main { display: flex; flex: 1; overflow: hidden; }
+        
+        #viewport { padding: 20px; background: #111; display: flex; flex-direction: column; align-items: center; border-right: 1px solid #444; flex-shrink: 0; position: relative; gap: 15px; width: 296px; box-sizing: border-box; overflow-y: auto; }
+        canvas { background: #000; box-shadow: 0 0 20px rgba(0,0,0,0.5); cursor: crosshair; border: 2px solid #444; }
+
+        #panel { flex: 1; background: #222; display: flex; flex-direction: column; padding: 15px; overflow-y: auto; gap: 15px; }
+        .stack-header { font-weight: bold; color: #0af; margin-bottom: 10px; border-bottom: 1px solid #444; padding-bottom: 5px; display: flex; justify-content: space-between; align-items: center; }
+        
+        .tool-box { background: #2c3e50; padding: 10px; border-radius: 4px; border: 1px solid #34495e; }
+        .tool-box label { font-size: 0.7em; color: #95a5a6; display: block; margin-bottom: 5px; text-transform: uppercase; }
+        
+        input[type="text"] { background: #111; color: #fff; border: 1px solid #555; padding: 4px; text-align: center; font-family: monospace; }
+        
+        #tileBrushRow { display: flex; align-items: center; gap: 10px; }
+        #brushPreview { width: 32px; height: 32px; border: 1px solid #0af; background: #000; }
+
+        .object-entry { background: #333; padding: 8px; margin-bottom: 5px; border-radius: 4px; cursor: pointer; border: 1px solid #444; font-family: monospace; font-size: 0.85em; transition: border-color 0.2s; }
+        .object-entry:hover { border-color: #0af; }
+        .object-entry b { color: #f1c40f; }
+
+        textarea { width: 100%; height: 120px; background: #111; color: #2ecc71; border: 1px solid #555; padding: 10px; font-family: monospace; font-size: 1em; resize: none; box-sizing: border-box; }
+        
+        button { padding: 6px 12px; cursor: pointer; background: #068; color: white; border: none; border-radius: 4px; font-weight: bold; font-size: 0.75em; }
+        button:hover { background: #07a; }
+        button.remove { background: #c0392b; }
+        button.remove:hover { background: #d35400; }
+        
+        #decompiler { background: #000; padding: 8px; font-family: monospace; color: #aaa; font-size: 0.8em; margin-top: 5px; border: 1px solid #333; min-height: 20px; max-height: 100px; overflow-y: auto; white-space: pre-wrap; }
+        
+        #punchcodeImages img {
+            width: 32px;
+            height: 32px;
+            image-rendering: pixelated;
+            border: 1px solid #444;
+            margin-right: 2px;
+            flex-shrink: 0;
+            background-color: #000;
+        }
+        
+        #tooltip { position: absolute; background: rgba(240, 230, 140, 0.8); color: #000; padding: 2px 6px; font-size: 10px; pointer-events: none; border: 1px solid #444; display: none; z-index: 100; font-family: monospace; }
+        
+        #listItems img, 
+        #listItems span { vertical-align: middle; display: inline-block; }
+
+        /* Index Modal Styles */
+        #indexModal {
+            display: none;
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.8); z-index: 1000;
+            align-items: center; justify-content: center;
+        }
+        .modal-content {
+            background: #222; border: 1px solid #555; border-radius: 6px;
+            width: 500px; max-height: 85vh; display: flex; flex-direction: column;
+            box-shadow: 0 0 20px rgba(0,0,0,0.8);
+        }
+        .modal-header {
+            padding: 12px; border-bottom: 1px solid #444;
+            display: flex; justify-content: space-between; align-items: center;
+            background: #1a252f; border-radius: 6px 6px 0 0;
+        }
+        .modal-tabs { display: flex; background: #111; }
+        .modal-tab {
+            flex: 1; padding: 10px; text-align: center; cursor: pointer;
+            background: #111; border-bottom: 2px solid transparent; font-weight: bold;
+            color: #888; transition: 0.2s;
+        }
+        .modal-tab:hover { color: #ccc; }
+        .modal-tab.active { background: #222; border-bottom: 2px solid #8e44ad; color: #9b59b6; }
+        .modal-body {
+            padding: 15px; overflow-y: auto; flex: 1;
+            display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+        }
+        .index-item {
+            display: flex; align-items: center; gap: 10px; padding: 6px;
+            background: #333; border: 1px solid #444; border-radius: 4px;
+            transition: 0.2s; cursor: pointer;
+        }
+        .index-item:hover { border-color: #9b59b6; background: #2c3e50; }
+        .index-item img {
+            width: 32px; height: 32px; image-rendering: pixelated;
+            background: #000; border: 1px solid #222; flex-shrink: 0;
+        }
+        .index-item-text { display: flex; flex-direction: column; font-family: monospace; overflow: hidden; }
+        .index-item-text b { color: #f1c40f; font-size: 1.1em; }
+        .index-item-text span { color: #aaa; font-size: 0.75em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        
+    </style>
+</head>
+<body>
+
+<div id="toolbar">
+    <div style="font-weight: bold; color: #0af;"> &nbsp; PUNCH CODE COMPILER:</div>
+    <button onclick="importGfx()">IMPORT</button>
+    <button onclick="exportGfx()">EXPORT</button>
+    <select id="sectorNav" onchange="changeSector()"></select>
+</div>
+
+<div id="main">
+    <div id="viewport">
+        <canvas id="sectorCanvas" width="256" height="384"></canvas>
+        <div id="tooltip">Z:00</div>
+        
+        <!-- Tile Brush moved below Canvas -->
+        <div class="tool-box" id="brushBox" style="width: 256px; box-sizing: border-box;">
+            <div id="tileBrushRow">
+                <input type="text" id="tileInput" size=2 maxlength="2" value="Ga" oninput="updateBrushPreview()">
+                <div id="brushPreview"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="panel">
+        <!-- Stack View (Always Visible) -->
+        <div id="stackView">
+            <div class="stack-header">
+                <div>OBJECT STACK: <span id="sectorLabel">A1</span></div>
+            </div>
+            <div class="tool-box" style="background: #1a252f; margin-bottom: 10px;">
+                <div style="display: flex; gap: 5px;">
+                    <input type="text" id="newID" size=2 maxlength="2" placeholder="ID">
+                    <input type="text" id="newZ" size=2 maxlength="2" placeholder="Z">
+                    <input type="text" id="newDATA" size=2 maxlength="2" value="">
+                    <button onclick="addObject()">+ ADD</button>
+                </div>
+            </div>
+            <div id="listItems"></div>
+        </div>
+
+        <!-- Logic Editor (Always Visible beneath the stack) -->
+        <div id="editorView">
+            <div class="stack-header">
+                <div>LOGIC: <span id="editingObjID">None Selected</span></div>
+                <!-- Added INDEX Button here -->
+                <button id="indexBtn" onclick="openIndexModal()" style="display: none; background: #8e44ad;">INDEX</button>
+            </div>
+            <div id="editorWorkspace" style="display: none;">
+                <textarea id="punchcodeInput" spellcheck="false" oninput="updateLogicAndDecompiler()"></textarea>
+                <div id="decompiler"></div>
+                <div id="punchcodeImages" class="tool-box" style="display: flex; flex-wrap: nowrap; overflow-x: auto; margin-top: 10px; padding: 5px; height: 42px;"></div>
+                <div style="margin-top: 10px;">
+                    <button class="remove" onclick="removeObject()" style="width: 100%;">DELETE SELECTED</button>
+                </div>
+            </div>
+            <div id="noSelectionMessage" style="color: #666; font-style: italic; text-align: center; padding: 20px 0;">
+                Select an object from the stack above to edit its logic.
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal for Punch Code Index -->
+<div id="indexModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <span style="font-weight: bold; color: #9b59b6;">PUNCH CODE INDEX</span>
+            <button onclick="closeIndexModal()" style="background: #c0392b; padding: 4px 8px;">X</button>
+        </div>
+        <div class="modal-tabs">
+            <div id="tabV" class="modal-tab" onclick="switchTab('V')">V - Verbs</div>
+            <div id="tabW" class="modal-tab" onclick="switchTab('W')">W - Registers</div>
+            <div id="tabX" class="modal-tab" onclick="switchTab('X')">X - Logic</div>
+        </div>
+        <div id="modalBody" class="modal-body"></div>
+    </div>
+</div>
+
+<script>
+    // --- GFX ITEM DICTIONARY ---
+    const fullItemMap = {
+        // Travel Items
+        "Aa": "Travel Boots", "Ab": "Hiking Boots", "Ac": "Swamp Boots", "Ad": "Mountain Boots", "Ae": "Lava Boots", "Af": "Row Boat",
+        // Tools/Utilities
+        "Bd": "Bucket", "Be": "Lantern", "Cg": "Log", "Ek": "Bucket Tar", "El": "Bucket Water",
+        // Food
+        "Fa": "Tomato", "Fb": "Tomatos", "Fc": "Tomatoes", "Fd": "Tomatoes", "Fe": "Tomato", "Jc": "Qandy", "Kf": "Bread",
+        // Plants
+        "Ka": "Plant",
+        // Hats
+        "La": "Black Hat", "Lb": "Blue Hat", "Lc": "Pink Hat", "Ld": "Red Bandana", "Le": "Blue Bandana", "Lf": "Mask",
+        // Helms
+        "Ma": "Cylon Helm", "Mb": "Cylon Helm",
+        // Enemies
+        "Mc": "Spider", "Md": "Mosquito", "Me": "Scorpion", "Mf": "Fire Ant",
+        // Player Items
+        "Sa": "Player Sa", "Sb": "Player Sb", "Sc": "Player Sc", "Sd": "Player Sd", "Se": "Player Se", "Sf": "Player Sf", "Sg": "Player Sg", "Sh": "Player Sh",
+        "Ta": "Player Ta", "Tb": "Player Tb", "Tc": "Player Tc", "Td": "Player Td", "Te": "Player Te", "Tf": "Player Tf", "Tg": "Player Tg", "Th": "Player Th",
+        // UI/Verb Commands 
+        "Va": "Avatar", "Vb": "", "Vc": "", "Vd": "Drop Item", "Ve": "East", "Vf": "Food (eat)", "Vg": "Get Item", "Vh": "", "Vi": "Inventory", "Vj": "",
+        "Vk": "", "Vl": "Look", "Vm": "", "Vn": "North", "Vo": "", "Vp": "Pop", "Vq": "", "Vr": "", "Vs": "South", "Vt": "Teleport", "Vu": "Use Object",
+        "Vv": "", "Vw": "West", "Vx": "", "Vy": "", "Vz": "", "V1": "", "V2": "", "V3": "", "V4": "", "V5": "", "V6": "", "V7": "", "V8": "", "V9": "",
+        // Registers 
+        "Wa": "Wa", "Wb": "Wb", "Wc": "Wc", "Wd": "Wd", "We": "We", "Wf": "Wf", "Wg": "Wg", "Wh": "Wh", "Wi": "Wi", "Wj": "Wj", "Wk": "Wk", "Wl": "Wl",
+        "Wm": "Wm", "Wn": "Wn", "Wo": "Wo", "Wp": "Wp", "Wq": "Wq", "Wr": "Wr", "Ws": "Ws", "Wt": "Wt", "Wu": "Wu", "Wv": "Wv", "Ww": "Ww", "Wx": "Wx",
+        "Wy": "Wy", "Wz": "Wz", "W1": "W1", "W2": "W2", "W3": "W3", "W4": "W4", "W5": "W5", "W6": "W6", "W7": "W7", "W8": "W8", "W9": "W9", "W0": "W0",
+        // Logic/Scripting Commands
+        "Xa": "Add ## to W$", "Xb": "", "Xc": "", "Xd": "Dice Roll ## Sides", "Xe": "", "Xf": "", "Xg": "If W$ greater than ##", "Xh": "", "Xi": "",
+        "Xj": "", "Xk": "", "Xl": "If W$ less than ##", "Xm": "If item $$ is on sector", "Xn": "Not", "Xo": "If object $$ is on sector", "Xp": "",
+        "Xq": "", "Xr": "", "Xs": "Subtract ## from W$", "Xt": "", "Xu": "", "Xv": "Add item $$ to inventory", "Xw": "", "Xx": "", "Xy": "",
+        "Xz": "If item $$ is on z-location", "X1": "", "X2": "", "X3": "", "X4": "", "X5": "", "X6": "", "X7": "", "X8": "", "X9": "", "X0": "",
+        // Static Objects/Buildings
+        "Ya": "City", "Yb": "Cart", "Yc": "Fernence", "Yd": "Magic Guild", "Ye": "Building", "Yf": "Cabin", "Yg": "Pipe", "Yh": "Pipe", "Yi": "Hut", "Yj": "Flag Pole",
+        // Game States/Actions/Environmental 
+        "Za": "Nothing", "Zb": "NO", "Zc": "Switch Off", "Zd": "Switch On", "Ze": "Teleport", "Zf": "Sign", "Zg": "Pier", "Zh": "Well", "Zi": "Fire Pit",
+        "Zj": "Fire", "Zk": "Mysterious Man", "Zl": "Mountain Hideout", "Zm": "City Gates", "Zn": "Green", "Zo": "Red"
+    };
+
+    function gfxItemID(i) {
+        return fullItemMap[i] || "Item " + i;
+    }
+
+    // --- STATE ---
+    let currentSector = "A1";
+    let mapSectors = {};
+    let editingIndex = -1;
+    const ROWS = ["A","B","C","D","E","F","G","H"]; 
+    const COLS = 8;
+    const tileCache = {}, itemCache = {};
+    const canvas = document.getElementById('sectorCanvas');
+    const ctx = canvas.getContext('2d');
+    const tooltip = document.getElementById('tooltip');
+
+    const punchcodeItemImageCache = {};
+
+    const nav = document.getElementById('sectorNav');
+    for(let r=0; r<ROWS.length; r++) {
+        for(let c=1; c<=COLS; c++) {
+            let opt = document.createElement('option');
+            opt.value = opt.textContent = ROWS[r] + (c);
+            nav.appendChild(opt);
+        }
+    }
+
+    function initBlank() {
+        ROWS.forEach(r => {
+            for(let c=1; c<=COLS; c++) {
+                mapSectors[r+c] = { tiles: "Ga".repeat(96), exits: "", objects: [] };
+            }
+        });
+        updateBrushPreview();
+        render();
+    }
+
+    // --- NAVIGATION ---
+    window.addEventListener('keydown', (e) => {
+        if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return;
+        
+        let rowIdx = ROWS.indexOf(currentSector[0]);
+        let colIdx = parseInt(currentSector.slice(1));
+        let changed = false;
+
+        if (e.key === "ArrowUp" && rowIdx > 0) { rowIdx--; changed = true; }
+        if (e.key === "ArrowDown" && rowIdx < ROWS.length - 1) { rowIdx++; changed = true; }
+        if (e.key === "ArrowLeft" && colIdx > 1) { colIdx--; changed = true; }
+        if (e.key === "ArrowRight" && colIdx < COLS) { colIdx++; changed = true; }
+
+        if (changed) {
+            currentSector = ROWS[rowIdx] + colIdx;
+            nav.value = currentSector;
+            changeSector();
+        }
+    });
+
+    // --- MOUSE INTERACTION ---
+    canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+    canvas.addEventListener('mousedown', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const x = Math.floor((e.clientX - rect.left) / 32);
+        const y = Math.floor((e.clientY - rect.top) / 32);
+        const tileIndex = y * 8 + x;
+        
+        if (tileIndex < 0 || tileIndex >= 96) return;
+
+        const sec = mapSectors[currentSector];
+
+        if (e.button === 0) { // Left Click: Paint
+            const brush = document.getElementById('tileInput').value || "Ga";
+            const before = sec.tiles.substring(0, tileIndex * 2);
+            const after = sec.tiles.substring(tileIndex * 2 + 2);
+            sec.tiles = before + brush + after;
+        } 
+        else if (e.button === 2) { // Right Click: Sample
+            const sampled = sec.tiles.substring(tileIndex * 2, tileIndex * 2 + 2);
+            document.getElementById('tileInput').value = sampled;
+            updateBrushPreview();
+        }
+        render();
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const x = Math.floor((e.clientX - rect.left) / 32);
+        const y = Math.floor((e.clientY - rect.top) / 32);
+        const tileIndex = y * 8 + x;
+
+        if (tileIndex >= 0 && tileIndex < 96) {
+            tooltip.style.display = 'block';
+            tooltip.style.left = (e.clientX - rect.left + 25) + 'px';
+            tooltip.style.top = (e.clientY - rect.top - 15) + 'px';
+            tooltip.innerText = `${tileIndex.toString().padStart(2, '0')}`;
+        } else {
+            tooltip.style.display = 'none';
+        }
+    });
+
+    canvas.addEventListener('mouseleave', () => tooltip.style.display = 'none');
+
+    // --- CORE LOGIC ---
+
+    function updateBrushPreview() {
+        const code = document.getElementById('tileInput').value;
+        const preview = document.getElementById('brushPreview');
+        preview.style.background = `#000 url('t/${code}.png') no-repeat center`;
+        preview.style.backgroundSize = "cover";
+    }
+
+    function getImg(src, cache) {
+        if (cache[src] && cache[src].complete) return cache[src];
+
+        const img = new Image();
+        img.src = src;
+        img.onload = () => {
+            cache[src] = img; 
+            render();
+        };
+        cache[src] = img; 
+        return img;
+    }
+
+    function render() {
+        const sec = mapSectors[currentSector];
+        if(!sec) return;
+        ctx.clearRect(0,0,256,384);
+        
+        for(let i=0; i<96; i++) {
+            let code = sec.tiles.substring(i*2, i*2+2);
+            let img = getImg(`t/${code}.png`, tileCache);
+            if(img.complete) ctx.drawImage(img, (i%8)*32, Math.floor(i/8)*32, 32, 32);
+        }
+
+        sec.objects.forEach(obj => {
+            let img = getImg(`i/${obj.id}.png`, itemCache);
+            let z = parseInt(obj.z);
+            let targetX = (z % 8) * 32;
+            let targetY = Math.floor(z / 8) * 32;
+
+            if(img.complete) {
+                if (obj.id.startsWith('Y')) {
+                    let drawX = targetX + 32 - img.width;
+                    let drawY = targetY + 32 - img.height;
+                    ctx.drawImage(img, drawX, drawY, img.width, img.height);
+                } else {
+                    ctx.drawImage(img, targetX, targetY, 32, 32);
+                }
+            }
+        });
+
+        updateObjectList();
+    }
+
+    function updateObjectList() {
+        const list = document.getElementById('listItems');
+        list.innerHTML = "";
+        const sec = mapSectors[currentSector];
+        if (!sec) return;
+        
+        sec.objects.forEach((obj, idx) => {
+            const div = document.createElement('div');
+            div.className = 'object-entry';
+            if (idx === editingIndex) {
+                div.style.borderColor = "#0af";
+                div.style.background = "#1a252f";
+            }
+            const typeLabel = obj.data ? `d:${obj.data}` : `dynamic`;
+            div.innerHTML = `<img src="i/${obj.id}.png" height=32 width=32 onerror="this.style.visibility='hidden'"> <b>${obj.id}</b> z:${obj.z} <span style="color: #888;">(${typeLabel})</span> ${gfxItemID(obj.id)}`;
+            
+            div.onclick = () => selectObject(idx);
+            list.appendChild(div);
+        });
+    }
+
+    function addObject() {
+        const id = document.getElementById('newID').value.trim();
+        const z = document.getElementById('newZ').value.trim();
+        const data = document.getElementById('newDATA').value.trim();
+        if (!id || !z) return;
+        
+        const sec = mapSectors[currentSector];
+        if (!sec) return;
+        
+        sec.objects.push({
+            id: id,
+            z: z,
+            data: data,
+            logic: ""
+        });
+        
+        document.getElementById('newID').value = "";
+        document.getElementById('newZ').value = "";
+        document.getElementById('newDATA').value = "00";
+        
+        render();
+        selectObject(sec.objects.length - 1);
+    }
+
+    function selectObject(idx) {
+        editingIndex = idx;
+        const sec = mapSectors[currentSector];
+        if (!sec || idx < 0 || idx >= sec.objects.length) {
+            clearSelection();
+            return;
+        }
+        
+        const obj = sec.objects[idx];
+        document.getElementById('editingObjID').innerText = obj.id + "@" + obj.z;
+        document.getElementById('punchcodeInput').value = obj.logic;
+        document.getElementById('editorWorkspace').style.display = "block";
+        document.getElementById('noSelectionMessage').style.display = "none";
+        
+        // Show INDEX button
+        document.getElementById('indexBtn').style.display = "inline-block";
+        
+        updateLogicAndDecompiler();
+        updateObjectList();
+    }
+
+    function clearSelection() {
+        editingIndex = -1;
+        document.getElementById('editingObjID').innerText = "None Selected";
+        document.getElementById('editorWorkspace').style.display = "none";
+        document.getElementById('noSelectionMessage').style.display = "block";
+        
+        // Hide INDEX button
+        document.getElementById('indexBtn').style.display = "none";
+        
+        updateObjectList();
+    }
+
+    function updateLogicAndDecompiler() {
+        if (editingIndex !== -1) {
+            const sec = mapSectors[currentSector];
+            if (sec && sec.objects[editingIndex]) {
+                sec.objects[editingIndex].logic = document.getElementById('punchcodeInput').value;
+            }
+        }
+        updateDecompiler();
+    }
+
+    function removeObject() {
+        if (editingIndex !== -1) {
+            const sec = mapSectors[currentSector];
+            if (sec) {
+                sec.objects.splice(editingIndex, 1);
+                clearSelection();
+                render();
+            }
+        }
+    }
+
+    function changeSector() {
+        currentSector = nav.value;
+        document.getElementById('sectorLabel').innerText = currentSector;
+        clearSelection();
+        render();
+    }
+
+    async function importGfx() {
+      try {
+        const text = await navigator.clipboard.readText();
+        if(!text) return;
+        text.split('\n').forEach(line => {
+            if(!line.includes('=')) return; 
+            let [label, content] = line.split('=');
+            if(!content) return;
+            let [map, items] = content.split('.');
+            let objs = [];
+            if(items) items.split(',').forEach(c => {
+                if(!c) return;
+                let [m, l] = c.split(':');
+                if (m) {
+                    if (m.length >= 6) {
+                        objs.push({ 
+                            id: m.substring(0,2), 
+                            z: m.substring(2,4), 
+                            data: m.substring(4,6), 
+                            logic: l || "" 
+                        });
+                    } else if (m.length >= 4) {
+                        objs.push({ 
+                            id: m.substring(0,2), 
+                            z: m.substring(2,4), 
+                            data: "", 
+                            logic: l || "" 
+                        });
+                    }
+                }
+            });
+            mapSectors[label] = { tiles: map.substring(0,192), exits: map.substring(192), objects: objs };
+        });
+        clearSelection();
+        render();
+      } catch (e) { console.error("Import failed", e); }
+    }
+ 
+    function exportGfx() {
+      let out = "";
+      for(const label in mapSectors) {
+        let sec = mapSectors[label];
+        let objStr = sec.objects.map(o => {
+            let meta = o.id + o.z;
+            if (o.data && o.data.trim().length === 2) {
+                meta += o.data;
+            }
+            return o.logic ? `${meta}:${o.logic}` : meta;
+        }).join(',');
+        out += `${label}=${sec.tiles}${sec.exits}.${objStr}\n`;
+      }
+      navigator.clipboard.writeText(out.trim());
+      alert("GFX EXPORTED!");
+    }
+
+    // --- INDEX MODAL LOGIC ---
+    function openIndexModal() {
+        document.getElementById('indexModal').style.display = 'flex';
+        switchTab('V'); // Open default tab
+    }
+    
+    function closeIndexModal() {
+        document.getElementById('indexModal').style.display = 'none';
+    }
+    
+    function switchTab(prefix) {
+        // Toggle Active Styling
+        document.querySelectorAll('.modal-tab').forEach(t => t.classList.remove('active'));
+        document.getElementById('tab' + prefix).classList.add('active');
+        
+        // Generate Body content dynamically
+        const body = document.getElementById('modalBody');
+        body.innerHTML = '';
+        
+        for (let key in fullItemMap) {
+            if (key.startsWith(prefix)) {
+                let desc = fullItemMap[key] || "Unknown";
+                
+                let div = document.createElement('div');
+                div.className = 'index-item';
+                div.onclick = () => insertCode(key);
+                
+                div.innerHTML = `
+                    <img src="i/${key}.png" onerror="this.style.display='none'">
+                    <div class="index-item-text">
+                        <b>${key}</b>
+                        <span title="${desc}">${desc}</span>
+                    </div>
+                `;
+                body.appendChild(div);
+            }
+        }
+    }
+    
+    function insertCode(code) {
+        const ta = document.getElementById('punchcodeInput');
+        
+        // Support inserting code at exact cursor position
+        if (ta.selectionStart || ta.selectionStart === '0' || ta.selectionStart === 0) {
+            let startPos = ta.selectionStart;
+            let endPos = ta.selectionEnd;
+            ta.value = ta.value.substring(0, startPos)
+                + code
+                + ta.value.substring(endPos, ta.value.length);
+            
+            // Move cursor to immediately after the inserted code
+            ta.selectionStart = startPos + code.length;
+            ta.selectionEnd = startPos + code.length;
+        } else {
+            // Fallback just in case
+            ta.value += code;
+        }
+        
+        updateLogicAndDecompiler();
+        ta.focus(); // Keep focus alive for continuous entry
+    }
+
+    // --- DECOMPILER ---
+    const punchcodeMap = {
+        'Va': 'avatar (set)',
+        'Vb': 'verb B', 
+        'Vc': 'character selection',
+        'Vd': 'dice roll', 
+        'Ve': 'move east',
+        'Vf': 'eat food',
+        'Vg': 'get item', 
+        'Vh': 'verb H',
+        'Vi': 'inventory (open)',
+        'Vj': 'verb J',
+        'Vk': 'verb K',
+        'Vl': 'look (examine)',
+        'Vm': 'verb M', 
+        'Vn': 'move north',
+        'Vo': 'verb O', 
+        'Vp': 'pop (stack)', 
+        'Vq': 'verb Q',
+        'Vr': 'read object data', 
+        'Vs': 'move south',
+        'Vt': 'teleport',
+        'Vu': 'use item',
+        'Vv': 'add item to inventory', 
+        'Vw': 'move west',
+        'Vx': 'verb X',
+        'Vy': 'verb Y',
+        'Vz': 'verb Z', 
+
+        'Xa': 'add to W register', 
+        'Xb': 'logic B',
+        'Xc': 'logic C',
+        'Xd': 'dice roll (sides)', 
+        'Xe': 'if valid exit', 
+        'Xf': 'logic F',
+        'Xg': 'if W register is greater than', 
+        'Xh': 'logic H',
+        'Xi': 'if item in inventory', 
+        'Xj': 'logic J',
+        'Xk': 'logic K',
+        'Xl': 'if W register is less than', 
+        'Xm': 'if item is on map', 
+        'Xn': 'NOT', 
+        'Xo': 'if object is on map', 
+        'Xp': 'logic P',
+        'Xq': 'logic Q',
+        'Xr': 'read object data', 
+        'Xs': 'subtract from W register', 
+        'Xt': 'map sectors terrain type',
+        'Xu': 'logic U',
+        'Xv': 'add item to player inventory',
+        'Xw': 'logic W',
+        'Xx': 'logic X',
+        'Xy': 'logic Y',
+        'Xz': 'if item is on z-location', 
+    };
+
+    function isWRegister(code) {
+        return code.length === 2 && code.charAt(0) === 'W' && (
+            (code.charAt(1) >= 'a' && code.charAt(1) <= 'z') ||
+            (code.charAt(1) >= '0' && code.charAt(1) <= '9')
+        );
+    }
+
+    function isNumerical(code) {
+        return code.length === 2 && !isNaN(parseInt(code));
+    }
+
+    function getCodeDescription(code) {
+        if (code === "Za") return "nothing (null)";
+        if (code === "Z1") return "exit Z1";
+        if (code.match(/^[A-H][1-8]$/)) return `sector ${code}`;
+        
+        const itemText = gfxItemID(code);
+        if (itemText !== "Item " + code) return itemText;
+
+        return `code "${code}"`;
+    }
+
+    function decompilepunchcode(code) {
+        let decompiled = [];
+        let i = 0;
+        let pendingNot = false;
+
+        while (i < code.length) {
+            let currentByte = code.substring(i, i + 2);
+            let description = "";
+            let consumedBytes = 2;
+
+            if (currentByte === 'Xn') {
+                pendingNot = true;
+                description = "NOT";
+            } else {
+                let prefix = pendingNot ? "NOT " : "";
+                pendingNot = false;
+
+                if (punchcodeMap[currentByte]) {
+                    description = prefix + punchcodeMap[currentByte];
+
+                    if (currentByte.startsWith('Vg') || currentByte.startsWith('Xi') || currentByte.startsWith('Xm') || 
+                        currentByte.startsWith('Xo') || currentByte.startsWith('Xr') || currentByte.startsWith('Xv') || 
+                        currentByte.startsWith('Xz') || currentByte.startsWith('Vp') || currentByte.startsWith('Xe')) {
+                        let itemCode = code.substring(i + 2, i + 4);
+                        if (itemCode) {
+                            description += ` (${getCodeDescription(itemCode)})`;
+                            consumedBytes += 2;
+                        }
+                    } else if (currentByte.startsWith('Vd') || currentByte.startsWith('Xd')) {
+                        let numeral = code.substring(i + 2, i + 4);
+                        if (isNumerical(numeral)) {
+                            description += ` (${parseInt(numeral)} sides)`;
+                            consumedBytes += 2;
+                        }
+                    } else if (currentByte.startsWith('Xa') || currentByte.startsWith('Xg') || currentByte.startsWith('Xl') || currentByte.startsWith('Xs')) {
+                        let wRegister = code.substring(i + 2, i + 4);
+                        let numeral = code.substring(i + 4, i + 6);
+                        if (isWRegister(wRegister) && isNumerical(numeral)) {
+                            let op = '';
+                            if (currentByte.startsWith('Xa')) op = 'add';
+                            else if (currentByte.startsWith('Xg')) op = 'is greater than';
+                            else if (currentByte.startsWith('Xl')) op = 'is less than';
+                            else if (currentByte.startsWith('Xs')) op = 'subtract';
+                            
+                            description = `${prefix}W register ${wRegister} ${op} ${parseInt(numeral)}`;
+                            consumedBytes += 4;
+                        }
+                    }
+                } else if (isWRegister(currentByte)) {
+                    description = `W register ${currentByte}`;
+                } else if (isNumerical(currentByte)) {
+                    description = `literal value ${parseInt(currentByte)}`;
+                } else {
+                    description = `UNKNOWN: ${currentByte}`;
+                }
+            }
+            
+            decompiled.push(description);
+            i += consumedBytes;
+        }
+
+        return decompiled.join('\n');
+    }
+
+    function updateDecompiler() {
+        const code = document.getElementById('punchcodeInput').value;
+        const display = document.getElementById('decompiler');
+        const punchcodeImagesContainer = document.getElementById('punchcodeImages');
+        
+        punchcodeImagesContainer.innerHTML = "";
+
+        if (!display || !punchcodeImagesContainer) return;
+        
+        if (code.trim() === "") {
+            display.innerText = "(no instructions)";
+        } else {
+            display.innerText = decompilepunchcode(code);
+            
+            let i = 0;
+            let imagesCount = 0;
+            const maxImages = 20;
+
+            while (i < code.length && imagesCount < maxImages) {
+                let currentByte = code.substring(i, i + 2);
+                let imgPath = `i/${currentByte}.png`;
+                let consumedBytes = 2;
+
+                if (currentByte.startsWith('Vg') || currentByte.startsWith('Xi') || currentByte.startsWith('Xm') || 
+                    currentByte.startsWith('Xo') || currentByte.startsWith('Xr') || currentByte.startsWith('Xv') || 
+                    currentByte.startsWith('Xz') || currentByte.startsWith('Vp') || currentByte.startsWith('Xe') ||
+                    currentByte.startsWith('Vd') || currentByte.startsWith('Xd')) {
+                    consumedBytes += 2;
+                } else if (currentByte.startsWith('Xa') || currentByte.startsWith('Xg') || 
+                           currentByte.startsWith('Xl') || currentByte.startsWith('Xs')) {
+                    consumedBytes += 4;
+                }
+
+                const img = document.createElement('img');
+                img.src = imgPath;
+                img.onerror = () => { img.style.display = 'none'; };
+                
+                if (!punchcodeItemImageCache[imgPath]) {
+                    const cachedImg = new Image();
+                    cachedImg.src = imgPath;
+                    cachedImg.onload = () => {
+                        punchcodeItemImageCache[imgPath] = cachedImg;
+                        if (img.parentNode === punchcodeImagesContainer) {
+                             img.src = cachedImg.src;
+                        }
+                    };
+                    punchcodeItemImageCache[imgPath] = cachedImg;
+                } else {
+                    img.src = punchcodeItemImageCache[imgPath].src;
+                }
+
+                punchcodeImagesContainer.appendChild(img);
+                imagesCount++;
+                i += consumedBytes;
+            }
+        }
+    }
+
+    window.onload = initBlank;
+</script>
+</body>
+</html>

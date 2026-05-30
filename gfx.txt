@@ -1,95 +1,153 @@
 
-Quintrix and Crew Software
-Multiplayer Graphics Engine
 
 
-Our gfx.js engine processes text files the way a mainframe
-processes punch cards, giving it a level of speed that most
-engines only dream of.
-
-The fastest file storage is the operating system's DOS, any
-database is an extra layer that can only slow things down,
-thus we used the file system as the database. The map is
-divided into 'sectors' which can run from Aa-Az or A0-Z9,
-or Aa-Z9. Each sector is given a directory and inside that
-directory any items, objects, avatars, and config are stored
-as files. The filename contain everything the client needs
-to render that sector, so a 'dir' command reveals the entire
-sector.  
-
-The server moves players by renaming their file, or moving 
-it to a new map sector directory. The server can change items
-by renaming, so if a player uses a 'switch off' the server
-can turn it into a 'switch on'. 
-
-There are 36 'V" registers (Xa-X9),  'W' registers (Wa-Wz), and
-36 'X' registers. The V registers are 'verbs' that are 'game
-commands'. The 'X' registers are logic gates that can be used
-to program 'bot players'. And the 'W' registers are used to store
-variables, which can be either an item id code, or a numeral from
-00-99 (we call this the 'stack', as in 'stacking inventory items').
-
-So XnXiLaVnZa = if not inventory player-hat north nothing, which
-translates to 'if item La is not in player's inventory, walk north'
-The Za it the item code for 'nothing' and is used to close the
-logic gate opened. As the last bytecode, it would actually be optional,
-or more commands could be added to the string to execute after the north. 
+                      Quintrix and Crew Software
+                      Multiplayer Graphics Engine
 
 
-    Va avatar        XaW$## add ## to W$
-    Vb                   Xb 
-    Vc                   Xc character selection
-    Vd                 Xd## dice roll (## sides)
-    Ve east            Xe$$ if $$ is a valid exit
-    Vf food (eat)        Xf
-    Vg               XgW*## if W$ if greater than
-    Vh                   Xh
-    Vi inventory       Xi$$ if item $$ is in inventory
-    Vj                   Xj
-    Vk                   Xk
-    Vl look          XlW$## if W$ is less than ##
-    Vm                 Xm$$ if item $$ is on map (dyamic items players can drop/pickup)
-    Vn north             Xn not (flips next logic gate)
-    Vo ore (mine)      Xo$$ if object $$ is on map (is in .gfx file)
-    Vp pier (fish)       Xp 
-    Vq                   Xq
-    Vr                 Xr$$ read object's data file (returns Za if item no on sector)
-    Vs south         XsW$## subtract ## from W$
-    Vt teleport          Xt map sectors terrain type
-    Vu use (item)        Xu
-    Vv                   Xv
-    Vw west              Xw
-    Vx                   Xx
-    Vy                   Xy
-    Vz                 Xz$$ if item $$ is on z-location
+     ——————————————————————————————————————————————————————————————————————————————————————————
 
-W* = wildcard (Wa-Wz or W0-W9)
-## = numeral 00-99
-$$ = byte code (Aa-Zz or A0-Z0)
+                      Stand Alone DevTeam Tools:
+
+    gfx-tileset.htm — Displays entire tileset including tiles, characters, and items.
+
+     gfx-editor.htm — World Map Editor (ground tiles)
+                      
+   gfx-compiler.htm — Add 'punch code' programmable 'objects' on map 
+                      
+      gfx-itemid.js — Master list of ItemID() codes (the nouns)
+      
+     ——————————————————————————————————————————————————————————————————————————————————————————
+
+     Punch card machines such as the UNIVAC were programmed by inserting 'plugs' into
+     holes on a 'plug board'; the gfx.js sends a series of 'plugs' to qandyland.js where
+     plugboard() processes them. All 'plugs' are two upper-case characters we call 'verbs'
+     with two-character 'nouns' attached, the server will respond to the plugs with plugs
+     so some of these plugs are client plugs and others are server plugs: 
+
+      Client:  Server:
+
+           ST   ST<token> — request session token                 
+       ID$$##             — Item $$ down (user has clicked item $$ on z-location ##)
+       OD$$##             — Object $$ down (user has clicked object $$ on z-location ##)
+                XX..      — Error .. (fatal, all text after XX is the error message)
+                XW        — Error: World Not Found
+           LK   LK<data>  — Look Around (use LOS to see beyond current sector)
+           RF   RF<data>  — Refresh current sector
+                PI$$##    — Player has been assigned item $$ at ## z-location
+                VA        — Server request for player avatar (triggers select avatar)   
+     ——————————————————————————————————————————————————————————————————————————————————————————
+
+     The 'UNIVAC Punch Code Processor' emulates a binary coded decimal computer
+     but with a base of 36 instead of 10. It processes files as if they were punch cards
+     programmed via a 'plugboard' using a retro-future 'plug code' language similar to
+     'short code' that was used on what would become the UNIVAC. It is composed of two-character
+     words that we divide into 'nouns' (the items), the 'verbs' (game instructions), the
+     'registers' which are the variables, and the 'logic gates' that do the math.
+     
+     Let's say a game designed needs 'hit points', so they assign 'Wh' to be hit points.
+     The player file is it's 'inventory', if a player has the item Wh in their file they
+     have 1 hit point. If they have 'WhWh', they have 2 hit points. 'WhWhWh' would be 3,
+     or they can be stacked 'Wh00' to 'Wh99'.
+     
+     XnXiLaVnXcVn = if not inventory player-hat north nothing, which translates to
+     'if item La is not in player's inventory, walk north'. The Xc code is used to close
+     the all open logic gates
+     
+     Because there are no jumps/branches/goto/gosub these files are processed from
+     start to finish just a like a punch card, where you can't just move the card in
+     and out of the machine - it is read from the start to the finish and yields
+     blinding fast processing speeds that combined with the tiny data packets creates
+     a 'massively multiplayer environment' no modern JSON API can match. 
+
+     W* = wildcard (Wa-Wz or W0-W9)
+     ## = numeral 00-99
+     $$ = byte code (Aa-Zz or A0-Z0)
 
 
-The very first thing the user has to click is a male or
-female head to select their avatar, this calls gfxSelectAvatar(a).
-We should assign 'Xc' as 'character selection' which the link
-handler can call gfxSelectAvatar() when it see's this link.
-Where do I find the link handler?? Is it not in gfx.js?? 
+        Va avatar        XaW$## add ## to W$
+        Vb                   Xb 
+        Vc                   Xc close all logic gates
+        Vd                 Xd## dice roll (## sides)
+        Ve east            Xe$$ if $$ is a valid exit
+        Vf food (eat)        Xf
+      Vg$$ get $$            XgW*## if W$ if greater than
+        Vh                   Xh
+        Vi inventory       Xi$$ if item $$ is in inventory
+        Vj                   Xj
+        Vk                   Xk
+        Vl look          XlW$## if W$ is less than ##
+        Vm                 Xm$$ if item $$ is on map (dyamic items players can drop/pickup)
+        Vn north             Xn not (flips next logic gate)
+        Vo                 Xo$$ if object $$ is on map (is in .gfx file)
+      Vp$$ pop               Xp pop <text>..  
+        Vq                   Xq
+        Vr                 Xr$$ read object's data file (returns Za if item no on sector)
+        Vs south         XsW$## subtract ## from W$
+        Vt teleport          Xt map sectors terrain type
+        Vu use (item)      Xu$$ update ItemID
+        Vv                 Xv$$ add item to player inventory (use not to remove)
+        Vw west              Xw 
+        Vx                   Xx Error
+        Vy                   Xy
+        Vz                 Xz$$ if item $$ is on z-location
 
- 
+     ——————————————————————————————————————————————————————————————————————————————————————————
 
-Item ID Codes:
+     Item ID Codes - the 'nouns' in the punchcode language, the first character will always
+     be a capital letter, the second character is a lower-case letter or numeral. Items Aa-Pz
+     are 'pick-up' items that players can pick-up and drop. The file gfx-itemid.js contains
+     the master list of all ItemID codes, which are sorted via their first character:
 
-A travel items
-B pick-up items
-C pick-up items
-D pick-up items
-E pick-up items
-F food items
-J food items
-L hats
-M swords
-N shields 
-V v-verbs (game commands)
-W item registers (variables)
-X x-logic (bot commands)
-Y buildings (images can be bigger than 32x32)
-Z usable items 
+        A — travel items
+        B — misc tools and items
+        C — misc tools and items
+        D — misc tools and items
+        E — misc tools and items
+        F — food items
+        G — cooked food
+        H — raw fish 
+        I — cooked fish
+        J — unused 
+        K — plants
+        L — player hats (can be worn)
+        M — player helms (can be worn)
+        N — unused
+        O — player shields (can be worn)
+        P — player swords (can be worn)
+        Q — unused
+        R — unused
+        S — unused
+        T — unused
+        U — unused 
+        V v-verbs (game commands)
+        W item registers (variables)
+        X x-logic (bot commands)
+        Y buildings (images can be bigger than 32x32)
+        Z usable items 
+
+
+
+      * THESE CODES ARE ALL IN DRAFT STAGE AND ARE SUBJECT TO CHANGE!!
+      
+        
+      
+
+     Filling the Logic Gate Gaps (X)Since you have Xg (greater than) and Xl (less than),
+     you need an equality checker and arithmetic handlers for your stack variables:
+     
+     XbW$## — Bitwise or Boolean Mask: Checks if specific status bits are flipped in a
+              register without modifying the whole stack.
+              
+     Xh$$## — High/Low bounds check: Verifies if a base-36 byte string falls inside a safe
+              zone (great for checking if coordinates are within map edges).
+              
+     Xj$$$$ — Join/Concatenate: Merges two item strings or values together.
+
+     XkW$## — equal to: The missing comparator. XkW$05 asks "Does register $ have
+              exactly 5 items?"XqW$## — eQuivalent type check: Checks if an item ID
+              matches a specific base-36 category type.
+     
+     Xy$$$$ — Yield to target: Transmutes one item string into another (e.g., changes
+              'Ff' (Food) to 'Ee' (Empty Can) after consumption). 
+              

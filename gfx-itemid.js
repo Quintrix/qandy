@@ -1,78 +1,214 @@
-window.gfxItemID=function(i) {
-if (i=="Aa") { return "Travel Boots"; }
-if (i=="Ab") { return "Hiking Boots"; }
-if (i=="Ac") { return "Swamp Boots"; }
-if (i=="Ad") { return "Mountain Boots"; }
-if (i=="Ae") { return "Lava Boots"; }
-if (i=="Af") { return "Row Boat"; }
-if (i=="Bd") { return "Bucket"; }
-if (i=="Be") { return "Lantern"; }
-if (i=="Cg") { return "Log"; }
-if (i=="Ek") { return "Bucket Tar"; }
-if (i=="El") { return "Bucket Water"; }
-if (i=="Fa") { return "Tomato"; }
-if (i=="Fb") { return "Tomatos"; }
-if (i=="Fc") { return "Tomatoes"; }
-if (i=="Fd") { return "Tomatoes"; }
-if (i=="Fe") { return "Tomato"; }
-if (i=="Jc") { return "Qandy"; }
-if (i=="Ka") { return "Plant"; }
-if (i=="Kf") { return "Bread"; }
-if (i=="La") { return "Black Hat"; }
-if (i=="Lb") { return "Blue Hat"; }
-if (i=="Lc") { return "Pink Hat"; }
-if (i=="Ld") { return "Red Bandana"; }
-if (i=="Le") { return "Blue Bandana"; }
-if (i=="Lf") { return "Mask"; }
-if (i=="Ma") { return "Cylon Helm"; }
-if (i=="Mb") { return "Cylon Helm"; }
-if (i=="Mc") { return "Spider"; }
-if (i=="Md") { return "Mosquito"; }
-if (i=="Me") { return "Scorpion"; }
-if (i=="Mf") { return "Fire Ant"; }
+window.gfxItemID = function(i) {
+    var itemMap = {
+        // Travel Items
+        "Aa": "Travel Boots",
+        "Ab": "Hiking Boots",
+        "Ac": "Swamp Boots",
+        "Ad": "Mountain Boots",
+        "Ae": "Lava Boots",
+        "Af": "Row Boat",
 
-if (i=="Sa") { return "Player Sa"; }
-if (i=="Sb") { return "Player Sb"; }
-if (i=="Sc") { return "Player Sc"; }
-if (i=="Sd") { return "Player Sd"; }
-if (i=="Se") { return "Player Se"; }
-if (i=="Sf") { return "Player Sf"; }
-if (i=="Sg") { return "Player Sg"; }
-if (i=="Sh") { return "Player Sh"; }
-if (i=="Ta") { return "Player Ta"; }
-if (i=="Tb") { return "Player Tb"; }
-if (i=="Tc") { return "Player Tc"; }
-if (i=="Td") { return "Player Td"; }
-if (i=="Te") { return "Player Te"; }
-if (i=="Tf") { return "Player Tf"; }
-if (i=="Tg") { return "Player Tg"; }
-if (i=="Th") { return "Player Th"; }
-if (i=="Ya") { return "City"; }
-if (i=="Yb") { return "Cart"; }
-if (i=="Yc") { return "Fernence"; }
-if (i=="Yd") { return "Magic Guild"; }
-if (i=="Ye") { return "Building"; }
-if (i=="Yf") { return "Cabin"; }
-if (i=="Yg") { return "Pipe"; }
-if (i=="Yh") { return "Pipe"; }
-if (i=="Yi") { return "Hut"; }
-if (i=="Yj") { return "Flag Pole"; }
-if (i=="Za") { return "Nothing"; }
-if (i=="Zb") { return "NO"; }
-if (i=="Zc") { return "Switch Off"; }
-if (i=="Zd") { return "Switch On"; }
-if (i=="Ze") { return "Teleport"; }
-if (i=="Zf") { return "Sign"; }
-if (i=="Zg") { return "Peir"; }
-if (i=="Zh") { return "Well"; }
-if (i=="Zi") { return "Fire Pit"; }
-if (i=="Zj") { return "Fire"; }
-if (i=="Zk") { return "Mysterious Man"; }
-if (i=="Zl") { return "Mountian Hideout"; }
-if (i=="Zm") { return "City Gates"; }
-if (i=="Zn") { return "Green"; }
-if (i=="Zo") { return "Red"; }
-return "Unknown";
-}
+        // Tools/Utilities
+        "Bd": "Bucket",
+        "Be": "Lantern",
+        "Cg": "Log",
+        "Ek": "Bucket Tar",
+        "El": "Bucket Water",
 
-window.ItemID=window.gfxItemID();
+        // Food
+        "Fa": "Tomato",
+        "Fb": "Tomatos",
+        "Fc": "Tomatoes",
+        "Fd": "Tomatoes",
+        "Fe": "Tomato",
+
+        // Food
+        "Jc": "Qandy",
+
+        // Plants
+        "Ka": "Plant",
+
+        // Food
+        "Kf": "Bread",
+
+        // Hats
+        "La": "Black Hat",
+        "Lb": "Blue Hat",
+        "Lc": "Pink Hat",
+        "Ld": "Red Bandana",
+        "Le": "Blue Bandana",
+        "Lf": "Mask",
+
+        // Helms
+        "Ma": "Cylon Helm",
+        "Mb": "Cylon Helm",
+
+        // Enemies
+        "Mc": "Spider",
+        "Md": "Mosquito",
+        "Me": "Scorpion",
+        "Mf": "Fire Ant",
+
+        // Player Items
+        "Sa": "Player Sa",
+        "Sb": "Player Sb",
+        "Sc": "Player Sc",
+        "Sd": "Player Sd",
+        "Se": "Player Se",
+        "Sf": "Player Sf",
+        "Sg": "Player Sg",
+        "Sh": "Player Sh",
+        "Ta": "Player Ta",
+        "Tb": "Player Tb",
+        "Tc": "Player Tc",
+        "Td": "Player Td",
+        "Te": "Player Te",
+        "Tf": "Player Tf",
+        "Tg": "Player Tg",
+        "Th": "Player Th",
+
+        // UI/Verb Commands (These definitely seem like a different category than physical items)
+        "Va": "Avatar",
+        "Vb": "",
+        "Vc": "",
+        "Vd": "Drop Item",
+        "Ve": "East",
+        "Vf": "Food (eat)",
+        "Vg": "Get Item",
+        "Vh": "",
+        "Vi": "Inventory",
+        "Vj": "",
+        "Vk": "",
+        "Vl": "Look",
+        "Vm": "",
+        "Vn": "North",
+        "Vo": "",
+        "Vp": "Pop",
+        "Vq": "",
+        "Vr": "",
+        "Vs": "South",
+        "Vt": "Teleport",
+        "Vu": "Use Object",
+        "Vv": "",
+        "Vw": "West",
+        "Vx": "",
+        "Vy": "",
+        "Vz": "",
+        "V1": "",
+        "V2": "",
+        "V3": "",
+        "V4": "",
+        "V5": "",
+        "V6": "",
+        "V7": "",
+        "V8": "",
+        "V9": "",
+
+        // Registers 
+        "Wa": "Wa",
+        "Wb": "Wb",
+        "Wc": "Wc",
+        "Wd": "Wd",
+        "We": "We",
+        "Wf": "Wf",
+        "Wg": "Wg",
+        "Wh": "Wh",
+        "Wi": "Wi",
+        "Wj": "Wj",
+        "Wk": "Wk",
+        "Wl": "Wl",
+        "Wm": "Wm",
+        "Wn": "Wn",
+        "Wo": "Wo",
+        "Wp": "Wp",
+        "Wq": "Wq",
+        "Wr": "Wr",
+        "Ws": "Ws",
+        "Wt": "Wt",
+        "Wu": "Wu",
+        "Wv": "Wv",
+        "Ww": "Ww",
+        "Wx": "Wx",
+        "Wy": "Wy",
+        "Wz": "Wz",
+        "W1": "W1",
+        "W2": "W2",
+        "W3": "W3",
+        "W4": "W4",
+        "W5": "W5",
+        "W6": "W6",
+        "W7": "W7",
+        "W8": "W8",
+        "W9": "W9",
+        "W0": "W0",
+
+        // Logic/Scripting Commands
+        "Xa": "Add ## to W$",
+        "Xb": "",
+        "Xc": "",
+        "Xd": "Dice Roll ## Sides",
+        "Xe": "",
+        "Xf": "",
+        "Xg": "If W$ greater than ##",
+        "Xh": "",
+        "Xi": "",
+        "Xj": "",
+        "Xk": "",
+        "Xl": "If W$ less than ##",
+        "Xm": "If item $$ is on sector",  // $$ = dynamic item
+        "Xn": "Not",
+        "Xo": "If object $$ is on sector", // $$ = static object
+        "Xp": "",
+        "Xq": "",
+        "Xr": "",
+        "Xs": "Subtract ## from W$", // use not to reverse
+        "Xt": "",
+        "Xu": "",
+        "Xv": "Add item $$ to inventory", // use not to remove
+        "Xw": "",
+        "Xx": "",
+        "Xy": "",
+        "Xz": "If item $$ is on z-location",
+        "X1": "",
+        "X2": "",
+        "X3": "",
+        "X4": "",
+        "X5": "",
+        "X6": "",
+        "X7": "",
+        "X8": "",
+        "X9": "",
+        "X0": "",
+
+        // Static Objects/Buildings
+        "Ya": "City",
+        "Yb": "Cart",
+        "Yc": "Fernence",
+        "Yd": "Magic Guild",
+        "Ye": "Building",
+        "Yf": "Cabin",
+        "Yg": "Pipe",
+        "Yh": "Pipe",
+        "Yi": "Hut",
+        "Yj": "Flag Pole",
+
+        // Game States/Actions/Environmental 
+        "Za": "Nothing",
+        "Zb": "NO",
+        "Zc": "Switch Off",
+        "Zd": "Switch On",
+        "Ze": "Teleport",
+        "Zf": "Sign",
+        "Zg": "Pier",
+        "Zh": "Well",
+        "Zi": "Fire Pit",
+        "Zj": "Fire",
+        "Zk": "Mysterious Man",
+        "Zl": "Mountain Hideout",
+        "Zm": "City Gates",
+        "Zn": "Green",
+        "Zo": "Red",
+    };
+
+    return itemMap[i] || "Unknown"; // Use bracket notation to access properties
+};

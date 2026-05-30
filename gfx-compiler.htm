@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>PUNCH CODE COMPILER</title>
+    <style>
+        body { background: #222; color: #eee; font-family: sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        #toolbar { background: #333; padding: 10px; display: flex; align-items: center; gap: 15px; border-bottom: 1px solid #444; }
+        #main { display: flex; flex: 1; overflow: hidden; }
+        #viewport { padding: 20px; background: #111; display: flex; flex-direction: column; align-items: center; border-right: 1px solid #444; flex-shrink: 0; position: relative; }
+        
+        canvas { background: #000; box-shadow: 0 0 20px rgba(0,0,0,0.5); cursor: crosshair; border: 2px solid #444; }
+
+        #panel { flex: 1; background: #222; display: flex; flex-direction: column; padding: 15px; overflow-y: auto; }
+        .stack-header { font-weight: bold; color: #0af; margin-bottom: 10px; border-bottom: 1px solid #444; padding-bottom: 5px; display: flex; justify-content: space-between; align-items: center; }
+        
+        .tool-box { background: #2c3e50; padding: 10px; margin-bottom: 15px; border-radius: 4px; border: 1px solid #34495e; }
+        .tool-box label { font-size: 0.7em; color: #95a5a6; display: block; margin-bottom: 5px; text-transform: uppercase; }
+        
+        input[type="text"] { background: #111; color: #fff; border: 1px solid #555; padding: 4px; text-align: center; font-family: monospace; }
+        
+        #tileBrushRow { display: flex; align-items: center; gap: 10px; }
+        #brushPreview { width: 32px; height: 32px; border: 1px solid #0af; background: #000; }
+
+        .object-entry { background: #333; padding: 8px; margin-bottom: 5px; border-radius: 4px; cursor: pointer; border: 1px solid #444; font-family: monospace; font-size: 0.85em; }
+        .object-entry:hover { border-color: #0af; }
+        .object-entry b { color: #f1c40f; }
+
+        textarea { width: 100%; height: 140px; background: #111; color: #2ecc71; border: 1px solid #555; padding: 10px; font-family: monospace; font-size: 1em; resize: none; box-sizing: border-box; }
+        
+        button { padding: 6px 12px; cursor: pointer; background: #068; color: white; border: none; border-radius: 4px; font-weight: bold; font-size: 0.75em; }
+        button:hover { background: #07a; }
+        button.reject { background: #7f8c8d; }
+        button.accept { background: #27ae60; flex: 1; }
+        button.remove { background: #c0392b; }
+        
+        #decompiler { background: #000; padding: 8px; font-family: monospace; color: #aaa; font-size: 0.8em; margin-top: 5px; border: 1px solid #333; min-height: 20px; }
+        
+        .exit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 10px; }
+        .exit-btn { background: #34495e; text-align: center; padding: 10px; border-radius: 4px; cursor: pointer; border: 1px solid #444; }
+        .exit-btn.active { border-color: #f1c40f; color: #f1c40f; background: #1a252f; }
+
+        .exit-layout-wrapper { display: flex; flex-direction: column; gap: 10px; }
+        .exit-cross {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            gap: 5px;
+            width: 180px;
+            margin: 0 auto;
+        }
+        .cross-slot { 
+            background: #1a252f; border: 1px solid #333; height: 45px; 
+            display: flex; align-items: center; justify-content: center; 
+            font-size: 0.8em; border-radius: 4px; cursor: pointer; color: #555;
+        }
+        .cross-slot.active { border-color: #f1c40f; color: #f1c40f; background: #2c3e50; }
+        .cross-slot.special { border-color: #0af; color: #0af; }
+        .cross-slot.disabled { opacity: 0.3; cursor: default; border: none; }
+        
+        #manualExitRow { display: flex; gap: 5px; margin-top: 5px; }
+        #manualExitRow input { flex: 1; text-transform: uppercase; }
+
+        #punchcodeImages img {
+            width: 32px; /* Fixed width for icon display */
+            height: 32px; /* Fixed height for icon display */
+            image-rendering: pixelated; /* For crisp retro look */
+            border: 1px solid #444;
+            margin-right: 2px; /* Space between images */
+            flex-shrink: 0; /* Prevent images from shrinking */
+            background-color: #000;
+        }
+        
+        /* Tooltip styles */
+        #tooltip { position: absolute; background: rgba(240, 230, 140, 0.8); color: #000; padding: 2px 6px; font-size: 10px; pointer-events: none; border: 1px solid #444; display: none; z-index: 100; font-family: monospace; }
+    </style>
+</head>
+<body>
+
+<div id="toolbar">
+    <div style="font-weight: bold; color: #0af;"> &nbsp; PUNCH CODE COMPILER:</div>
+    <button onclick="importGfx()">IMPORT</button>
+    <button onclick="exportGfx()">EXPORT</button>
+    <select id="sectorNav" onchange="changeSector()"></select>
+</div>
+
+<div id="main">
+    <div id="viewport">
+        <canvas id="sectorCanvas" width="256" height="384"></canvas>
+        <div id="tooltip">Z:00</div>
+    </div>
+
+    <div id="panel">
+        <div id="stackView">
+            <div class="stack-header">OBJECT STACK: <span id="sectorLabel">A1</span></div>
+            <div class="tool-box" style="background: #1a252f;">
+                <div style="display: flex; gap: 5px;">
+                    <input type="text" id="newID" size=2 maxlength="2" placeholder="ID">
+                    <input type="text" id="newZ" size=2 maxlength="2" placeholder="Z">
+                    <input type="text" id="newDATA" size=2 maxlength="2" value="00">
+                    <button onclick="addObject()">+ ADD</button>
+                </div>
+            </div>
+            <div id="listItems"></div>
+        </div>
+
+        <!-- LOGIC EDITOR -->
+        <div id="editorView" style="display:none;">
+            <div class="stack-header">LOGIC: <span id="editingObjID"></span></div>
+            <textarea id="punchcodeInput" spellcheck="false" oninput="updateDecompiler()"></textarea>
+            <div id="decompiler"></div>
+            <div id="punchcodeImages" class="tool-box" style="display: flex; flex-wrap: nowrap; overflow-x: auto; margin-top: 10px; padding: 5px; height: 42px;">
+                <!-- Images will be inserted here by JS -->
+            </div>
+            <div class="btn-row" style="display:flex; gap:5px; margin-top:10px;">
+                <button class="accept" onclick="acceptLogic()">ACCEPT</button>
+                <button class="reject" onclick="rejectLogic()">REJECT</button>
+                <button class="remove" onclick="removeObject()">DELETE</button>
+            </div>
+        </div>
+
+        <div class="tool-box" id="brushBox">
+            <label>Tile Brush</label>
+            <div id="tileBrushRow">
+                <input type="text" id="tileInput" size=2 maxlength="2" value="Ga" oninput="updateBrushPreview()">
+                <div id="brushPreview"></div>
+            </div>
+        </div>
+
+        <div class="tool-box" id="exitsBox">
+            <label>Sector Exits (N/S/E/W & Special)</label>
+            <div class="exit-layout-wrapper">
+                <div class="exit-cross" id="exitCross">
+                    <!-- Generated by JS -->
+                </div>
+                <div id="manualExitRow">
+                    <input type="text" id="manualExitInput" maxlength="2" placeholder="ADD CODE (e.g. Z1)">
+                    <button onclick="addManualExit()">+</button>
+                </div>
+            </div>
+        </div>
+        
+    </div>
+</div>
+
+<script>
+    // --- STATE ---
+    let currentSector = "A1";
+    let mapSectors = {};
+    let editingIndex = -1;
+    // Bounds restricted to A1-H8 (8x8 world)
+    const ROWS = ["A","B","C","D","E","F","G","H"]; 
+    const COLS = 8;
+    const tileCache = {}, itemCache = {};
+    const canvas = document.getElementById('sectorCanvas');
+    const ctx = canvas.getContext('2d');
+    const tooltip = document.getElementById('tooltip');
+
+    function gfxItemID(i) {
+        const items = {"Zf":"Sign","Zh":"Well","Yj":"Flag","Ze":"Teleport","Bd":"Bucket"};
+        return items[i] || "Item " + i;
+    }
+
+    const punchcodeItemImageCache = {};
+
+    const nav = document.getElementById('sectorNav');
+    for(let r=0; r<ROWS.length; r++) {
+        for(let c=1; c<=COLS; c++) {
+            let opt = document.createElement('option');
+            opt.value = opt.textContent = ROWS[r] + (c);
+            nav.appendChild(opt);
+        }
+    }
+
+    function initBlank() {
+        ROWS.forEach(r => {
+            for(let c=1; c<=COLS; c++) {
+                // Initialize 12 rows worth of tiles (96 total) per sector logic
+                mapSectors[r+c] = { tiles: "Ga".repeat(96), exits: "", objects: [] };
+            }
+        });
+        updateBrushPreview();
+        render();
+    }
+
+    // --- NAVIGATION ---
+    window.addEventListener('keydown', (e) => {
+        if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return;
+        
+        let rowIdx = ROWS.indexOf(currentSector[0]);
+        let colIdx = parseInt(currentSector.slice(1));
+        let changed = false;
+
+        if (e.key === "ArrowUp" && rowIdx > 0) { rowIdx--; changed = true; }
+        if (e.key === "ArrowDown" && rowIdx < ROWS.length - 1) { rowIdx++; changed = true; }
+        if (e.key === "ArrowLeft" && colIdx > 1) { colIdx--; changed = true; }
+        if (e.key === "ArrowRight" && colIdx < COLS) { colIdx++; changed = true; }
+
+        if (changed) {
+            currentSector = ROWS[rowIdx] + colIdx;
+            nav.value = currentSector;
+            changeSector();
+        }
+    });
+
+    // --- MOUSE INTERACTION ---
+    canvas.addEventListener('contextmenu', e => e.preventDefault()); // Disable context menu for sampling
+
+    canvas.addEventListener('mousedown', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const x = Math.floor((e.clientX - rect.left) / 32);
+        const y = Math.floor((e.clientY - rect.top) / 32);
+        const tileIndex = y * 8 + x;
+        
+        if (tileIndex < 0 || tileIndex >= 96) return;
+
+        const sec = mapSectors[currentSector];
+
+        if (e.button === 0) { // Left Click: Paint
+            const brush = document.getElementById('tileInput').value || "Ga";
+            const before = sec.tiles.substring(0, tileIndex * 2);
+            const after = sec.tiles.substring(tileIndex * 2 + 2);
+            sec.tiles = before + brush + after;
+        } 
+        else if (e.button === 2) { // Right Click: Sample
+            const sampled = sec.tiles.substring(tileIndex * 2, tileIndex * 2 + 2);
+            document.getElementById('tileInput').value = sampled;
+            updateBrushPreview();
+        }
+        render();
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const x = Math.floor((e.clientX - rect.left) / 32);
+        const y = Math.floor((e.clientY - rect.top) / 32);
+        const tileIndex = y * 8 + x;
+
+        if (tileIndex >= 0 && tileIndex < 96) {
+            tooltip.style.display = 'block';
+            tooltip.style.left = (e.clientX - rect.left + 25) + 'px';
+            tooltip.style.top = (e.clientY - rect.top - 15) + 'px';
+            tooltip.innerText = `${tileIndex.toString().padStart(2, '0')}`;
+        } else {
+            tooltip.style.display = 'none';
+        }
+    });
+
+    canvas.addEventListener('mouseleave', () => tooltip.style.display = 'none');
+
+    // --- CORE LOGIC ---
+
+    function updateBrushPreview() {
+        const code = document.getElementById('tileInput').value;
+        const preview = document.getElementById('brushPreview');
+        preview.style.background = `#000 url('t/${code}.png') no-repeat center`;
+        preview.style.backgroundSize = "cover";
+    }
+
+    function getImg(src, cache) {
+        if (cache[src] && cache[src].complete) return cache[src]; // Return if image is already loaded and complete
+
+        const img = new Image();
+        img.src = src;
+        img.onload = () => {
+            // Store the image itself along with its dimensions in the cache
+            cache[src] = img; 
+            render(); // Rerender once the image is loaded
+        };
+        // Also store the image object itself for immediate use if not yet loaded (though it won't draw until onload)
+        cache[src] = img; 
+        return img;
+    }
+
+    function render() {
+        const sec = mapSectors[currentSector];
+        if(!sec) return;
+        ctx.clearRect(0,0,256,384);
+        
+        for(let i=0; i<96; i++) {
+            let code = sec.tiles.substring(i*2, i*2+2);
+            let img = getImg(`t/${code}.png`, tileCache);
+            if(img.complete) ctx.drawImage(img, (i%8)*32, Math.floor(i/8)*32, 32, 32);
+        }
+
+        sec.objects.forEach(obj => {
+            let img = getImg(`i/${obj.id}.png`, itemCache);
+            let z = parseInt(obj.z); // Z is the tile index
+            let targetX = (z % 8) * 32;
+            let targetY = Math.floor(z / 8) * 32;
+
+            if(img.complete) {
+                if (obj.id.startsWith('Y')) { // For 'building' items (Ya-Yz)
+                    // Calculate drawing position so the lower-right corner aligns with targetX, targetY + 32
+                    let drawX = targetX + 32 - img.width;
+                    let drawY = targetY + 32 - img.height;
+                    ctx.drawImage(img, drawX, drawY, img.width, img.height);
+                } else {
+                    // All other items are 32x32 and align to the top-left of the tile
+                    ctx.drawImage(img, targetX, targetY, 32, 32);
+                }
+            }
+        });
+
+        updateObjectList();
+        updateExitUI(sec.exits);
+    }
+
+function updateExitUI(exitsStr) {
+    const cross = document.getElementById('exitCross');
+    cross.innerHTML = "";
+    
+    // Parse current exits into an array of 2-char codes
+    let currentExits = [];
+    for(let i=0; i<exitsStr.length; i+=2) {
+        currentExits.push(exitsStr.substring(i, i+2));
+    }
+
+    const r = ROWS.indexOf(currentSector.charAt(0));
+    const c = parseInt(currentSector.slice(1));
+    
+    // Define the grid positions
+    const n = (r > 0 ? ROWS[r-1] + c : null);
+    const s = (r < ROWS.length-1 ? ROWS[r+1] + c : null);
+    const w = (c > 1 ? ROWS[r] + (c-1) : null);
+    const e = (c < COLS ? ROWS[r] + (c+1) : null);
+
+    // Identify the first "Special" exit (not N, S, E, or W)
+    const specialExit = currentExits.find(code => code !== n && code !== s && code !== w && code !== e);
+
+    // Grid Mapping: [Index, Label/Code, isStandardNeighbor]
+    const slots = [
+        { pos: 1, code: n, label: "N" },
+        { pos: 3, code: w, label: "W" },
+        { pos: 4, code: specialExit || "..", label: specialExit || "..", isSpecial: true },
+        { pos: 5, code: e, label: "E" },
+        { pos: 7, code: s, label: "S" }
+    ];
+
+    // Create 9 grid cells
+    for (let i = 0; i < 9; i++) {
+        const slotData = slots.find(s => s.pos === i);
+        const div = document.createElement('div');
+        
+        if (slotData) {
+            const isActive = slotData.code && currentExits.includes(slotData.code);
+            div.className = "cross-slot" + (isActive ? " active" : "") + (slotData.isSpecial ? " special" : "");
+            div.innerText = slotData.code ? (slotData.isSpecial ? slotData.code : slotData.label) : "-";
+            
+            if (slotData.code && slotData.code !== "..") {
+                div.onclick = () => toggleExit(slotData.code);
+            } else if (slotData.isSpecial) {
+                div.style.cursor = "default"; // Placeholder ".."
+            }
+        } else {
+            div.className = "cross-slot disabled";
+        }
+        cross.appendChild(div);
+    }
+}
+
+function toggleExit(code) {
+    let sec = mapSectors[currentSector];
+    let exits = [];
+    for(let i=0; i<sec.exits.length; i+=2) {
+        exits.push(sec.exits.substring(i, i+2));
+    }
+
+    if (exits.includes(code)) {
+        exits = exits.filter(e => e !== code);
+    } else {
+        exits.push(code);
+    }
+    
+    sec.exits = exits.join("");
+    render();
+}
+
+function addManualExit() {
+    const input = document.getElementById('manualExitInput');
+    const code = input.value.trim().toUpperCase();
+    if (code.length === 2) {
+        let sec = mapSectors[currentSector];
+        if (!sec.exits.includes(code)) {
+            sec.exits += code;
+            render();
+        }
+        input.value = "";
+    }
+}
+
+    function toggleExit(code) {
+        let exits = mapSectors[currentSector].exits;
+        if (exits.includes(code)) exits = exits.replace(code, "");
+        else exits += code;
+        mapSectors[currentSector].exits = exits;
+        render();
+    }
+
+    function updateObjectList() {
+      const list = document.getElementById('listItems');
+      list.innerHTML = "";
+      mapSectors[currentSector].objects.forEach((obj, idx) => {
+        const div = document.createElement('div');
+        div.className = 'object-entry';
+        
+        // Display data segment if present, otherwise mark as dynamic
+        const typeLabel = obj.data ? `d:${obj.data}` : `dynamic`;
+        
+        div.innerHTML = `[<b>${obj.id}</b> z:${obj.z} <span style="color: #888;">(${typeLabel})</span>] ${gfxItemID(obj.id)}`;
+        div.onclick = () => openEditor(idx);
+        list.appendChild(div);
+      });
+    }
+
+    function openEditor(idx) {
+        editingIndex = idx;
+        const obj = mapSectors[currentSector].objects[idx];
+        document.getElementById('brushBox').style.display = 'none';
+        document.getElementById('exitsBox').style.display = 'none';
+        document.getElementById('stackView').style.display = "none";
+        document.getElementById('editingObjID').innerText = obj.id + "@" + obj.z;
+        document.getElementById('punchcodeInput').value = obj.logic;
+        document.getElementById('editorView').style.display = "block";
+        updateDecompiler();
+    }
+
+    function acceptLogic() {
+        if (editingIndex !== -1) {
+            mapSectors[currentSector].objects[editingIndex].logic = document.getElementById('punchcodeInput').value;
+        }
+        closeEditor();
+    }
+
+    function rejectLogic() {
+        closeEditor();
+    }
+
+    function removeObject() {
+        if (editingIndex !== -1) {
+            mapSectors[currentSector].objects.splice(editingIndex, 1);
+        }
+        closeEditor();
+    }
+
+    function updateDecompiler() {
+        const code = document.getElementById('punchcodeInput').value;
+        const display = document.getElementById('decompiler');
+        if (!display) return;
+        display.innerText = code || "(no instructions)";
+    }
+
+    function closeEditor() {
+        editingIndex = -1;
+        document.getElementById('brushBox').style.display = 'block';
+        document.getElementById('exitsBox').style.display = 'block';
+        document.getElementById('stackView').style.display = "block";
+        document.getElementById('editorView').style.display = "none";
+        render();
+    }
+
+    function changeSector() {
+        currentSector = nav.value;
+        document.getElementById('sectorLabel').innerText = currentSector;
+        closeEditor();
+        render();
+    }
+
+    async function importGfx() {
+      try {
+        const text = await navigator.clipboard.readText();
+        if(!text) return;
+        text.split('\n').forEach(line => {
+            if(!line.includes('=')) return; 
+            let [label, content] = line.split('=');
+            if(!content) return;
+            let [map, items] = content.split('.');
+            let objs = [];
+            if(items) items.split(',').forEach(c => {
+                if(!c) return;
+                let [m, l] = c.split(':');
+                if (m) {
+                    if (m.length >= 6) {
+                        // Static Object (ID + Z + DATA)
+                        objs.push({ 
+                            id: m.substring(0,2), 
+                            z: m.substring(2,4), 
+                            data: m.substring(4,6), 
+                            logic: l || "" 
+                        });
+                    } else if (m.length >= 4) {
+                        // Dynamic Item (ID + Z)
+                        objs.push({ 
+                            id: m.substring(0,2), 
+                            z: m.substring(2,4), 
+                            data: "", 
+                            logic: l || "" 
+                        });
+                    }
+                }
+            });
+            mapSectors[label] = { tiles: map.substring(0,192), exits: map.substring(192), objects: objs };
+        });
+        render();
+      } catch (e) { console.error("Import failed", e); }
+    }
+ 
+    function exportGfx() {
+      let out = "";
+      for(const label in mapSectors) {
+        let sec = mapSectors[label];
+        let objStr = sec.objects.map(o => {
+            let meta = o.id + o.z;
+            if (o.data && o.data.trim().length === 2) {
+                meta += o.data; // Add 2-character DATA for static objects
+            }
+            return o.logic ? `${meta}:${o.logic}` : meta;
+        }).join(',');
+        out += `${label}=${sec.tiles}${sec.exits}.${objStr}\n`;
+      }
+      navigator.clipboard.writeText(out.trim());
+      alert("GFX EXPORTED!");
+    }
+
+
+// Global mapping for punchcode to human-readable text
+    const punchcodeMap = {
+        // Verbs (V registers)
+        'Va': 'avatar (set)',
+        'Vb': 'verb B', // Assuming Vb, Vh, Vj, Vk, Vo, Vq, Vv, Vx, Vy are placeholders for now
+        'Vc': 'character selection',
+        'Vd': 'dice roll', // Vd## will be handled
+        'Ve': 'move east',
+        'Vf': 'eat food',
+        'Vg': 'get item', // Vg$$ will be handled
+        'Vh': 'verb H',
+        'Vi': 'inventory (open)',
+        'Vj': 'verb J',
+        'Vk': 'verb K',
+        'Vl': 'look (examine)',
+        'Vm': 'verb M', // Vm$$ will be handled
+        'Vn': 'move north',
+        'Vo': 'verb O', // Vo$$ will be handled
+        'Vp': 'pop (stack)', // Vp$$ will be handled
+        'Vq': 'verb Q',
+        'Vr': 'read object data', // Vr$$ will be handled
+        'Vs': 'move south',
+        'Vt': 'teleport',
+        'Vu': 'use item',
+        'Vv': 'add item to inventory', // Vv$$ will be handled
+        'Vw': 'move west',
+        'Vx': 'verb X',
+        'Vy': 'verb Y',
+        'Vz': 'verb Z', // Vz$$ will be handled
+
+        // Logic Gates (X registers)
+        'Xa': 'add to W register', // XaW$## will be handled
+        'Xb': 'logic B',
+        'Xc': 'logic C',
+        'Xd': 'dice roll (sides)', // Xd## will be handled
+        'Xe': 'if valid exit', // Xe$$ will be handled
+        'Xf': 'logic F',
+        'Xg': 'if W register is greater than', // XgW*## will be handled
+        'Xh': 'logic H',
+        'Xi': 'if item in inventory', // Xi$$ will be handled
+        'Xj': 'logic J',
+        'Xk': 'logic K',
+        'Xl': 'if W register is less than', // XlW$## will be handled
+        'Xm': 'if item is on map', // Xm$$ will be handled
+        'Xn': 'NOT', // Flips next logic gate
+        'Xo': 'if object is on map', // Xo$$ will be handled
+        'Xp': 'logic P',
+        'Xq': 'logic Q',
+        'Xr': 'read object data', // Xr$$ returns Za if not on sector
+        'Xs': 'subtract from W register', // XsW$## will be handled
+        'Xt': 'map sectors terrain type',
+        'Xu': 'logic U',
+        'Xv': 'add item to player inventory',
+        'Xw': 'logic W',
+        'Xx': 'logic X',
+        'Xy': 'logic Y',
+        'Xz': 'if item is on z-location', // Xz$$ will be handled
+    };
+
+    // Helper to identify W registers and numerical values
+    function isWRegister(code) {
+        return code.length === 2 && code.charAt(0) === 'W' && (
+            (code.charAt(1) >= 'a' && code.charAt(1) <= 'z') ||
+            (code.charAt(1) >= '0' && code.charAt(1) <= '9')
+        );
+    }
+
+    function isNumerical(code) {
+        return code.length === 2 && !isNaN(parseInt(code));
+    }
+
+    // Function to provide text descriptions for specific item/sector codes
+    function getCodeDescription(code) {
+        // This can be extended to provide more descriptive names for specific item/sector codes
+        // For now, we'll use gfxItemID for known object IDs.
+        if (code === "Za") return "nothing (null)";
+        if (code === "Z1") return "exit Z1"; // Example for special exits
+        if (code.match(/^[A-H][1-8]$/)) return `sector ${code}`; // E.g., A1, H8
+        
+        const itemText = gfxItemID(code);
+        if (itemText !== "Item " + code) return itemText; // If gfxItemID provided a specific name
+
+        return `code "${code}"`; // Default for unknown codes
+    }
+
+
+    function decompilepunchcode(code) {
+        let decompiled = [];
+        let i = 0;
+        let pendingNot = false;
+
+        while (i < code.length) {
+            let currentByte = code.substring(i, i + 2);
+            let description = "";
+            let consumedBytes = 2; // Default to consuming 2 characters
+
+            if (currentByte === 'Xn') {
+                pendingNot = true;
+                description = "NOT";
+            } else {
+                let prefix = pendingNot ? "NOT " : "";
+                pendingNot = false; // Reset after use
+
+                if (punchcodeMap[currentByte]) {
+                    description = prefix + punchcodeMap[currentByte];
+
+                    // Handle multi-byte instructions
+                    if (currentByte.startsWith('Vg') || currentByte.startsWith('Xi') || currentByte.startsWith('Xm') || 
+                        currentByte.startsWith('Xo') || currentByte.startsWith('Xr') || currentByte.startsWith('Xv') || 
+                        currentByte.startsWith('Xz') || currentByte.startsWith('Vp') || currentByte.startsWith('Xe')) {
+                        let itemCode = code.substring(i + 2, i + 4);
+                        if (itemCode) {
+                            description += ` (${getCodeDescription(itemCode)})`;
+                            consumedBytes += 2;
+                        }
+                    } else if (currentByte.startsWith('Vd') || currentByte.startsWith('Xd')) {
+                        let numeral = code.substring(i + 2, i + 4);
+                        if (isNumerical(numeral)) {
+                            description += ` (${parseInt(numeral)} sides)`;
+                            consumedBytes += 2;
+                        }
+                    } else if (currentByte.startsWith('Xa') || currentByte.startsWith('Xg') || currentByte.startsWith('Xl') || currentByte.startsWith('Xs')) {
+                        let wRegister = code.substring(i + 2, i + 4);
+                        let numeral = code.substring(i + 4, i + 6);
+                        if (isWRegister(wRegister) && isNumerical(numeral)) {
+                            let op = '';
+                            if (currentByte.startsWith('Xa')) op = 'add';
+                            else if (currentByte.startsWith('Xg')) op = 'is greater than';
+                            else if (currentByte.startsWith('Xl')) op = 'is less than';
+                            else if (currentByte.startsWith('Xs')) op = 'subtract';
+                            
+                            description = `${prefix}W register ${wRegister} ${op} ${parseInt(numeral)}`;
+                            consumedBytes += 4;
+                        }
+                    }
+                } else if (isWRegister(currentByte)) {
+                    description = `W register ${currentByte}`;
+                } else if (isNumerical(currentByte)) {
+                    description = `literal value ${parseInt(currentByte)}`;
+                } else {
+                    description = `UNKNOWN punchcode: ${currentByte}`;
+                }
+            }
+            
+            decompiled.push(description);
+            i += consumedBytes;
+        }
+
+        return decompiled.join('\n');
+    }
+
+    function updateDecompiler() {
+        const code = document.getElementById('punchcodeInput').value;
+        const display = document.getElementById('decompiler');
+        const punchcodeImagesContainer = document.getElementById('punchcodeImages');
+        
+        // Clear previous images
+        punchcodeImagesContainer.innerHTML = "";
+
+        if (!display || !punchcodeImagesContainer) return;
+        
+        if (code.trim() === "") {
+            display.innerText = "(no instructions)";
+        } else {
+            display.innerText = decompilepunchcode(code);
+            
+            // Generate and display images for the first 20 instructions (or fewer)
+            let i = 0;
+            let imagesCount = 0;
+            const maxImages = 20;
+
+            while (i < code.length && imagesCount < maxImages) {
+                let currentByte = code.substring(i, i + 2);
+                let imgPath = `i/${currentByte}.png`;
+                let consumedBytes = 2; // Default consumption
+
+                // Check for multi-byte instructions that consume additional characters
+                if (currentByte.startsWith('Vg') || currentByte.startsWith('Xi') || currentByte.startsWith('Xm') || 
+                    currentByte.startsWith('Xo') || currentByte.startsWith('Xr') || currentByte.startsWith('Xv') || 
+                    currentByte.startsWith('Xz') || currentByte.startsWith('Vp') || currentByte.startsWith('Xe') ||
+                    currentByte.startsWith('Vd') || currentByte.startsWith('Xd')) {
+                    consumedBytes += 2; // Consumes item code or numeral
+                } else if (currentByte.startsWith('Xa') || currentByte.startsWith('Xg') || 
+                           currentByte.startsWith('Xl') || currentByte.startsWith('Xs')) {
+                    consumedBytes += 4; // Consumes W register + numeral
+                }
+
+                const img = document.createElement('img');
+                img.src = imgPath;
+                img.onerror = () => { img.style.display = 'none'; }; // Hide if image doesn't exist
+                
+                // Cache the image for performance
+                if (!punchcodeItemImageCache[imgPath]) {
+                    const cachedImg = new Image();
+                    cachedImg.src = imgPath;
+                    cachedImg.onload = () => {
+                        punchcodeItemImageCache[imgPath] = cachedImg;
+                        // Force re-render of just this image if it loads async
+                        if (img.parentNode === punchcodeImagesContainer) {
+                             img.src = cachedImg.src; // Ensure the displayed img uses the loaded one
+                        }
+                    };
+                    punchcodeItemImageCache[imgPath] = cachedImg; // Store pending image
+                } else {
+                    img.src = punchcodeItemImageCache[imgPath].src; // Use cached image
+                }
+
+                punchcodeImagesContainer.appendChild(img);
+                imagesCount++;
+                i += consumedBytes;
+            }
+        }
+    }
+
+
+    window.onload = initBlank;
+</script>
+</body>
+</html>

@@ -1,23 +1,24 @@
+
 window.GFX = 0; // set to true when gfx.js ready to use
 
-var _serverUrl = 'http://localhost:8080/qandyland3.js';
-var _registryUrl = 'https://qandy.vercel.app/api/servers';
-var _gfxDrive = 'gfx'; // current drive context; set by gfxCreation / gfxGameState
+window.gfxDrive = ''; // current drive context; set by gfxCreation / gfxGameState
+window.gfxDo = "RF";     // Default refresh command
+window.gfxPong = "..";   // server response
+window.gfxSession = null;
+window.gfxConnected = null;
 
+var _serverUrl = 'http://localhost:8080/qandyland.js';
+var _registryUrl = 'https://qandy.vercel.app/api/servers';
 
 var mapx=7;
 var mapy=11;
 
-window.gfxDo = "RF";     // Default refresh command
-window.gfxPong = "..";   // server response
-window.gfxSession = null;
-
-window.map="_L";         // map player item is on (default lobby)
+window.map="F2";         // map player-item is on
 window.mapTiles=[];      // tiles on player's current map
 window.mapExits=[];      // valid exits for map sectors
 window.mapObjs=[];       // objs on map sectors
 window.mapItems;         // items on player's current map
-window.playerItem="Za";  // item id of object player has claimed (nothing)
+window.playerItem="Za";  // item-id of object player has claimed (nothing)
 window.playerZ=-1;       // z-locatin of playerItem
 window.playerAvatar = "";   // players avatar (ie "B0D0")
 
@@ -87,6 +88,33 @@ window.gfxInit = async function() {
   document.getElementById('txt').style.top = '50px';
   document.getElementById('txt').style.left = '350px';
 }
+
+window.gfxConnect = async function(serverIndex) {
+  // hard coded for development
+  server = { host: 'localhost', port: 8080 };
+  _serverUrl = "http://" + server.host + ":" + server.port + "/qandyland.js";
+
+  try {
+    await gfxFetchMap(gfxDrive);
+  } catch (e) {
+    await print("Error: " + e.message + "\n\n");
+    dosExit();
+    return;
+  }
+  
+  var res = await gfxPing("ST");
+  if (res.startsWith("ST")) {
+    window.gfxSession = res.substring(2); 
+    await gfxInit();
+    gfxTiles(map);
+    gfxObjects(map);
+    gfxTick();
+    return;
+  }
+
+  await print("Error: No session token\n\n");
+  dosExit;
+};
 
 window.gfxTiles = function(sector) {
   var a = 0;
@@ -166,118 +194,42 @@ window.gfxChar = function(charID, avatarStr, zPos) {
 
 window.gfxZClick = function(z, clickedElement) {
   var zNum = parseInt(z, 10);
-  // Track the last clicked Z for the popup positioning logic
   window.lastClickedZ = zNum; 
   if (typeof window.zdown === 'function') { window.zdown(zNum); }
   var htm = '';
 
-  // 1. Handle OBJS: 6-character segments (ID[2], Z[2], DATA[2])
-  // No delimiters used here
+  // 1. Updated Static Objects Parser (comma-separated)
   var objsData = mapObjs[window.map]; 
   if (objsData) {
-    for (var i = 0; i < objsData.length; i += 6) {
-      var objId = objsData.substring(i, i + 2);
-      var objZ  = parseInt(objsData.substring(i + 2, i + 4), 10);
+    var objs = objsData.split(',');
+    for (var i = 0; i < objs.length; i++) {
+      var entry = objs[i].trim();
+      if (!entry) continue;
       
-      if (objId.charAt(0)=='S') { continue; }
-      if (objId.charAt(0)=='T') { continue; }
+      var meta = entry.split(':')[0];
+      var objId = meta.substring(0, 2);
+      var objZ  = parseInt(meta.substring(2, 4), 10);
+      
       if (objZ === zNum) {
-        htm += '<a href="javascript:objdown(\''+objId+'\')">'+gfxItemID(objId)+'</a><br>';
+        htm += '<a href="gfx:OD'+objId+objZ+'">'+gfxItemID(objId)+'</a><br>';
       }
     }
   }
 
-  // 2. Handle ITEMS: Comma-delimited strings
-  // Example: "Sa33,Sb34,Sc57"
+  // 2. Dynamic Items (already comma-delimited)
   if (mapItems) {
-    var items=mapItems.split(',');
+    var items = mapItems.split(',');
     for (var j=0; j<items.length; j++) {
-      var id=items[j].substring(0, 2);
-      var z=parseInt(items[j].substring(2, 4), 10);
-      if (z === zNum) {
-        htm += '<a href="javascript:itemdown(\''+items[j]+'\')">'+gfxItemID(id)+'</a><br>';        
+      var id = items[j].substring(0, 2);
+      var itemZ = parseInt(items[j].substring(2, 4), 10);
+      if (itemZ === zNum) {
+        htm += '<a href="gfx:ID'+id+itemZ+'">'+gfxItemID(id)+'</a><br>';        
       }
     }
   }
 
   if (htm) { 
     pop(htm); 
-  }
-}
-
-window.gfxServers = async function() {
-  var url = _registryUrl;
-  if (!url) return { error: 'Error: no registry URL configured' };
-  try {
-    var response = await fetch(url, { method: 'GET' });
-    if (!response.ok) return { error: 'Error: registry responded with ' + response.status };
-    var data = await response.json();
-    
-    // Build server options
-    var servers = data.servers || [];
-    var options = [{ name: 'localhost', host: 'localhost', port: 8080, drives: [] }];
-    
-    for (var i = 0; i < servers.length; i++) {
-      var s = servers[i];
-      if (s.drives && s.drives.includes(_gfxDrive)) {
-        options.push(s);
-      }
-    }
-    
-    // Store for gfxConnect to use
-    window._serverOptions = options;
-    
-    // Display the list
-    await print("Available servers:\n");
-    for (var j = 0; j < options.length; j++) {
-      var server = options[j];
-      var label = server.name || (server.host + ":" + server.port);
-      await print(j + ". " + label + "\n");
-    }
-    await print("Server [0]: ");
-    
-    return options;
-    
-  } catch (e) {
-    await print("Error fetching servers: " + e.message + "\n");
-    return null;
-  }
-}
-
-window.gfxConnect = async function(serverIndex) {
-  // Get server from the list stored by gfxServers()
-  var server = window._serverOptions[serverIndex || 0];
-  if (!server) { server = { host: 'localhost', port: 8080 }; }
-  _serverUrl = "http://" + server.host + ":" + server.port + "/qandyland3.js";
-  try {
-  	
-    var res = await gfxPing("ST");
-    if (res.startsWith("ST")) { window.gfxSession = res.substring(2); }
-
-    var gameState = await gfxPing("GS");
-    if (gameState.startsWith("XW")) {
-      await print("Creating new world...\n");
-      gameState = await gfxPing("BB");
-    }
-    await gfxInit();
-    var minutes = gameState.slice(0, 2);
-    var seconds = gameState.slice(2, 4);
-    var mapName = gameState.slice(4);
-    window._gameTime    = minutes + ':' + seconds;
-    window._gameMapFile = mapName + '.gfx';
-    // Load the map file specified by the server
-    if (window._gameMapFile) {
-    	console.log("Loading Map "+window._gameMapFile);
-      await gfxFetchMap(window._gameMapFile);
-      gfxTiles("_L"); // display lobby first
-      gfxObjects("_L");
-    }
-    gfxSelectAvatar("");
-    gfxTick();
-    return window.gameState;
-  } catch (e) {
-  	 await print("Error: "+e.message+"\n\n");
-    gfxServers();
   }
 }
 
@@ -289,147 +241,144 @@ window.gfxSelectAvatar = function(a) {
 
  if (a=="00") {
   PUP="Select Character:<p>";
-  PUP=PUP+"<a href=\"gfx:VaB0\"><img src=\"c/B0.png\" height=64 width=32></a> &nbsp; ";
-  PUP=PUP+"<a href=\"gfx:VaB1\"><img src=\"c/B1.png\" height=64 width=32></a> &nbsp; ";
-  PUP=PUP+"<a href=\"gfx:VaB2\"><img src=\"c/B2.png\" height=64 width=32></a><br>";
-  PUP=PUP+"<a href=\"gfx:VaB3\"><img src=\"c/B3.png\" height=64 width=32></a> &nbsp; ";
-  PUP=PUP+"<a href=\"gfx:VaB4\"><img src=\"c/B4.png\" height=64 width=32></a> &nbsp; ";
-  PUP=PUP+"<a href=\"gfx:VaB5\"><img src=\"c/B5.png\" height=64 width=32></a> &nbsp; ";
-  PUP=PUP+"<a href=\"gfx:VaB6\"><img src=\"c/B6.png\" height=64 width=32></a><p>";
-  PUP=PUP+"<a href=\"gfx:Va\">Go Back</a><p>";
+  PUP=PUP+"<a href=\"gfx:VAB0\"><img src=\"c/B0.png\" height=64 width=32></a> &nbsp; ";
+  PUP=PUP+"<a href=\"gfx:VAB1\"><img src=\"c/B1.png\" height=64 width=32></a> &nbsp; ";
+  PUP=PUP+"<a href=\"gfx:VAB2\"><img src=\"c/B2.png\" height=64 width=32></a><br>";
+  PUP=PUP+"<a href=\"gfx:VAB3\"><img src=\"c/B3.png\" height=64 width=32></a> &nbsp; ";
+  PUP=PUP+"<a href=\"gfx:VAB4\"><img src=\"c/B4.png\" height=64 width=32></a> &nbsp; ";
+  PUP=PUP+"<a href=\"gfx:VAB5\"><img src=\"c/B5.png\" height=64 width=32></a> &nbsp; ";
+  PUP=PUP+"<a href=\"gfx:VAB6\"><img src=\"c/B6.png\" height=64 width=32></a><p>";
+  PUP=PUP+"<a href=\"gfx:VA\">Go Back</a><p>";
   pop(PUP);
  } else {
   if (a=="01") {
    PUP="Select Character:<p>";
-   PUP=PUP+"<a href=\"gfx:VaF0\"><img src=\"c/F0.png\" height=64 width=32></a> &nbsp; ";
-   PUP=PUP+"<a href=\"gfx:VaF1\"><img src=\"c/F1.png\" height=64 width=32></a> &nbsp; ";
-   PUP=PUP+"<a href=\"gfx:VaF2\"><img src=\"c/F2.png\" height=64 width=32></a><br>";
-   PUP=PUP+"<a href=\"gfx:VaF3\"><img src=\"c/F3.png\" height=64 width=32></a> &nbsp; ";
-   PUP=PUP+"<a href=\"gfx:VaF4\"><img src=\"c/F4.png\" height=64 width=32></a> &nbsp; ";
-   PUP=PUP+"<a href=\"gfx:VaF5\"><img src=\"c/F5.png\" height=64 width=32></a> &nbsp; ";
-   PUP=PUP+"<a href=\"gfx:VaF6\"><img src=\"c/F6.png\" height=64 width=32></a><p>";
-   PUP=PUP+"<a href=\"gfx:gfxSelectAvatar(\'\');\">Go Back</a><p>";
+   PUP=PUP+"<a href=\"gfx:VAF0\"><img src=\"c/F0.png\" height=64 width=32></a> &nbsp; ";
+   PUP=PUP+"<a href=\"gfx:VAF1\"><img src=\"c/F1.png\" height=64 width=32></a> &nbsp; ";
+   PUP=PUP+"<a href=\"gfx:VAF2\"><img src=\"c/F2.png\" height=64 width=32></a><br>";
+   PUP=PUP+"<a href=\"gfx:VAF3\"><img src=\"c/F3.png\" height=64 width=32></a> &nbsp; ";
+   PUP=PUP+"<a href=\"gfx:VAF4\"><img src=\"c/F4.png\" height=64 width=32></a> &nbsp; ";
+   PUP=PUP+"<a href=\"gfx:VAF5\"><img src=\"c/F5.png\" height=64 width=32></a> &nbsp; ";
+   PUP=PUP+"<a href=\"gfx:VAF6\"><img src=\"c/F6.png\" height=64 width=32></a><p>";
+   PUP=PUP+"<a href=\"gfx:VA;\">Go Back</a><p>";
    pop(PUP);
   } else {
-  	// will need to add body selection here
   	if (a.length==2) {
   	 if (a.charAt(0)=="F") { PObj=a+"H0"; } else { PObj=a+"D0"; }
-    playerAvatar = PObj;
+  	 gfxDo="VA"+PObj+"..";
     PopForce = "hidden";
     window.lastClickedZ=42; PopAlign='click';
-    pop("Select Player<br>Hat to join game!");
+    pop("Tag Flagpole<br>join game!");
   	} else {
     PX=2; PY=9; PZ=(PY*(mapx+1))+PX;
     PUP="<p align=center>Male or Female?<br>";
-    PUP=PUP+'<a href=\"gfx:Va00\"><img src=\"c/B1.png\" height=128 width=64></a>';
+    PUP=PUP+'<a href=\"gfx:VA00\"><img src=\"c/B1.png\" height=128 width=64></a>';
     PUP=PUP+'&nbsp;&nbsp;&nbsp;'; 
-    PUP=PUP+'<a href=\"gfx:Va01\"><img src=\"c/F5.png\" height=128 width=64></a>';
+    PUP=PUP+'<a href=\"gfx:VA01\"><img src=\"c/F5.png\" height=128 width=64></a>';
     pop(PUP);
    }
   }
  }
 }
 
-function gfxTick() {
-  if (window.gfxInterval) clearInterval(window.gfxInterval);
-  window.gfxInterval = setInterval(async function() {
-    //try {
-      var command = window.gfxDo || "RF"; window.gfxDo = "RF";
-      if (isLooking === true) { command="Ql"; window.gfxDo = "Ql"; }
-      var gfxPong = await gfxPing(command);
-      console.log(command+' = '+gfxPong);
+async function gfxTick() {
+  // send plugs to qandyland.js plugboard() for UNIVAC processing
+  if (window.gfxTimeout) clearTimeout(window.gfxTimeout);
+  try {
+  	if (gfxDo === "") { window.gfxDo = "RF"; }
+  	plugs=gfxDo;
+  	gfxDo=""; // reset for next tick
+
+    // no plugs work in 'look' mode, must exit look mode to get/use items    
+    if (typeof isLooking !== 'undefined' && isLooking === true) { 
+      plugs = "Ql"; 
+      window.gfxDo = "Ql"; 
+    }
+
+    console.log("plugs="+plugs);
+    var gfxPong = await gfxPing(plugs);
+    console.log("gfxPong="+gfxPong);
+    // Ensure we received a valid string before processing
+    if (typeof gfxPong === 'string') {
       let ptr = 0;
       while (ptr < gfxPong.length) {
         let verb = gfxPong.substring(ptr, ptr + 2);
         ptr += 2;
-        if (verb === "RF") {
-          let noun = gfxPong.substring(ptr);
-          gfxRefresh(noun); 
-          break;
+
+        if (verb === "VA") {
+          if (typeof window.gfxSelectAvatar === 'function') {
+            window.gfxSelectAvatar("");
+          }
         }
+        
+        if (verb === "PI") {
+          window.playerItem = gfxPong.substring(ptr, ptr + 2); ptr += 2;
+          window.playerZ = parseInt(gfxPong.substring(ptr, ptr + 2), 10); ptr += 2;
+          console.log("playerItem="+playerItem+" playerZ="+playerZ);
+        }
+
+        // 2. Handle Refresh (Variable-Length Command)
+        if (verb === "RF") {
+          let noun = gfxPong.substring(ptr); 
+          gfxRefresh(noun); 
+          ptr = gfxPong.length; // no more commands after RF
+        }
+
+        // 3. Handle Look Mode (Variable-Length Command)
         if (verb === "Ql") {
-        	 isLooking=true;
+          window.isLooking = true; 
           let myMap = gfxPong.substring(ptr, ptr + 2);
           let myZ = gfxPong.substring(ptr + 2, ptr + 4);
-          let playerData = gfxPong.substring(ptr + 4);
-          gfxRenderGlobalCanvas(myMap, myZ, playerData);
-          break;
+          let playerData = gfxPong.substring(ptr + 4); 
+          window.gfxRenderGlobalCanvas(myMap, myZ, playerData);
+          ptr = gfxPong.length; // no more commands after RF
         }
-        // MAP TRANSITION VERBS: Lm, Ma, Mp, etc.
-        // Noun is always 2 characters (the Map ID)
-        //if (verb === "Lm" || verb === "Ma" || verb === "Mp") {
-        //  let newMap = s.substring(ptr, ptr + 2);
-        //  ptr += 2;
-        //  processMapChange(newMap);
-        //  continue;
-        //}
-
-        // ACTION VERBS: Fs (Fish), Mn (Mine), In (Inventory)
-        // These look for the 'Za' delimiter
-        if (verb === "Fs" || verb === "Mn" || verb === "In") {
-          let endIdx = gfxPong.indexOf("Za", ptr);
-          if (endIdx === -1) {
-            // Safety: if Za is missing, skip or log error
-            ptr = gfxPong.length; 
-          } else {
-            let data = gfxPong.substring(ptr, endIdx);
-            alert(verb+" "+data);
-            //processAction(verb, data);
-            ptr = endIdx + 2; // Skip the data and the 'Za'
-          }
-          continue;
-        }
-
-        // If we don't recognize the verb, we have a "sync error" or unknown card
-        // For safety, if we don't know the verb, we stop to prevent infinite loops
-        console.warn("Unknown punch card verb:", verb);
-        break;
       }
-    //} catch (e) { 
-    //  console.error('Server tick error:', e); 
-    //}
-  }, 1000);
-    if (!window.gfxVisualInterval) {
-     window.gfxVisualInterval = setInterval(window.gfxVisualTick, 200);
+    }
+  } catch (e) { 
+    console.error('Server tick error:', e); 
+  }
+
+  window.gfxTimeout = setTimeout(gfxTick, 1000);
+  if (!window.gfxVisualInterval) {
+    window.gfxVisualInterval = setInterval(window.gfxVisualTick, 200);
   }
 }
 
 window.gfxPing = async function(commandString) {
   if (!commandString || commandString.length < 2) throw new Error('gfxPing: invalid command');
 
-  var body = commandString;
-  // Ensure the URL matches exactly what the server is listening for
-  var url = _serverUrl + '?d=' + encodeURIComponent(_gfxDrive);
-
-  // Send the session token in a header instead of the URL for better security
-  var headers = { 'Content-Type': 'text/plain' };
+  // Queville Style: Create form data
+  var formData = new URLSearchParams();
+  formData.append('c', commandString);      // 'c' for Command (e.g., "RF")
+  formData.append('d', window.gfxDrive);    // 'd' for Drive
   if (window.gfxSession) {
-    headers['X-Session-Token'] = window.gfxSession;
+    formData.append('s', window.gfxSession); // 's' for Session
   }
 
   try {
-    var response = await fetch(url, {
-      method:  'POST',
-      headers: headers,
-      body:    body
+    var response = await fetch(_serverUrl, {
+      method: 'POST',
+      headers: { 
+        // This is the key "Queville" header
+        'Content-Type': 'application/x-www-form-urlencoded' 
+      },
+      body: formData.toString() // formatted as: c=RF&d=capflag.gfx&s=xyz
     });
-    
+
     if (!response.ok) throw new Error('Server error: ' + response.status);
-    //console.log(response.status+" "+response.text);
     
     var resText = await response.text();
-    
-    // If the server returns an ST command, save it as our session
     if (resText.startsWith("ST")) {
       window.gfxSession = resText.substring(2);
     }
-    
     return resText;
   } catch (e) {
-    throw new Error('gfxPing: ' + (e.message || String(e)));
+    console.error('gfxPing failed:', e);
+    throw e;
   }
-}
- 
+} 
+
 window.gfxVisualTick = function() {
     if (!window.movingItems) window.movingItems = {};
     for (var iId in window.movingItems) {
@@ -456,7 +405,6 @@ async function gfxFetchMap(filename) {
     await print("Loading " + filename + "...\n");
     
     var gfxContent = await qdosLoad(filename);
-    console.log(gfxContent);
     if (!gfxContent) { throw new Error("Failed to load " + filename); }
 
     var lines = gfxContent.split('\n').filter(line => line.trim());
@@ -473,11 +421,29 @@ async function gfxFetchMap(filename) {
       var rest = line.substring(eqIdx + 1);
       var dotIdx = rest.indexOf('.');
       var mapData = dotIdx >= 0 ? rest.substring(0, dotIdx) : rest;
-      var objData = dotIdx >= 0 ? rest.substring(dotIdx + 1) : '';
+      var rawObjData = dotIdx >= 0 ? rest.substring(dotIdx + 1) : '';
+      
+      // Parse entries to separate static objects from dynamic items
+      var filteredObjs = [];
+      if (rawObjData) {
+        var entries = rawObjData.split(',');
+        for (var j = 0; j < entries.length; j++) {
+          var entry = entries[j].trim();
+          if (!entry) continue;
+          
+          // Split off the server-side punch code (after the colon) to check base length
+          var basePart = entry.split(':')[0];
+          
+          // Static objects have a base length of 6 (item-id + item-z + item-data)
+          if (basePart.length === 6) {
+            filteredObjs.push(entry);
+          }
+        }
+      }
       
       mapTiles[sectorId] = mapData.substring(0, 192); 
       mapExits[sectorId] = mapData.substring(192); 
-      mapObjs[sectorId] = objData; 
+      mapObjs[sectorId] = filteredObjs.join(','); 
     }
     return true;
     
@@ -490,35 +456,47 @@ async function gfxFetchMap(filename) {
 window.gfxObjects = function(sector) {
   var objsStr = window.mapObjs[sector];
   var oldObjs = document.querySelectorAll('.objs');
-  for (var k = 0; k < oldObjs.length; k++) { if (oldObjs[k].parentNode) { oldObjs[k].parentNode.removeChild(oldObjs[k]); }}
-  if (objsStr) {
-    var safeObjs = String(objsStr || "");
-    var newObjs = safeObjs.match(/.{1,6}/g) || [];
+  for (var k = 0; k < oldObjs.length; k++) { 
+    if (oldObjs[k].parentNode) { oldObjs[k].parentNode.removeChild(oldObjs[k]); }
+  }
 
-    for (var i = 0; i < newObjs.length; i++) {
-      var entry = newObjs[i];
-      var iId = entry.slice(0, 2);
-      var z = parseInt(entry.slice(2, 4), 10);
-      var idata = entry.slice(4, 6);
-      
-      if (/^[ST][a-z]$/.test(iId)) { continue; }
-      
+  console.log("objsStr="+objsStr);
+   
+  if (objsStr) {
+    // NEW: Split by comma for variable length objects
+    var objects = objsStr.split(',');
+
+    for (var i = 0; i < objects.length; i++) {
+      var entry = objects[i].trim();
+      if (!entry) continue;
+
+      // Split metadata from bytecode (if present)
+      // bytecode is not saved in gfxFetchMap(), there will be no ':' found
+      var parts = entry.split(':');
+      var objid = parts[0]; // e.g., "Yj44Sa"
+      var objcode = parts[1];
+            
+      var iId = objid.slice(0, 2);
+      var z = parseInt(objid.slice(2, 4), 10);
+      var data = objid.slice(4, 6);
+
       var coords = zToXY(z);
       var img = document.createElement('img');
       img.className = 'objs';
       img.src = 'i/' + iId + '.png';
       img.style.position = 'absolute';
-      var initialTop = (32 + 20 + (coords.y * 32));
-      var initialLeft = (32 + 22 + (coords.x * 32));
-      img.style.top = initialTop + "px";
-      img.style.left = initialLeft + "px";
+      img.style.top = (32 + 20 + (coords.y * 32)) + "px";
+      img.style.left = (32 + 22 + (coords.x * 32)) + "px";
       img.style.zIndex = '110'; 
 
-      // The adjustment logic
-      img.onload = function() {
-        // Subtracting the image's own dimensions from the starting coordinates
-        this.style.top = (initialTop - this.height + 32) + "px";
-        this.style.left = (initialLeft - this.width + 32) + "px";
+      // Adjustment logic for large items (Flagpoles, Buildings)
+      if (iId.charAt(0)==="Y") {
+        img.onload = function() {
+          var currentTop = parseInt(this.style.top, 10) || 0;
+          var currentLeft = parseInt(this.style.left, 10) || 0;
+          this.style.top = (currentTop - this.height + 32) + "px";
+          this.style.left = (currentLeft - this.width + 32) + "px";
+        }
       }
 
       img.onclick = (function(capturedZ) {
@@ -714,39 +692,81 @@ window.gfxRenderGlobalCanvas = function(myMap, myZ, playerData) {
   });
 };
 
-window.gfxCreation = async function(drive, mapString, players, isRound) {
-//   drive     – server drive to build world on (e.g. "gfx")
-//   mapString – topology string of 2-char map IDs (unused; server reads capflag.gfx)
-//   players   – player string of concatenated 2-char codes (unused; server reads capflag.gfx)
-//   isRound   – unused; server determines world topology from capflag.gfx
-
-// A1-L8 = small game  (8 rows wide, 12 rows tall) (fits on cell phone screen)
-// A0-Z9 = big game (10 rows wide, 26 rows tall)
-// Aa-Zz = huge game (26 rows wide, 26 rows tall)
-
-// Sets drive context and delegates to gfxPing("BB").
-
-  if (drive) _gfxDrive = drive;
-  return await gfxPing("BB");
-}
-
 window.gfxGameState = async function(drive) {
 // Query game state and player manifest for a drive.
 // Returns the raw retro response string: e.g. "JSSa.Sb.Sc.Ta.Tb.Tc"
 //   state prefix: JS = just starting (no active players), IP = in progress
 //   each dot-separated slot: <playerCode><mapId><avatarData> if occupied, <playerCode> if empty
-  if (drive) _gfxDrive = drive;
+  if (drive) gfxDrive = drive;
   return await gfxPing("GS");
 }
 
 function gfxClick(bytecode) {
-  // alert(bytecode) == Va00 (male)    Va01 (female)
-  byte=bytecode.substring(0,2);
-  left=bytecode.substring(2);
-  if (byte==="Va") { gfxSelectAvatar(left); }
-  // if byte = Vb call gfxObjectDown(code)
-  // if byte = Vc call gfxItemDown(code)
-  // if byte = Vd call gfxZDown(code)
+  var type = bytecode.substring(0, 2); // ZD, ID, OD, VA
+  var data = bytecode.substring(2);    // Remainder of the code
+  
+  switch (type) {
+    case "ZD": // Z-Down
+      if (typeof window.zdown === 'function') window.zdown(parseInt(data, 10));
+      break;
+    
+    case "ID": // Item-Down (Dynamic)
+      if (typeof window.itemdown === 'function') window.itemdown(data);
+      break;
+
+    case "OD": // Object-Down (Static)
+      if (typeof window.objdown === 'function') window.objdown(data);
+      break;
+
+    case "VA": // Internal Avatar Logic
+      if (typeof gfxSelectAvatar === 'function') gfxSelectAvatar(data);
+      break;
+      
+    default:
+      console.warn("Unknown GFX event type:", type);
+  }
+}
+
+window.gfxZClick = function(z, clickedElement) {
+  var zNum = parseInt(z, 10);
+  var zStr = zNum.toString().padStart(2, '0');
+  window.lastClickedZ = zNum; 
+  
+  // Immediately notify game of the raw Z click
+  gfxClick("ZD" + zStr);
+
+  var htm = '';
+  // 1. Static Objects
+  var objsData = mapObjs[window.map]; 
+  if (objsData) {
+    var objs = objsData.split(',');
+    for (var i = 0; i < objs.length; i++) {
+      var entry = objs[i].trim();
+      if (!entry) continue;
+      var meta = entry.split(':')[0];
+      var objId = meta.substring(0, 2);
+      var objZ  = parseInt(meta.substring(2, 4), 10);
+      
+      if (objZ === zNum && !/^[ST][a-z]$/.test(objId)) {
+        // NEW: OD + Vu (Use) + objId
+        htm += `<a href="gfx:OD${objId}${objZ}">${gfxItemID(objId)}</a><br>`;
+      }
+    }
+  }
+
+  // 2. Dynamic Items
+  if (mapItems) {
+    var items = mapItems.split(',');
+    for (var j = 0; j < items.length; j++) {
+      var id = items[j].substring(0, 2);
+      var itemZ = parseInt(items[j].substring(2, 4), 10);
+      if (itemZ === zNum) {
+        htm += '<a href="gfx:ID' + id + itemZ + '">' + gfxItemID(id) + '</a><br>';
+      }
+    }
+  }
+  
+  if (htm) { pop(htm); }
 }
 
 splash(1000);

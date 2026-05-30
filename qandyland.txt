@@ -67,7 +67,9 @@
     dir — directory listing (detailed)
     list — file listing (names)
     bigbang — world generation helper
+
     Rf — refresh: return map sector items for current session location
+
 
 
 
@@ -77,11 +79,11 @@ The Qandyland Multi-Player Processer:
 
 Punch cards worked because electricity could flow through the holes in the cards to produce 1's and 0's ... can you imagine a punch card machine that could close a hole so it could be re-used? That's exactly what the Qandyland server does, emulates a UNIVAC main frame that processes text files as if they were punch cards,  mimicking the IBM era of main frames where one card was input, and a new card was output, but without creating huge amounts paper waste. 
 
-With modern computing power, this turns the early main frames into highly efficient data processors that no modern json object is going to be able to compete with, one Qandyland server can process hundreds of thousands of players files every 1 second compared to 2000 per minute on an opticl card reader.
+With modern computing power, this turns the early main frames into highly efficient data processors that no modern json object is going to be able to compete with, one Qandyland server can process hundreds of thousands of players files every 1 second compared to 2000 per minute on an opticl card reader. CPU and memory are now not the bottleneck, but rather the network card - how fast can your network card get the input out of the buffer and the output into the buffer?
 
 Unlike modern scripting, punch cards were read from left to right like a book without jump/branch/goto/gosub commands that eliminates spaghetti code, and with a fixed 80-column width it mathematically eliminates potential for buffer overflow exploits.  
 
-Our powerful two-character bytecode language allows a 'dumb server to do smart things' giving 'players' the ability to program bot-participants in their games, and allows the 'sysop' to create complex game worlds with simple bytecode scripts.
+We wrote a specialized two-character 'punch code' built up from a 1949 language called 'short code" that allowed programmers to write code to process the punch cards instead what was called a 'plug board', where a user manually plugged wires into the main frame to 'program it'. This language allows our 'dumb server to do smart things' giving 'players' the ability to program bot-participants in their games, and allows the 'sysop' to create complex game worlds with simple bytecode scripts.
 
 
 

@@ -21,7 +21,9 @@
             gap: 20px;
             border-bottom: 1px solid #444;
         }
-        #outerContainer { display: flex; flex-direction: row; height: 100vh; }
+        
+        #outerContainer { display: flex; flex-direction: row; height: 90vh; }
+        
         #sideToolbar {
           width: 56px;
           background: #202a36;
@@ -90,16 +92,27 @@
 <div id="toolPopup" style="display:none; position:fixed; left:200px; top:100px; background:#333; border:2px solid #0af; color:#eee; border-radius:8px; z-index:1000; min-width:250px; min-height:120px; box-shadow:0 6px 32px #000a"></div>
 
 <script>
-const SECTORS_WIDE = 8, SECTORS_TALL = 12;
+    const SECTORS_WIDE = 8, SECTORS_TALL = 8;
     const SECTOR_TILE_WIDTH = 8, SECTOR_TILE_HEIGHT = 12;
 
+    const DEFAULT_MAP_URL = 'capflag.gfx'; // The name of your default map file
+
+    let copiedSectorData = null; // Stores an array of 96 tile codes when a sector is copied
+    let copiedSectorLabel = null; // Stores the label of the copied sector (e.g., "A1")
+
     var TILE_W = 64;
-    var TILE_H = 144;
+    var TILE_H = 96; 
     var TILE_SIZE = 32; 
     var NOISE_TILES = ['Fa', 'Gb', 'Gc', 'Gd', 'Ge', 'Gf', 'Gg'];
 
     let mapData = [];
-    const imageCache = {};
+    const imageCache = {}; // Cache for tile images
+    const itemCache = {}; // Cache for item images
+
+    // New: Keep track of all unique tile codes encountered for preloading
+    const uniqueTileCodes = new Set(); 
+    const uniqueItemCodes = new Set();
+
 
     let mapHistory = [];
     const MAX_UNDO = 20; // Limit memory usage
@@ -133,20 +146,79 @@ const SECTORS_WIDE = 8, SECTORS_TALL = 12;
 
     const canvas = document.getElementById('mapCanvas');
     const ctx = canvas.getContext('2d');
-    const brushDisplay = document.getElementById('brushDisplay');
+    const brushDisplay = document.getElementById('brushDisplay'); // This element doesn't exist, can remove if not used elsewhere.
 
-    function initMap() {
+    async function initMap() {
         canvas.width = TILE_W * TILE_SIZE;
         canvas.height = TILE_H * TILE_SIZE;
 
-        for (let y = 0; y < TILE_H; y++) {
-            mapData[y] = [];
-            for (let x = 0; x < TILE_W; x++) {
-                mapData[y][x] = NOISE_TILES[Math.floor(Math.random() * NOISE_TILES.length)];
+        console.log(`Loading default map: ${DEFAULT_MAP_URL}`);
+        try {
+            const response = await fetch(DEFAULT_MAP_URL);
+
+            if (!response.ok) {
+              throw new Error(`HTTP error! status: ${response.status}`);
             }
+            const mapText = await response.text();
+            processMap(mapText);
+            await preloadAllImages(); 
+            renderFullMap(); // Render after data is loaded and parsed and images are preloaded
+            console.log("Default map loaded and rendered.");
+
+        } catch (error) {
+            console.error("Failed to load default map:", error);
+            alert("Failed to load default map. Initializing with random noise.");
+            // Fallback to random noise if default map fails to load
+            for (let y = 0; y < TILE_H; y++) {
+                mapData[y] = [];
+                for (let x = 0; x < TILE_W; x++) {
+                    const tile = NOISE_TILES[Math.floor(Math.random() * NOISE_TILES.length)];
+                    mapData[y][x] = tile;
+                    uniqueTileCodes.add(tile); // Add to unique codes
+                }
+            }
+            // Fallback: Also preload images if falling back to noise
+            await preloadAllImages(); 
+            renderFullMap();
         }
-        renderFullMap();
     }
+
+
+async function preloadAllImages() {
+    console.log("Preloading images...");
+    const imagePromises = [];
+
+    // Preload tile images
+    for (const code of uniqueTileCodes) {
+        if (!imageCache[code]) {
+            const img = new Image();
+            img.src = `t/${code}.png`;
+            const promise = new Promise((resolve) => {
+                img.onload = () => resolve();
+                img.onerror = () => { console.warn(`Failed to load tile image: t/${code}.png`); resolve(); }; // Resolve even on error
+            });
+            imageCache[code] = img;
+            imagePromises.push(promise);
+        }
+    }
+
+    // Preload item images
+    for (const id of uniqueItemCodes) {
+        if (!itemCache[id]) {
+            const img = new Image();
+            img.src = `i/${id}.png`;
+            const promise = new Promise((resolve) => {
+                img.onload = () => resolve();
+                img.onerror = () => { console.warn(`Failed to load item image: i/${id}.png`); resolve(); }; // Resolve even on error
+            });
+            itemCache[id] = img;
+            imagePromises.push(promise);
+        }
+    }
+
+    await Promise.all(imagePromises);
+    console.log("All images preloaded.");
+}
 
 function renderToolbar() {
     const toolbar = document.getElementById('toolbar');
@@ -170,6 +242,10 @@ function renderToolbar() {
       let o = document.createElement('option');
       o.textContent = opt.label;
       o.value = opt.value;
+      // Set the currently active size
+      if (opt.value === TILE_SIZE) {
+        o.selected = true;
+      }
       select.appendChild(o);
     });
 
@@ -196,11 +272,12 @@ function renderToolbar() {
     addButton('Flower', showFlowerTool);
     addButton('Terrain', showTerrainTool);
     
-    addButton('Fill', () => { activeTool = 'fill'; });
+    addButton('Sectors', showSectorTool);
+    
     addButton('Stamp', showStampTool);    
 
     addButton('Exits', () => showExitsEditor(lastEditedSector));
-    addButton('Items', showItemsTool);    
+    //addButton('Items', showItemsTool);    
     
 }
 
@@ -212,6 +289,108 @@ function syncBrushSize(val) {
         slider.value = brushSize;
         updateBrushSizePreview(brushSize);
     }
+}
+
+let currentSectorToolMode = 'fill'; // 'fill', 'copy', 'paste'
+
+function showSectorTool() {
+    activeTool = 'sector_tool'; // A new active tool mode for handling clicks
+    const popup = document.getElementById('toolPopup');
+
+    const buttonStyle = (mode) => currentSectorToolMode === mode ? 'background:#0af; color:white;' : '';
+
+    popup.innerHTML = `
+        <div id="toolPopupHeader" style="cursor:move; background:#1abc9c; padding:8px; border-radius:6px 6px 0 0; font-weight:bold;">
+            Sector Editor
+            <span style="float:right;cursor:pointer;" onclick="exitSectorTool()">✕</span>
+        </div>
+        <div style="padding:16px; display:flex; flex-direction:column; gap:10px;">
+            <p style="font-size:0.85em; color:#eee; margin-top:0;">Select an action, then click a sector on the map.</p>
+            
+            <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:8px;">
+                <button onclick="setSectorToolMode('fill')" style="${buttonStyle('fill')}">Fill Sector</button>
+                <button onclick="setSectorToolMode('copy')" style="${buttonStyle('copy')}">Copy Sector</button>
+                <button onclick="setSectorToolMode('paste')" style="${buttonStyle('paste')}">Paste Sector</button>
+            </div>
+
+            <div style="background:#222; padding:10px; border-radius:4px; font-size:0.85em; color:#bbb;">
+                Current Brush: <span style="color:#0af; font-family:monospace;">${brush}</span><br>
+                Copied Sector: <span style="color:#0af; font-family:monospace;">${copiedSectorLabel || 'None'}</span>
+            </div>
+            
+            <button onclick="exitSectorTool()" style="background:#555; width:100%; margin-top:10px;">Done</button>
+        </div>
+    `;
+    popup.style.display = "block";
+    makeDraggable(popup, document.getElementById('toolPopupHeader'));
+}
+
+function setSectorToolMode(mode) {
+    currentSectorToolMode = mode;
+    showSectorTool(); // Refresh popup to highlight active button
+}
+
+// Function to fill a sector with the current brush
+function fillSectorWithBrush(globalX, globalY) {
+    saveHistory(); // Ensure this is inside the mousedown listener or at the start of the action
+    for (let y = globalY; y < globalY + SECTOR_TILE_HEIGHT; y++) {
+        for (let x = globalX; x < globalX + SECTOR_TILE_WIDTH; x++) {
+            if (x >= 0 && x < TILE_W && y >= 0 && y < TILE_H) { // Bounds check for safety
+                if (mapData[y][x] !== brush) {
+                    mapData[y][x] = brush;
+                    drawTile(x, y); // Only redraw changed tiles
+                }
+            }
+        }
+    }
+    renderFullMap(); // A full render might be cleaner to ensure everything is updated, especially if only drawTile(x,y) is used sparingly.
+}
+
+// Function to copy a sector's tiles
+function copySector(globalX, globalY, label) {
+    copiedSectorData = [];
+    for (let y = globalY; y < globalY + SECTOR_TILE_HEIGHT; y++) {
+        for (let x = globalX; x < globalX + SECTOR_TILE_WIDTH; x++) {
+            if (x >= 0 && x < TILE_W && y >= 0 && y < TILE_H) {
+                copiedSectorData.push(mapData[y][x]);
+            } else {
+                copiedSectorData.push('Ga'); // Fill with default grass if out of bounds (shouldn't happen for valid sectors)
+            }
+        }
+    }
+    copiedSectorLabel = label;
+    showSectorTool(); // Refresh popup to show copied sector label
+    console.log(`Copied sector ${label} (containing ${copiedSectorData.length} tiles).`);
+}
+
+// Function to paste a sector's tiles
+function pasteSector(globalX, globalY) {
+    saveHistory(); // Ensure this is inside the mousedown listener or at the start of the action
+    let sourceTiles = copiedSectorData;
+    if (!sourceTiles) {
+        // If no sector was copied, use default grass
+        console.log("No sector copied, pasting default grass.");
+        sourceTiles = Array(SECTOR_TILE_WIDTH * SECTOR_TILE_HEIGHT).fill('Ga');
+        copiedSectorLabel = "Default Grass"; // Update label for feedback
+    }
+
+    let tileIndex = 0;
+    for (let y = globalY; y < globalY + SECTOR_TILE_HEIGHT; y++) {
+        for (let x = globalX; x < globalX + SECTOR_TILE_WIDTH; x++) {
+            if (x >= 0 && x < TILE_W && y >= 0 && y < TILE_H) {
+                mapData[y][x] = sourceTiles[tileIndex] || 'Ga'; // Fallback to Ga if sourceTiles is somehow short
+            }
+            tileIndex++;
+        }
+    }
+    renderFullMap();
+    showSectorTool(); // Refresh popup to show confirmation (or updated copied sector label)
+    console.log(`Pasted sector at (${globalX}, ${globalY}).`);
+}
+
+function exitSectorTool() {
+    activeTool = 'brush'; // Revert to default brush
+    document.getElementById('toolPopup').style.display = 'none';
 }
 
 function showFileTool() {
@@ -455,11 +634,18 @@ function exitFlowerMode() {
     document.getElementById('toolPopup').style.display = 'none';
 }    
 
+// MODIFIED: setTileSize to use renderFullMap directly
 function setTileSize(size) {
     TILE_SIZE = size;
     canvas.width = TILE_W * TILE_SIZE;
     canvas.height = TILE_H * TILE_SIZE;
-      renderFullMap();
+    // No need for await preloadAllImages() here as images are already in cache
+    renderFullMap(); 
+    // Update the dropdown to reflect the new size if it wasn't triggered by the dropdown itself
+    const select = document.querySelector('#toolbar select');
+    if (select) {
+        select.value = size;
+    }
 }
 
     // no longer used
@@ -511,14 +697,12 @@ function setTileSize(size) {
         sidebar.appendChild(btn);
     }
 
+    // MODIFIED: getTileImage
     function getTileImage(code) {
-        if (imageCache[code]) return imageCache[code];
-        const img = new Image();
-        img.src = `t/${code}.png`;
-        img.onload = () => renderFullMap(); 
-        imageCache[code] = img;
-        return img;
+        // Assume images are preloaded and in cache
+        return imageCache[code];
     }
+   
 
     function makeDraggable(popup, header) {
         let offsetX = 0, offsetY = 0, isDown = false;
@@ -634,7 +818,7 @@ function borders() {
 
 function drawSectorBorders(ctx, tileSize, sectorsWide, sectorsTall, sectorTileWidth, sectorTileHeight) {
     ctx.save();
-    const ROWS = ["A","B","C","D","E","F","G","H","I","J","K","L"];
+    const ROWS = ["A","B","C","D","E","F","G","H"];
 
     for (let r = 0; r < sectorsTall; r++) {
         for (let c = 0; c < sectorsWide; c++) {
@@ -699,12 +883,13 @@ function drawSectorBorders(ctx, tileSize, sectorsWide, sectorsTall, sectorTileWi
     function drawTile(x, y) {
         if (x < 0 || x >= TILE_W || y < 0 || y >= TILE_H) return;
         const code = mapData[y][x];
-        const img = getTileImage(code);
+        const img = getTileImage(code); // Get from preloaded cache
         ctx.fillStyle = '#000';
         ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-        if (img.complete && img.naturalWidth !== 0) {
+        if (img && img.complete && img.naturalWidth !== 0) { // Check img exists and is complete
             ctx.drawImage(img, x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
         } else {
+            // Placeholder for missing/broken images
             ctx.strokeStyle = '#333';
             ctx.strokeRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
         }
@@ -760,7 +945,7 @@ function handlePaintAction(clientX, clientY) {
 
 function showLOSTool() {
     activeTool = 'terrain';
-    const ROWS = ["A","B","C","D","E","F","G","H","I","J","K","L"];
+    const ROWS = ["A","B","C","D","E","F","G","H"];
     const terrains = { "Ga": "Grass (Clear)", "Ra": "Forest (Dense)", "Sa": "Mountain (High)", "Ta": "Swamp (Low)", "Ya": "Wall (Block)" };
     
     let gridHtml = `<div style="display:grid; grid-template-columns:repeat(8, 30px); gap:2px; background:#111; padding:5px;">`;
@@ -857,7 +1042,7 @@ canvas.addEventListener('mousedown', (e) => {
     const tx = Math.floor((e.clientX - rect.left) / TILE_SIZE);
     const ty = Math.floor((e.clientY - rect.top) / TILE_SIZE);
 
-    const ROWS = ["A","B","C","D","E","F","G","H","I","J","K","L"];
+    const ROWS = ["A","B","C","D","E","F","G","H"];
     const sectorX = Math.floor(tx / SECTOR_TILE_WIDTH);
     const sectorY = Math.floor(ty / SECTOR_TILE_HEIGHT);
     
@@ -869,6 +1054,20 @@ canvas.addEventListener('mousedown', (e) => {
         showExitsEditor(lastEditedSector);
     }
 
+    if (activeTool === 'sector_tool' && e.button === 0) { // Left-click only for sector tools
+        const sectorGlobalX = sectorX * SECTOR_TILE_WIDTH;
+        const sectorGlobalY = sectorY * SECTOR_TILE_HEIGHT;
+        
+        if (currentSectorToolMode === 'fill') {
+            fillSectorWithBrush(sectorGlobalX, sectorGlobalY);
+        } else if (currentSectorToolMode === 'copy') {
+            copySector(sectorGlobalX, sectorGlobalY, lastEditedSector);
+        } else if (currentSectorToolMode === 'paste') {
+            pasteSector(sectorGlobalX, sectorGlobalY);
+        }
+        return; // Important: Stop further processing after handling sector tool click
+    }
+
     if (activeTool === 'stamp' && e.button === 0) {
         applyStamp(tx, ty);
         return; 
@@ -877,7 +1076,7 @@ canvas.addEventListener('mousedown', (e) => {
     if (activeTool === 'items') {
         const sectorX = Math.floor(tx / SECTOR_TILE_WIDTH);
         const sectorY = Math.floor(ty / SECTOR_TILE_HEIGHT);
-        const ROWS = ["A","B","C","D","E","F","G","H","I","J","K","L"];
+        const ROWS = ["A","B","C","D","E","F","G","H"];
         const label = `${ROWS[sectorY]}${sectorX + 1}`;
     
         // Calculate 0-95 index
@@ -909,11 +1108,6 @@ canvas.addEventListener('mousedown', (e) => {
     if (activeTool === 'paste') {
         pasteAt(tx, ty);
         return;
-    }
-
-    if (activeTool === 'fill' && e.button === 0) {
-        fillSectorAt(e.clientX, e.clientY);
-        return; 
     }
 
     if (activeTool === 'river') {
@@ -1002,7 +1196,7 @@ canvas.addEventListener('mousedown', (e) => {
     });
 
     function updateBrushUI() {
-      // brushDisplay.innerText = brush;
+      // brushDisplay.innerText = brush; // This element doesn't exist.
     }
 
 
@@ -1014,7 +1208,7 @@ function showExitsEditor(sectorLabel) {
     const popup = document.getElementById('toolPopup');
     
     // Calculate Cardinal Neighbors
-    const ROWS = ["A","B","C","D","E","F","G","H","I","J","K","L"];
+    const ROWS = ["A","B","C","D","E","F","G","H"];
     let rowChar = sectorLabel.charAt(0), colNum = parseInt(sectorLabel.slice(1));
     let r = ROWS.indexOf(rowChar), c = colNum;
 
@@ -1110,7 +1304,7 @@ function saveExitsInput() {
     document.getElementById('toolPopup').style.display = 'none';
 }
 function autoCalculateExits(isRound) {
-    const ROWS = ["A","B","C","D","E","F","G","H","I","J","K","L"];
+    const ROWS = ["A","B","C","D","E","F","G","H"];
     const rowCount = 12;
     const colCount = 8;
     
@@ -1160,10 +1354,11 @@ function validateExitsInput() {
     document.getElementById('exitsInput').value = val;
     // Validate: up to 8 characters, each 2 chars A-L + [1-8]
     let valid = (/^([A-L][1-8]){0,4}$/).test(val);
-    document.getElementById('exitsValidation').innerHTML =
-        valid ?
-          `<span style="color:#3fa">Valid exits:</span> ${val.match(/.{1,2}/g)?.join(' ')||''}` :
-          `<span style="color:#f66">Invalid! Use 2-char codes, e.g. A2B1</span>`;
+    // This element 'exitsValidation' doesn't exist, so this will throw an error or do nothing
+    // document.getElementById('exitsValidation').innerHTML =
+    //     valid ?
+    //       `<span style="color:#3fa">Valid exits:</span> ${val.match(/.{1,2}/g)?.join(' ')||''}` :
+    //       `<span style="color:#f66">Invalid! Use 2-char codes, e.g. A2B1</span>`;
 }
 
 function saveExitsInput() {
@@ -1178,7 +1373,7 @@ function saveExitsInput() {
 
 // Generates the 4 "natural" exits (within map bounds) for a sector
 function resetExitsToNatural(sectorLabel) {
-    const ROWS = ["A","B","C","D","E","F","G","H","I","J","K","L"];
+    const ROWS = ["A","B","C","D","E","F","G","H"];
     let rowChar = sectorLabel.charAt(0), colNum = parseInt(sectorLabel.slice(1));
     let r = ROWS.indexOf(rowChar), c = colNum - 1;
     let exits = "";
@@ -1194,14 +1389,31 @@ async function importMap() {
     try {
         const text = await navigator.clipboard.readText();
         if (!text) return;
+        console.log('importMap='+text);
+        processMap(text);
+    } catch (err) {
+        console.error('Failed to read clipboard:', err);
+        alert("Import failed. Check console for details.");
+    }
+}
 
+async function processMap(text) {
+        console.log('processMap='+text);
         const lines = text.split('\n');
-        const ROWS = ["A","B","C","D","E","F","G","H","I","J","K","L"];
+        const ROWS = ["A","B","C","D","E","F","G","H"];
         const SECTOR_W = 8;
         const SECTOR_H = 12;
 
-        // Reset existing items to prevent merging with old data
+        // Reset mapData and sectorItems before loading new data
+        mapData = []; // Clear existing map
+        for (let y = 0; y < TILE_H; y++) { // Re-initialize mapData structure
+            mapData[y] = Array(TILE_W).fill('Ga'); // Fill with default grass initially
+        }
+        sectorExits = {};
         sectorItems = {};
+
+        uniqueTileCodes.clear(); // Clear for new import
+        uniqueItemCodes.clear(); // Clear for new import
 
         lines.forEach(line => {
             if (!line.includes('=')) return;
@@ -1213,19 +1425,19 @@ async function importMap() {
             const cIndex = parseInt(label.substring(1)) - 1;
             if (rIndex === -1 || isNaN(cIndex)) return;
 
-            // 1. Split items from the rest (Tiles + Exits)
+            // 1. Split Tiles/Exits from the Objects
             const parts = allData.split('.');
-            const mainData = parts[0]; // Contains Tiles (192 chars) + Exits
-            const itemData = parts[1] || ""; // Contains I10500...
+            const mainData = parts[0];     // Contains Tiles (192 chars) + Exits
+            const objectData = parts[1] || ""; // Contains ID(2)Z(2)DATA(2):LOGIC, ...
 
-            // 2. Extract Tiles and Exits
+            // 2. Process Tiles (First 192 characters)
             const tilesLength = 96 * 2; 
             const tilesString = mainData.substring(0, tilesLength);
+            
+            // 3. Process Exits (Everything after the first 192 characters in part 0)
             const exitString = mainData.substring(tilesLength);
-
             sectorExits[label] = exitString;
 
-            // 3. Process Tiles
             for (let i = 0; i < 96; i++) {
                 const tileCode = tilesString.substring(i * 2, (i * 2) + 2);
                 const sx = i % SECTOR_W;
@@ -1235,74 +1447,78 @@ async function importMap() {
 
                 if (globalX < TILE_W && globalY < TILE_H) {
                     mapData[globalY][globalX] = tileCode;
+                    uniqueTileCodes.add(tileCode); // Add for preloading
                 }
             }
 
-            // 4. Process Items (New Logic)
-            if (itemData) {
+            // 4. Process Objects (Logic-aware)
+            if (objectData) {
                 sectorItems[label] = [];
-                // Each item is 6 chars: ID(2) + Z(2) + DATA(2)
-                const items = itemData.match(/.{1,6}/g);
-                if (items) {
-                    items.forEach(chunk => {
-                        sectorItems[label].push({
-                            id: chunk.substring(0, 2),
-                            z: chunk.substring(2, 4),
-                            data: chunk.substring(4, 6)
-                        });
-                    });
-                }
+                // Split by comma for multiple objects
+                const objectChunks = objectData.split(',');
+                objectChunks.forEach(chunk => {
+                    if (!chunk) return;
+                    
+                    // Split metadata from logic by colon
+                    const [meta, logic] = chunk.split(':');
+                    if (meta && meta.length >= 6) {
+                        const item = {
+                            id: meta.substring(0, 2),
+                            z: meta.substring(2, 4),
+                            data: meta.substring(4, 6),
+                            logic: logic || "" // Preserve the bytecode!
+                        };
+                        sectorItems[label].push(item);
+                        uniqueItemCodes.add(item.id); // Add for preloading
+                    }
+                });
             }
         });
 
+        // After importing new data, preload the new images and then render
+        await preloadAllImages(); 
         renderFullMap();
-        alert("Map and Items imported successfully!");
-
-    } catch (err) {
-        console.error('Failed to read clipboard:', err);
-        alert("Import failed. Check console for details.");
-    }
 }
 
-    // Export logic
 function exportMap() {
     const SECTOR_W = 8;
     const SECTOR_H = 12;
-    const ROWS = ["A","B","C","D","E","F","G","H","I","J","K","L"];
+    const ROWS = ["A","B","C","D","E","F","G","H"];
     let output = "";
 
-    for (let r = 0; r < 12; r++) { // Vertical sectors
-        for (let c = 0; c < 8; c++) { // Horizontal sectors
+    for (let r = 0; r < SECTORS_TALL; r++) { 
+        for (let c = 0; c < SECTORS_WIDE; c++) { 
             const sectorLabel = `${ROWS[r]}${c + 1}`;
-            let sectorString = "";
-            const los = sectorLOS[sectorLabel] || "Ga"; // Get LOS
+            let tilesString = "";
 
-            // Get tiles in this sector
+            // 1. Get 192 characters of tile data (96 tiles)
             for (let sy = 0; sy < SECTOR_H; sy++) {
                 for (let sx = 0; sx < SECTOR_W; sx++) {
                     const globalX = (c * SECTOR_W) + sx;
                     const globalY = (r * SECTOR_H) + sy;
-                    sectorString += mapData[globalY][globalX];
+                    tilesString += mapData[globalY][globalX];
                 }
             }
 
-            // --- Add the exits string ---
-            var exits = sectorExits[sectorLabel] || ""; // fallback to "" if undefined
+            // 2. Get Exits
+            const exits = sectorExits[sectorLabel] || "";
             
-            
-let itemString = "";
-if (sectorItems[sectorLabel] && sectorItems[sectorLabel].length > 0) {
-    itemString = "." + sectorItems[sectorLabel].map(it => `${it.id}${it.z}${it.data}`).join("");
-}
+            // 3. Get Objects with Logic/Bytecode
+            let objectString = "";
+            if (sectorItems[sectorLabel] && sectorItems[sectorLabel].length > 0) {
+                // Format: ID(2)Z(2)DATA(2):LOGIC joined by commas
+                const objSerialized = sectorItems[sectorLabel].map(it => {
+                    return `${it.id}${it.z}${it.data}:${it.logic || ""}`;
+                }).join(',');
+                objectString = "." + objSerialized;
+            }
 
-//output += `${sectorLabel}=${sectorString}${exits}${itemString}\n`;            
-output += `${sectorLabel}=${sectorString}${los}${exits}${itemString}\n`; // Insert los here
-            
+            output += `${sectorLabel}=${tilesString}${exits}${objectString}\n`;
         }
     }
 
     navigator.clipboard.writeText(output.trim()).then(() => {
-        alert("Map exported to clipboard!");
+        alert("Map exported to clipboard in Object-compatible format!");
     }).catch(err => {
         console.error('Error copying to clipboard', err);
     });
@@ -1477,31 +1693,6 @@ function applyPathToMap(path) {
     renderFullMap();
 }
 
-function fillSectorAt(clientX, clientY) {
-    const rect = canvas.getBoundingClientRect();
-    const tileX = Math.floor((clientX - rect.left) / TILE_SIZE);
-    const tileY = Math.floor((clientY - rect.top) / TILE_SIZE);
-
-    const sectorX = Math.floor(tileX / SECTOR_TILE_WIDTH);
-    const sectorY = Math.floor(tileY / SECTOR_TILE_HEIGHT);
-
-    // Calculate the pixel/tile boundaries of that sector
-    const startX = sectorX * SECTOR_TILE_WIDTH;
-    const endX = startX + SECTOR_TILE_WIDTH;
-    const startY = sectorY * SECTOR_TILE_HEIGHT;
-    const endY = startY + SECTOR_TILE_HEIGHT;
-
-    // Fill the sector
-    for (let y = startY; y < endY; y++) {
-        for (let x = startX; x < endX; x++) {
-            if (mapData[y][x] !== brush) {
-                mapData[y][x] = brush;
-            }
-        }
-    }
-    renderFullMap();
-}
-
 // Helper to check if a tile is part of a mountain
 function isMountain(x, y) {
     if (x < 0 || x >= TILE_W || y < 0 || y >= TILE_H) return false;
@@ -1592,13 +1783,15 @@ function pasteAt(tileX, tileY) {
     rows.forEach((rowStr, dy) => {
         // Match every 2 characters (the tile codes)
         const tiles = rowStr.match(/.{1,2}/g); 
-        tiles.forEach((code, dx) => {
-            const x = tileX + dx;
-            const y = tileY + dy;
-            if (x < TILE_W && y < TILE_H) {
-                mapData[y][x] = code;
-            }
-        });
+        if (tiles) { // Add a check to ensure tiles is not null
+            tiles.forEach((code, dx) => {
+                const x = tileX + dx;
+                const y = tileY + dy;
+                if (x < TILE_W && y < TILE_H) {
+                    mapData[y][x] = code;
+                }
+            });
+        }
     });
     renderFullMap();
 }
@@ -1624,57 +1817,6 @@ function renderFullMap() {
         );
         ctx.setLineDash([]); // Reset dash
     }
-
-
-
-    // Draw Items
-const itemCache = {}; // Global cache for item images
-
-// Inside renderFullMap() ...
-for (let label in sectorItems) {
-    const ROWS = ["A","B","C","D","E","F","G","H","I","J","K","L"];
-    const rIndex = ROWS.indexOf(label[0]);
-    const cIndex = parseInt(label.substring(1)) - 1;
-
-    sectorItems[label].forEach(item => {
-        const z = parseInt(item.z);
-        const lx = z % SECTOR_TILE_WIDTH;
-        const ly = Math.floor(z / SECTOR_TILE_WIDTH);
-        
-        // Calculate the top-left of the target tile in pixels
-        const tileX = ((cIndex * SECTOR_TILE_WIDTH) + lx) * TILE_SIZE;
-        const tileY = ((rIndex * SECTOR_TILE_HEIGHT) + ly) * TILE_SIZE;
-
-        // Determine bottom-right corner of that tile
-        const bottomRightX = tileX + TILE_SIZE;
-        const bottomRightY = tileY + TILE_SIZE;
-
-        const imgPath = `i/${item.id}.png`;
-
-        if (!itemCache[item.id]) {
-            // Create new image object if not in cache
-            const img = new Image();
-            img.src = imgPath;
-            img.onload = () => renderFullMap(); // Re-render once loaded
-            itemCache[item.id] = img;
-        }
-
-        const img = itemCache[item.id];
-        
-        if (img.complete && img.naturalWidth !== 0) {
-            // Calculate draw position: 
-            // Draw at (BottomRight - Width, BottomRight - Height)
-            const drawX = bottomRightX - img.width;
-            const drawY = bottomRightY - img.height;
-            
-            ctx.drawImage(img, drawX, drawY);
-        } else {
-            // Optional: Draw a loading placeholder/dot if image isn't ready
-            ctx.fillStyle = "yellow";
-            ctx.fillRect(tileX + 12, tileY + 12, 8, 8);
-        }
-    });
-}    
 
     drawSectorBorders(ctx, TILE_SIZE, SECTORS_WIDE, SECTORS_TALL, SECTOR_TILE_WIDTH, SECTOR_TILE_HEIGHT);
 }
@@ -2036,7 +2178,7 @@ function showItemsTool() {
 
 window.onload = function() {
     renderToolbar();
-    initMap();
+    initMap(); // This will now preload all images
 };
 
 </script>
