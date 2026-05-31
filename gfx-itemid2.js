@@ -1,54 +1,10 @@
 window.gfxItemID = function(i) {
     var itemMap = {
-        // Travel Items
-        "Aa": "Travel Boots",
-        "Ab": "Hiking Boots",
-        "Ac": "Swamp Boots",
-        "Ad": "Mountain Boots",
-        "Ae": "Lava Boots",
-        "Af": "Row Boat",
-
-        // Tools/Utilities
         "Bd": "Bucket",
-        "Be": "Lantern",
         "Cg": "Log",
-        "Ek": "Bucket Tar",
         "El": "Bucket Water",
-
-        // Food
-        "Fa": "Tomato",
-        "Fb": "Tomatos",
-        "Fc": "Tomatoes",
-        "Fd": "Tomatoes",
-        "Fe": "Tomato",
-
-        // Food
         "Jc": "Qandy",
-
-        // Plants
-        "Ka": "Plant",
-
-        // Food
-        "Kf": "Bread",
-
-        // Hats
         "La": "Black Hat",
-        "Lb": "Blue Hat",
-        "Lc": "Pink Hat",
-        "Ld": "Red Bandana",
-        "Le": "Blue Bandana",
-        "Lf": "Mask",
-
-        // Helms
-        "Ma": "Cylon Helm",
-        "Mb": "Cylon Helm",
-
-        // Enemies
-        "Mc": "Spider",
-        "Md": "Mosquito",
-        "Me": "Scorpion",
-        "Mf": "Fire Ant",
-
         // Player Items
         "Sa": "Player Sa",
         "Sb": "Player Sb",
@@ -67,7 +23,7 @@ window.gfxItemID = function(i) {
         "Tg": "Player Tg",
         "Th": "Player Th",
 
-        // UI/Verb Commands (These definitely seem like a different category than physical items)
+        // Verb Commands
         "Va": "Avatar",
         "Vb": "Vb",
         "Vc": "Vc",
@@ -87,7 +43,7 @@ window.gfxItemID = function(i) {
         "Vq": "Vq",
         "Vr": "Vr",
         "Vs": "South",
-        "Vt": "teleport to %% $$",
+        "Vt": "%%$$ teleport to ",
         "Vu": "Vu",
         "Vv": "Vv",
         "Vw": "West",
@@ -142,7 +98,7 @@ window.gfxItemID = function(i) {
         "W9": "W9",
         "W0": "W0",
 
-        // Logic/Scripting Commands
+        // Logic Gates
         "Xa": "Xa",
         "Xb": "Xb",
         "Xc": "clear gate",
@@ -151,7 +107,7 @@ window.gfxItemID = function(i) {
         "Xf": "Xf",
         "Xg": "Xg",
         "Xh": "Xh",
-        "Xi": "if inventory $$",
+        "Xi": "$$if inventory",
         "Xj": "Xj",
         "Xk": "Xk",
         "Xl": "Xl",
@@ -181,33 +137,16 @@ window.gfxItemID = function(i) {
         "X0": "X0",
 
         // Static Objects/Buildings
-        "Ya": "City",
-        "Yb": "Cart",
-        "Yc": "Fernence",
-        "Yd": "Magic Guild",
-        "Ye": "Building",
-        "Yf": "Cabin",
-        "Yg": "Pipe",
-        "Yh": "Pipe",
-        "Yi": "Hut",
         "Yj": "Flag Pole",
 
         // Game States/Actions/Environmental 
         "Za": "Nothing",
         "Zb": "NO",
-        "Zc": "Switch Off",
-        "Zd": "Switch On",
         "Ze": "Teleport",
         "Zf": "Sign",
-        "Zg": "Pier",
         "Zh": "Well",
         "Zi": "Fire Pit",
         "Zj": "Fire",
-        "Zk": "Mysterious Man",
-        "Zl": "Mountain Hideout",
-        "Zm": "City Gates",
-        "Zn": "Green",
-        "Zo": "Red",
     };
 
     return itemMap[i] || "Unknown"; // Use bracket notation to access properties

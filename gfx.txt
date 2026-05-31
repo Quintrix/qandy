@@ -30,12 +30,13 @@
            ST   ST<token> — request session token                 
        ID$$##             — Item $$ down (user has clicked item $$ on z-location ##)
        OD$$##             — Object $$ down (user has clicked object $$ on z-location ##)
-                XX..      — Error .. (fatal, all text after XX is the error message)
-                XW        — Error: World Not Found
+                XX%%..    — Error %%
            LK   LK<data>  — Look Around (use LOS to see beyond current sector)
            RF   RF<data>  — Refresh current sector
                 PI$$##    — Player has been assigned item $$ at ## z-location
-                VA        — Server request for player avatar (triggers select avatar)   
+                VA        — Server request for player avatar (triggers select avatar)
+                XS%%..    — Server commands for gfx.js engine to pass on to client
+                
      ——————————————————————————————————————————————————————————————————————————————————————————
 
      The 'UNIVAC Punch Code Processor' emulates a binary coded decimal computer
@@ -50,9 +51,9 @@
      have 1 hit point. If they have 'WhWh', they have 2 hit points. 'WhWhWh' would be 3,
      or they can be stacked 'Wh00' to 'Wh99'.
      
-     XnXiLaVnXcVn = if not inventory player-hat north nothing, which translates to
-     'if item La is not in player's inventory, walk north'. The Xc code is used to close
-     the all open logic gates
+     XiLaVtA1YeXcXiLbVtH8ZeXc = if player's inventory has 'black hat' teleport to the 
+     'Ze' (teleport) on A1, clear gate. if player's inventory has 'blue hat' teleport
+     to the 'Ze' (teleport) on H8, clear gate.
      
      Because there are no jumps/branches/goto/gosub these files are processed from
      start to finish just a like a punch card, where you can't just move the card in
@@ -63,32 +64,34 @@
      W* = wildcard (Wa-Wz or W0-W9)
      ## = numeral 00-99
      $$ = byte code (Aa-Zz or A0-Z0)
+     %% = text validated: A-Za-z0-9 !@#$%^&*()-+=;:?,."'
+          (two dots '..' is the end of text)
+     
 
-
-        Va avatar        XaW$## add ## to W$
+        Va avatar        XaW$## add ## to W$ (use Xn (not) to subtract)
         Vb                   Xb 
-        Vc                   Xc close all logic gates
+        Vc                   Xc close all open logic gates
         Vd                 Xd## dice roll (## sides)
         Ve east            Xe$$ if $$ is a valid exit
         Vf food (eat)        Xf
-      Vg$$ get $$            XgW*## if W$ if greater than
+      Vg$$ get $$        XgW*## if W$ if greater than (use Xn (not) for less than)
         Vh                   Xh
-        Vi inventory       Xi$$ if item $$ is in inventory
+        Vi inventory       Xi$$ if item $$ is in inventory open gate (if fails gate closes and code is ignored until Xc) 
         Vj                   Xj
         Vk                   Xk
-        Vl look          XlW$## if W$ is less than ##
+        Vl look              Xl 
         Vm                 Xm$$ if item $$ is on map (dyamic items players can drop/pickup)
         Vn north             Xn not (flips next logic gate)
         Vo                 Xo$$ if object $$ is on map (is in .gfx file)
-      Vp$$ pop               Xp pop <text>..  
+      Vp$$ pop               Xp   
         Vq                   Xq
-        Vr                 Xr$$ read object's data file (returns Za if item no on sector)
-        Vs south         XsW$## subtract ## from W$
+        Vr                 Xr$$ read object's data value in filename
+        Vs south             Xs 
         Vt teleport          Xt map sectors terrain type
         Vu use (item)      Xu$$ update ItemID
         Vv                 Xv$$ add item to player inventory (use not to remove)
         Vw west              Xw 
-        Vx                   Xx Error
+        Vx               Xx%%.. Error $$
         Vy                   Xy
         Vz                 Xz$$ if item $$ is on z-location
 

@@ -1,4 +1,3 @@
-
 window.GFX = 0; // set to true when gfx.js ready to use
 
 window.gfxDrive = ''; // current drive context; set by gfxCreation / gfxGameState
@@ -302,8 +301,17 @@ async function gfxTick() {
     if (typeof gfxPong === 'string') {
       let ptr = 0;
       while (ptr < gfxPong.length) {
-        let verb = gfxPong.substring(ptr, ptr + 2);
-        ptr += 2;
+        let verb = gfxPong.substring(ptr, ptr + 2); ptr += 2;
+        if (verb === "XS") {
+          let endPtr = gfxPong.indexOf("..", ptr);
+          let noun="";
+          if (endPtr !== -1) {
+            noun = gfxPong.substring(ptr, endPtr); ptr = endPtr + 2; 
+          } else {
+            noun = gfxPong.substring(ptr); ptr = gfxPong.length;
+          }
+          if (typeof window.gfxServerPlug === 'function') { gfxServerPlug(noun); }
+        }
 
         if (verb === "VA") {
           if (typeof window.gfxSelectAvatar === 'function') {

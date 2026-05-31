@@ -36,6 +36,85 @@ window.zdown = function(z) {
   console.log("Player clicked tile:", z);
 };
 
+window.gfxServerPlug = function(code) {
+  // executes any punch code the server sends the client
+  // will allow each game to customize all aspects of the game
+  console.log('server plug = '+code);
+
+
+    
+  let column = 0; code="ViLaZaVa";
+  
+  while (column < code.length) {
+  	 var verb = code.substring(column, 2);
+  	 column += 2;
+    if (verb === "Va") { gfxSelectAvatar(itemz); }
+    if (verb === "Vi") { 
+      if (code.indexOf("Za")<0) {
+        items=code.substring(column,code.length);
+        column=code.length;
+      } else {
+        items=code.substring(column, code.indexOf("Za"));
+        column=code.indexOf("Za")+2;
+      }
+      gfxInventory(items);
+    }  
+  }
+  return;
+}
+
+window.gfxInventory = function(items) {
+  pop(items);
+}
+
+window.gfxSelectAvatar = function(a) {
+
+ window.PopAlign = "center";
+ window.PopUpVis = "hidden";
+ window.PopForce = "visible"; 
+
+ if (a=="00") {
+  PUP="Select Character:<p>";
+  PUP=PUP+"<a href=\"gfx:VAB0\"><img src=\"c/B0.png\" height=64 width=32></a> &nbsp; ";
+  PUP=PUP+"<a href=\"gfx:VAB1\"><img src=\"c/B1.png\" height=64 width=32></a> &nbsp; ";
+  PUP=PUP+"<a href=\"gfx:VAB2\"><img src=\"c/B2.png\" height=64 width=32></a><br>";
+  PUP=PUP+"<a href=\"gfx:VAB3\"><img src=\"c/B3.png\" height=64 width=32></a> &nbsp; ";
+  PUP=PUP+"<a href=\"gfx:VAB4\"><img src=\"c/B4.png\" height=64 width=32></a> &nbsp; ";
+  PUP=PUP+"<a href=\"gfx:VAB5\"><img src=\"c/B5.png\" height=64 width=32></a> &nbsp; ";
+  PUP=PUP+"<a href=\"gfx:VAB6\"><img src=\"c/B6.png\" height=64 width=32></a><p>";
+  PUP=PUP+"<a href=\"gfx:VA\">Go Back</a><p>";
+  pop(PUP);
+ } else {
+  if (a=="01") {
+   PUP="Select Character:<p>";
+   PUP=PUP+"<a href=\"gfx:VAF0\"><img src=\"c/F0.png\" height=64 width=32></a> &nbsp; ";
+   PUP=PUP+"<a href=\"gfx:VAF1\"><img src=\"c/F1.png\" height=64 width=32></a> &nbsp; ";
+   PUP=PUP+"<a href=\"gfx:VAF2\"><img src=\"c/F2.png\" height=64 width=32></a><br>";
+   PUP=PUP+"<a href=\"gfx:VAF3\"><img src=\"c/F3.png\" height=64 width=32></a> &nbsp; ";
+   PUP=PUP+"<a href=\"gfx:VAF4\"><img src=\"c/F4.png\" height=64 width=32></a> &nbsp; ";
+   PUP=PUP+"<a href=\"gfx:VAF5\"><img src=\"c/F5.png\" height=64 width=32></a> &nbsp; ";
+   PUP=PUP+"<a href=\"gfx:VAF6\"><img src=\"c/F6.png\" height=64 width=32></a><p>";
+   PUP=PUP+"<a href=\"gfx:VA;\">Go Back</a><p>";
+   pop(PUP);
+  } else {
+  	if (a.length==2) {
+  	 if (a.charAt(0)=="F") { PObj=a+"H0"; } else { PObj=a+"D0"; }
+  	 gfxDo="VA"+PObj+"..";
+    PopForce = "hidden";
+    window.lastClickedZ=42; PopAlign='click';
+    pop("Tag Flagpole<br>join game!");
+  	} else {
+    PX=2; PY=9; PZ=(PY*(mapx+1))+PX;
+    PUP="<p align=center>Male or Female?<br>";
+    PUP=PUP+'<a href=\"gfx:VA00\"><img src=\"c/B1.png\" height=128 width=64></a>';
+    PUP=PUP+'&nbsp;&nbsp;&nbsp;'; 
+    PUP=PUP+'<a href=\"gfx:VA01\"><img src=\"c/F5.png\" height=128 width=64></a>';
+    pop(PUP);
+   }
+  }
+ }
+}
+
 window.itemdown = function(code) {
  console.log('item down = '+code);
   
@@ -66,6 +145,7 @@ window.itemdown = function(code) {
 
 window.objdown = function(code) {
   console.log("objdown -> code="+code);
+  hpop();
   var itemid = code.substring(0, 2); 
   var itemz = code.substring(2, 4); 
 

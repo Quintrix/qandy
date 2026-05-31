@@ -24,7 +24,11 @@ var sysopGfx = 'capflag.gfx'; // default .gfx file
 var sysopOffline=true;
 
 const UNIVAC = require('./qandyland-univac.js');
-UNIVAC.inject({ fileLoad, fileSave, fileDelete });
+UNIVAC.inject({ fileLoad,
+                fileSave,
+                fileDelete,
+                fileList
+              });
 
 var http   = require('http');
 var path   = require('path');
@@ -827,10 +831,8 @@ function dirList(driveName, cwd, pattern, switches, session) {
 function fileList(driveName, cwd, pattern, session) {
   var drive = drives[driveName];
   if (!drive) return { success: false, error: 'drive not mounted' };
-
   var dir   = (cwd || '/').replace(/^\//, '').replace(/\/$/, '');
   var names = [];
-
   var manifest = _readManifest(driveName);
   var entries = manifest.filter(function (e) {
     if (!e || !e.name) return false;
@@ -840,14 +842,12 @@ function fileList(driveName, cwd, pattern, session) {
     var fileDir = slash >= 0 ? e.name.substring(0, slash) : '';
     return fileDir === dir;
   });
-
   for (var i = 0; i < entries.length; i++) {
     var nb = baseName(entries[i].name);
     if (pattern && !matchPattern(nb, pattern)) continue;
-    names.push(entries[i].name);
+    names.push(nb);
   }
-
-  return { success: true, listing: names.join('\n') };
+  return { success: true, listing: names.join(' ') };
 }
 
 // Simple glob-style pattern matching (* and ?)
@@ -1315,7 +1315,14 @@ function plugboard(req, stacker, plugs, drive, session) {
           // Grab the first file that matches our ID/Z prefix
           let matchedPath = filesResponse.results[0].name;
           let matchedBase = matchedPath.substring(matchedPath.lastIndexOf('/') + 1);
-          
+
+          if (itemId === player.item) {
+            let invLoad = fileLoad(drive, '/', player.fullPath, session);
+            let inventoryData = (invLoad.success && invLoad.content) ? invLoad.content : '';
+            output += "XSVi" + inventoryData + "Za";
+            break; // Halt further OD processing so we don't trigger UNIVAC
+          }
+
           if (itemId > 'Rz' && itemId < 'Ua') {
             if (matchedBase.length === 4) {
               if (!player.item || player.item === "") {
@@ -1354,6 +1361,7 @@ function plugboard(req, stacker, plugs, drive, session) {
               console.log("Item already claimed (file length is " + matchedBase.length + ")");
             }
           }
+          
         } else {
           console.log("Item file not found for: " + searchPrefix);
         }
@@ -1441,27 +1449,16 @@ function plugboard(req, stacker, plugs, drive, session) {
   if (refresh) {
     let list = fileList(drive, 'w/' + player.map, null, session);
     let items = [];
-  
     if (list.success && list.listing) {
-      let files = list.listing.split('\n');
+      let files = list.listing.split(' ');
       files.forEach(f => {
-        let base = f.substring(f.lastIndexOf('/') + 1);
-        if (base.length > 1) {
-             if (base.length === 6) {
-          } else {
-               items.push(base);
-          }
-        }
+        if (f.length > 1) { if (f.length !== 6) { items.push(f); }}
       });
     }
-
     let numericZ = parseInt(player.z, 10) || 0;
     let z = numericZ < 0 ? "00" : (numericZ < 10 ? "0" + numericZ : String(numericZ));
-    //consoloe.log("player.z="+player.z+" numericZ="+numericZ);
     output = output + "RF" + player.map + z + items.join(',');
-    // console.log("1196 output="+output);
-  }   
-
+  }
   return respondRetro(stacker, output, session);
 }
 

@@ -136,7 +136,7 @@ function UNIVAC(driveName, itemfile, objfile) {
   }
   console.log("object punch code = "+objLoad.content);
 
-  var tape   = objLoad.content;   // e.g. 'VtA1'
+  var tape   = objLoad.content;   // e.g. 'XiLaVtA1ZeXcXiLbVtH8ZeXc'
   var column = 0;                 // read-head position on the tape
 
   // Mutable working state – will be committed at the end if anything changed
@@ -150,60 +150,65 @@ function UNIVAC(driveName, itemfile, objfile) {
 
   // ── 3. Process punch code ─────────────────────────────────────────────────
 
-  while (column < tape.length) {
+  var gateopen=true; // logic gate, if gate gets closed codes are ignored until 'Xc' clears all gates  
+  var ifnot = false; // inverses a code: if in inventory becomes if not in inventory, plus becomes minus, add becomes remove, etc
 
+  while (column < tape.length) {
     var word = tape.slice(column, column + 2);
     column += 2;
-
+    
     switch (word) {
-
-      // ── Vt[XX] – Teleport to sector XX ─────────────────────────────────
-      //
-      // Reads the next 2 characters as the target sector code.
-      // Validates the target against the current sector's 'e' exit file.
-      // Moves the item file from the old sector directory to the new one.
-      // Updates player map state in the p file.
-      //
+    	case 'Xn': ifnot=true; break;
+    	case 'Xc': ifnot=false; break;
+      case 'Xi': {
+        var noun = tape.slice(column, column + 2); column += 2;
+        console.log("UNIVAC() Xi" + noun);
+        // Load the player's item file content (their inventory)
+        var invLoad = _deps.fileLoad(driveName, '/', itemfile, 'UNIVAC');
+        var inventory = (invLoad.success && invLoad.content) ? invLoad.content : '';
+        var hasItem = inventory.indexOf(noun) > -1;
+        var conditionMet = ifnot ? !hasItem : hasItem;
+        if (!conditionMet) {
+          // Fast-forward tape to the next 'Xc' that closes this gate
+          while (column < tape.length) {
+            var skipWord = tape.slice(column, column + 2); column += 2;
+            if (skipWord === 'Xc') { ifnot = false; break; }
+          }
+        }
+        break;
+      }
+      
       case 'Vt': {
-
-        if (column + 2 > tape.length) {
-          console.error('UNIVAC: Vt instruction missing sector operand in tape: ' + tape);
-          column = tape.length; // halt
-          break;
+        var noun = tape.slice(column, column + 2); column += 2;
+        if (!_isValidExit(driveName, state.sector, noun)) { break; }
+        var targetSector = noun; var targetZStr = state.zStr;
+        if (column + 2 <= tape.length) {
+          var zToken = tape.slice(column, column + 2); column += 2;
+          if (/^\d{2}$/.test(zToken)) {
+            targetZStr = zToken;
+          } else if (/^[A-Z]/.test(zToken)) {
+            if (typeof _deps.fileList === 'function') {
+              var listRes = _deps.fileList(driveName, 'w/' + targetSector, null, 'UNIVAC');
+              if (listRes && listRes.success && listRes.listing) {
+                var paddedList = ' ' + listRes.listing;
+                var searchToken = ' ' + zToken;
+                var idx = paddedList.indexOf(searchToken);
+                if (idx !== -1) {
+                  var zStart = idx + searchToken.length;
+                  targetZStr = paddedList.substring(zStart, zStart + 2);
+                }
+              }
+            }
+          }
         }
 
-        var targetSector = tape.slice(column, column + 2);
-        column += 2;
-
-        // Validate the exit
-        if (!_isValidExit(driveName, state.sector, targetSector)) {
-          console.log('UNIVAC: Vt' + targetSector + ' blocked – not in ' + state.sector + '/e');
-          break;
-        }
-
-        // Build old and new canonical paths
-        var oldPath = 'w/' + state.sector + '/' + item.id + state.zStr + state.avatar;
-        var newPath = 'w/' + targetSector  + '/' + item.id + state.zStr + state.avatar;
-
-        // Load item content before moving (it carries the player's inventory)
-        var itemContent = _deps.fileLoad(driveName, '/', oldPath, 'UNIVAC');
-        var content     = itemContent.success ? itemContent.content : '';
-
-        // Save to new location first, then remove old location
-        var saveRes = _deps.fileSave(driveName, '/', newPath, content, 'UNIVAC', 'UNIVAC');
-        if (!saveRes.success) {
-          console.error('UNIVAC: Vt failed to save to new path ' + newPath + ': ' + saveRes.error);
-          break;
-        }
-
-        _deps.fileDelete(driveName, '/', oldPath, 'UNIVAC');
-
-        // Commit new sector into working state
+        // ── FIX: commit the new location to state ────────────────────────────
         state.sector = targetSector;
+        state.zStr   = targetZStr;
+        state.z      = parseInt(targetZStr, 10);
         state.dirty  = true;
 
-        console.log('UNIVAC: Vt moved ' + item.id + ' → ' + targetSector);
-        break;
+        break;   // ── FIX: don't fall through to default
       }
 
       // ── Unknown word – skip (forward-compatible) ────────────────────────
@@ -214,12 +219,28 @@ function UNIVAC(driveName, itemfile, objfile) {
     }
   }
 
-  // ── 4. Commit: update the 'p' registry if state changed ──────────────────
-
   if (state.dirty) {
+    // Construct old path using initial 'item', and new path using mutated 'state'
+    var oldPath = 'w/' + item.sector + '/' + item.id + item.zStr + item.avatar;
+    var newPath = 'w/' + state.sector + '/' + item.id + state.zStr + state.avatar;
+    // Only hit the filesystem if the path actually changed 
+    // (This naturally handles any command that updates sectors, Z-locations, or avatars)
+    if (oldPath !== newPath) {
+      // Load item content before moving (it carries the player's inventory)
+      var itemContent = _deps.fileLoad(driveName, '/', oldPath, 'UNIVAC');
+      var content     = itemContent.success ? itemContent.content : '';
+      // Save to new location first
+      var saveRes = _deps.fileSave(driveName, '/', newPath, content, 'UNIVAC', 'UNIVAC');
+      if (!saveRes.success) {
+        console.error('UNIVAC: Failed to save to new path ' + newPath + ': ' + saveRes.error);
+        return; // Halt if save failed so we don't accidentally wipe player from the 'p' registry
+      }
+      // Remove old location
+      _deps.fileDelete(driveName, '/', oldPath, 'UNIVAC');
+      console.log('UNIVAC: Successfully moved ' + item.id + ' on disk from ' + oldPath + ' to ' + newPath);
+    }
     _updatePFile(driveName, item.id, state.sector, state.zStr, state.avatar);
   }  
-  
   // Return the final state so the host server can update its session memory
   return {
     sector: state.sector,
@@ -227,17 +248,11 @@ function UNIVAC(driveName, itemfile, objfile) {
     avatar: state.avatar,
     fullPath: 'w/' + state.sector + '/' + item.id + state.zStr + state.avatar
   };
-  
-}
+}  
+
 
 // ── Exports ───────────────────────────────────────────────────────────────────
 
 UNIVAC.inject = inject;
 
 module.exports = UNIVAC;
-
-
-
-
-// ── 4. Commit: update the 'p' registry if state changed ──────────────────
-
