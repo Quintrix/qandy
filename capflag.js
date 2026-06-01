@@ -40,26 +40,28 @@ window.gfxServerPlug = function(code) {
   // executes any punch code the server sends the client
   // will allow each game to customize all aspects of the game
   console.log('server plug = '+code);
-
-
     
-  let column = 0; code="ViLaZaVa";
-  
+  let column = 0; 
+
   while (column < code.length) {
-  	 var verb = code.substring(column, 2);
-  	 column += 2;
+    var verb = code.substring(column, column + 2);
+    column += 2;
+  
     if (verb === "Va") { gfxSelectAvatar(itemz); }
+  
     if (verb === "Vi") { 
-      if (code.indexOf("Za")<0) {
-        items=code.substring(column,code.length);
-        column=code.length;
+      let nextDotDot = code.indexOf("..", column);
+      if (nextDotDot < 0) {
+        items = code.substring(column, code.length);
+        column = code.length;
       } else {
-        items=code.substring(column, code.indexOf("Za"));
-        column=code.indexOf("Za")+2;
+        items = code.substring(column, nextDotDot);
+        column = nextDotDot + 2;
       }
       gfxInventory(items);
     }  
   }
+  
   return;
 }
 

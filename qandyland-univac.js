@@ -125,7 +125,19 @@ function UNIVAC(driveName, itemfile, objfile) {
     return;
   }
 
-  console.log("item.sector = "+item.sector);
+  var itemLoad = _deps.fileLoad(driveName, '/', itemfile, 'UNIVAC');
+  if (!itemLoad.success) {
+    console.error('UNIVAC: cannot load item file: ' + itemfile);
+    return;
+  }
+  var state = {
+    sector  : item.sector,
+    z       : item.z,
+    zStr    : item.zStr,
+    avatar  : item.avatar,
+    content : itemLoad.content || '',   // ← the card's data, loaded once
+    dirty   : false
+  };
   
   // ── 2. Load the object's punch code ──────────────────────────────────────
 
@@ -160,6 +172,7 @@ function UNIVAC(driveName, itemfile, objfile) {
     switch (word) {
     	case 'Xn': ifnot=true; break;
     	case 'Xc': ifnot=false; break;
+
       case 'Xi': {
         var noun = tape.slice(column, column + 2); column += 2;
         console.log("UNIVAC() Xi" + noun);
@@ -177,7 +190,7 @@ function UNIVAC(driveName, itemfile, objfile) {
         }
         break;
       }
-      
+
       case 'Vt': {
         var noun = tape.slice(column, column + 2); column += 2;
         if (!_isValidExit(driveName, state.sector, noun)) { break; }

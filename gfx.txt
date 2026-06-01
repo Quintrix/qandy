@@ -68,32 +68,32 @@
           (two dots '..' is the end of text)
      
 
-        Va avatar        XaW$## add ## to W$ (use Xn (not) to subtract)
+        Va avatar            Xa
         Vb                   Xb 
         Vc                   Xc close all open logic gates
-        Vd                 Xd## dice roll (## sides)
-        Ve east            Xe$$ if $$ is a valid exit
-        Vf food (eat)        Xf
+        Vd                   Xd
+        Ve east              Xe
+        Vf                   Xf
       Vg$$ get $$        XgW*## if W$ if greater than (use Xn (not) for less than)
         Vh                   Xh
         Vi inventory       Xi$$ if item $$ is in inventory open gate (if fails gate closes and code is ignored until Xc) 
         Vj                   Xj
         Vk                   Xk
         Vl look              Xl 
-        Vm                 Xm$$ if item $$ is on map (dyamic items players can drop/pickup)
+        Vm                   Xm
         Vn north             Xn not (flips next logic gate)
-        Vo                 Xo$$ if object $$ is on map (is in .gfx file)
-      Vp$$ pop               Xp   
+        Vo                   Xo
+        Vp                   Xp   
         Vq                   Xq
-        Vr                 Xr$$ read object's data value in filename
+        Vr                 Xr$$ remove from inventory (use NOT to add) 
         Vs south             Xs 
-        Vt teleport          Xt map sectors terrain type
-        Vu use (item)      Xu$$ update ItemID
-        Vv                 Xv$$ add item to player inventory (use not to remove)
+        Vt teleport          Xt 
+        Vu                   Xu
+        Vv                   Xv
         Vw west              Xw 
-        Vx               Xx%%.. Error $$
+        Vx                   Xx
         Vy                   Xy
-        Vz                 Xz$$ if item $$ is on z-location
+        Vz                   Xz if item $$ is on z-location
 
      ——————————————————————————————————————————————————————————————————————————————————————————
 
