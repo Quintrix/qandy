@@ -35,7 +35,8 @@
            RF   RF<data>  — Refresh current sector
                 PI$$##    — Player has been assigned item $$ at ## z-location
                 VA        — Server request for player avatar (triggers select avatar)
-                XS%%..    — Server commands for gfx.js engine to pass on to client
+                SP%%..    — Server Plugs for gfx.js engine to pass on to client, these
+                            let UNIVAC send plugs to the client.js (not the  gfx.js engine)  
                 
      ——————————————————————————————————————————————————————————————————————————————————————————
 
@@ -68,32 +69,32 @@
           (two dots '..' is the end of text)
      
 
-        Va avatar            Xa
-        Vb                   Xb 
-        Vc                   Xc close all open logic gates
-        Vd                   Xd
-        Ve east              Xe
-        Vf                   Xf
-      Vg$$ get $$        XgW*## if W$ if greater than (use Xn (not) for less than)
-        Vh                   Xh
-        Vi inventory       Xi$$ if item $$ is in inventory open gate (if fails gate closes and code is ignored until Xc) 
-        Vj                   Xj
-        Vk                   Xk
-        Vl look              Xl 
-        Vm                   Xm
-        Vn north             Xn not (flips next logic gate)
-        Vo                   Xo
-        Vp                   Xp   
-        Vq                   Xq
-        Vr                 Xr$$ remove from inventory (use NOT to add) 
-        Vs south             Xs 
-        Vt teleport          Xt 
-        Vu                   Xu
-        Vv                   Xv
-        Vw west              Xw 
-        Vx                   Xx
-        Vy                   Xy
-        Vz                   Xz if item $$ is on z-location
+        Va avatar                Xa
+        Vb                       Xb 
+        Vc                       Xc close all open logic gates
+        Vd                       Xd
+        Ve east                  Xe
+        Vf                       Xf
+      Vg$$ get $$            Xg$$## if W$ if greater than (use Xn (not) for less than)
+        Vh                       Xh
+        Vi inventory           Xi$$ if item $$ is in inventory open gate (if fails gate closes and code is ignored until Xc) 
+        Vj                       Xj
+        Vk                       Xk
+        Vl look                  Xl 
+    Vm$$## make item $$##        Xm
+        Vn north                 Xn not (flips next logic gate)
+        Vo                       Xo
+        Vp                       Xp   
+        Vq                       Xq 
+    Vr$$## remove obj $$##     Xr$$ remove from inventory (use NOT to add) 
+        Vs south                 Xs 
+        Vt teleport              Xt 
+        Vu                       Xu
+        Vv                       Xv
+        Vw west                  Xw 
+        Vx                       Xx
+        Vy                       Xy
+        Vz                       Xz if item $$ is on z-location
 
      ——————————————————————————————————————————————————————————————————————————————————————————
 

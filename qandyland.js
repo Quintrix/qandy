@@ -1296,6 +1296,7 @@ function plugboard(req, stacker, plugs, drive, session) {
               player.z = uResult.z;
               player.avatar = uResult.avatar;
               player.fullPath = uResult.fullPath;
+              output += uResult.output;
             }
           }
         }
@@ -1319,7 +1320,7 @@ function plugboard(req, stacker, plugs, drive, session) {
           if (itemId === player.item) {
             let invLoad = fileLoad(drive, '/', player.fullPath, session);
             let inventoryData = (invLoad.success && invLoad.content) ? invLoad.content : '';
-            output += "XSVi" + inventoryData + "..";
+            output += "SPVi" + inventoryData + "..";
             break; // Halt further OD processing so we don't trigger UNIVAC
           }
 
@@ -1530,8 +1531,7 @@ var server = http.createServer(function (req, res) {
       }
     }
 
-     // Now call the plugboard with the unpacked data
-    plugboard(req, res, command, drive, session, itemContent);
+    plugboard(req, res, command, drive, session);
     
   }).catch(err => {
     res.writeHead(500);

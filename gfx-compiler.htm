@@ -509,6 +509,22 @@
         updateExitInput();
     }
 
+    async function loadDefaultMap() {
+        // First, initialize a blank map just in case the .gfx file is missing some sectors
+        initBlank(); 
+        try {
+            const response = await fetch('capflag.gfx');
+            if (!response.ok) throw new Error('File not found');
+            const text = await response.text();
+            parseGfxData(text);
+
+            changeSector(); 
+            console.log("Successfully loaded capflag.gfx");
+        } catch (error) {
+            console.warn("Could not load capflag.gfx automatically. Remaining blank.", error);
+        }
+    }
+
     async function importGfx() {
       try {
         const text = await navigator.clipboard.readText();
@@ -533,27 +549,6 @@
       navigator.clipboard.writeText(out.trim());
       alert("GFX EXPORTED!");
     }
-
-    async function loadDefaultMap() {
-        // First, initialize a blank map just in case the .gfx file is missing some sectors
-        initBlank(); 
-
-        try {
-            const response = await fetch('capflag.gfx');
-            if (!response.ok) throw new Error('File not found');
-        
-            const text = await response.text();
-            parseGfxData(text);
-        
-            // Ensure UI updates to whatever 'currentSector' is selected
-            changeSector(); 
-        
-            console.log("Successfully loaded capflag.gfx");
-        } catch (error) {
-            console.warn("Could not load capflag.gfx automatically. Remaining blank.", error);
-        }
-    }
-
 
     function parseGfxData(text) {
         text.split('\n').forEach(line => {

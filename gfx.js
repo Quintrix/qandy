@@ -297,12 +297,13 @@ async function gfxTick() {
     console.log("plugs="+plugs);
     var gfxPong = await gfxPing(plugs);
     console.log("gfxPong="+gfxPong);
+
     // Ensure we received a valid string before processing
     if (typeof gfxPong === 'string') {
       let ptr = 0;
       while (ptr < gfxPong.length) {
         let verb = gfxPong.substring(ptr, ptr + 2); ptr += 2;
-        if (verb === "XS") {
+        if (verb === "SP") {
           let endPtr = gfxPong.indexOf("..", ptr);
           let noun="";
           if (endPtr !== -1) {
@@ -310,6 +311,7 @@ async function gfxTick() {
           } else {
             noun = gfxPong.substring(ptr); ptr = gfxPong.length;
           }
+          console.log("###131###"+noun);
           if (typeof window.gfxServerPlug === 'function') { gfxServerPlug(noun); }
         }
 
@@ -490,6 +492,7 @@ window.gfxObjects = function(sector) {
 
       var coords = zToXY(z);
       var img = document.createElement('img');
+      img.id = 'obj_' + iId + '_' + z; 
       img.className = 'objs';
       img.src = 'i/' + iId + '.png';
       img.style.position = 'absolute';

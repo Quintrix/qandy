@@ -44,11 +44,20 @@ window.gfxServerPlug = function(code) {
   let column = 0; 
 
   while (column < code.length) {
-    var verb = code.substring(column, column + 2);
-    column += 2;
+    var verb = code.substring(column, column + 2); column += 2;
   
     if (verb === "Va") { gfxSelectAvatar(itemz); }
-  
+
+    if (verb === "Vr") {
+    	let noun = code.substring(column, column + 2); column += 2;
+      let zloc = code.substring(column, column + 2); column += 2;
+      let numericZ = parseInt(zloc, 10);
+      let targetObj = document.getElementById('obj_' + noun + '_' + numericZ);
+      // If it exists on the current map, remove it
+      console.log("### 63 ### "+noun+" "+numericZ);
+      if (targetObj) { targetObj.remove(); }
+    }  
+
     if (verb === "Vi") { 
       let nextDotDot = code.indexOf("..", column);
       if (nextDotDot < 0) {
