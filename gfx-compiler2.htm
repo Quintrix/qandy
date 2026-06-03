@@ -684,21 +684,20 @@
           ifnot=true;
           desc=" ";
         }
-        
+
         if (item === "Xc") { 
           desc = "<br>";
           punchcodeImagesContainer.appendChild(createImgBlock('i/Zd.png'));
           punchcodeImagesContainer.appendChild(createSpacer(" ", true));
         } else {
             // Add image of code to visual:
-            
             punchcodeImagesContainer.appendChild(createImgBlock('i/' + item + '.png'));
-
+            
             while (desc.startsWith("%%") || desc.startsWith("$$") || desc.startsWith("##")) {
                 
                 if (desc.startsWith("%%")) {
                     let nextcode = code.substring(column, column + 2); 
-                    column += 2;
+                    column += 2; 
                     desc = desc.substring(2) + " " + nextcode;
                     punchcodeImagesContainer.appendChild(createTextBlock(nextcode));
                 }
@@ -709,11 +708,9 @@
                     punchcodeImagesContainer.appendChild(createImgBlock('i/' + nextcode + '.png'));
                 }
                 
-                if (desc.startsWith("##")) {
-                    console.log("###712###"); 
+                if (desc.startsWith("##")) { 
                     let nextcode = code.substring(column, column + 2); column += 2;
                     desc = desc.substring(2) + " " + nextcode;
-                    console.log("###703### "+desc);
                     punchcodeImagesContainer.appendChild(createNumBlock(nextcode));
                 }
             }
@@ -759,7 +756,7 @@
 
     function createNumBlock(num) {
         const wrap = document.createElement('div');
-        wrap.className = 'punchcode-num';
+        wrap.className = 'punchcode-num'; 
         if (/^\d{2}$/.test(num)) {
           const div = document.createElement('div'); 
           div.className = 'punchcode-text';

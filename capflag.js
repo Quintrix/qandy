@@ -36,10 +36,10 @@ window.zdown = function(z) {
   console.log("Player clicked tile:", z);
 };
 
-window.gfxServerPlug = function(code) {
+window.serverdown = function(code) {
   // executes any punch code the server sends the client
   // will allow each game to customize all aspects of the game
-  console.log('server plug = '+code);
+  console.log('serverdown() code='+code);
     
   let column = 0; 
 
@@ -54,7 +54,6 @@ window.gfxServerPlug = function(code) {
       let numericZ = parseInt(zloc, 10);
       let targetObj = document.getElementById('obj_' + noun + '_' + numericZ);
       // If it exists on the current map, remove it
-      console.log("### 63 ### "+noun+" "+numericZ);
       if (targetObj) { targetObj.remove(); }
     }  
 
@@ -67,15 +66,82 @@ window.gfxServerPlug = function(code) {
         items = code.substring(column, nextDotDot);
         column = nextDotDot + 2;
       }
-      gfxInventory(items);
+      invdown(items);
     }  
   }
   
   return;
 }
 
-window.gfxInventory = function(items) {
-  pop(items);
+window.invdown = function(code) {
+  console.log("invdown() items="+items);
+  let column = 0; 
+  let outputItems = "";
+  let outputStats = ""
+  let statCounts = {}; // Dictionary to tally up multiples of the same stat
+
+  if (code) {
+    if (code.charAt(0) === '-') {
+    	// clicked a single item on the inventory display
+    	item=code.substring(1,3);
+    	items=code.substring(3);
+    	desc=gfxItemID(item);
+    	console.log("inventory down: item="+item+" items = "+items);
+    	let PUP = `<div align="center">`;
+    	PUP += `${desc}<p>`;
+      PUP += `<img src="i/${item}.png" height="32" width="32"><p>`;
+      PUP += `<a href="gfx:ID${playerItem}${playerZ}">Drop</a> &nbsp `;
+      PUP += `<a href="gfx:ID${playerItem}${playerZ}">Back</a>`;
+      PUP += `</div>`;
+      pop(PUP);
+    	return;
+    }
+    	
+    while (column < items.length) {
+      var verb = items.substring(column, column + 2); 
+      column += 2;
+      // Items less than 'Qa' are standard visual inventory items
+      if (verb < "Qa") {
+        // Add item image 'i/[verb].png' to outputItems
+        // Click calls gfxDisplayInv(item) and prevents default anchor jumping
+        outputItems += `<a href="gfx:IN-${verb}${items}">`;
+        outputItems += `<img src="i/${verb}.png" height="32" width="32" alt="${verb}"></a> &nbsp; `;
+      } else {
+        // Items 'Qa' and above are stats. Increment their count.
+        num = items.substring(column, column + 2);
+        if (num.charAt(0) >= "A" && num.charAt(0) <="Z") {
+          // if not a numeral, do NOT advnace read head and add 1 to stat count
+          statCounts[verb] = (statCounts[verb] || 0) + 1;
+        } else {
+        	  column += 2;
+        	  statCounts[verb] = (statCounts[verb] || 0) + parseInt(num, 10);
+         }
+      }
+    }
+  } else {
+  	 // request player's inventory from server
+  	 if (playerItem != "Za") {
+  	   gfxDo="ID"+playerItem+playerZ;
+  	   return;
+  	 }
+  }  	
+
+  // Build the outputStats string (e.g., "Wm 99")
+  for (let stat in statCounts) {
+  	 if (stat != "Za") {
+      outputStats += `${stat} ${statCounts[stat]}<br>`;
+    }
+  }
+
+  // Combine them, putting the stats at the beginning of the output
+  let output = outputStats;
+  if (outputStats !== "" && outputItems !== "") {
+    output += "<p>"; // Add some spacing between stats and items if both exist
+  }
+  output += outputItems;
+  
+  // Display using the engine's standard popup
+  pop(output);  
 }
 
 window.gfxSelectAvatar = function(a) {
@@ -127,39 +193,49 @@ window.gfxSelectAvatar = function(a) {
 }
 
 window.itemdown = function(code) {
- console.log('item down = '+code);
-  
   hpop();
-    
   var itemid = code.substring(0, 2);
-  var itemz = code.substring(2, 4); 
-  
+  var itemz = code.substring(2, 4);
+  console.log("itemdown() code="+code+" itemid="+itemid+" playerZ="+playerZ+" itemz="+itemz); 
   if (itemid === "VA") {
   	 gfxSelectAvatar(itemz);
   	 return;
   }
-  
   // items Sa-Tz are player items
-  console.log("itemid="+itemid+" playerZ="+playerZ+" itemz="+itemz);
-  if (itemid > 'Rz' && itemid < 'Ua' && playerItem === 'Za') {
-  	 // if player has not selected a player-item yet, they cannot 'move' to the object
-    if (playerItem === "Za") { playerZ=itemz; } 
+  if (itemid >= 'Sa' && itemid < 'Ua') {
+    playerdown(itemid, itemz);
+    return;
   }
-
   if (playerZ != itemz)  {
   	 // walk player to item then set gfxDo
   } else {
   	 console.log("gfxDo="+gfxDo);
     window.gfxDo += "ID" + itemid + itemz;
   }
-};
+}
+
+window.playerdown = function(itemid, itemz) {
+  console.log("playerdown() itemid="+itemid+" itemz="+itemz);
+  if (playerItem === "Za") {
+  	 // player has not seclected a player item
+  	 window.gfxDo += "ID" + itemid + itemz;
+  	 return;
+  }
+  if (itemid === playerItem) { 
+    // display inventory
+    invdown();
+  } else {
+    pop("profile "+itemid+itemz);	
+  }    	  
+  return;
+}
 
 window.objdown = function(code) {
-  console.log("objdown -> code="+code);
   hpop();
   var itemid = code.substring(0, 2); 
   var itemz = code.substring(2, 4); 
-
+  console.log("objdown -> code="+code);
+  
   if (itemid < 'Sa' || itemid > "Tz") {
   	 gfxDo="OD"+itemid+itemz;
   } else {

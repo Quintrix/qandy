@@ -36,7 +36,7 @@
                 PI$$##    — Player has been assigned item $$ at ## z-location
                 VA        — Server request for player avatar (triggers select avatar)
                 SP%%..    — Server Plugs for gfx.js engine to pass on to client, these
-                            let UNIVAC send plugs to the client.js (not the  gfx.js engine)  
+                            let UNIVAC send plugs to the client.js (not the gfx.js engine)  
                 
      ——————————————————————————————————————————————————————————————————————————————————————————
 

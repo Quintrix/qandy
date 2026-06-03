@@ -12,14 +12,14 @@ var _registryUrl = 'https://qandy.vercel.app/api/servers';
 var mapx=7;
 var mapy=11;
 
+window.playerItem="Za";  // item-id of object player has claimed (nothing)
+window.playerZ=-1;       // z-locatin of playerItem
+window.playerAvatar = "";   // players avatar (ie "B0D0")
 window.map="F2";         // map player-item is on
 window.mapTiles=[];      // tiles on player's current map
 window.mapExits=[];      // valid exits for map sectors
 window.mapObjs=[];       // objs on map sectors
 window.mapItems;         // items on player's current map
-window.playerItem="Za";  // item-id of object player has claimed (nothing)
-window.playerZ=-1;       // z-locatin of playerItem
-window.playerAvatar = "";   // players avatar (ie "B0D0")
 
 var gfxInterval = null;  // The 1-second loop
 
@@ -283,7 +283,7 @@ window.gfxSelectAvatar = function(a) {
 async function gfxTick() {
   // send plugs to qandyland.js plugboard() for UNIVAC processing
   if (window.gfxTimeout) clearTimeout(window.gfxTimeout);
-  try {
+  // try {
   	if (gfxDo === "") { window.gfxDo = "RF"; }
   	plugs=gfxDo;
   	gfxDo=""; // reset for next tick
@@ -294,9 +294,9 @@ async function gfxTick() {
       window.gfxDo = "Ql"; 
     }
 
-    console.log("plugs="+plugs);
+    // console.log("plugs="+plugs);
     var gfxPong = await gfxPing(plugs);
-    console.log("gfxPong="+gfxPong);
+    // console.log("gfxPong="+gfxPong);
 
     // Ensure we received a valid string before processing
     if (typeof gfxPong === 'string') {
@@ -311,8 +311,7 @@ async function gfxTick() {
           } else {
             noun = gfxPong.substring(ptr); ptr = gfxPong.length;
           }
-          console.log("###131###"+noun);
-          if (typeof window.gfxServerPlug === 'function') { gfxServerPlug(noun); }
+          if (typeof window.serverdown === 'function') { serverdown(noun); }
         }
 
         if (verb === "VA") {
@@ -345,9 +344,9 @@ async function gfxTick() {
         }
       }
     }
-  } catch (e) { 
-    console.error('Server tick error:', e); 
-  }
+  // } catch (e) { 
+  //   console.error('Server tick error:', e); 
+  // }
 
   window.gfxTimeout = setTimeout(gfxTick, 1000);
   if (!window.gfxVisualInterval) {
@@ -713,12 +712,18 @@ window.gfxGameState = async function(drive) {
 }
 
 function gfxClick(bytecode) {
+  console.log("gfxClick() bytecode="+bytecode);
   var type = bytecode.substring(0, 2); // ZD, ID, OD, VA
   var data = bytecode.substring(2);    // Remainder of the code
+  console.log("gfxClick() data="+data);
   
   switch (type) {
     case "ZD": // Z-Down
       if (typeof window.zdown === 'function') window.zdown(parseInt(data, 10));
+      break;
+    
+    case "IN": // Inventory-Down (Dynamic)
+      if (typeof window.invdown === 'function') window.invdown(data);
       break;
     
     case "ID": // Item-Down (Dynamic)

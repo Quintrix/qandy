@@ -141,13 +141,19 @@ function UNIVAC(driveName, itemfile, objfile) {
   
   // ── 2. Load the object's punch code ──────────────────────────────────────
 
-  var objLoad = _deps.fileLoad(driveName, '/', objfile, 'UNIVAC');
-  if (!objLoad.success || !objLoad.content) {
-    console.error('UNIVAC: cannot load object file: ' + driveName + objfile);
-    return;
+  var objLoad;
+  if (objfile && objfile.substring(0, 4) === "RAM:") {
+     // Use substring(4) to grab everything after "RAM:"
+     objLoad = { success: true, content: objfile.substring(4) };
+  } else {
+    objLoad = _deps.fileLoad(driveName, '/', objfile, 'UNIVAC');
+    if (!objLoad.success || !objLoad.content) {
+      console.error('UNIVAC: cannot load object file: ' + driveName + objfile);
+      return;
+    }
   }
   console.log("object punch code = " + objLoad.content);
-
+  
   var tape   = objLoad.content; // e.g. 'XiLaVtA1ZeXcXiLbVtH8ZeXc'
   var column = 0;               // read-head position on the tape
   var output = "";              // output string  
@@ -162,13 +168,12 @@ function UNIVAC(driveName, itemfile, objfile) {
     column += 2;
     
     switch (word) {
-      case 'Xn': ifnot = true; break;
-      case 'Xc': ifnot = false; break;
+      case 'Xn': ifnot = true; break;   // not flag
+      case 'Xc': ifnot = false; break;  // clear not flag
  
-      case 'Vm': {
+      case 'Vm': { // make dynmic item on map sector 
         var noun = tape.slice(column, column + 2); column += 2;
         var zToken = tape.slice(column, column + 2); column += 2;
-        
         var resolvedZ = state.zStr; // Default to player's z-location
         if (/^\d{2}$/.test(zToken)) {
         	 console.log("verb make item -> "+noun+zToken);
@@ -189,11 +194,7 @@ function UNIVAC(driveName, itemfile, objfile) {
               }
             }
           }
-          // If the target item didn't exist in the sector, 'found' remains false
-          // and it safely falls back to the player's z-location.
         }
-
-        // ── APPLY ACTION ─────────────────────────────────────────────────────
         var targetPath = 'w/' + state.sector + '/' + noun + resolvedZ;
         console.log("make item "+targetPath);
         if (ifnot) {
@@ -202,16 +203,18 @@ function UNIVAC(driveName, itemfile, objfile) {
           console.log("UNIVAC() Vm: removed " + targetPath);
         } else {
           // Vm: Make item
-          _deps.fileSave(driveName, '/', targetPath, '', 'UNIVAC', 'UNIVAC');
+          let ts = 'X' + _deps.futureTimestamp(1); 
+          _deps.fileSave(driveName, '/', targetPath, '', 'UNIVAC', 'UNIVAC', ts);
           console.log("UNIVAC() Vm: created " + targetPath);
         }
         break;
       }
 
-      case 'Xr': {
+      case 'Xr': { // remove/add item from item's inventory
         var noun = tape.slice(column, column + 2); column += 2;
         // Delineate Inventory (Aa-Pz) vs Memory (Qa-Zz)
-        var isInventory = (noun >= 'Aa' && noun <= 'Pz');
+        // Delineate Inventory (Aa-Pz) vs Memory (Qa-Zz)
+        var isInventory = (noun >= 'Aa' && noun < 'Qa');
         var isMemory    = (noun >= 'Qa' && noun <= 'Zz');
         if (ifnot) {
           // ── ADD ITEM ───────────────────────────────────────────────────────
@@ -264,22 +267,19 @@ function UNIVAC(driveName, itemfile, objfile) {
         break;
       }
       
-      case 'Vr': {
+      case 'Vr': { // remove object from client's map sector
         var noun = tape.slice(column, column + 2); column += 2;
         var zloc = tape.slice(column, column + 2); column += 2;
         var zNum = (zloc < 10 ? '0' : '') + zloc;
         output += "SPVr" + noun + zNum + "..";
       }
 
-      
-      case 'Xi': {
+      case 'Xi': { // in item has $$ in inventory 
         var noun = tape.slice(column, column + 2); column += 2;
         console.log("UNIVAC() Xi" + noun);
-        
         // Use the pre-loaded player item file content (their inventory)
         var hasItem = state.content.indexOf(noun) > -1;
         var conditionMet = ifnot ? !hasItem : hasItem;
-        
         if (!conditionMet) {
           // Fast-forward tape to the next 'Xc' that closes this gate
           while (column < tape.length) {
@@ -289,8 +289,113 @@ function UNIVAC(driveName, itemfile, objfile) {
         }
         break;
       }
+      
+      // ── MOVEMENT COMMANDS ─────────────────────────────────────────────────
+      case 'Vn':
+      case 'Vs':
+      case 'Ve':
+      case 'Vw': {
+        var GFX_COLS = 8;
+        var GFX_ROWS = 12;
+        var GFX_TOTAL_TILES = GFX_COLS * GFX_ROWS;
 
-      case 'Vt': {
+        var currentZ   = state.z;
+        var currentMap = state.sector;
+        var newAvatar  = state.avatar;
+
+        var col = currentZ % GFX_COLS;
+        var row = Math.floor(currentZ / GFX_COLS);
+        var targetZ     = currentZ;
+        var isEdge      = false;
+        var dirChar     = '';
+        var moveBlocked = false;
+
+        // 1. Calculate step and check for edge/"airlock" conditions
+        if (word === 'Vn') {
+          dirChar = 'N';
+          if (row === 0) {
+            moveBlocked = true;
+          } else {
+            targetZ = currentZ - GFX_COLS;
+            if (Math.floor(targetZ / GFX_COLS) === 0) { isEdge = true; }
+          }
+        } else if (word === 'Vs') {
+          dirChar = 'S';
+          if (row === GFX_ROWS - 1) {
+            moveBlocked = true;
+          } else {
+            targetZ = currentZ + GFX_COLS;
+            if (Math.floor(targetZ / GFX_COLS) === GFX_ROWS - 1) { isEdge = true; }
+          }
+        } else if (word === 'Ve') {
+          dirChar = 'E';
+          if (col === GFX_COLS - 1) {
+            moveBlocked = true;
+          } else {
+            targetZ = currentZ + 1;
+            if (targetZ % GFX_COLS === GFX_COLS - 1) { isEdge = true; }
+          }
+        } else if (word === 'Vw') {
+          dirChar = 'W';
+          if (col === 0) {
+            moveBlocked = true;
+          } else {
+            targetZ = currentZ - 1;
+            if (targetZ % GFX_COLS === 0) { isEdge = true; }
+          }
+        }
+
+        if (moveBlocked) { break; } // Out-of-bounds — silently drop this move
+
+        // 2. Map edge-scrolling logic
+        var finalZ   = targetZ;
+        var finalMap = currentMap;
+
+        if (isEdge) {
+          // calculateTargetSector derives the neighbouring map code from the current
+          // map code and the direction being travelled.
+          var targetSector = null;
+          if (_deps && typeof _deps.calculateTargetSector === 'function') {
+            targetSector = _deps.calculateTargetSector(currentMap, dirChar);
+          } else if (typeof calculateTargetSector === 'function') {
+            targetSector = calculateTargetSector(currentMap, dirChar);
+          }
+
+          // Only scroll if the neighbour map is listed as a valid exit
+          if (targetSector && targetSector !== '  ' && targetSector !== '00'
+              && _isValidExit(driveName, currentMap, targetSector)) {
+
+            // Arrive on the opposite edge of the new map
+            if      (word === 'Vn') finalZ = targetZ + GFX_TOTAL_TILES - GFX_COLS;
+            else if (word === 'Vs') finalZ = targetZ - GFX_TOTAL_TILES + GFX_COLS;
+            else if (word === 'Ve') finalZ = targetZ - GFX_COLS + 1;
+            else if (word === 'Vw') finalZ = targetZ + GFX_COLS - 1;
+
+            finalMap = targetSector;
+          } else {
+            break; // Edge leads nowhere — blocked, drop this move
+          }
+        }
+
+        // 3. Flip avatar sprite for east/west movement
+        if (word === 'Ve' || word === 'Vw') {
+          if (_deps && typeof _deps.flipAvatarDirection === 'function') {
+            newAvatar = _deps.flipAvatarDirection(newAvatar, word);
+          } else if (typeof flipAvatarDirection === 'function') {
+            newAvatar = flipAvatarDirection(newAvatar, word);
+          }
+        }
+
+        // 4. Update memory state (Step 4 of UNIVAC handles the actual file saves/moves)
+        state.sector = finalMap;
+        state.z      = finalZ;
+        state.zStr   = (finalZ < 10 ? '0' : '') + finalZ;
+        state.avatar = newAvatar;
+
+        break;
+      }
+
+      case 'Vt': { // teleport item to new map new z
         var noun = tape.slice(column, column + 2); column += 2;
         if (!_isValidExit(driveName, state.sector, noun)) { break; }
         var targetSector = noun; var targetZStr = state.zStr;
@@ -313,7 +418,6 @@ function UNIVAC(driveName, itemfile, objfile) {
             }
           }
         }
-
         // ── FIX: commit the new location to state ────────────────────────────
         state.sector = targetSector;
         state.zStr   = targetZStr;
@@ -360,6 +464,36 @@ function UNIVAC(driveName, itemfile, objfile) {
     output: output
   };
 }
+
+
+function calculateTargetSector(map, dir) {
+  if (!map || map.length !== 2) return null;
+  let r = map.charCodeAt(0);
+  let c = map.charCodeAt(1);
+  if      (dir === 'N') r -= 1;
+  else if (dir === 'S') r += 1;
+  else if (dir === 'E') c += 1;
+  else if (dir === 'W') c -= 1;
+  return String.fromCharCode(r) + String.fromCharCode(c);
+}
+
+function flipAvatarDirection(avatarStr, cmd) {
+  if (!avatarStr || (cmd !== 'Ve' && cmd !== 'Vw')) return avatarStr;
+  if (cmd === 'Ve') {
+    // Left → Right: A→B, C→D, E→F, G→H, I→J, K→L, M→N, O→P
+    return avatarStr.replace(/[ACEGIKMO]/g, function(c) {
+      return String.fromCharCode(c.charCodeAt(0) + 1);
+    });
+  } else {
+    // Right → Left: B→A, D→C, F→E, H→G, J→I, L→K, N→M, P→O
+    return avatarStr.replace(/[BDFHJLNP]/g, function(c) {
+      return String.fromCharCode(c.charCodeAt(0) - 1);
+    });
+  }
+}
+
+
+
 // ── Exports ───────────────────────────────────────────────────────────────────
 
 UNIVAC.inject = inject;

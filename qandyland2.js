@@ -27,8 +27,7 @@ const UNIVAC = require('./qandyland-univac.js');
 UNIVAC.inject({ fileLoad,
                 fileSave,
                 fileDelete,
-                fileList,
-                futureTimestamp
+                fileList
               });
 
 var http   = require('http');
@@ -292,21 +291,6 @@ function timestamp() {
   );
 }
 
-// Generates a 14-character timestamp 'minutes' into the future
-function futureTimestamp(minutes) {
-  var d = new Date();
-  d.setMinutes(d.getMinutes() + minutes);
-  var pad = function (n, w) { return String(n).padStart(w || 2, '0'); };
-  return (
-    String(d.getFullYear()) +
-    pad(d.getMonth() + 1) +
-    pad(d.getDate()) +
-    pad(d.getHours()) +
-    pad(d.getMinutes()) +
-    pad(d.getSeconds())
-  );
-}
-
 function utf8len(s) {
   return Buffer.byteLength(String(s == null ? '' : s), 'utf8');
 }
@@ -455,8 +439,7 @@ function _findEntry(manifest, userInput) {
   return null;
 }
 
-
-function fileSave(driveName, cwd, name, content, session, owner, customTs) {
+function fileSave(driveName, cwd, name, content, session, owner) {
   var drive = drives[driveName];
   if (!drive) return { success: false, error: 'drive not mounted' };
 
@@ -497,7 +480,7 @@ function fileSave(driveName, cwd, name, content, session, owner, customTs) {
     return { success: false, error: 'drive storage limit exceeded (max ' + formatBytes(MAX_TOTAL_DRIVE_SIZE) + ')' };
   }
 
-  var ts = customTs || timestamp();
+  var ts = timestamp();
   _storageSet(drive.storage, canonical, str);
 
   // Update manifest: remove old entry by canonical name, add updated entry
@@ -848,14 +831,9 @@ function dirList(driveName, cwd, pattern, switches, session) {
 function fileList(driveName, cwd, pattern, session) {
   var drive = drives[driveName];
   if (!drive) return { success: false, error: 'drive not mounted' };
-  
   var dir   = (cwd || '/').replace(/^\//, '').replace(/\/$/, '');
   var names = [];
   var manifest = _readManifest(driveName);
-  
-  // Grab the current time for lazy expiration checks
-  var now = timestamp(); 
-
   var entries = manifest.filter(function (e) {
     if (!e || !e.name) return false;
     if (e.name === MANIFEST_KEY) return false;
@@ -864,27 +842,11 @@ function fileList(driveName, cwd, pattern, session) {
     var fileDir = slash >= 0 ? e.name.substring(0, slash) : '';
     return fileDir === dir;
   });
-
   for (var i = 0; i < entries.length; i++) {
-    var e = entries[i];
-
-    // ── LAZY GARBAGE COLLECTION ──
-    if (e.timestamp && e.timestamp.charAt(0) === 'X') {
-      var expTime = e.timestamp.substring(1);
-      if (now >= expTime) {
-        // Delete it from the server immediately
-        fileDelete(driveName, '/', e.name, 'system');
-        console.log('[GC-Lazy] Expired item removed on read: ' + e.name);
-        // Skip adding it to the return array
-        continue;
-      }
-    }
-
-    var nb = baseName(e.name);
+    var nb = baseName(entries[i].name);
     if (pattern && !matchPattern(nb, pattern)) continue;
     names.push(nb);
   }
-  
   return { success: true, listing: names.join(' ') };
 }
 
@@ -1084,16 +1046,13 @@ function sanitizeForTerminal(content) {
 
 // ── Server console formatting helpers ─────────────────────────────────────────
 
-
 function _formatTimestampShort(ts) {
-  if (ts && ts.charAt(0) === 'X') ts = ts.substring(1); // <-- ADD THIS
   if (!ts || ts.length < 14) return (ts || '(unknown)');
   return ts.slice(0, 4) + '-' + ts.slice(4, 6) + '-' + ts.slice(6, 8) +
          ' ' + ts.slice(8, 10) + ':' + ts.slice(10, 12) + ':' + ts.slice(12, 14);
 }
 
 function _formatTimestampHuman(ts) {
-  if (ts && ts.charAt(0) === 'X') ts = ts.substring(1); 
   if (!ts || ts.length < 14) return (ts || '(unknown)');
   var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
                 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -1124,20 +1083,8 @@ function isValidDriveName(drive) {
   return !!(drive && /^[A-Za-z0-9_.-]+$/.test(drive) && drive.length <= 64);
 }
 
+
 function plugboard(req, stacker, plugs, drive, session) {
-  function runtape(code) {
-    if (code) {
-      let uResult = UNIVAC(drive, player.fullPath, "RAM:"+tape);
-      if (uResult) {
-        //Apply UNIVAC's modifications to our live player session
-        player.map = uResult.sector;
-        player.z = uResult.z;
-        player.avatar = uResult.avatar;
-        player.fullPath = uResult.fullPath;
-        output += uResult.output;
-      }
-    }
-  }
 
   var player = playerIndex.get(session);
   
@@ -1159,10 +1106,10 @@ function plugboard(req, stacker, plugs, drive, session) {
     if (!player.avatar) player.avatar = "";
   }
 
-  var refresh = true;
   let column = 0; // which column of the 'plugs' the read-head is on
   let output = ""; // plug code that will be returned to the client 
-  let tape="";  
+  var refresh = true;
+  
   while (column < plugs.length) {
 
     let code = plugs.slice(column, column + 2);
@@ -1174,19 +1121,147 @@ function plugboard(req, stacker, plugs, drive, session) {
       case 'Ve':
       case 'Vw':
         if (!player.item || player.item === "") { break; }
-        tape += code;
+
+        {
+          const GFX_COLS = 8;
+          const GFX_ROWS = 12;
+          const GFX_TOTAL_TILES = GFX_COLS * GFX_ROWS;
+
+          // Process exactly ONE movement command per outer loop iteration.
+          // 'code' already holds the current Vn/Vs/Ve/Vw — do not consume more here.
+          let chunk = code;
+
+          let currentZ   = parseInt(player.z, 10) || 0;
+          let currentMap = player.map;
+          let newAvatar  = player.avatar;
+
+          let col = currentZ % GFX_COLS;
+          let row = Math.floor(currentZ / GFX_COLS);
+          let targetZ    = currentZ;
+          let isEdge     = false;
+          let dirChar    = '';
+          let moveBlocked = false;
+
+          // 1. Calculate step and check for edge/"airlock" conditions
+          if (chunk === 'Vn') {
+            dirChar = 'N';
+            if (row === 0) {
+              moveBlocked = true;
+            } else {
+              targetZ = currentZ - GFX_COLS;
+              if (Math.floor(targetZ / GFX_COLS) === 0) { isEdge = true; }
+            }
+          } else if (chunk === 'Vs') {
+            dirChar = 'S';
+            if (row === GFX_ROWS - 1) {
+              moveBlocked = true;
+            } else {
+              targetZ = currentZ + GFX_COLS;
+              if (Math.floor(targetZ / GFX_COLS) === GFX_ROWS - 1) { isEdge = true; }
+            }
+          } else if (chunk === 'Ve') {
+            dirChar = 'E';
+            if (col === GFX_COLS - 1) {
+              moveBlocked = true;
+            } else {
+              targetZ = currentZ + 1;
+              if (targetZ % GFX_COLS === GFX_COLS - 1) { isEdge = true; }
+            }
+          } else if (chunk === 'Vw') {
+            dirChar = 'W';
+            if (col === 0) {
+              moveBlocked = true;
+            } else {
+              targetZ = currentZ - 1;
+              if (targetZ % GFX_COLS === 0) { isEdge = true; }
+            }
+          }
+
+          if (moveBlocked) { break; } // Out-of-bounds — silently drop this move
+
+          // 2. Map edge-scrolling logic
+          let finalZ   = targetZ;
+          let finalMap = currentMap;
+          let scrolled = false;
+
+          if (isEdge) {
+            // Load the exits file for the current map
+            let eLoad = fileLoad(drive, '/', 'w/' + currentMap + '/e', session);
+            let exits = (eLoad.success && eLoad.content) ? eLoad.content : '';
+
+            // calculateTargetSector derives the neighbouring map code from the current
+            // map code and the direction being travelled.
+            let targetSector = (typeof calculateTargetSector === 'function')
+                                ? calculateTargetSector(currentMap, dirChar)
+                                : null;
+
+            // Only scroll if the neighbour map is listed as a valid exit
+            if (targetSector && targetSector !== '  ' && targetSector !== '00'
+                && exits.indexOf(targetSector) > -1) {
+
+              // Arrive on the opposite edge of the new map
+              if      (chunk === 'Vn') finalZ = targetZ + GFX_TOTAL_TILES - GFX_COLS;
+              else if (chunk === 'Vs') finalZ = targetZ - GFX_TOTAL_TILES + GFX_COLS;
+              else if (chunk === 'Ve') finalZ = targetZ - GFX_COLS + 1;
+              else if (chunk === 'Vw') finalZ = targetZ + GFX_COLS - 1;
+
+              finalMap = targetSector;
+              scrolled = true;
+            } else {
+              break; // Edge leads nowhere — blocked, drop this move
+            }
+          }
+
+          // 3. Flip avatar sprite for east/west movement
+          if ((chunk === 'Ve' || chunk === 'Vw') && typeof flipAvatarDirection === 'function') {
+            newAvatar = flipAvatarDirection(newAvatar, chunk);
+          }
+
+          let avatarChanged = (newAvatar !== player.avatar);
+
+          let oldZStr = String(player.z).padStart(2, '0');
+          let newZStr = String(finalZ).padStart(2, '0');
+
+          let oldPath = 'w/' + player.map + '/' + player.item + oldZStr + player.avatar;
+          let newPath = 'w/' + finalMap  + '/' + player.item + newZStr + newAvatar;
+
+          // 4. Commit: load old file → save to new path → delete old path
+          let mvFileLoad    = fileLoad(drive, '/', oldPath, session);
+          let mvFileContent = mvFileLoad.success ? mvFileLoad.content : '';
+
+          let saveRes = fileSave(drive, '/', newPath, mvFileContent, session, 'Move');
+
+          if (saveRes.success) {
+            fileDelete(drive, '/', oldPath, session);
+
+            player.z        = finalZ;
+            player.map      = finalMap;
+            player.avatar   = newAvatar;
+            player.fullPath = newPath;
+
+            // Update 'p' registry if map changed or avatar flipped
+            if (scrolled || avatarChanged) {
+              let pLoad = fileLoad(drive, '/', 'p', session);
+              if (pLoad.success && pLoad.content) {
+                let escId    = player.item.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                let pUpdated = pLoad.content.replace(
+                  new RegExp('^(' + escId + ')=.*$', 'm'),
+                  '$1=' + finalMap + newZStr + newAvatar
+                );
+                fileSave(drive, '/', 'p', pUpdated, session, 'Move');
+              }
+            }
+          }
+        }
         break;
         
       case 'OD':
-        if (tape) { runtape(tape); tape=""; }
-        
         let objfile = null; 
         let objid = plugs.slice(column, column + 2);
         let objz  = plugs.slice(column + 2, column + 4);
         column += 4;
         
-        let pZStr = (player.z < 10 ? '0' : '') + player.z;
-        let odSearchPattern = 'w/' + player.map + '/' + objid + pZStr + '??';
+        let odSearchPattern = 'w/' + player.map + '/' + objid + player.z + '??';
 
         // Let the RegExp engine do the heavy lifting
         let odFilesResponse = fileSearch(drive, odSearchPattern);
@@ -1228,7 +1303,6 @@ function plugboard(req, stacker, plugs, drive, session) {
         break;
                 
       case 'ID':
-        if (tape) { runtape(tape); tape=""; }
         let itemId = plugs.slice(column, column + 2);
         let itemZ  = plugs.slice(column + 2, column + 4);
         column += 4;
@@ -1314,7 +1388,6 @@ function plugboard(req, stacker, plugs, drive, session) {
         break;
 
       case 'VA':
-        if (tape) { runtape(tape); tape=""; }
         //
         // 'Va[new avatar string]..'
 
@@ -1370,9 +1443,6 @@ function plugboard(req, stacker, plugs, drive, session) {
     }
   }
 
-  // Ensure any dangling tape commands (like Vn, Ve, etc.) are executed
-  if (tape) { runtape(tape); tape=""; }
-
   if (session) {
     playerIndex.set(session, player);
   }
@@ -1391,6 +1461,36 @@ function plugboard(req, stacker, plugs, drive, session) {
     output = output + "RF" + player.map + z + items.join(',');
   }
   return respondRetro(stacker, output, session);
+}
+
+function calculateTargetSector(map, dir) {
+  if (!map || map.length !== 2) return null;
+  let r = map.charCodeAt(0);
+  let c = map.charCodeAt(1);
+  if      (dir === 'N') r -= 1;
+  else if (dir === 'S') r += 1;
+  else if (dir === 'E') c += 1;
+  else if (dir === 'W') c -= 1;
+  return String.fromCharCode(r) + String.fromCharCode(c);
+}
+
+function playerCard(driveName, session, ip) {
+  
+}
+
+function flipAvatarDirection(avatarStr, cmd) {
+  if (!avatarStr || (cmd !== 'Qe' && cmd !== 'Qw')) return avatarStr;
+  if (cmd === 'Qe') {
+    // Left → Right: A→B, C→D, E→F, G→H, I→J, K→L, M→N, O→P
+    return avatarStr.replace(/[ACEGIKMO]/g, function(c) {
+      return String.fromCharCode(c.charCodeAt(0) + 1);
+    });
+  } else {
+    // Right → Left: B→A, D→C, F→E, H→G, J→I, L→K, N→M, P→O
+    return avatarStr.replace(/[BDFHJLNP]/g, function(c) {
+      return String.fromCharCode(c.charCodeAt(0) - 1);
+    });
+  }
 }
 
 // ── HTTP server ───────────────────────────────────────────────────────────────
@@ -1434,7 +1534,6 @@ var server = http.createServer(function (req, res) {
     plugboard(req, res, command, drive, session);
     
   }).catch(err => {
-    console.error("HTTP 500 ERROR:", err.stack || err); 
     res.writeHead(500);
     res.end("Server Error");
   });
