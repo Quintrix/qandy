@@ -9,69 +9,163 @@ window.gfxItemID = function(i) {
         "Af": "Row Boat",
 
         // Tools/Utilities
-        "Bd": "Bucket",
+        "Ba": "Pick Axe",
+        "Bb": "Wood Axe",
+        "Bc": "Net",
+        "Bd": "Fishing Pole",
         "Be": "Lantern",
-        "Cg": "Log",
-        "Ek": "Bucket Tar",
-        "El": "Bucket Water",
+        "Bf": "Wand",
+
+        // Game Items
+        "Ca": "Bucket",
+        "Cb": "Bucket of Water",
+        "Cc": "Bucket of Milk",
+        "Cd": "Bucket of Mud",
+        "Ce": "Log",
+        "Cf": "Blue Key",
+        "Cg": "Red Key",
+        "Ch": "Crystal Key",
+        "Ci": "Treasure Chest",
+ 
+        // Qujest Items
+
+        // Stacked Items
+        "Ea": "Match",
+        "Eb": "Matches",
+        "Ec": "Matches",
+        "Ed": "Feathers",
+        "Ee": "Arrowheads",
+        "Ef": "Arrows",
+        "Eg": "Potion x1",
+        "Eh": "Potion x2",
+        "Ei": "Potion x3",
+        "Ej": "Potion x1",
+        "Ek": "Potion x2",
+        "El": "Potion x3",
 
         // Food
-        "Fa": "Tomato",
-        "Fb": "Tomatos",
-        "Fc": "Tomatoes",
-        "Fd": "Tomatoes",
-        "Fe": "Tomato",
+        "Fa": "Cheese",
+        "Fb": "Egg",
+        "Fc": "Dragon Egg",
+        "Fd": "Wheat",
+        "Fe": "Flour",
+        "Ff": "Dough",
+        "Fg": "Raw Pizza",
 
-        // Food
-        "Jc": "Qandy",
-
-        // Plants
+        // Plant Foods
         "Ka": "Plant",
+        "Gb": "Tomato",
+        "Gc": "Tomatos",
+        "Gd": "Tamatos",
+        "Ge": "Tomatoes",
+        "Gf": "Letcue",
 
         // Food
-        "Kf": "Bread",
+        "Hf": "Bread",
+        "Hf": "Slice Pizza",
+        "Hf": "Half Pizza",
+        "Hf": "Pizza",
+        "Hf": "Pizza",
+        "Hf": "Half Sandwich",
+        "Hf": "Sandwich",
+
+        // Raw Fish
+        "Ia": "Raw Crab",
+        "Ic": "Raw Carp",
+        "Ie": "Raw Catfish",
+        "Ig": "Raw Flounder",
+        "Ii": "Raw Lobster",
+        "Ik": "Raw Shark",
+        "Im": "Raw Crawler",
+        "In": "Raw Crawler",
+        "Ip": "Raw Frog Legs",
+        "Iq": "Raw Ham",
+
+        // Cooked Fish
+        "Ja": "Crab",
+        "Jc": "Carp",
+        "Je": "Catfish",
+        "Jg": "Flounder",
+        "Ji": "Lobster",
+        "Jk": "Shark",
+        "Jm": "Crawler",
+        "Jn": "Crawler",
+        "Jp": "Legs",
+        "Jq": "Ham",
+
+        // Mining Items
+        "Ka": "Copper Ore",
+        "Kc": "Tin Ore",
+        "Kd": "Emerald",
+        "Ke": "Iron Ore",
+        "Kg": "Coal",
+        "Kh": "Ruby",
+        "Ki": "Lava Ore",
+        "Kk": "Diamond",
 
         // Hats
-        "La": "Black Hat",
-        "Lb": "Blue Hat",
-        "Lc": "Pink Hat",
+        "La": "White Hat",
+        "Lb": "Black Hat",
+        "Lc": "Blue Hat",
+        "Ld": "Red Hat",
         "Ld": "Red Bandana",
         "Le": "Blue Bandana",
         "Lf": "Mask",
+        "Lk": "Cylon Helm",
+        "Ll": "Cylon Helm",
 
-        // Helms
-        "Ma": "Cylon Helm",
-        "Mb": "Cylon Helm",
+        // Swords
+        "Ma": "Sword",
+
+        // Shields
+        "Mk": "Shield",
 
         // Enemies
-        "Mc": "Spider",
-        "Md": "Mosquito",
-        "Me": "Scorpion",
-        "Mf": "Fire Ant",
+        "Pa": "Spider",
+        "Pb": "Mosquito",
+        "Pc": "Scorpion",
+        "Pd": "Fire Ant",
 
         // Player Items
-        "Sa": "Player Sa",
-        "Sb": "Player Sb",
-        "Sc": "Player Sc",
-        "Sd": "Player Sd",
-        "Se": "Player Se",
-        "Sf": "Player Sf",
-        "Sg": "Player Sg",
-        "Sh": "Player Sh",
-        "Ta": "Player Ta",
-        "Tb": "Player Tb",
-        "Tc": "Player Tc",
-        "Td": "Player Td",
-        "Te": "Player Te",
-        "Tf": "Player Tf",
-        "Tg": "Player Tg",
-        "Th": "Player Th",
+        "Sa": "White Team",
+        "Sb": "Black Team",
+        "Sc": "Pink Team",
+        "Sd": "Blue Team",
+        "Se": "White Flag",
+        "Sf": "Black Flag",
+        "Sg": "Pink Flag",
+        "Sh": "Blue Flag",
+        
+        // Static Objects/Buildings, can be larger than 32x32 px
+        "Ta": "City",
+        "Tb": "Cart",
+        "Tc": "Fernace",
+        "Td": "Magic Guild",
+        "Te": "Building",
+        "Tf": "Building",
+        "Tg": "Building",
+        "Th": "Building",
+        "Ti": "Hut",
+        "Tj": "Flag Pole",
+        "Tk": "Building",
+        "Tl": "Pyramid",
+        "Tm": "Ruins",
+        "Tn": "Fountain",
+        "To": "Bunker",
+        "Tp": "Dead Tree",
+        "Ua": "Stove",
+        "Ub": "Tavern",
+        "Uc": "Windmill",
+        "Ud": "Tower",
+        "Ue": "Temple",
+        "Uf": "Throne",
+        "Ug": "Grand Tree",
 
         // UI/Verb Commands (These definitely seem like a different category than physical items)
-        "Va": "Avatar",
+        "Va": "$$--[get unique player it/set avatar]",
         "Vb": "Vb",
         "Vc": "Vc",
-        "Vd": "$$Drop ",
+        "Vd": "$$[drop item/get item] ",
         "Ve": "East",
         "Vf": "Vf",
         "Vg": "Vg",
@@ -180,18 +274,6 @@ window.gfxItemID = function(i) {
         "X9": "X9",
         "X0": "X0",
 
-        // Static Objects/Buildings
-        "Ya": "City",
-        "Yb": "Cart",
-        "Yc": "Fernence",
-        "Yd": "Magic Guild",
-        "Ye": "Building",
-        "Yf": "Cabin",
-        "Yg": "Pipe",
-        "Yh": "Pipe",
-        "Yi": "Hut",
-        "Yj": "Flag Pole",
-
         // Game States/Actions/Environmental 
         "Za": "Nothing",
         "Zb": "NO",
@@ -208,6 +290,11 @@ window.gfxItemID = function(i) {
         "Zm": "City Gates",
         "Zn": "Green",
         "Zo": "Red",
+        "Zo": "Terrain",
+        "Zo": "Pipe",
+        "Zo": "Pipe",
+        "Zo": "Table"
+
     };
 
     return itemMap[i] || "Unknown"; // Use bracket notation to access properties

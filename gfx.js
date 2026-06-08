@@ -12,14 +12,15 @@ var _registryUrl = 'https://qandy.vercel.app/api/servers';
 var mapx=7;
 var mapy=11;
 
-window.playerItem="Za";  // item-id of object player has claimed (nothing)
-window.playerZ=-1;       // z-locatin of playerItem
-window.playerAvatar = "";   // players avatar (ie "B0D0")
-window.map="F2";         // map player-item is on
-window.mapTiles=[];      // tiles on player's current map
-window.mapExits=[];      // valid exits for map sectors
-window.mapObjs=[];       // objs on map sectors
-window.mapItems;         // items on player's current map
+window.playerItem="Za";   // item-id of team item player has claimed (Sa Sb Sc Sd or Za for 'nothing')
+window.playerZ=-1;        // z-locatin of playerItem
+window.playerAvatar = ""; // players avatar (ie "B0D0")
+window.playerId = "";     // unique 4 character player id 
+window.map="F2";          // map player-item is on
+window.mapTiles=[];       // tiles on player's current map
+window.mapExits=[];       // valid exits for map sectors
+window.mapObjs=[];        // objs on map sectors
+window.mapItems;          // items on player's current map
 
 var gfxInterval = null;  // The 1-second loop
 
@@ -102,12 +103,14 @@ window.gfxConnect = async function(serverIndex) {
   }
   
   var res = await gfxPing("ST");
+  console.log(res); // gfx.js:106 STDSFVvmtmngogRFA100
+
   if (res.startsWith("ST")) {
-    window.gfxSession = res.substring(2); 
+    window.gfxSession = res.substring(2);
     await gfxInit();
     gfxTiles(map);
     gfxObjects(map);
-    gfxTick();
+    window.gfxTimeout = setTimeout(gfxTick, 1000);
     return;
   }
 
@@ -218,11 +221,19 @@ window.gfxZClick = function(z, clickedElement) {
   // 2. Dynamic Items (already comma-delimited)
   if (mapItems) {
     var items = mapItems.split(',');
-    for (var j=0; j<items.length; j++) {
+    for (var j = 0; j < items.length; j++) {
+      if (!items[j] || items[j].length < 4) continue; // Safety check
+      
       var id = items[j].substring(0, 2);
       var itemZ = parseInt(items[j].substring(2, 4), 10);
+      var itemZStr = items[j].substring(2, 4); // FIX: Keep the leading zero!
+      
+      // FIX: Safely extract the 4-char ID only if the string is long enough
+      var uniqueid = items[j].length >= 8 ? items[j].substring(4, 8) : "";
+      
       if (itemZ === zNum) {
-        htm += '<a href="gfx:ID'+id+itemZ+'">'+gfxItemID(id)+'</a><br>';        
+        // Use itemZStr instead of itemZ so "04" doesn't become "4"
+        htm += '<a href="gfx:ID' + id + itemZStr + uniqueid + '">' + gfxItemID(id) + '</a><br>';
       }
     }
   }
@@ -230,54 +241,6 @@ window.gfxZClick = function(z, clickedElement) {
   if (htm) { 
     pop(htm); 
   }
-}
-
-window.gfxSelectAvatar = function(a) {
-
- window.PopAlign = "center";
- window.PopUpVis = "hidden";
- window.PopForce = "visible"; 
-
- if (a=="00") {
-  PUP="Select Character:<p>";
-  PUP=PUP+"<a href=\"gfx:VAB0\"><img src=\"c/B0.png\" height=64 width=32></a> &nbsp; ";
-  PUP=PUP+"<a href=\"gfx:VAB1\"><img src=\"c/B1.png\" height=64 width=32></a> &nbsp; ";
-  PUP=PUP+"<a href=\"gfx:VAB2\"><img src=\"c/B2.png\" height=64 width=32></a><br>";
-  PUP=PUP+"<a href=\"gfx:VAB3\"><img src=\"c/B3.png\" height=64 width=32></a> &nbsp; ";
-  PUP=PUP+"<a href=\"gfx:VAB4\"><img src=\"c/B4.png\" height=64 width=32></a> &nbsp; ";
-  PUP=PUP+"<a href=\"gfx:VAB5\"><img src=\"c/B5.png\" height=64 width=32></a> &nbsp; ";
-  PUP=PUP+"<a href=\"gfx:VAB6\"><img src=\"c/B6.png\" height=64 width=32></a><p>";
-  PUP=PUP+"<a href=\"gfx:VA\">Go Back</a><p>";
-  pop(PUP);
- } else {
-  if (a=="01") {
-   PUP="Select Character:<p>";
-   PUP=PUP+"<a href=\"gfx:VAF0\"><img src=\"c/F0.png\" height=64 width=32></a> &nbsp; ";
-   PUP=PUP+"<a href=\"gfx:VAF1\"><img src=\"c/F1.png\" height=64 width=32></a> &nbsp; ";
-   PUP=PUP+"<a href=\"gfx:VAF2\"><img src=\"c/F2.png\" height=64 width=32></a><br>";
-   PUP=PUP+"<a href=\"gfx:VAF3\"><img src=\"c/F3.png\" height=64 width=32></a> &nbsp; ";
-   PUP=PUP+"<a href=\"gfx:VAF4\"><img src=\"c/F4.png\" height=64 width=32></a> &nbsp; ";
-   PUP=PUP+"<a href=\"gfx:VAF5\"><img src=\"c/F5.png\" height=64 width=32></a> &nbsp; ";
-   PUP=PUP+"<a href=\"gfx:VAF6\"><img src=\"c/F6.png\" height=64 width=32></a><p>";
-   PUP=PUP+"<a href=\"gfx:VA;\">Go Back</a><p>";
-   pop(PUP);
-  } else {
-  	if (a.length==2) {
-  	 if (a.charAt(0)=="F") { PObj=a+"H0"; } else { PObj=a+"D0"; }
-  	 gfxDo="VA"+PObj+"..";
-    PopForce = "hidden";
-    window.lastClickedZ=42; PopAlign='click';
-    pop("Tag Flagpole<br>join game!");
-  	} else {
-    PX=2; PY=9; PZ=(PY*(mapx+1))+PX;
-    PUP="<p align=center>Male or Female?<br>";
-    PUP=PUP+'<a href=\"gfx:VA00\"><img src=\"c/B1.png\" height=128 width=64></a>';
-    PUP=PUP+'&nbsp;&nbsp;&nbsp;'; 
-    PUP=PUP+'<a href=\"gfx:VA01\"><img src=\"c/F5.png\" height=128 width=64></a>';
-    pop(PUP);
-   }
-  }
- }
 }
 
 async function gfxTick() {
@@ -294,9 +257,9 @@ async function gfxTick() {
       window.gfxDo = "Ql"; 
     }
 
-    // console.log("plugs="+plugs);
+    console.log("plugs="+plugs);
     var gfxPong = await gfxPing(plugs);
-    // console.log("gfxPong="+gfxPong);
+    console.log("gfxPong="+gfxPong);
 
     // Ensure we received a valid string before processing
     if (typeof gfxPong === 'string') {
@@ -304,7 +267,7 @@ async function gfxTick() {
       while (ptr < gfxPong.length) {
         let verb = gfxPong.substring(ptr, ptr + 2); ptr += 2;
         if (verb === "SP") {
-          let endPtr = gfxPong.indexOf("..", ptr);
+          let endPtr = gfxPong.indexOf("--", ptr);
           let noun="";
           if (endPtr !== -1) {
             noun = gfxPong.substring(ptr, endPtr); ptr = endPtr + 2; 
@@ -314,16 +277,13 @@ async function gfxTick() {
           if (typeof window.serverdown === 'function') { serverdown(noun); }
         }
 
-        if (verb === "VA") {
-          if (typeof window.gfxSelectAvatar === 'function') {
-            window.gfxSelectAvatar("");
-          }
-        }
-        
         if (verb === "PI") {
+          // Read player-item results: [playerItem 2][playerZ 2][playerId 4]
           window.playerItem = gfxPong.substring(ptr, ptr + 2); ptr += 2;
-          window.playerZ = parseInt(gfxPong.substring(ptr, ptr + 2), 10); ptr += 2;
-          console.log("playerItem="+playerItem+" playerZ="+playerZ);
+          window.playerZ    = parseInt(gfxPong.substring(ptr, ptr + 2), 10); ptr += 2;
+          window.playerId   = gfxPong.substring(ptr, ptr + 4); ptr += 4;
+          console.log("playerItem=" + window.playerItem + " playerZ=" + window.playerZ
+            + " playerId=" + window.playerId + " avatar=" + window.playerAvatar);
         }
 
         // 2. Handle Refresh (Variable-Length Command)
@@ -378,9 +338,6 @@ window.gfxPing = async function(commandString) {
     if (!response.ok) throw new Error('Server error: ' + response.status);
     
     var resText = await response.text();
-    if (resText.startsWith("ST")) {
-      window.gfxSession = resText.substring(2);
-    }
     return resText;
   } catch (e) {
     console.error('gfxPing failed:', e);
@@ -484,11 +441,11 @@ window.gfxObjects = function(sector) {
       var parts = entry.split(':');
       var objid = parts[0]; // e.g., "Yj44Sa"
       var objcode = parts[1];
-            
+
       var iId = objid.slice(0, 2);
       var z = parseInt(objid.slice(2, 4), 10);
       var data = objid.slice(4, 6);
-
+      
       var coords = zToXY(z);
       var img = document.createElement('img');
       img.id = 'obj_' + iId + '_' + z; 
@@ -500,7 +457,7 @@ window.gfxObjects = function(sector) {
       img.style.zIndex = '110'; 
 
       // Adjustment logic for large items (Flagpoles, Buildings)
-      if (iId.charAt(0)==="Y") {
+      if (iId.charAt(0)==="T" || iId.charAt(0)==="U") {
         img.onload = function() {
           var currentTop = parseInt(this.style.top, 10) || 0;
           var currentLeft = parseInt(this.style.left, 10) || 0;
@@ -571,22 +528,65 @@ function gfxRefresh(rfStr) {
     if (isNaN(destZ)) continue;
     
     var rawAvatar = entry.length > 4 ? entry.slice(4) : '';
+    var uid = '';
     var avatar = rawAvatar;
-    var moves = [];
-    
-    // NO DASH: Find the first 'Q' command in the avatar string
-    var qIdx = rawAvatar.indexOf('Q');
-    if (qIdx > -1) {
-        avatar = rawAvatar.substring(0, qIdx);
-        var historyStr = rawAvatar.substring(qIdx);
-        moves = historyStr.match(/Q[nsew]/g) || []; // Extract movement items
+
+    // 1. EXTRACT 4-CHARACTER UNIQUE ID
+    if (rawAvatar.length >= 4) {
+      // Read backwards to find valid avatar parts (A-P followed by 0-9, or Q moves)
+      var avatarMatch = rawAvatar.match(/(([A-P][0-9])|(Q[nsew]))*$/);
+      if (avatarMatch && avatarMatch[0].length < rawAvatar.length) {
+        var prefix = rawAvatar.substring(0, rawAvatar.length - avatarMatch[0].length);
+        if (prefix.length === 4) {
+          uid = prefix; // We successfully isolated the 4-char UID
+          avatar = avatarMatch[0];
+        } else if (rawAvatar.length >= 6) {
+          // Fallback split just in case the format varies
+          uid = rawAvatar.substring(0, 4);
+          avatar = rawAvatar.substring(4);
+        }
+      }
     }
 
-    if (iId === window.playerItem) {
+    // Combine item-id and uid to uniquely track players in the client DOM
+    var uniqueIId = uid ? iId + uid : iId;
+    var moves = [];
+    
+    var isLocalPlayer = (uniqueIId === window.playerItem) || 
+                        (iId === window.playerItem && (!uid || uid === window.playerId));
+
+    // 2. EXTRACT MOVEMENT HISTORY (Must be done AFTER UID extraction)
+    var qIdx = avatar.indexOf('Q');
+    if (qIdx > -1) {
+        var historyStr = avatar.substring(qIdx);
+        avatar = avatar.substring(0, qIdx);
+        moves = historyStr.match(/Q[nsew]/g) || []; 
+    }
+
+    // Match local player (supports old 2-char matching and new 6-char matching)
+    var isLocalPlayer = (uniqueIId === window.playerItem) || (iId === window.playerItem);
+
+    if (isLocalPlayer) {
       window.playerAvatar = avatar;
       window.playerZ = resolvedPlayerZ;
-      window.movingItems[iId].z = resolvedPlayerZ;
-      gfxChar(iId, avatar, window.playerZ);
+      
+      // Auto-upgrade the client's player item string to use the Unique ID 
+      // so other players sharing this base item-id don't overwrite our local player.
+      if (window.playerItem === iId && uid) {
+          window.playerItem = uniqueIId;
+          if (window.movingItems[iId]) {
+              window.movingItems[uniqueIId] = window.movingItems[iId];
+              delete window.movingItems[iId];
+          }
+      }
+
+      if (!window.movingItems[uniqueIId]) {
+          window.movingItems[uniqueIId] = { z: resolvedPlayerZ, queue: oldPlayerQueue, avatar: window.playerAvatar };
+      } else {
+          window.movingItems[uniqueIId].z = resolvedPlayerZ;
+      }
+      
+      gfxChar(uniqueIId, avatar, window.playerZ);
     } else {
       if (avatar) {
         var startZ = destZ;
@@ -594,16 +594,16 @@ function gfxRefresh(rfStr) {
             startZ = window.reverseMoveZ(startZ, moves[k]);
         }
         if (moves.length > 0) {
-            window.movingItems[iId] = { z: startZ, destZ: destZ, queue: moves, avatar: avatar };
-            gfxChar(iId, avatar, startZ);
+            window.movingItems[uniqueIId] = { z: startZ, destZ: destZ, queue: moves, avatar: avatar };
+            gfxChar(uniqueIId, avatar, startZ);
         } else {
-            gfxChar(iId, avatar, destZ);
+            gfxChar(uniqueIId, avatar, destZ);
         }
       } else {
         var coords = zToXY(destZ);
         var img = document.createElement('img');
         img.className = 'item';
-        img.src = 'i/' + iId + '.png';
+        img.src = 'i/' + iId + '.png'; // Base item-id is still used for non-avatar files
         img.style.position = 'absolute';
         img.style.top  = (32 + 20 + (coords.y * 32)) + 'px';
         img.style.left = (32 + 22 + (coords.x * 32)) + 'px';
@@ -735,9 +735,15 @@ function gfxClick(bytecode) {
       break;
 
     case "VA": // Internal Avatar Logic
-      if (typeof gfxSelectAvatar === 'function') gfxSelectAvatar(data);
+      if (typeof window.serverdown === 'function') {
+        gfxDo="Va"+data; 
+      }
       break;
-      
+            
+    case "SD": // Server-Down (send command to server)
+      gfxDo=data;
+      break;   
+    
     default:
       console.warn("Unknown GFX event type:", type);
   }
@@ -750,7 +756,7 @@ window.gfxZClick = function(z, clickedElement) {
   
   // Immediately notify game of the raw Z click
   gfxClick("ZD" + zStr);
-
+  
   var htm = '';
   // 1. Static Objects
   var objsData = mapObjs[window.map]; 
@@ -762,8 +768,13 @@ window.gfxZClick = function(z, clickedElement) {
       var meta = entry.split(':')[0];
       var objId = meta.substring(0, 2);
       var objZ  = parseInt(meta.substring(2, 4), 10);
-      
-      if (objZ === zNum && !/^[ST][a-z]$/.test(objId)) {
+
+      console.log("###776### objZ="+objZ+" zNum="+zNum);
+      //gfx.js:781 ###776### objZ=44 zNum=66
+      //gfx.js:781 ###776### objZ=69 zNum=66
+      //gfx.js:781 ###776### objZ=66 zNum=66
+
+      if (objZ === zNum) {
         // NEW: OD + Vu (Use) + objId
         htm += `<a href="gfx:OD${objId}${objZ}">${gfxItemID(objId)}</a><br>`;
       }
@@ -776,8 +787,9 @@ window.gfxZClick = function(z, clickedElement) {
     for (var j = 0; j < items.length; j++) {
       var id = items[j].substring(0, 2);
       var itemZ = parseInt(items[j].substring(2, 4), 10);
+      var uniqueid = items[j].substring(4, 8);
       if (itemZ === zNum) {
-        htm += '<a href="gfx:ID' + id + itemZ + '">' + gfxItemID(id) + '</a><br>';
+        htm += '<a href="gfx:ID' + id + itemZ + uniqueid + '">' + gfxItemID(id) + '</a><br>';
       }
     }
   }

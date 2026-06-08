@@ -66,38 +66,37 @@
         .punchcode-text {
             width: 32px;
             height: 32px;
-            vertical-align: middle; /* Keeps images and divs aligned on the same baseline */
-            margin: 1px; /* Optional: gives a tiny gap between blocks */
+            vertical-align: middle;
+            margin: 1px;
         }
 
         .punchcode-text {
-            display: inline-flex;      /* Flexbox is perfect for centering */
-            align-items: center;       /* Centers vertically */
-            justify-content: center;   /* Centers horizontally */
-            background-color: #006600;    /* Background color (adjust to your UI) */
-            color: #FFFFFF;            /* Text color (e.g., retro terminal green) */
-            font-family: monospace;    /* Monospace looks best for codes */
-            font-size: 16px;           /* Size to fit 2 characters nicely */
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #006600;
+            color: #FFFFFF;
+            font-family: monospace;
+            font-size: 16px;
             font-weight: bold;
-            border-radius: 4px;        /* Optional: slightly rounded corners */
+            border-radius: 4px;
             box-sizing: border-box;    
             overflow: hidden;
             background: url('t/Ga.png') no-repeat center / cover;
         }
 
-        /* Optional: a class specifically for the 'Xc' space */
         .punchcode-space {
             width: 32px;
             height: 32px;
-            display: inline-flex;      /* Flexbox is perfect for centering */
-            align-items: center;       /* Centers vertically */
-            justify-content: center;   /* Centers horizontally */
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
             background-color: transparent;
-            color: #CCFFFF;            /* Text color (e.g., retro terminal green) */
-            font-family: monospace;    /* Monospace looks best for codes */
-            font-size: 16px;           /* Size to fit 2 characters nicely */
+            color: #CCFFFF;
+            font-family: monospace;
+            font-size: 16px;
             font-weight: bold;
-            border-radius: 4px;        /* Optional: slightly rounded corners */
+            border-radius: 4px;
             box-sizing: border-box;    
             overflow: hidden;
         }        
@@ -170,6 +169,15 @@
               <button onclick="editObject()">EDIT</button> <!-- NEW BUTTON -->
               <div id="listItems"></div>
             </div>
+           </div>                
+        </div>
+
+        <div id="globalStackView">
+          <div class="tool-box" style="background: #1a252f;">
+            <div style="font-weight: bold; color: #0af; margin-bottom: 10px;">GLOBAL STACK:</div>
+            <div id="global-a"><div class="object-entry" onclick="openGlobalEditor('a')">[<b>a</b>] Alpha (On Connect) <span id="global-lbl-a" style="color: #888;"></span></div></div>
+            <div id="global-b"><div class="object-entry" onclick="openGlobalEditor('b')">[<b>b</b>] Before (Pre-Tick) <span id="global-lbl-b" style="color: #888;"></span></div></div>
+            <div id="global-c"><div class="object-entry" onclick="openGlobalEditor('c')">[<b>c</b>] After (Post-Tick) <span id="global-lbl-c" style="color: #888;"></span></div></div>
           </div>
         </div>
         
@@ -177,9 +185,9 @@
         <div class="tool-box" id="logicBox" style="display: none;">
             <div class="stack-header"><span id="logicLabel">LOGIC</span>: <span id="editingObjID"></span></div>
             <textarea id="punchcodeInput" spellcheck="false" oninput="updateDecompiler()"></textarea>
-            <div id="punchcodeImages" class="tool-box" style="display: flex; flex-wrap: nowrap; overflow-x: auto; margin-top: 10px; padding: 5px; height: 42px;">
+            <div id="punchcodeImages" class="tool-box" style="display: flex; flex-wrap: wrap; margin-top: 10px; padding: 5px; min-height: 42px; gap: 2px;">
                 <!-- Images will be inserted here by JS -->
-            </div>
+            </div>            
             <div id="decompiler"></div>
             <div class="btn-row" style="display:flex; gap:5px; margin-top:10px;">
                 <button class="reject" onclick="rejectLogic()">CLEAR</button>
@@ -193,7 +201,6 @@
                <input type="text" id="manualExitInput" placeholder="e.g. N1S1Z1" oninput="saveExitInput()">
            </div>                
         </div>
-        
     </div>
 </div>
 
@@ -202,6 +209,9 @@
     let currentSector = "A1";
     let mapSectors = {};
     let editingIndex = -1;
+    let editingGlobalKey = null;
+    let globalLogic = { a: "", b: "", c: "" };
+    
     // Bounds restricted to A1-H8 (8x8 world)
     const ROWS = ["A","B","C","D","E","F","G","H"]; 
     const COLS = 8;
@@ -222,6 +232,7 @@
     }
 
     function initBlank() {
+        globalLogic = { a: "", b: "", c: "" };
         ROWS.forEach(r => {
             for(let c=1; c<=COLS; c++) {
                 // Initialize 12 rows worth of tiles (96 total) per sector logic
@@ -229,6 +240,7 @@
             }
         });
         updateBrushPreview();
+        updateGlobalLabels();
         render();
     }
 
@@ -251,6 +263,7 @@
         if (e.key === "ArrowRight" && colIdx < COLS) { colIdx++; changed = true; }
 
         if (changed) {
+            saveCurrentEditor();
             currentSector = ROWS[rowIdx] + colIdx;
             nav.value = currentSector;
             changeSector();
@@ -258,7 +271,7 @@
     });
 
     // --- MOUSE INTERACTION ---
-    canvas.addEventListener('contextmenu', e => e.preventDefault()); // Disable context menu for sampling
+    canvas.addEventListener('contextmenu', e => e.preventDefault());
 
     canvas.addEventListener('mousedown', (e) => {
         if (document.activeElement) { document.activeElement.blur(); }
@@ -314,16 +327,14 @@
     }
 
     function getImg(src, cache) {
-        if (cache[src] && cache[src].complete) return cache[src]; // Return if image is already loaded and complete
+        if (cache[src] && cache[src].complete) return cache[src];
 
         const img = new Image();
         img.src = src;
         img.onload = () => {
-            // Store the image itself along with its dimensions in the cache
             cache[src] = img; 
-            render(); // Rerender once the image is loaded
+            render(); 
         };
-        // Also store the image object itself for immediate use if not yet loaded (though it won't draw until onload)
         cache[src] = img; 
         return img;
     }
@@ -341,18 +352,16 @@
 
         sec.objects.forEach(obj => {
             let img = getImg(`i/${obj.id}.png`, itemCache);
-            let z = parseInt(obj.z); // Z is the tile index
+            let z = parseInt(obj.z); 
             let targetX = (z % 8) * 32;
             let targetY = Math.floor(z / 8) * 32;
 
             if(img.complete) {
-                if (obj.id.startsWith('Y')) { // For 'building' items (Ya-Yz)
-                    // Calculate drawing position so the lower-right corner aligns with targetX, targetY + 32
+                if (obj.id.startsWith('T') || obj.id.startsWith('U')) { 
                     let drawX = targetX + 32 - img.width;
                     let drawY = targetY + 32 - img.height;
                     ctx.drawImage(img, drawX, drawY, img.width, img.height);
                 } else {
-                    // All other items are 32x32 and align to the top-left of the tile
                     ctx.drawImage(img, targetX, targetY, 32, 32);
                 }
             }
@@ -383,7 +392,6 @@
       if (input) input.value = mapSectors[currentSector]?.exits || "";
     }  
 
-
     function editObject() {
         if (editingIndex === -1) {
             alert("Please select an object from the list below to edit first.");
@@ -392,36 +400,31 @@
         const idStr = document.getElementById('newID').value.trim();
         const zStr = document.getElementById('newZ').value.trim();
         const dataStr = document.getElementById('newDATA').value.trim();
-        // Basic validation
         if (idStr.length !== 2 || zStr.length !== 2) {
             alert("ID and Z must be exactly 2 characters (e.g., ID: 'Bd', Z: '05')");
             return;
         }
-        // Update the object in memory
         const obj = mapSectors[currentSector].objects[editingIndex];
         obj.id = idStr;
         obj.z = zStr;
         obj.data = (dataStr.length === 2) ? dataStr : "";
-        // Update the label in the logic editor to reflect the new ID/Z
         document.getElementById('editingObjID').innerText = obj.id + "@" + obj.z;
-        // Update logic label dynamically in case they added/removed DATA
         const labelEl = document.getElementById('logicLabel');
         if (obj.data && obj.data.length === 2) {
             labelEl.innerText = "PUNCH CODE";
         } else {
             labelEl.innerText = "ITEM INVENTORY";
         }
-        // Re-render the canvas and the stack list
         render();
     }
     
-    function updateObjectList() {
+function updateObjectList() {
       const logicBox = document.getElementById('logicBox');
       
-      // We safely move logicBox temporarily out of #listItems prior to resetting the innerHTML.
-      // Doing this preserves the internal textbox states and handles avoiding complete destruction of the div.
-      document.getElementById('panel').appendChild(logicBox);
-      logicBox.style.display = 'none';
+      // FIX: Always detach and safely tuck away logicBox to prevent it from being destroyed!
+      if (logicBox) {
+          document.getElementById('panel').appendChild(logicBox);
+      }
         
       const list = document.getElementById('listItems');
       list.innerHTML = "";
@@ -429,34 +432,51 @@
         const div = document.createElement('div');
         div.className = 'object-entry';
         
-        // Display data segment if present, otherwise mark as dynamic
         const typeLabel = obj.data ? `d:${obj.data}` : `dynamic`;
         
         div.innerHTML = `[<b>${obj.id}</b> z:${obj.z} <span style="color: #888;">(${typeLabel})</span>] ${gfxItemID(obj.id)}`;
         div.onclick = () => openEditor(idx);
         list.appendChild(div);
 
-        // Accordion logic insertion
-        if (idx === editingIndex) {
+        // Accordion logic insertion for objects
+        if (idx === editingIndex && logicBox) {
             list.appendChild(logicBox);
             logicBox.style.display = 'block';
         }
       });
+
+      // FIX: Put the logic box back in the global slot if a global script is selected
+      if (editingGlobalKey !== null && logicBox) {
+          document.getElementById('global-' + editingGlobalKey).appendChild(logicBox);
+          logicBox.style.display = 'block';
+      } else if (editingIndex === -1 && logicBox) {
+          logicBox.style.display = 'none';
+      }
     }
-    
+
+    function updateGlobalLabels() {
+        // Strip whitespace before calculating the amount of 2-character instructions
+        const getCount = (str) => Math.floor((str || "").replace(/\s/g, "").length / 2);
+        
+        const lenA = getCount(globalLogic.a);
+        const lenB = getCount(globalLogic.b);
+        const lenC = getCount(globalLogic.c);
+        
+        document.getElementById('global-lbl-a').innerText = lenA > 0 ? `(${lenA} inst)` : "";
+        document.getElementById('global-lbl-b').innerText = lenB > 0 ? `(${lenB} inst)` : "";
+        document.getElementById('global-lbl-c').innerText = lenC > 0 ? `(${lenC} inst)` : "";
+    }
+        
     function addObject() {
       const idStr = document.getElementById('newID').value.trim();
       const zStr = document.getElementById('newZ').value.trim();
       const dataStr = document.getElementById('newDATA').value.trim();
 
-      // Basic validation
       if (idStr.length !== 2 || zStr.length !== 2) {
         alert("ID and Z must be exactly 2 characters (e.g., ID: 'Bd', Z: '05')");
         return;
       }
 
-      // If DATA is empty, it's treated as a dynamic item. 
-      // If DATA has 2 characters, it's a static object.
       const newObject = {
         id: idStr,
         z: zStr,
@@ -464,15 +484,119 @@
         logic: ""
       };
 
-      // Add to the current sector's array
       mapSectors[currentSector].objects.push(newObject);
 
-      // Clear inputs for the next entry (leave DATA as is for convenience, or clear it)
       document.getElementById('newID').value = "";
       document.getElementById('newZ').value = "";
-    
-      // Re-render the canvas and the stack list
       render();
+    }
+
+    function saveCurrentEditor() {
+        if (editingIndex !== -1) {
+            try {
+              mapSectors[currentSector].objects[editingIndex].logic = document.getElementById('punchcodeInput').value;
+            } catch (error) {
+              console.log("ERROR: "+error);
+            }
+        } else if (editingGlobalKey !== null) {
+            globalLogic[editingGlobalKey] = document.getElementById('punchcodeInput').value;
+        }
+    }
+
+function openGlobalEditor(key) {
+        if (editingGlobalKey === key) {
+            saveCurrentEditor();
+            closeEditor();
+            return;
+        }
+
+        saveCurrentEditor();
+
+        editingIndex = -1;
+        editingGlobalKey = key;
+
+        updateObjectList(); 
+
+        const logicBox = document.getElementById('logicBox');
+        if (logicBox) {
+            document.getElementById('global-' + key).appendChild(logicBox);
+            logicBox.style.display = 'block';
+        }
+
+        let title = "";
+        if (key === 'a') title = "ALPHA (ON CONNECT)";
+        if (key === 'b') title = "BEFORE (PRE-TICK)";
+        if (key === 'c') title = "AFTER (POST-TICK)";
+
+        document.getElementById('logicLabel').innerText = "GLOBAL PUNCH CODE";
+        document.getElementById('editingObjID').innerText = title;
+        
+        const punchInput = document.getElementById('punchcodeInput');
+        if (punchInput) {
+            punchInput.value = globalLogic[key] || "";
+        }
+
+        updateDecompiler();
+        updateGlobalLabels();
+    }
+
+    function openEditor(idx) {
+      if (editingIndex === idx) {
+          saveCurrentEditor();
+          closeEditor();
+          return;
+      }
+
+      saveCurrentEditor();
+
+      editingIndex = idx;
+      editingGlobalKey = null;
+      updateGlobalLabels();
+
+      const obj = mapSectors[currentSector].objects[idx];
+
+      document.getElementById('newID').value = obj.id;
+      document.getElementById('newZ').value = obj.z;
+      document.getElementById('newDATA').value = obj.data || "";
+
+      const labelEl = document.getElementById('logicLabel');
+      if (obj.data && obj.data.length === 2) {
+          labelEl.innerText = "PUNCH CODE";   
+      } else {
+          labelEl.innerText = "ITEM INVENTORY"; 
+      }
+
+      document.getElementById('editingObjID').innerText = obj.id + "@" + obj.z;
+      document.getElementById('punchcodeInput').value = obj.logic;
+
+      updateDecompiler();
+      updateObjectList(); 
+    }
+
+    function closeEditor() {
+      editingIndex = -1;
+      editingGlobalKey = null;
+
+      const logicBox = document.getElementById('logicBox');
+      document.getElementById('panel').appendChild(logicBox);
+      logicBox.style.display = 'none';
+
+      document.getElementById('brushBox').style.display = 'block';
+      document.getElementById('exitsBox').style.display = 'block';
+      document.getElementById('stackView').style.display = 'block';
+      
+      document.getElementById('newID').value = "";
+      document.getElementById('newZ').value = "";
+      document.getElementById('newDATA').value = "00";
+      
+      document.getElementById('editingObjID').innerText = "";
+      document.getElementById('punchcodeInput').value = "";
+      
+      updateDecompiler();
+      updateGlobalLabels();
+      updateObjectList();
+      render();
+      updateExitInput(); 
     }
 
     function rejectLogic() {
@@ -482,6 +606,8 @@
     function removeObject() {
         if (editingIndex !== -1) {
             mapSectors[currentSector].objects.splice(editingIndex, 1);
+        } else if (editingGlobalKey !== null) {
+            globalLogic[editingGlobalKey] = "";
         }
         closeEditor();
     }
@@ -498,58 +624,9 @@
             display.innerHTML = res;
         }
     }
-
-    function openEditor(idx) {
-      // Toggle logic pane close if identically re-clicked
-      if (editingIndex === idx) {
-          mapSectors[currentSector].objects[editingIndex].logic = document.getElementById('punchcodeInput').value;
-          closeEditor();
-          return;
-      }
-
-      // AUTO-SAVE: If we are already editing an object, save its logic before switching
-      if (editingIndex !== -1) {
-        mapSectors[currentSector].objects[editingIndex].logic = document.getElementById('punchcodeInput').value;
-      }
-
-      editingIndex = idx;
-      const obj = mapSectors[currentSector].objects[idx];
-
-      document.getElementById('newID').value = obj.id;
-      document.getElementById('newZ').value = obj.z;
-      document.getElementById('newDATA').value = obj.data || "";
-
-      const labelEl = document.getElementById('logicLabel');
-      if (obj.data && obj.data.length === 2) {
-          labelEl.innerText = "PUNCH CODE";    // Has DATA (Static Object)
-      } else {
-          labelEl.innerText = "ITEM INVENTORY"; // No DATA (Dynamic Item / Player)
-      }
-
-      document.getElementById('editingObjID').innerText = obj.id + "@" + obj.z;
-      document.getElementById('punchcodeInput').value = obj.logic;
-
-      updateDecompiler();
-      updateObjectList(); 
-    }
-
-    function closeEditor() {
-      editingIndex = -1;
-      document.getElementById('brushBox').style.display = 'block';
-      document.getElementById('exitsBox').style.display = 'block';
-      document.getElementById('stackView').style.display = 'block';
-      document.getElementById('newID').value = "";
-      document.getElementById('newZ').value = "";
-      document.getElementById('newDATA').value = "00";
-      // Clear out the logic editor text so it looks "closed"
-      document.getElementById('editingObjID').innerText = "";
-      document.getElementById('punchcodeInput').value = "";
-      updateDecompiler();
-      render();
-      updateExitInput(); 
-    }
     
     function changeSector() {
+        saveCurrentEditor();
         currentSector = nav.value;
         document.getElementById('sectorLabel').innerText = currentSector;
         closeEditor();
@@ -558,7 +635,6 @@
     }
 
     async function loadDefaultMap() {
-        // First, initialize a blank map just in case the .gfx file is missing some sectors
         initBlank(); 
         try {
             const response = await fetch('capflag.gfx');
@@ -582,15 +658,23 @@
     }
  
     function exportGfx() {
+      saveCurrentEditor();
       let out = "";
+
+      const escapeWhitespace = (str) => (str || "").replace(/\n/g, "++");      
+      
+      if (globalLogic.a) out += `a=${globalLogic.a}\n`;
+      if (globalLogic.b) out += `b=${globalLogic.b}\n`;
+      if (globalLogic.c) out += `c=${globalLogic.c}\n`;
+
       for(const label in mapSectors) {
         let sec = mapSectors[label];
         let objStr = sec.objects.map(o => {
             let meta = o.id + o.z;
             if (o.data && o.data.trim().length === 2) {
-                meta += o.data; // Add 2-character DATA for static objects
+                meta += o.data; 
             }
-            return o.logic ? `${meta}:${o.logic}` : meta;
+            return o.logic ? `${meta}:${escapeWhitespace(o.logic)}` : meta;
         }).join(',');
         out += `${label}=${sec.tiles}${sec.exits}.${objStr}\n`;
       }
@@ -599,10 +683,20 @@
     }
 
     function parseGfxData(text) {
+        globalLogic = { a: "", b: "", c: "" };
+        
+        const unescapeWhitespace = (str) => (str || "").replace(/_NL_/g, "\n");
+
         text.split('\n').forEach(line => {
             if(!line.includes('=')) return; 
             let [label, content] = line.split('=');
             if(!content) return;
+            
+            if (label === 'a' || label === 'b' || label === 'c') {
+                globalLogic[label] = unescapeWhitespace(content.trim());
+                return;
+            }
+
             let [map, items] = content.split('.');
             let objs = [];
             if(items) items.split(',').forEach(c => {
@@ -610,20 +704,18 @@
                 let [m, l] = c.split(':');
                 if (m) {
                     if (m.length >= 6) {
-                        // Static Object (ID + Z + DATA)
                         objs.push({ id: m.substring(0,2), z: m.substring(2,4), data: m.substring(4,6), logic: l || "" });
                     } else if (m.length >= 4) {
-                        // Dynamic Item (ID + Z)
                         objs.push({ id: m.substring(0,2), z: m.substring(2,4), data: "", logic: l || "" });
                     }
                 }
             });
             mapSectors[label] = { tiles: map.substring(0,192), exits: map.substring(192), objects: objs };
         });
+        updateGlobalLabels();
         render();
     }
 
-    // Helper to identify W registers and numerical values
     function isWRegister(code) {
         return code.length === 2 && code.charAt(0) === 'W' && (
             (code.charAt(1) >= 'a' && code.charAt(1) <= 'z') ||
@@ -635,36 +727,20 @@
         return code.length === 2 && !isNaN(parseInt(code));
     }
 
-    // Function to provide text descriptions for specific item/sector codes
     function getCodeDescription(code) {
-        // This can be extended to provide more descriptive names for specific item/sector codes
-        // For now, we'll use gfxItemID for known object IDs.
         if (code === "Za") return "nothing (null)";
-        if (code === "Z1") return "exit Z1"; // Example for special exits
-        if (code.match(/^[A-H][1-8]$/)) return `sector ${code}`; // E.g., A1, H8
+        if (code === "Z1") return "exit Z1"; 
+        if (code.match(/^[A-H][1-8]$/)) return `sector ${code}`; 
         
         const itemText = gfxItemID(code);
-        if (itemText !== "Item " + code) return itemText; // If gfxItemID provided a specific name
+        if (itemText !== "Item " + code) return itemText; 
 
-        return `code "${code}"`; // Default for unknown codes
+        return `code "${code}"`; 
     }
 
-    //
-    // example ItemID:
-    //
-    //  "Xi": "$$if inventory ",
-    //  "Vt": "%%$$ teleport to ",
-    //
-    //  $$ %% ## get moved to end of description, ie:
-    //   Xi = if inventory La  
-    //   Vt = teleport to %% $$
-    //
-    //  $$ = item id
-    //  %% = map sector (upper case letter, followed by numeral)
-    //  ## = numeral from 00 to 99, or a item-id
-    //
-
-    function decompilepunchcode(code) {
+function decompilepunchcode(code) {
+      if (!code) code = "";
+      
       let output = "";
       let column = 0;
       let ifnot = false; 
@@ -672,72 +748,111 @@
       const punchcodeImagesContainer = document.getElementById('punchcodeImages');
       punchcodeImagesContainer.innerHTML = "";
 
-      while (column < code.length) {
-        let item = code.substring(column, column + 2);
-        column += 2;
+      // Helper function to grab the next 2 characters while simultaneously 
+      // converting spaces and line breaks into visual UI blocks.
+      function getNextToken() {
+          let token = null;
+          while (column < code.length) {
+              let char = code.charAt(column);
+              
+              if (char === ' ' || char === '\t') {
+                  // Visual Space (16px empty block)
+                  const spacer = document.createElement('div');
+                  spacer.style.width = '16px';
+                  spacer.style.height = '32px';
+                  spacer.style.display = 'inline-block';
+                  punchcodeImagesContainer.appendChild(spacer);
+                  
+                  if (!output.endsWith(" ") && !output.endsWith("<br>")) output += " ";
+                  column++;
+              } else if (char === '\n' || char === '\r') {
+                  // Visual Line Break (Forces flexbox to wrap to next line)
+                  const br = document.createElement('div');
+                  br.style.flexBasis = '100%';
+                  br.style.height = '0';
+                  punchcodeImagesContainer.appendChild(br);
+                  
+                  if (!output.endsWith("<br>")) output += "<br>";
+                  
+                  // Skip \r\n combos cleanly if they exist
+                  if (char === '\r' && code.charAt(column + 1) === '\n') column++;
+                  column++;
+              } else {
+                  // Grab the actual 2-character punchcode
+                  token = code.substring(column, column + 2);
+                  column += 2;
+                  break;
+              }
+          }
+          return token;
+      }
 
-        // Get base description
+      // Process all codes
+      while (column < code.length) {
+        let item = getNextToken();
+        if (!item) break; // Reached the end via whitespace
+        if (item.length < 2) break; // Ignore a malformed 1-character tail
+
         let desc = typeof gfxItemID === "function" ? gfxItemID(item) : "Unknown";
         if (desc === "Unknown") desc = item;
 
         if (item === "Xn") { 
-          ifnot=true;
-          desc=" ";
+          ifnot = true;
+          desc = " ";
         }
         
         if (item === "Xc") { 
           desc = "<br>";
           punchcodeImagesContainer.appendChild(createImgBlock('i/Zd.png'));
-          punchcodeImagesContainer.appendChild(createSpacer(" ", true));
         } else {
-            // Add image of code to visual:
             
             punchcodeImagesContainer.appendChild(createImgBlock('i/' + item + '.png'));
 
+            // If an instruction expects parameters, grab the next valid token
             while (desc.startsWith("%%") || desc.startsWith("$$") || desc.startsWith("##")) {
+                let prefix = desc.substring(0, 2);
+                let nextcode = getNextToken();
                 
-                if (desc.startsWith("%%")) {
-                    let nextcode = code.substring(column, column + 2); 
-                    column += 2;
+                if (!nextcode) break; // No parameter found
+
+                if (prefix === "%%") {
                     desc = desc.substring(2) + " " + nextcode;
                     punchcodeImagesContainer.appendChild(createTextBlock(nextcode));
                 }
                 
-                if (desc.startsWith("$$")) {
-                    let nextcode = code.substring(column, column + 2); column += 2;
+                if (prefix === "$$") {
                     desc = desc.substring(2) + " [" + gfxItemID(nextcode) + "] ";
                     punchcodeImagesContainer.appendChild(createImgBlock('i/' + nextcode + '.png'));
                 }
                 
-                if (desc.startsWith("##")) {
-                    console.log("###712###"); 
-                    let nextcode = code.substring(column, column + 2); column += 2;
+                if (prefix === "##") {
                     desc = desc.substring(2) + " " + nextcode;
-                    console.log("###703### "+desc);
                     punchcodeImagesContainer.appendChild(createNumBlock(nextcode));
                 }
             }
         }
 
-        // Process [ <left> / <right> ] conditions
+        // Handle If-Not text formatting
         if (desc.match(/\[(.*?)\/(.*?)\]/)) {
             desc = desc.replace(/\[(.*?)\/(.*?)\]/g, (match, left, right) => {
                 return ifnot ? right : left;
             });
-            ifnot = false; // turn off ifnot after processed
+            ifnot = false; 
         }
         
-        // Add the clean base text to the output first
+        // Finalize Text Decompiler output
         let baseText = desc.trim();
-        if (baseText) {
-          // Add a leading space if we aren't at the start of a new line
-          if (output.length > 0 && !output.endsWith("\n")) {
+        if (baseText && baseText !== "<br>") {
+          if (output.length > 0 && !output.endsWith(" ") && !output.endsWith("<br>")) {
             output += " ";
-           }
-           output += baseText;
           }
+          output += baseText;
+        } else if (baseText === "<br>") {
+          if (!output.endsWith("<br>")) output += "<br>";
         }
-        return output;
+      }
+      
+      return output;
     }
 
     function createSpacer(text) {

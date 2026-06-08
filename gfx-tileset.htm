@@ -54,16 +54,17 @@ if (Types=="T") {
 }
 if (Types=="I") {
  for (i=LS;i<LE+1;i++) {
-  document.write("<table width=600 border=0 bordercolor=navy cellpadding=5><tr>");
+  document.write("<table border=0 bordercolor=navy cellpadding=5><tr>");
   for (j=97;j<113;j++) {
-   document.write("<td width=70 align=center><p>");
+   document.write("<td align=center><p>");
    document.write("<img src=\"i/"+String.fromCharCode(i,j)+".png\" onerror=\"ImgError(this);\" height=32 width=32>");
    document.write("<br>"+String.fromCharCode(i,j)  );
    document.write("</td>");
   }
   document.write("</tr></table>");
  }
-}  
+} 
+ 
 if (Types=="C") {
  for (i=LS;i<LE+1;i++) {
   document.write("<table width=600 border=0 bordercolor=navy cellpadding=5><tr>");

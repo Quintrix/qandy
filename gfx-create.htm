@@ -139,8 +139,10 @@
     let pathStartNode = null;
     
     let sectorLOS = {}; // Format: { "A1": "Ga", "B1": "Sa", ... }
-    
     let sectorItems = {}; // Format: { "A1": [{id: "I1", z: "05", data: "01"}, ...] }
+
+    let preservedLines = {}; // NEW: Stores any data/logic lines we don't recognize
+
     let currentItemCode = "I1";
     let currentItemData = "00";
 
@@ -1416,9 +1418,11 @@ async function processMap(text) {
         for (let y = 0; y < TILE_H; y++) { // Re-initialize mapData structure
             mapData[y] = Array(TILE_W).fill('Ga'); // Fill with default grass initially
         }
+
         sectorExits = {};
         sectorItems = {};
-
+        preservedLines = {}; 
+        
         uniqueTileCodes.clear(); // Clear for new import
         uniqueItemCodes.clear(); // Clear for new import
 
@@ -1430,8 +1434,14 @@ async function processMap(text) {
             
             const rIndex = ROWS.indexOf(label.charAt(0));
             const cIndex = parseInt(label.substring(1)) - 1;
-            if (rIndex === -1 || isNaN(cIndex)) return;
 
+            if (label.length !== 2 || rIndex === -1 || isNaN(cIndex) || cIndex < 0 || cIndex >= 8) {
+                preservedLines[label] = allData;
+                return;
+            }
+            
+            if (rIndex === -1 || isNaN(cIndex)) return;
+            
             // 1. Split Tiles/Exits from the Objects
             const parts = allData.split('.');
             const mainData = parts[0];     // Contains Tiles (192 chars) + Exits
@@ -1537,11 +1547,16 @@ function exportMap() {
                 }).join(',');
                 objectString = "." + objSerialized;
             }
-
-            output += `${sectorLabel}=${tilesString}${exits}${objectString}\n`;
             output += `${sectorLabel}=${tilesString}${exits}${objectString}\n`;
         }
     }
+    
+    alert(preservedLines);
+    
+    for (const [key, value] of Object.entries(preservedLines)) {
+        output += `${key}=${value}\n`;
+    }
+
 
     navigator.clipboard.writeText(output.trim()).then(() => {
         alert("Map exported to clipboard in Object-compatible format!");

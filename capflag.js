@@ -36,43 +36,6 @@ window.zdown = function(z) {
   console.log("Player clicked tile:", z);
 };
 
-window.serverdown = function(code) {
-  // executes any punch code the server sends the client
-  // will allow each game to customize all aspects of the game
-  console.log('serverdown() code='+code);
-    
-  let column = 0; 
-
-  while (column < code.length) {
-    var verb = code.substring(column, column + 2); column += 2;
-  
-    if (verb === "Va") { gfxSelectAvatar(itemz); }
-
-    if (verb === "Vr") {
-    	let noun = code.substring(column, column + 2); column += 2;
-      let zloc = code.substring(column, column + 2); column += 2;
-      let numericZ = parseInt(zloc, 10);
-      let targetObj = document.getElementById('obj_' + noun + '_' + numericZ);
-      // If it exists on the current map, remove it
-      if (targetObj) { targetObj.remove(); }
-    }  
-
-    if (verb === "Vi") { 
-      let nextDotDot = code.indexOf("..", column);
-      if (nextDotDot < 0) {
-        items = code.substring(column, code.length);
-        column = code.length;
-      } else {
-        items = code.substring(column, nextDotDot);
-        column = nextDotDot + 2;
-      }
-      invdown(items);
-    }  
-  }
-  
-  return;
-}
-
 window.invdown = function(code) {
   console.log("invdown() items="+items);
   let column = 0; 
@@ -90,7 +53,7 @@ window.invdown = function(code) {
     	let PUP = `<div align="center">`;
     	PUP += `${desc}<p>`;
       PUP += `<img src="i/${item}.png" height="32" width="32"><p>`;
-      PUP += `<a href="gfx:ID${playerItem}${playerZ}">Drop</a> &nbsp `;
+      PUP += `<a href="gfx:SDVd${item}">Drop</a> &nbsp `;
       PUP += `<a href="gfx:ID${playerItem}${playerZ}">Back</a>`;
       PUP += `</div>`;
       pop(PUP);
@@ -120,16 +83,20 @@ window.invdown = function(code) {
     }
   } else {
   	 // request player's inventory from server
-  	 if (playerItem != "Za") {
-  	   gfxDo="ID"+playerItem+playerZ;
-  	   return;
-  	 }
-  }  	
-
+    if (playerItem != "Za") {
+      let zStr = (playerZ < 10 ? '0' : '') + playerZ;
+      window.gfxDo += "ID" + playerItem.substring(0,2) + zStr + playerItem.substring(2);
+      return;
+    }
+  }
+  
   // Build the outputStats string (e.g., "Wm 99")
   for (let stat in statCounts) {
   	 if (stat != "Za") {
-      outputStats += `${stat} ${statCounts[stat]}<br>`;
+  	 	let type=stat;
+      if (type=="Wm") { type="Moves"; }
+  	 	if (type=="Wa") { type="Armband"; }
+      outputStats += `${type} ${statCounts[stat]}<br>`;
     }
   }
 
@@ -144,68 +111,125 @@ window.invdown = function(code) {
   pop(output);  
 }
 
-window.gfxSelectAvatar = function(a) {
+window.serverdown = function(code) {
+  // executes any punch code the server sends the client
+  // will allow each game to customize all aspects of the game
+  console.log('serverdown() code='+code);
+  // capflag.js:42 serverdown() code=VaSa--
+  let column = 0; 
 
- window.PopAlign = "center";
- window.PopUpVis = "hidden";
- window.PopForce = "visible"; 
+  while (column < code.length) {
+    var verb = code.substring(column, column + 2); column += 2;
+  
+    if (verb === "Va") {
+    	// Va--     <- avatar = text between Va and -- (in this case null)
+      // extract avatar capflagAvatar(team+avatar);
+      // call capflagAvatar(avatar);
+      capflagAvatar("");
+    }
 
- if (a=="00") {
-  PUP="Select Character:<p>";
-  PUP=PUP+"<a href=\"gfx:VAB0\"><img src=\"c/B0.png\" height=64 width=32></a> &nbsp; ";
-  PUP=PUP+"<a href=\"gfx:VAB1\"><img src=\"c/B1.png\" height=64 width=32></a> &nbsp; ";
-  PUP=PUP+"<a href=\"gfx:VAB2\"><img src=\"c/B2.png\" height=64 width=32></a><br>";
-  PUP=PUP+"<a href=\"gfx:VAB3\"><img src=\"c/B3.png\" height=64 width=32></a> &nbsp; ";
-  PUP=PUP+"<a href=\"gfx:VAB4\"><img src=\"c/B4.png\" height=64 width=32></a> &nbsp; ";
-  PUP=PUP+"<a href=\"gfx:VAB5\"><img src=\"c/B5.png\" height=64 width=32></a> &nbsp; ";
-  PUP=PUP+"<a href=\"gfx:VAB6\"><img src=\"c/B6.png\" height=64 width=32></a><p>";
-  PUP=PUP+"<a href=\"gfx:VA\">Go Back</a><p>";
-  pop(PUP);
- } else {
-  if (a=="01") {
-   PUP="Select Character:<p>";
-   PUP=PUP+"<a href=\"gfx:VAF0\"><img src=\"c/F0.png\" height=64 width=32></a> &nbsp; ";
-   PUP=PUP+"<a href=\"gfx:VAF1\"><img src=\"c/F1.png\" height=64 width=32></a> &nbsp; ";
-   PUP=PUP+"<a href=\"gfx:VAF2\"><img src=\"c/F2.png\" height=64 width=32></a><br>";
-   PUP=PUP+"<a href=\"gfx:VAF3\"><img src=\"c/F3.png\" height=64 width=32></a> &nbsp; ";
-   PUP=PUP+"<a href=\"gfx:VAF4\"><img src=\"c/F4.png\" height=64 width=32></a> &nbsp; ";
-   PUP=PUP+"<a href=\"gfx:VAF5\"><img src=\"c/F5.png\" height=64 width=32></a> &nbsp; ";
-   PUP=PUP+"<a href=\"gfx:VAF6\"><img src=\"c/F6.png\" height=64 width=32></a><p>";
-   PUP=PUP+"<a href=\"gfx:VA;\">Go Back</a><p>";
-   pop(PUP);
-  } else {
-  	if (a.length==2) {
-  	 if (a.charAt(0)=="F") { PObj=a+"H0"; } else { PObj=a+"D0"; }
-  	 gfxDo="VA"+PObj+"..";
-    PopForce = "hidden";
-    window.lastClickedZ=42; PopAlign='click';
-    pop("Tag Flagpole<br>join game!");
-  	} else {
-    PX=2; PY=9; PZ=(PY*(mapx+1))+PX;
-    PUP="<p align=center>Male or Female?<br>";
-    PUP=PUP+'<a href=\"gfx:VA00\"><img src=\"c/B1.png\" height=128 width=64></a>';
-    PUP=PUP+'&nbsp;&nbsp;&nbsp;'; 
-    PUP=PUP+'<a href=\"gfx:VA01\"><img src=\"c/F5.png\" height=128 width=64></a>';
-    pop(PUP);
-   }
+    if (verb === "Vr") {
+    	let noun = code.substring(column, column + 2); column += 2;
+      let zloc = code.substring(column, column + 2); column += 2;
+      let numericZ = parseInt(zloc, 10);
+      let targetObj = document.getElementById('obj_' + noun + '_' + numericZ);
+      // If it exists on the current map, remove it
+      if (targetObj) { targetObj.remove(); }
+    }  
+
+    if (verb === "Vi") { 
+      let nextDotDot = code.indexOf("..", column);
+      if (nextDotDot < 0) {
+        items = code.substring(column, code.length);
+        column = code.length;
+      } else {
+        items = code.substring(column, nextDotDot);
+        column = nextDotDot + 2;
+      }
+      invdown(items);
+    }  
   }
- }
+  
+  return;
 }
+
+// avatar = 'Va'     -> gfx.js:256 gfxPong=SPVa--RFH144Sa44AaAa
+window.capflagAvatar = function(avatar) {
+
+  let hat="";
+  let body="";
+  
+  if (playerItem === "Sa") { body="D3"; hat="J0"; }
+  if (playerItem === "Sb") { body="D0"; hat="J1"; }
+
+  let PUP = "<p align=center>Select Face:<p align=center>";
+
+  if (body && hat) {
+    PUP += `<a href="gfx:SDVAB0${body}${hat}--"><img src="c/B0.png" height=32 width=32></a> &nbsp; `;
+    PUP += `<a href="gfx:SDVAB1${body}${hat}--"><img src="c/B1.png" height=32 width=32></a> &nbsp; `;
+    PUP += `<a href="gfx:SDVAB2${body}${hat}--"><img src="c/B2.png" height=32 width=32></a><br>`;
+    PUP += `<a href="gfx:SDVAB3${body}${hat}--"><img src="c/B3.png" height=32 width=32></a> &nbsp; `;
+    PUP += `<a href="gfx:SDVAB4${body}${hat}--"><img src="c/B4.png" height=32 width=32></a> &nbsp; `;
+    PUP += `<a href="gfx:SDVAB5${body}${hat}--"><img src="c/B5.png" height=32 width=32></a> &nbsp; `;
+    PUP += `<a href="gfx:SDVAB6${body}${hat}--"><img src="c/B6.png" height=32 width=32></a><p>`;
+
+    // change to female bodies
+    if (playerItem === "Sa") { body="H3";  }
+    if (playerItem === "Sb") { body="H0";  }
+    
+    PUP += `<p align=center>`;
+    PUP += `<a href="gfx:SDVA${avatar}F0H0I1--"><img src="c/F0.png" height=32 width=32></a> &nbsp; `;
+    PUP += `<a href="gfx:SDVA${avatar}F1H0I1--"><img src="c/F1.png" height=32 width=32></a> &nbsp; `;
+    PUP += `<a href="gfx:SDVA${avatar}F2H0I1--"><img src="c/F2.png" height=32 width=32></a><br>`;
+    PUP += `<a href="gfx:SDVA${avatar}F3H0I1--"><img src="c/F3.png" height=32 width=32></a> &nbsp; `;
+    PUP += `<a href="gfx:SDVA${avatar}F4H0I1--"><img src="c/F4.png" height=32 width=32></a> &nbsp; `;
+    PUP += `<a href="gfx:SDVA${avatar}F5H0I1--"><img src="c/F5.png" height=32 width=32></a> &nbsp; `;
+    PUP += `<a href="gfx:SDVA${avatar}F6H0I1--"><img src="c/F6.png" height=32 width=32></a><p>`;
+  } else {
+  	 PUP="<p align=center><font color=red>ERROR:</font><br>No Team Item Selected";
+  } 
+  pop(PUP);
+  return;
+
+}	
 
 window.itemdown = function(code) {
   hpop();
   var itemid = code.substring(0, 2);
   var itemz = code.substring(2, 4);
-  console.log("itemdown() code="+code+" itemid="+itemid+" playerZ="+playerZ+" itemz="+itemz); 
+  var uniqueid = code.length >= 8 ? code.substring(4, 8) : "";
+
   if (itemid === "VA") {
-  	 gfxSelectAvatar(itemz);
-  	 return;
-  }
-  // items Sa-Tz are player items
-  if (itemid >= 'Sa' && itemid < 'Ua') {
-    playerdown(itemid, itemz);
+    // Pass the remainder of the code after "VA" (e.g. "Sa" or "SaB0")
+    // capflagAvatar(code.substring(2));
     return;
   }
+
+  if (itemid >= 'Sa' && itemid <= 'Sd') {
+    if (playerItem === "Za") {
+      // player has not seclected a player item
+      window.gfxDo += "ID" + itemid + itemz;
+      return;
+    }
+    // Check if the player clicked THEMSELVES
+    if (itemid+uniqueid === playerItem) { 
+      invdown(""); // Request local inventory from server
+    } else {
+      // They clicked ANOTHER player -> Show Profile Menu
+      let PUP = `<div align="center">`;
+      PUP += `<b>${gfxItemID(itemid)}</b><br>`;
+      PUP += `<span style="font-size:10px;color:gray;">UID: ${uniqueid}</span><p>`;
+      
+      // Hook custom server punches for interaction here:
+      PUP += `<a href="gfx:SDPr${itemid}${uniqueid}">Profile Player</a><br>`;
+      PUP += `<a href="gfx:SDTr${itemid}${uniqueid}">Request Trade</a>`;
+      PUP += `</div>`;
+      
+      pop(PUP);	
+    }    	  
+    return;
+  }  
+
   if (playerZ != itemz)  {
   	 // walk player to item then set gfxDo
   } else {
@@ -214,36 +238,14 @@ window.itemdown = function(code) {
   }
 }
 
-window.playerdown = function(itemid, itemz) {
-  console.log("playerdown() itemid="+itemid+" itemz="+itemz);
-  if (playerItem === "Za") {
-  	 // player has not seclected a player item
-  	 window.gfxDo += "ID" + itemid + itemz;
-  	 return;
-  }
-  if (itemid === playerItem) { 
-    // display inventory
-    invdown();
-  } else {
-    pop("profile "+itemid+itemz);	
-  }    	  
-  return;
-}
-
 window.objdown = function(code) {
   hpop();
   var itemid = code.substring(0, 2); 
   var itemz = code.substring(2, 4); 
   console.log("objdown -> code="+code);
-  
-  if (itemid < 'Sa' || itemid > "Tz") {
-  	 gfxDo="OD"+itemid+itemz;
-  } else {
-  	 // logic for selecting a player-item for new players
-  	 if (playerItem === "Za") { gfxDo="OD" + itemid + itemz; } 
-  }
-  
-  // walk player to itemz, then execute 
+
+  // walk player to itemz, then execute
+  gfxDo="OD" + itemid + itemz;
    
 };
 
@@ -269,8 +271,8 @@ window.reverseMoveZ = function(z, cmd) {
 }
 
 window.keydown = function(key, e) {
+  hpop();
   var keyStr = (typeof e === 'object' && e.key) ? e.key : key;
-  
   if (window.playerItem === "Za" || !window.playerItem) return;
 
   // enter 'look around' mode

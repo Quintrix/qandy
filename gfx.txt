@@ -1,9 +1,7 @@
 
 
-
                       Quintrix and Crew Software
                       Multiplayer Graphics Engine
-
 
      ——————————————————————————————————————————————————————————————————————————————————————————
 
@@ -11,11 +9,13 @@
 
     gfx-tileset.htm — Displays entire tileset including tiles, characters, and items.
 
-     gfx-editor.htm — World Map Editor (ground tiles)
+     gfx-create.htm — World Map Creator (ground tiles)
                       
-   gfx-compiler.htm — Add 'punch code' programmable 'objects' on map 
+   gfx-compiler.htm — Add 'punch code' programmable 'objects' on map
+   
+       gfx-mods.htm — Modify the itemid.js script via the .gfx file for custom codes  
                       
-      gfx-itemid.js — Master list of ItemID() codes (the nouns)
+      gfx-itemid.js — Master list of gfxItemID() codes (the nouns)
       
      ——————————————————————————————————————————————————————————————————————————————————————————
 
@@ -23,7 +23,8 @@
      holes on a 'plug board'; the gfx.js sends a series of 'plugs' to qandyland.js where
      plugboard() processes them. All 'plugs' are two upper-case characters we call 'verbs'
      with two-character 'nouns' attached, the server will respond to the plugs with plugs
-     so some of these plugs are client plugs and others are server plugs: 
+     so some of these plugs are client plugs sent to the server, and others are server plugs
+     sent to the client: 
 
       Client:  Server:
 
@@ -36,66 +37,162 @@
                 PI$$##    — Player has been assigned item $$ at ## z-location
                 VA        — Server request for player avatar (triggers select avatar)
                 SP%%..    — Server Plugs for gfx.js engine to pass on to client, these
-                            let UNIVAC send plugs to the client.js (not the gfx.js engine)  
+                            let UNIVAC send plugs to the client.js (not the gfx.js engine,
+                            which gives developers direct access to the server results)   
                 
      ——————————————————————————————————————————————————————————————————————————————————————————
 
-     The 'UNIVAC Punch Code Processor' emulates a binary coded decimal computer
-     but with a base of 36 instead of 10. It processes files as if they were punch cards
+     The 'UNIVAC Punch Code Processor' emulates a binary coded decimal computer, but
+     with a base of 36 instead of 10. It processes text files as if they were punch cards
      programmed via a 'plugboard' using a retro-future 'plug code' language similar to
      'short code' that was used on what would become the UNIVAC. It is composed of two-character
      words that we divide into 'nouns' (the items), the 'verbs' (game instructions), the
      'registers' which are the variables, and the 'logic gates' that do the math.
      
-     Let's say a game designed needs 'hit points', so they assign 'Wh' to be hit points.
+     Let's say a game designer needs 'hit points', so they assign 'Wh' to be hit points.
      The player file is it's 'inventory', if a player has the item Wh in their file they
      have 1 hit point. If they have 'WhWh', they have 2 hit points. 'WhWhWh' would be 3,
      or they can be stacked 'Wh00' to 'Wh99'.
      
-     XiLaVtA1YeXcXiLbVtH8ZeXc = if player's inventory has 'black hat' teleport to the 
-     'Ze' (teleport) on A1, clear gate. if player's inventory has 'blue hat' teleport
-     to the 'Ze' (teleport) on H8, clear gate.
+     XiLaVtA1YeXcXiLbVtH8ZeXc = if player's inventory (Xi) has 'black hat' (La) teleport (Vt)
+     to sector A1's 'Ze' (teleport), clear gate (xc). if player's inventory (Xi) has 'blue hat'
+     (Lb) teleport (Vt) to sector H8's 'Ze' (teleport), clear gate (Xc).
      
      Because there are no jumps/branches/goto/gosub these files are processed from
      start to finish just a like a punch card, where you can't just move the card in
      and out of the machine - it is read from the start to the finish and yields
-     blinding fast processing speeds that combined with the tiny data packets creates
-     a 'massively multiplayer environment' no modern JSON API can match. 
+     blinding fast processing speeds that combined with a RAM drive with no moving parts
+     and tiny data packets allows for a 'massively multiplayer environment' that no
+     modern JSON API can match. 
 
-     W* = wildcard (Wa-Wz or W0-W9)
-     ## = numeral 00-99
-     $$ = byte code (Aa-Zz or A0-Z0)
-     %% = text validated: A-Za-z0-9 !@#$%^&*()-+=;:?,."'
-          (two dots '..' is the end of text)
+     Punch Codes start with an upper-case letter followed by a lower-case letter or a
+     numeral. Codes that have two-capital letters are codes for the 'plugboard'. The
+     plugboard() runs the player file through the UNIVAC() that processes the codes in
+     the objects. So if you 'use well', the UNIVAC() will run the 'well' object's code
+     and output a new player file, in this case replacing an empty bucket in the player's
+     inventory with a bucket of water. Or it could be programmed to return 'nothing',
+     game developers can write their own code for each and every object in the game.
+
+     These codes allow .gfx developers to create any type of world they desire, where
+     they can program a 'dumb server to do smart things'.   
      
+     
+     Legend:     $$ = byte code (Aa-Zz or A0-Z0)
+                 $* = *wildcard (A*-Z*)
+                 ## = numeral 00-99
+                 
+                 %% = text validated: A-Za-z0-9 !@#$%^&*()-+=;:?,."'
+                 -- = used by some codes as quotes for --strings-- 
+                      (some codes only use it as an end-quote to terminate the input)
+                 
+               (NA) = not implemented yet, code's purpose reserved 
 
-        Va avatar                Xa
-        Vb                       Xb 
-        Vc                       Xc close all open logic gates
-        Vd                       Xd
-        Ve east                  Xe
-        Vf                       Xf
-      Vg$$ get $$            Xg$$## if W$ if greater than (use Xn (not) for less than)
-        Vh                       Xh
-        Vi inventory           Xi$$ if item $$ is in inventory open gate (if fails gate closes and code is ignored until Xc) 
-        Vj                       Xj
-        Vk                       Xk
-        Vl look                  Xl 
-    Vm$$## make item $$##        Xm
-        Vn north                 Xn not (flips next logic gate)
-        Vo                       Xo
-        Vp                       Xp   
-        Vq                       Xq 
-    Vr$$## remove obj $$##     Xr$$ remove from inventory (use NOT to add) 
-        Vs south                 Xs 
-        Vt teleport              Xt 
-        Vu                       Xu
-        Vv                       Xv
-        Vw west                  Xw 
-        Vx                       Xx
-        Vy                       Xy
-        Vz                       Xz if item $$ is on z-location
+       ——————————————————————————————————————————————————————————————————————————————————————————
+       
+     Code Format Description:
 
+       Va Va$$-- avatar: if the player has been assigned a unique player id, then set the
+                 player-item's avatar to $$ until -- (ie: VaB0D0La-- = B0D0),
+
+       Xa Xa$$   alpha, claim player-item $$ to be assigned unique player-id (AaAa-ZzZz). 
+                 If the player item is 'Za' (nothing) then it is a ghost player that has
+                 not selected a 'team' yet, the developer will write 'lobby' punch code
+                 for the player and call the Xa$$ again this time with Sa, Sb, Sc, or Sd.
+                 Once a team has been selected, the UNIVAC() will not allow it to be 
+                 changed (disables turn-coat exploit).
+
+
+       Vd Vd$$   drop: if player has $$ drop it (remove the if 'not drop' then get $$) 
+       Ve Ve     east
+       
+       Vg Vg$$   get: if item is on player's z-location, and player has a Za item in their
+                 player file, change the Za to the $$ item and remove the item from the map
+                 sector directory
+                 
+       Vi Vi     inventory
+       Vl Vl     look 
+       Vm Vm$$## make item $$##
+       Vn Vn     north                     
+       Vr Vr$$## remove obj $$## from client's current map rendering (re-spawns on scroll)          
+       Vs Vs     south 
+       
+   Vt$$## Vt$$## teleport to map sector $$, must be in the valid 'e' (exits) file, will
+                 place player on z-location ##, if ## starts with an upper-case letter, it
+                 will put player on that item's z-location on the new map sector. 
+                   
+       Vw Vw     west 
+
+
+       Xa Xa$$   alpha, claim player-item $$ to be assigned unique player-id (AaAa-ZzZz). 
+                 If the player item is 'Za' (nothing) then it is a ghost player that has
+                 not selected a 'team' yet, the developer will write 'lobby' punch code
+                 for the player and call the Xa$$ again this time with Sa, Sb, Sc, or Sd.
+                 Once a team has been selected, the UNIVAC() will not allow it to be 
+                 changed (disables turn-coat exploit).
+
+       Va Va$$-- avatar: if the player has been assigned a unique player id, then set the
+                 player-item's avatar to $$ until -- (ie: VaB0D0La-- = B0D0),
+
+       Xa Xa$$   alpha, claim player-item $$ to be assigned unique player-id (Za = nothing, Sa Sb Sc and Sd are team items)
+       
+       Xb Xb$$-- send punch code to client's server plug board 
+
+       Xc Xc     clear all logic gates, if appending code this can be used as a reset
+                 to avoid logic overflow logic and malicious errors.
+       Xd XdW$   decrease register by one, use XnXd to add one to register. (## = 00 - 99, else item id Az - Zz) (NA)
+
+       Xe
+       Xf
+              
+       Xg Xg$$## if W$ if greater than (use Xn (not) for less than)
+       
+       Xh
+       
+       Xi Xi$$   if item $$ is in inventory open gate (if fails gate closes and code is ignored until Xc)
+
+       Xj
+       Xk
+       Xl
+       Xm
+       
+       Xn Xn not (flips next logic gate)
+       
+       Xo
+       
+       Xp Xp$$   render $$ over head .2 seconds, not = pop message $$ (NA)
+       
+       Xq
+       
+       Xr Xr$$   remove from inventory (use NOT to add)
+       
+       Xs 
+       Xt
+       
+       Xz Xz$$   if item $$ is on z-location (NA)
+        
+       
+      ** If appending code, can start with this to avoid logic overflow bugs and exploits   
+
+     ——————————————————————————————————————————————————————————————————————————————————————————
+
+        W* Registers:
+        
+        There are two sets of registers that can be used as 'variables':
+
+          Wa-Wz — free, can be used by game developers for hit points, levels, quest flags, etc
+          W0-W9 — stored in the 'a' (alpha) file and used as the UNIVAC's 'memory'
+          
+             W0 — first spawn map sector, the 'lobby'
+             W1 — first byte of next unique player id
+             W2 — second byte of the next unique player id
+          W3-W9 — reserved for future use
+            
+     ——————————————————————————————————————————————————————————————————————————————————————————
+
+     The client's serverplug() function:
+     
+          
+     
      ——————————————————————————————————————————————————————————————————————————————————————————
 
      Item ID Codes - the 'nouns' in the punchcode language, the first character will always
@@ -103,55 +200,70 @@
      are 'pick-up' items that players can pick-up and drop. The file gfx-itemid.js contains
      the master list of all ItemID codes, which are sorted via their first character:
 
-        A — travel items
-        B — misc tools and items
-        C — misc tools and items
-        D — misc tools and items
-        E — misc tools and items
-        F — food items
-        G — cooked food
-        H — raw fish 
-        I — cooked fish
-        J — unused 
-        K — plants
-        L — player hats (can be worn)
-        M — player helms (can be worn)
-        N — unused
-        O — player shields (can be worn)
-        P — player swords (can be worn)
-        Q — unused
-        R — unused
-        S — unused
-        T — unused
-        U — unused 
-        V v-verbs (game commands)
-        W item registers (variables)
-        X x-logic (bot commands)
-        Y buildings (images can be bigger than 32x32)
-        Z usable items 
-
-
+       A — travel items
+       B — tools
+       C — items
+       D — quest items
+       E — stacked items
+       F — ingredient
+       G — plant based food
+       H — baked food
+       I — raw food 
+       J — cooked food
+       K — mining items
+       L — hats and helms
+       M — swords and shields
+       N — unused
+       O — unused
+       P — unused
+       Q — unused
+       R — unused
+       S — player items, can use these items without being on it's z-location, for login
+       T — buildings (images can be bigger than 32x32)
+       U — buildings (images can be bigger than 32x32)
+       V — v-verbs (game commands)
+       W — registers (variables)
+       X — x-logic (logic gates)
+       Y — server items that have punchcode
+       Z — server items that have punchcode 
 
       * THESE CODES ARE ALL IN DRAFT STAGE AND ARE SUBJECT TO CHANGE!!
       
+     ——————————————————————————————————————————————————————————————————————————————————————————
+     
+     The gfx-compiler.js can edit several 'config files, these one character filenames get
+     saved in the qandyland.js RAM drive to be used by the UNIVAC():
+
+       a — alpha, the UNIVAC()'s 'inventory' with config data
+       b — before, executed before the player's 1-second tick
+       c — after, executed after the player's 1-second tick
+ 
+     UNIVAC() inventory file that can include these items:
+
+       Aa$$ — set register that holds player's number of moves  
+       Ab## — ## moves required to walk on forest (tiles R$) (99=not allowed)
+       Ac## — ## moves required to walk on swamp (tiles T$) (99=not allowed)
+       Ad## — ## moves required to walk on mountain (tiles S$) (99=not allowed)
+       Ae## — ## moves required to walk on lava (tiles M$) (99=not allowed)
+       Af## — ## moves required to walk on water (tiles M$) (99=not allowed)
+               
+     ——————————————————————————————————————————————————————————————————————————————————————————
+
+     Programming Clients:
+     
+     The gfx.js engine is designed to work with any type of game that wants to use
+     the UNIVAC() to process data, in fact gfx.js by itself does nothing. To use 
+     the engine, a developer must write a 'client.js', the capflag.js will be the
+     flagship game of the 'multiplayer graphics engine' and can be used as a template.
+     
+     The gfx.js checks to see if certain functions have been defined, and if so sends
+     data to them:
+     
+          objdown(code) — the player clicks an object (code = itemid + itemz, ie: Yj44)
+         itemdown(code) — the player clicks an item (code = itemid + itemz, ie: Sa33)
+       playerdown(code) — itemdown() sends clicks on 'player items' here
+          invdown(code) — the player requests to see their inventory file
+       serverdown(code) — the UNIVAC() sends punchcode here for direct client access
+     keydown(key,event) — the Qandy sends virtual key press events here
+     
         
-      
-
-     Filling the Logic Gate Gaps (X)Since you have Xg (greater than) and Xl (less than),
-     you need an equality checker and arithmetic handlers for your stack variables:
-     
-     XbW$## — Bitwise or Boolean Mask: Checks if specific status bits are flipped in a
-              register without modifying the whole stack.
-              
-     Xh$$## — High/Low bounds check: Verifies if a base-36 byte string falls inside a safe
-              zone (great for checking if coordinates are within map edges).
-              
-     Xj$$$$ — Join/Concatenate: Merges two item strings or values together.
-
-     XkW$## — equal to: The missing comparator. XkW$05 asks "Does register $ have
-              exactly 5 items?"XqW$## — eQuivalent type check: Checks if an item ID
-              matches a specific base-36 category type.
-     
-     Xy$$$$ — Yield to target: Transmutes one item string into another (e.g., changes
-              'Ff' (Food) to 'Ee' (Empty Can) after consumption). 
-              

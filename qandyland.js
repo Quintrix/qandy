@@ -28,6 +28,7 @@ UNIVAC.inject({ fileLoad,
                 fileSave,
                 fileDelete,
                 fileList,
+                fileRename,
                 futureTimestamp
               });
 
@@ -455,7 +456,6 @@ function _findEntry(manifest, userInput) {
   return null;
 }
 
-
 function fileSave(driveName, cwd, name, content, session, owner, customTs) {
   var drive = drives[driveName];
   if (!drive) return { success: false, error: 'drive not mounted' };
@@ -466,15 +466,10 @@ function fileSave(driveName, cwd, name, content, session, owner, customTs) {
   if (!fv.ok) return { success: false, error: fv.reason };
 
   var canonical = resolveName(cwd, fname);
-  var manifest  = _readManifest(driveName);
+  
+  // O(1) Manifest Lookup instead of Array reading
+  var existing = drive.manifestMap.get(canonical);
 
-  // Find existing entry by canonical path (exact match prevents cross-directory collisions)
-  var existing = null;
-  for (var fi = 0; fi < manifest.length; fi++) {
-    if (manifest[fi].name === canonical) { existing = manifest[fi]; break; }
-  }
-
-  // Write-protection check
   if (existing && isWriteProtected(existing.name)) {
     return { success: false, error: 'file is write-protected' };
   }
@@ -482,37 +477,30 @@ function fileSave(driveName, cwd, name, content, session, owner, customTs) {
   var str  = String(content == null ? '' : content);
   var size = utf8len(str);
 
-  if (size > MAX_FILE_BYTES) {
-    return { success: false, error: 'file too large (max ' + formatBytes(MAX_FILE_BYTES) + ')' };
-  }
+  if (size > MAX_FILE_BYTES) return { success: false, error: 'file too large (max ' + formatBytes(MAX_FILE_BYTES) + ')' };
 
-  var stats = calculateDriveStats(drive);
-  if (!existing && stats.fileCount >= MAX_DRIVE_FILES) {
-    return { success: false, error: 'drive full' };
-  }
-
-  // Drive total size check
+  // Calculate stats directly without looping
+  if (!existing && drive.fileCount >= MAX_DRIVE_FILES) return { success: false, error: 'drive full' };
   var oldSize = existing ? existing.size : 0;
-  if (stats.totalSize - oldSize + size > MAX_TOTAL_DRIVE_SIZE) {
-    return { success: false, error: 'drive storage limit exceeded (max ' + formatBytes(MAX_TOTAL_DRIVE_SIZE) + ')' };
-  }
+  if (drive.totalSize - oldSize + size > MAX_TOTAL_DRIVE_SIZE) return { success: false, error: 'drive storage limit exceeded' };
 
   var ts = customTs || timestamp();
   _storageSet(drive.storage, canonical, str);
 
-  // Update manifest: remove old entry by canonical name, add updated entry
-  var newManifest = manifest.filter(function (e) {
-    return e.name !== MANIFEST_KEY && e.name !== canonical;
-  });
-  newManifest.push({
+  // Instantly update the manifest Map
+  drive.manifestMap.set(canonical, {
     name:      canonical,
     size:      size,
     timestamp: ts,
     owner:     owner || session,
     session:   session
   });
-  _saveManifest(driveName, newManifest);
 
+  // Keep cache updated incrementally
+  if (!existing && canonical.charAt(0) !== '<') drive.fileCount++;
+  if (canonical.charAt(0) !== '<') drive.totalSize += (size - oldSize);
+
+  _debounceSaveManifestToStorage(driveName);
   return { success: true, result: true };
 }
 
@@ -557,27 +545,23 @@ function fileDelete(driveName, cwd, name, session) {
   var drive = drives[driveName];
   if (!drive) return { success: false, error: 'drive not mounted' };
 
-  var fname    = normName(name);
+  var fname = normName(name);
   if (!fname) return { success: false, error: 'invalid filename' };
   var canonical = resolveName(cwd, fname);
-  var manifest  = _readManifest(driveName);
-
-  // Find entry by canonical path
-  var existing = null;
-  for (var fi = 0; fi < manifest.length; fi++) {
-    if (manifest[fi].name === canonical) { existing = manifest[fi]; break; }
-  }
-
+  
+  var existing = drive.manifestMap.get(canonical);
   if (!existing) return { success: false, error: 'file not found' };
   if (isWriteProtected(existing.name)) return { success: false, error: 'file is write-protected' };
 
   _storageDelete(drive.storage, canonical);
+  drive.manifestMap.delete(canonical);
 
-  var newManifest = manifest.filter(function (e) {
-    return e.name !== MANIFEST_KEY && e.name !== canonical;
-  });
-  _saveManifest(driveName, newManifest);
+  if (canonical.charAt(0) !== '<') {
+    drive.fileCount--;
+    drive.totalSize -= existing.size;
+  }
 
+  _debounceSaveManifestToStorage(driveName);
   return { success: true, result: 'deleted' };
 }
 
@@ -587,7 +571,6 @@ function fileRename(driveName, cwd, name, dest, session) {
 
   var fname = normName(name);
   var dname = normName(dest);
-  if (!fname || !dname) return { success: false, error: 'invalid filename' };
   var fv = validateName(baseName(fname));
   var dv = validateName(baseName(dname));
   if (!fv.ok) return { success: false, error: fv.reason };
@@ -595,14 +578,9 @@ function fileRename(driveName, cwd, name, dest, session) {
 
   var srcCanonical  = resolveName(cwd, fname);
   var destCanonical = resolveName(cwd, dname);
-  var manifest      = _readManifest(driveName);
-
-  // Find by canonical path
-  var existing = null, destExisting = null;
-  for (var fi = 0; fi < manifest.length; fi++) {
-    if (manifest[fi].name === srcCanonical)  existing     = manifest[fi];
-    if (manifest[fi].name === destCanonical) destExisting = manifest[fi];
-  }
+  
+  var existing = drive.manifestMap.get(srcCanonical);
+  var destExisting = drive.manifestMap.get(destCanonical);
 
   if (!existing) return { success: false, error: 'file not found' };
   if (isWriteProtected(existing.name)) return { success: false, error: 'file is write-protected' };
@@ -614,19 +592,16 @@ function fileRename(driveName, cwd, name, dest, session) {
   _storageSet(drive.storage, destCanonical, content);
   _storageDelete(drive.storage, srcCanonical);
 
-  var ts = timestamp();
-  var newManifest = manifest.filter(function (e) {
-    return e.name !== MANIFEST_KEY && e.name !== srcCanonical;
-  });
-  newManifest.push({
+  drive.manifestMap.delete(srcCanonical);
+  drive.manifestMap.set(destCanonical, {
     name:      destCanonical,
     size:      existing.size,
-    timestamp: ts,
+    timestamp: timestamp(),
     owner:     existing.owner || session,
     session:   existing.session || session
   });
-  _saveManifest(driveName, newManifest);
 
+  _debounceSaveManifestToStorage(driveName);
   return { success: true, result: 'renamed' };
 }
 
@@ -646,7 +621,6 @@ function fileExists(driveName, cwd, name) {
 
 // Search manifest using wildcards
 function fileSearch(driveName, pattern) {
-	console.log(driveName, pattern);
   var drive = drives[driveName];
   if (!drive) return { success: false, error: 'drive not found', results: [] };
 
@@ -667,7 +641,6 @@ function fileSearch(driveName, pattern) {
       });
     }
   }
-  console.log(driveName, pattern, results);
   return { success: true, results: results };
 }
 
@@ -930,7 +903,6 @@ function getIP(req) {
 // A player item will always be at least 8 characters (item a-location face body)
 //
 
-
 function bigbang(driveName, session) {
 
   if (!drives[driveName]) return { success: false, error: 'drive not mounted: ' + driveName };
@@ -945,8 +917,8 @@ function bigbang(driveName, session) {
   }
 
   var lines = raw.split('\n');
-  var sectors = [];   // { id, exits, items[] }
-  var playerSlots = '';
+  var sectors = [];       // { id, tiles, exits, items[] }
+  var systemFiles = [];   // { id, data } for global UNIVAC scripts
   var playerCodes = [];
   var seenCodes   = {};
 
@@ -959,6 +931,16 @@ function bigbang(driveName, session) {
 
     var sectorId  = line.substring(0, eqIdx);
     var rest      = line.substring(eqIdx + 1);
+
+    // Ignore metadata entirely (e.g. ##=Pa:White Flag)
+    if (sectorId === '##') continue;
+
+    // Single-character keys are flat script files inside /w/, not map sectors
+    if (sectorId.length === 1) {
+      systemFiles.push({ id: sectorId, data: rest });
+      continue;
+    }
+
     var dotIdx    = rest.indexOf('.');
     var mapData   = dotIdx >= 0 ? rest.substring(0, dotIdx) : rest;
     var itemData  = dotIdx >= 0 ? rest.substring(dotIdx + 1) : '';
@@ -966,7 +948,8 @@ function bigbang(driveName, session) {
     // tiles are first 192 chars (96 × 2); exits are the remainder
     var tiles = mapData.substring(0, 192); 
     var exitStr = mapData.substring(192);
-    // NEW: Parse items using comma separation
+    
+    // Parse items using comma separation
     var items = [];
     if (itemData) {
       var rawItems = itemData.split(',');
@@ -975,7 +958,7 @@ function bigbang(driveName, session) {
         if (blob) items.push(blob);
       }
     }
-    sectors.push({ id: sectorId, exits: exitStr, items: items });
+    sectors.push({ id: sectorId, tiles: tiles, exits: exitStr, items: items });
   }
 
   if (sectors.length === 0) {
@@ -990,9 +973,19 @@ function bigbang(driveName, session) {
   if (!wDir.success && wDir.error !== 'directory already exists') {
     return { success: false, error: 'failed to create /w/ directory: ' + wDir.error };
   }
-  
-  // Create /w/a.txt alpha 'punch code' script (VtF2 = teleport F2)
-  var eResult = fileSave(driveName, '/', 'w/a.txt', 'VtF2', session, 'bigbang');
+
+  // Create empty /p/ root directory for connecting players
+  var pDir = dirMake(driveName, '/', 'p', session);
+  if (!pDir.success && pDir.error !== 'directory already exists') {
+    return { success: false, error: 'failed to create /p/ directory: ' + pDir.error };
+  }
+
+  // Save 1-character system files into /w/ using their dynamic keys (e.g. w/a, w/b)
+  for (var fi = 0; fi < systemFiles.length; fi++) {
+    var sysFile = systemFiles[fi];
+    var sfResult = fileSave(driveName, '/', 'w/' + sysFile.id, sysFile.data, 'UNIVAC', 'UNIVAC');
+    if (!sfResult.success) errors.push('w/' + sysFile.id + ': ' + sfResult.error);
+  }
   
   // Process Sector Items
   for (var si = 0; si < sectors.length; si++) {
@@ -1005,6 +998,10 @@ function bigbang(driveName, session) {
       continue;
     }
 
+    // m(.txt) – valid terrain tiles (192 chars)
+    var mResult = fileSave(driveName, '/', dirPath + '/m', sector.tiles, session, 'bigbang');
+    if (!mResult.success) errors.push(dirPath + '/m: ' + mResult.error);
+
     // e(.txt) – valid exits
     var eResult = fileSave(driveName, '/', dirPath + '/e', sector.exits, session, 'bigbang');
     if (!eResult.success) errors.push(dirPath + '/e: ' + eResult.error);
@@ -1013,27 +1010,18 @@ function bigbang(driveName, session) {
     for (var ii = 0; ii < sector.items.length; ii++) {
       var parts = sector.items[ii].split(':');
       var itemMeta = parts[0];
-      var itemCode = (parts[1] || '').slice(0, sysopCardWidth);
       
-      var itemId=parts[0].substring(0,2); 
-
-      if (['Q','R','S','T'].includes(itemId.charAt(0).toUpperCase())) {
-        //playerSlots.add(itemId);
-        playerSlots += itemId + '='+sector.id+'\n';
-        playerCodes.push(itemId);
-      }
-
+      // Strip out whitespace and '++' line breaks, THEN slice the exact limits
+      var rawCode = (parts[1] || '').replace(/\s+|\+\+/g, '');
+      var itemCode = rawCode.slice(0, sysopCardWidth);
+      
+      var itemId = parts[0].substring(0, 2); 
+      
       var iResult = fileSave(driveName, '/', dirPath + '/' + itemMeta, itemCode, '', 'bigbang');
       if (!iResult.success) errors.push(dirPath + '/' + itemMeta + ': ' + iResult.error);
     }
 
-
     created.push(sector.id);
-  }
-
-  if (playerSlots) {
-    var pResult = fileSave(driveName, '/', 'p', playerSlots, '', 'bigbang'); 
-    if (!pResult.success) errors.push('p: ' + pResult.error);
   }
 
   // 
@@ -1042,6 +1030,13 @@ function bigbang(driveName, session) {
   // it should ensure all directories and files created have known path names
   // to prevent malicious user from 'hiding' data files in directories that 
   // don't exist preventing the terminal operator to know they exist
+  // It may become some type of stand alone 'check disk' tool.
+  //
+  // this is not today's task, we will do this when we have finalized the .gfx format
+  // so we will know what we are checking for. This is to make sure I don't forget.
+
+  //
+  // -Joe 
   //
 
   if (errors.length > 0) {
@@ -1125,48 +1120,50 @@ function isValidDriveName(drive) {
 }
 
 function plugboard(req, stacker, plugs, drive, session) {
+  let output = "";
+  if (plugs != "RF") { console.log(plugs+" "+drive+" "+session); }
   function runtape(code) {
     if (code) {
-      let uResult = UNIVAC(drive, player.fullPath, "RAM:"+tape);
+      let uResult = UNIVAC(drive, player.fullPath, "RAM:"+code);
       if (uResult) {
-        //Apply UNIVAC's modifications to our live player session
-        player.map = uResult.sector;
-        player.z = uResult.z;
-        player.avatar = uResult.avatar;
+        player.map      = uResult.sector;
+        player.z        = uResult.z;
+        player.avatar   = uResult.avatar;
+        if (uResult.playerid) player.pubId = uResult.playerid;
+        if (uResult.item) player.item  = uResult.item + player.pubId; // e.g. "ZaAaAa"
         player.fullPath = uResult.fullPath;
         output += uResult.output;
+        // this get overwritten at line 1141
       }
     }
   }
-
   var player = playerIndex.get(session);
   
-  // Ensure the 'player' object exists with safe defaults so we can use player.* directly
   if (!player) {
     player = {
       drive: drive,
       fullPath: null,
-      map: "F2",
+      map: "A1",
       z: 0,
       item: "",
-      avatar: ""
+      avatar: "",
+      pubId: ""
     };
   } else {
-    // Apply fallbacks if existing properties happen to be empty
-    if (!player.map) player.map = "F2";
+    if (!player.map) player.map = "A1";
     if (player.z == null) player.z = 0;
     if (!player.item) player.item = "";
     if (!player.avatar) player.avatar = "";
   }
 
   var refresh = true;
-  let column = 0; // which column of the 'plugs' the read-head is on
-  let output = ""; // plug code that will be returned to the client 
+  let column = 0; 
+  
   let tape="";  
   while (column < plugs.length) {
 
     let code = plugs.slice(column, column + 2);
-    column += 2; // advance read head after every read
+    column += 2; 
 
     switch (code) {
       case 'Vn':
@@ -1177,6 +1174,12 @@ function plugboard(req, stacker, plugs, drive, session) {
         tape += code;
         break;
         
+      case 'Vd': 
+        if (!player.item || player.item === "") { break; }
+        let item = plugs.slice(column, column + 2); column += 2;
+        tape += code+item;
+        break;      
+
       case 'OD':
         if (tape) { runtape(tape); tape=""; }
         
@@ -1185,26 +1188,24 @@ function plugboard(req, stacker, plugs, drive, session) {
         let objz  = plugs.slice(column + 2, column + 4);
         column += 4;
         
-        let pZStr = (player.z < 10 ? '0' : '') + player.z;
-        let odSearchPattern = 'w/' + player.map + '/' + objid + pZStr + '??';
+        if (player.item === 'Za') {
+        	 if (objid.charAt(0) === 'S') {
+        	 	player.z = objz;
+        	 }
+        }
 
-        // Let the RegExp engine do the heavy lifting
+        let pZStr = (player.z < 10 ? '0' : '') + player.z;
+
+        let odSearchPattern = 'w/' + player.map + '/' + objid + pZStr + '??';
         let odFilesResponse = fileSearch(drive, odSearchPattern);
         
         if (odFilesResponse.success && odFilesResponse.results.length > 0) {
-          objfile = odFilesResponse.results[0].name;
-        }        
-        
-        if (odFilesResponse.success && odFilesResponse.results.length > 0) {
-          // Scan through the matches to find the static object file
           for (let i = 0; i < odFilesResponse.results.length; i++) {
             let entryName = odFilesResponse.results[i].name;
             let matchedBase = entryName.substring(entryName.lastIndexOf('/') + 1);
-            
-            // Check length: static object filenames will always be exactly 6 characters
             if (matchedBase.length === 6) {
               objfile = entryName;
-              break; // Found our target, exit the loop
+              break; 
             }
           }
         }
@@ -1212,17 +1213,19 @@ function plugboard(req, stacker, plugs, drive, session) {
         if (objfile != null) {
           console.log("UNIVAC(" + drive + ", " + player.fullPath + ", " + objfile + ")");
           if (typeof UNIVAC === 'function') {
-            // Capture the resulting state from the punch card processor
             let uResult = UNIVAC(drive, player.fullPath, objfile);
-            
             if (uResult) {
-              // Apply UNIVAC's modifications to our live player session
               player.map = uResult.sector;
               player.z = uResult.z;
               player.avatar = uResult.avatar;
+              if (uResult.playerid) player.pubId = uResult.playerid;
+              if (uResult.item) player.item = uResult.item + player.pubId;
+              
               player.fullPath = uResult.fullPath;
               output += uResult.output;
             }
+            console.log("###1205### fullPath="+player.fullPath+" objfile="+objfile);
+            // ###1196### fullPath=w/H1/Sa44AaAaAaAa objfile=w/H1/Sa66Za
           }
         }
         break;
@@ -1233,93 +1236,90 @@ function plugboard(req, stacker, plugs, drive, session) {
         let itemZ  = plugs.slice(column + 2, column + 4);
         column += 4;
         
-        let searchPrefix = 'w/' + player.map + '/' + itemId + itemZ;
-        
-        // fileSearch returns { success: true, results: [{name, size, timestamp}] }
+        let searchPrefix = 'w/' + player.map + '/' + itemId;
         let filesResponse = fileSearch(drive, searchPrefix + '*');
         
         if (filesResponse.success && filesResponse.results.length > 0) {
-          // Grab the first file that matches our ID/Z prefix
-          let matchedPath = filesResponse.results[0].name;
-          let matchedBase = matchedPath.substring(matchedPath.lastIndexOf('/') + 1);
-
-          if (itemId === player.item) {
-            let invLoad = fileLoad(drive, '/', player.fullPath, session);
-            let inventoryData = (invLoad.success && invLoad.content) ? invLoad.content : '';
-            output += "SPVi" + inventoryData + "..";
-            break; // Halt further OD processing so we don't trigger UNIVAC
-          }
-
-          if (itemId > 'Rz' && itemId < 'Ua') {
-            if (matchedBase.length === 4) {
-              if (!player.item || player.item === "") {
-                let defaultAvatar = 'B1D3J0'; // 2-char default avatar code (resulting in 8-char total length)
-                let newBase = matchedBase + defaultAvatar;
-                let newPath = 'w/' + player.map + '/' + newBase;
-                let renameResult = fileRename(drive, '/', matchedPath, newPath, session);
-                if (renameResult.success) {
-                  console.log("itemId="+itemId+" itemZ="+itemZ);
-                  player.item = itemId;
-                  player.z = parseInt(itemZ, 10);
-                  player.avatar = defaultAvatar;
-                  player.fullPath = newPath;
-                  
-                  // Update the 'p' registry file 
-                  let pLoad = fileLoad(drive, '/', 'p', session);
-                  if (pLoad.success) {
-                    let escId = itemId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                    // Replaces "S1=A1" with "S1=A1Va" to register the avatar assignment globally
-                    let z = itemZ < 0 ? "00" : (itemZ < 10 ? "0" + itemZ : itemZ);                    
-                    let pUpdated = pLoad.content.replace(
-                      new RegExp('^(' + escId + ')=.*$', 'm'),
-                      '$1=' + player.map + z + defaultAvatar
-                    );
-                    fileSave(drive, '/', 'p', pUpdated, session, 'JG');
-                  }
-                  // Return the Va command/response to the client
-                  output += "PI"+itemId+itemZ+"VA";
-                } else {
-                  console.log("Failed to claim slot: " + renameResult.error);
-                }
-              } else {
-                console.log("Player already has an active item: " + player.item);
-              }
-            } else {
-              console.log("Item already claimed (file length is " + matchedBase.length + ")");
+          let matchedPath = null;
+          let matchedBase = null;
+          
+          for (let i = 0; i < filesResponse.results.length; i++) {
+            let base = filesResponse.results[i].name.split('/').pop();
+            if (base.substring(2, 4) === itemZ) {
+              matchedPath = filesResponse.results[i].name;
+              matchedBase = base;
+              break;
             }
           }
-          
-        } else {
-          console.log("Item file not found for: " + searchPrefix);
+
+          if (matchedPath) {
+            let matchedPubId = matchedBase.length >= 8 ? matchedBase.substring(4, 8) : "";
+            let matchedFullId = matchedPubId ? itemId + matchedPubId : itemId;
+
+            // If the player clicks their own item, send inventory
+            if (matchedFullId === player.item) {
+              let invLoad = fileLoad(drive, '/', player.fullPath, session);
+              let inventoryData = (invLoad.success && invLoad.content) ? invLoad.content : '';
+              output += "SPVi" + inventoryData + "..";
+              break; 
+            }
+            
+            // ── GHOST PLAYER CREATION TRIGGER ────────────────────────────────
+            if (itemId >= 'Sa' && itemId <= 'Sh') {
+              if (!player.item || player.item === "") {
+                // The user clicked a hat but doesn't exist yet! 
+                // Run your custom initialization punch code:
+                let initTape = "XnXjVaB1D3J0++XnXr++LaZaZaZaZaZaZaZaZaWm99++VtA1ZeVuVa++Xc";
+                runtape(initTape);
+                break; // Stop processing so we don't accidentally try to pick up the item
+              }
+            }
+            
+            // Pick up standard dynamic items
+            if (itemId >= 'Aa' && itemId < 'Qa') { tape += 'XnVd'+itemId; }
+          }
         }
-        break;          	  
+        break;                  
 
       case 'ST':
         if (session && playerIndex.has(session)) {
           output += "ST" + session;
         } else {
-          // Generate a new 8-character session token
-          session = Math.random().toString(36).substring(2, 10);
-          playerIndex.set(session, {
-            drive:    drive, // 'drive' parameter passed into plugboard()
+          let chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+          let pubId = '';
+          for (let i = 0; i < 4; i++) pubId += chars.charAt(Math.floor(Math.random() * chars.length));
+
+          let secret = Math.random().toString(36).substring(2, 10);
+          session = secret;
+
+          player = {
+            drive:    drive,
             fullPath: null,
-            map:      "F2",
+            map:      "A1",
             item:     "",
             z:        0,
-            avatar:   ""
-          });
+            avatar:   "",
+            pubId:    pubId
+          };
+          playerIndex.set(session, player);
+
+          // Create the ghost player file with Za (empty slot) as the item
+          runtape("XaZa");
+          player.item = 'Za'; // mark slot as created so item guards pass
+          let numericZ = parseInt(player.z, 10) || 0;
+          // overwrite UNIVAC output as client has no session token to process it yet
           output += "ST" + session;
+          var refresh=false;
         }
-        column = plugs.length; // no more commands
-        break;
+        column = plugs.length;
+        break;        
 
       case 'VA':
+        console.log("### PLUGBOARD VA ###");
         if (tape) { runtape(tape); tape=""; }
-        //
-        // 'Va[new avatar string]..'
 
         let vaAvatar = "";
-        let vaTermIdx = plugs.indexOf('..', column);
+        let vaTermIdx = plugs.indexOf('--', column);
         if (vaTermIdx !== -1) {
           vaAvatar = plugs.slice(column, vaTermIdx);
           column = vaTermIdx + 2;
@@ -1328,54 +1328,20 @@ function plugboard(req, stacker, plugs, drive, session) {
           column = plugs.length;
         }
 
-        // The player must already have an active item claimed
-        if (!player.item || player.item === "") {
-          console.log("Cannot update avatar: player has no active item.");
-          break; 
-        }
+        if (!player.item || player.item === "") break; 
+        if (vaAvatar !== player.avatar) { runtape("Va" + vaAvatar + "--"); }
+        break;                
 
-        if (vaAvatar !== player.avatar) {
-          let vaNumZ = parseInt(player.z, 10) || 0;
-          let vaZStr = vaNumZ < 0 ? "00" : (vaNumZ < 10 ? "0" + vaNumZ : String(vaNumZ));
-          
-          let vaOldPath = 'w/' + player.map + '/' + player.item + vaZStr + player.avatar;
-          let vaNewPath = 'w/' + player.map + '/' + player.item + vaZStr + vaAvatar;
-          
-          let vaRenameRes = fileRename(drive, '/', vaOldPath, vaNewPath, session);
-          if (vaRenameRes.success) {
-            player.avatar = vaAvatar;
-            player.fullPath = vaNewPath;
-            
-            // Update the 'p' registry file so the rest of the world sees the change
-            let vaPLoad = fileLoad(drive, '/', 'p', session);
-            if (vaPLoad.success && vaPLoad.content) {
-              let vaEscId = player.item.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-              let vaPUpdated = vaPLoad.content.replace(
-                new RegExp('^(' + vaEscId + ')=.*$', 'm'),
-                '$1=' + player.map + vaZStr + vaAvatar
-              );
-              fileSave(drive, '/', 'p', vaPUpdated, session, 'VA');
-            }
-          } else {
-            console.log("Failed to update avatar file: " + vaRenameRes.error);
-          }
-        }
-        break;
-                
       case 'OO':
-        // return 'look mode' 
-        refresh=false;
-        column = plugs.length; // no more commands
+        var refresh=false;
+        column = plugs.length; 
         break;        
     }
   }
 
-  // Ensure any dangling tape commands (like Vn, Ve, etc.) are executed
   if (tape) { runtape(tape); tape=""; }
-
-  if (session) {
-    playerIndex.set(session, player);
-  }
+  
+  if (session) { playerIndex.set(session, player); }
 
   if (refresh) {
     let list = fileList(drive, 'w/' + player.map, null, session);
@@ -1388,7 +1354,13 @@ function plugboard(req, stacker, plugs, drive, session) {
     }
     let numericZ = parseInt(player.z, 10) || 0;
     let z = numericZ < 0 ? "00" : (numericZ < 10 ? "0" + numericZ : String(numericZ));
-    output = output + "RF" + player.map + z + items.join(',');
+
+    let pItemId = player.item ? player.item.substring(0, 2) : "Za";
+    let pPubId = player.pubId ? player.pubId : "0000";
+    if (pPubId.length < 4) pPubId = pPubId.padEnd(4, '0');
+    
+    output = "PI" + pItemId + z + pPubId + output;
+    output += "RF" + player.map + z + items.join(',');
   }
   return respondRetro(stacker, output, session);
 }
