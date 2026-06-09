@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>GFX ITEM ID EDITOR</title>
+    <style>
+        /* ── Base ── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background: #1a1a1a;
+            color: #ddd;
+            font-family: monospace;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* ── Toolbar ── */
+        #toolbar {
+            background: #2a2a2a;
+            border-bottom: 1px solid #444;
+            padding: 8px 14px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-shrink: 0;
+        }
+        #toolbar .title {
+            color: #0af;
+            font-weight: bold;
+            font-size: 0.9em;
+            letter-spacing: 0.05em;
+            margin-right: 6px;
+        }
+        button {
+            padding: 5px 11px;
+            cursor: pointer;
+            background: #068;
+            color: #fff;
+            border: none;
+            border-radius: 3px;
+            font-weight: bold;
+            font-size: 0.72em;
+            font-family: monospace;
+            letter-spacing: 0.04em;
+        }
+        button:hover { background: #07a; }
+        button.green  { background: #274; }
+        button.green:hover  { background: #395; }
+        button.amber  { background: #750; }
+        button.amber:hover  { background: #971; }
+        button.red    { background: #722; }
+        button.red:hover    { background: #944; }
+
+        #status-bar {
+            margin-left: auto;
+            font-size: 0.7em;
+            color: #888;
+            font-style: italic;
+        }
+
+        /* ── Main layout ── */
+        #main {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* ── Sidebar ── */
+        #sidebar {
+            width: 48px;
+            background: #222;
+            border-right: 1px solid #444;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 6px 0;
+            gap: 2px;
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+        .letter-btn {
+            width: 36px;
+            height: 30px;
+            background: #2c2c2c;
+            border: 1px solid #444;
+            border-radius: 3px;
+            color: #aaa;
+            font-size: 0.85em;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.1s, color 0.1s;
+        }
+        .letter-btn:hover { background: #3a3a3a; color: #fff; }
+        .letter-btn.active { background: #0af; color: #000; border-color: #0af; }
+        .letter-btn.has-data { border-color: #274; }
+        .letter-btn.has-mod  { border-color: #750; }
+
+        /* ── Content area ── */
+        #content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Column headers */
+        #col-headers {
+            display: grid;
+            grid-template-columns: 40px 40px 320px 320px;
+            gap: 0;
+            background: #252525;
+            border-bottom: 2px solid #444;
+            padding: 5px 10px;
+            flex-shrink: 0;
+        }
+        #col-headers span {
+            font-size: 0.65em;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+        #col-headers span:nth-child(1) { text-align: center; }
+        #col-headers span:nth-child(2) { text-align: center; }
+        #col-headers span:nth-child(3) { padding-left: 8px; color: #4af; }
+        #col-headers span:nth-child(4) { padding-left: 8px; color: #fa4; }
+
+        /* Item list */
+        #item-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 4px 0;
+            width: 100%;
+        }
+
+        .item-row {
+            display: grid;
+            grid-template-columns: 40px 40px 320px 320px;
+            align-items: center;
+            gap: 0;
+            padding: 3px 10px;
+            border-bottom: 1px solid #2a2a2a;
+            transition: background 0.08s;
+        }
+        .item-row:hover { background: #282828; }
+        .item-row.has-js-edit  { background: #1a251a; }
+        .item-row.has-gfx-edit { background: #25211a; }
+        .item-row.has-both     { background: #1e1e26; }
+
+        /* Item image cell */
+        .item-img {
+            width: 32px;
+            height: 32px;
+            image-rendering: pixelated;
+            object-fit: contain;
+            background: #111;
+            border: 1px solid #333;
+            display: block;
+        }
+        .item-img-wrap {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Item ID badge */
+        .item-id {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.78em;
+            color: #f1c40f;
+            font-weight: bold;
+            letter-spacing: 0.04em;
+        }
+
+        /* Edit fields */
+        .item-row input[type="text"] {
+            width: 32ch;
+            max-width: 32ch;
+            min-width: 32ch;
+            background: #111;
+            color: #eee;
+            border: 1px solid #333;
+            border-radius: 2px;
+            padding: 4px 7px;
+            font-family: monospace;
+            font-size: 0.82em;
+            outline: none;
+            margin: 2px 6px 2px 6px;
+            transition: border-color 0.15s;
+        }
+        .item-row input[type="text"]:focus { border-color: #0af; background: #181818; }
+        .item-row input.js-field:focus  { border-color: #4af; }
+        .item-row input.gfx-field:focus { border-color: #fa4; }
+        .item-row input.js-field.edited  { border-color: #274; color: #8f8; }
+        .item-row input.gfx-field.edited { border-color: #750; color: #fa8; }
+        .item-row input.invalid { border-color: #922 !important; background: #1a0000; }
+
+        /* Empty state */
+        #empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #555;
+            font-size: 0.85em;
+            gap: 8px;
+        }
+        #empty-state .big { font-size: 2em; }
+
+        /* Legend strip */
+        #legend {
+            background: #222;
+            border-top: 1px solid #333;
+            padding: 5px 14px;
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            flex-shrink: 0;
+        }
+        #legend span { font-size: 0.65em; color: #777; }
+        .leg { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; }
+        .leg-js  { background: #395; }
+        .leg-gfx { background: #971; }
+        .leg-both { background: #449; }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #1a1a1a; }
+        ::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #666; }
+    </style>
+
+    <!-- Load the master item map -->
+    <script src="gfx-itemid.js"></script>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════ TOOLBAR ══ -->
+<div id="toolbar">
+    <span class="title">GFX ITEM ID EDITOR</span>
+
+    <button class="amber" onclick="importGfx()">Import .gfx</button>
+    <button class="amber" onclick="exportGfx()">Export .gfx</button>
+
+    <span style="color:#444;">│</span>
+
+    <button class="green" onclick="exportItemidJS()">Export itemid.js</button>
+
+    <span style="color:#444;">│</span>
+
+    <button class="red" onclick="clearAllMods()">CLEAR GFX MODS</button>
+
+    <span id="status-bar">Ready — load a .gfx file or start editing</span>
+</div>
+
+<!-- ══════════════════════════════════════════════ MAIN ══ -->
+<div id="main">
+
+    <!-- Sidebar: A–Z letter nav -->
+    <div id="sidebar" role="navigation" aria-label="Item group">
+        <!-- Populated by JS -->
+    </div>
+
+    <!-- Content: column headers + scrollable item list -->
+    <div id="content">
+        <div id="col-headers">
+            <span>IMG</span>
+            <span>ID</span>
+            <span>► itemid.js description</span>
+            <span>► .gfx override</span>
+        </div>
+        <div id="item-list">
+            <div id="empty-state">
+                <span class="big">⬛</span>
+                <span>Select a letter from the sidebar — or press a key (A–Z) to jump to that group</span>
+                <span style="font-size:0.8em;color:#444;">◀ ▶ arrow keys flip through letters</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════ LEGEND ══ -->
+<div id="legend">
+    <span><span class="leg leg-js"></span> itemid.js edited</span>
+    <span><span class="leg leg-gfx"></span> .gfx override set</span>
+    <span><span class="leg leg-both"></span> both edited</span>
+    <span style="margin-left:auto;">Max 32 chars per field &nbsp;·&nbsp; IDs: Aa–Zz, A0–Z9</span>
+</div>
+
+<script>
+/* ╔══════════════════════════════════════════════════════════════════╗
+   ║  SAFE CHARACTER RULES                                           ║
+   ║  Allowed in item descriptions (32-char max):                    ║
+   ║    A-Z  a-z  0-9  (letters and digits)                         ║
+   ║    space                                                        ║
+   ║    + - . ' _ / ( ) [ ]   (punctuation seen in base data)       ║
+   ║    # $ % @ ! ? , :       (common punctuation for dev notes)    ║
+   ║                                                                  ║
+   ║  BLOCKED: \n \r \t | ~ (reserved by .gfx format)               ║
+   ╚══════════════════════════════════════════════════════════════════╝ */
+const SAFE_CHARS = /^[A-Za-z0-9 +\-.'_/()\[\]#$%@!?,:]*$/;
+const MAX_DESC   = 32;
+const MAX_LINE   = 160;
+
+/* ── State ──────────────────────────────────────────────────────── */
+
+// jsData  : { "Aa": "Travel Boots", ... }  — editable JS descriptions
+// gfxData : { "Aa": "Enchanted Boots", ... } — editable GFX overrides
+// baseData: { "Aa": "Travel Boots", ... }  — original loaded from gfx-itemid.js (read-only reference)
+
+let jsData   = {};   // current JS field values (user-editable copy)
+let gfxData  = {};   // current GFX override values
+let baseData = {};   // original values from gfx-itemid.js (never mutated)
+
+let currentLetter = null;
+let gfxFileName   = "capflag.gfx";
+let gfxFileLines  = [];  // all lines of the imported .gfx file, minus ##= lines
+
+/* ── All valid item keys: Aa–Zz and A0–Z9 ──────────────────────── */
+const ALL_KEYS = [];
+for (let cap = 65; cap <= 90; cap++) {
+    const C = String.fromCharCode(cap);
+    for (let low = 97; low <= 122; low++) ALL_KEYS.push(C + String.fromCharCode(low)); // Aa–Zz
+    for (let d = 0; d <= 9; d++)          ALL_KEYS.push(C + d);                         // A0–Z9
+}
+
+/* ── Bootstrap ──────────────────────────────────────────────────── */
+window.addEventListener('DOMContentLoaded', () => {
+    loadBaseData();
+    buildSidebar();
+    autoLoadGfx();
+    document.addEventListener('keydown', onKeyNav);
+});
+
+/* ── Keyboard navigation ────────────────────────────────────────── */
+function onKeyNav(e) {
+    // Don't hijack keypresses inside input fields
+    if (e.target && e.target.tagName === 'INPUT') return;
+
+    const key = e.key;
+
+    // Letter key A-Z / a-z → jump to that group
+    if (key.length === 1 && key.match(/[A-Za-z]/)) {
+        e.preventDefault();
+        selectLetter(key.toUpperCase());
+        // Scroll sidebar button into view
+        const btn = document.getElementById(`lbtn-${key.toUpperCase()}`);
+        if (btn) btn.scrollIntoView({ block: 'nearest' });
+        return;
+    }
+
+    // Arrow keys — flip through A–Z
+    if (key === 'ArrowLeft' || key === 'ArrowRight') {
+        e.preventDefault();
+        const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+        const idx = currentLetter ? letters.indexOf(currentLetter) : -1;
+        let next;
+        if (key === 'ArrowLeft')  next = idx <= 0 ? 'Z' : letters[idx - 1];
+        else                      next = idx >= 25 ? 'A' : letters[idx + 1];
+        selectLetter(next);
+        const btn = document.getElementById(`lbtn-${next}`);
+        if (btn) btn.scrollIntoView({ block: 'nearest' });
+    }
+}
+
+/* Load base data from gfx-itemid.js (already <script> loaded).
+   We call gfxItemID() for every key and keep only non-"Unknown" ones. */
+function loadBaseData() {
+    if (typeof gfxItemID !== 'function') {
+        setStatus('⚠ gfx-itemid.js not found — starting with blank descriptions');
+        return;
+    }
+    for (const key of ALL_KEYS) {
+        const val = gfxItemID(key);
+        if (val && val !== 'Unknown') {
+            baseData[key] = val;
+            jsData[key]   = val;   // editable copy starts identical to base
+        }
+    }
+    setStatus(`Loaded ${Object.keys(baseData).length} items from gfx-itemid.js`);
+}
+
+/* ── Sidebar ────────────────────────────────────────────────────── */
+function buildSidebar() {
+    const sb = document.getElementById('sidebar');
+    sb.innerHTML = '';
+    for (let cap = 65; cap <= 90; cap++) {
+        const C = String.fromCharCode(cap);
+        const btn = document.createElement('button');
+        btn.className = 'letter-btn';
+        btn.textContent = C;
+        btn.id = `lbtn-${C}`;
+        btn.title = `Group ${C}`;
+        btn.onclick = () => selectLetter(C);
+        sb.appendChild(btn);
+    }
+    refreshSidebarState();
+}
+
+function refreshSidebarState() {
+    for (let cap = 65; cap <= 90; cap++) {
+        const C   = String.fromCharCode(cap);
+        const btn = document.getElementById(`lbtn-${C}`);
+        if (!btn) continue;
+        const hasJs  = ALL_KEYS.some(k => k[0] === C && jsData[k]  && jsData[k]  !== (baseData[k] || ''));
+        const hasGfx = ALL_KEYS.some(k => k[0] === C && gfxData[k] && gfxData[k].trim() !== '');
+        btn.classList.remove('has-data', 'has-mod', 'active');
+        if (hasGfx)        btn.classList.add('has-mod');
+        else if (hasJs)    btn.classList.add('has-data');
+        if (C === currentLetter) btn.classList.add('active');
+    }
+}
+
+/* ── Letter selection ───────────────────────────────────────────── */
+function selectLetter(C) {
+    currentLetter = C;
+    refreshSidebarState();
+    renderItemList(C);
+}
+
+/* ── Item list renderer ─────────────────────────────────────────── */
+function renderItemList(C) {
+    const list = document.getElementById('item-list');
+    list.innerHTML = '';
+
+    // All keys for this letter — always show Aa-Az (and A0-A9), defined or not
+    const keys = ALL_KEYS.filter(k => k[0] === C);
+
+    for (const key of keys) {
+        const row = document.createElement('div');
+        row.className = 'item-row';
+        row.id = `row-${key}`;
+        updateRowClass(row, key);
+
+        // ── Image cell ──
+        const imgWrap = document.createElement('div');
+        imgWrap.className = 'item-img-wrap';
+        const img = document.createElement('img');
+        img.className = 'item-img';
+        img.src = `i/${key}.png`;
+        img.alt = key;
+        img.title = key;
+        // Buildings (Ta–Uz) may be oversized — constrain with CSS object-fit
+        img.onerror = () => { img.style.opacity = '0.2'; img.alt = '?'; };
+        imgWrap.appendChild(img);
+
+        // ── ID badge ──
+        const idCell = document.createElement('div');
+        idCell.className = 'item-id';
+        idCell.textContent = key;
+
+        // ── JS field ──
+        const jsInput = document.createElement('input');
+        jsInput.type = 'text';
+        jsInput.className = 'js-field';
+        jsInput.maxLength = MAX_DESC;
+        jsInput.value = jsData[key] || '';
+        jsInput.placeholder = baseData[key] ? `(base: ${baseData[key]})` : '(undefined)';
+        jsInput.title = `itemid.js value for ${key}`;
+        jsInput.setAttribute('data-key', key);
+        jsInput.setAttribute('data-type', 'js');
+        jsInput.addEventListener('input', onFieldInput);
+        if (jsData[key] && jsData[key] !== (baseData[key] || '')) jsInput.classList.add('edited');
+
+        // ── GFX field ──
+        const gfxInput = document.createElement('input');
+        gfxInput.type = 'text';
+        gfxInput.className = 'gfx-field';
+        gfxInput.maxLength = MAX_DESC;
+        gfxInput.value = gfxData[key] || '';
+        gfxInput.placeholder = '(no override)';
+        gfxInput.title = `.gfx override for ${key}`;
+        gfxInput.setAttribute('data-key', key);
+        gfxInput.setAttribute('data-type', 'gfx');
+        gfxInput.addEventListener('input', onFieldInput);
+        if (gfxData[key] && gfxData[key].trim() !== '') gfxInput.classList.add('edited');
+
+        row.appendChild(imgWrap);
+        row.appendChild(idCell);
+        row.appendChild(jsInput);
+        row.appendChild(gfxInput);
+        list.appendChild(row);
+    }
+}
+
+/* ── Field input handler ────────────────────────────────────────── */
+function onFieldInput(e) {
+    const input  = e.target;
+    const key    = input.getAttribute('data-key');
+    const type   = input.getAttribute('data-type');
+    const val    = input.value;
+
+    // Validate
+    const valid = val === '' || (SAFE_CHARS.test(val) && val.length <= MAX_DESC);
+    input.classList.toggle('invalid', !valid);
+    if (!valid) { setStatus(`⚠ Invalid characters or length > ${MAX_DESC} in ${key}`); return; }
+
+    if (type === 'js') {
+        if (val === '') delete jsData[key];
+        else jsData[key] = val;
+        const edited = val !== '' && val !== (baseData[key] || '');
+        input.classList.toggle('edited', edited);
+    } else {
+        if (val === '') delete gfxData[key];
+        else gfxData[key] = val;
+        input.classList.toggle('edited', val !== '');
+    }
+
+    // Update row highlight
+    const row = document.getElementById(`row-${key}`);
+    if (row) updateRowClass(row, key);
+
+    refreshSidebarState();
+    setStatus(`${key} updated`);
+}
+
+function updateRowClass(row, key) {
+    const hasJs  = jsData[key]  && jsData[key]  !== (baseData[key] || '');
+    const hasGfx = gfxData[key] && gfxData[key].trim() !== '';
+    row.classList.remove('has-js-edit', 'has-gfx-edit', 'has-both');
+    if (hasJs && hasGfx) row.classList.add('has-both');
+    else if (hasJs)      row.classList.add('has-js-edit');
+    else if (hasGfx)     row.classList.add('has-gfx-edit');
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   AUTO-LOAD capflag.gfx
+══════════════════════════════════════════════════════════════════ */
+async function autoLoadGfx() {
+    try {
+        const resp = await fetch('capflag.gfx');
+        if (!resp.ok) { setStatus('capflag.gfx not found — no mods loaded'); return; }
+        const text = await resp.text();
+        parseGfxFile(text, 'capflag.gfx');
+    } catch (e) {
+        setStatus('capflag.gfx not found — no mods loaded');
+    }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   IMPORT .GFX  (read from clipboard)
+══════════════════════════════════════════════════════════════════ */
+async function importGfx() {
+    try {
+        const text = await navigator.clipboard.readText();
+        if (!text || !text.trim()) {
+            setStatus("⚠ Clipboard is empty — copy a .gfx file's contents first");
+            return;
+        }
+        parseGfxFile(text, gfxFileName || 'clipboard.gfx');
+    } catch (e) {
+        setStatus('⚠ Clipboard read failed — check browser permissions');
+    }
+}
+
+function parseGfxFile(text, fname) {
+    gfxData = {};
+    gfxFileLines = [];
+    const lines = text.split(/\r?\n/);
+    let modCount = 0;
+
+    for (const line of lines) {
+        if (line.startsWith('##=')) {
+            // Parse mod line: ##=Key~Desc|Key~Desc|...
+            const payload = line.slice(3).trim();
+            const entries = payload.split('|');
+            for (const entry of entries) {
+                const tilde = entry.indexOf('~');
+                if (tilde < 0) continue;
+                const key  = entry.slice(0, tilde).trim();
+                const desc = entry.slice(tilde + 1).trim();
+                if (!isValidKey(key)) continue;
+                if (!SAFE_CHARS.test(desc) || desc.length > MAX_DESC) continue;
+                gfxData[key] = desc;
+                modCount++;
+            }
+        } else {
+            gfxFileLines.push(line);
+        }
+    }
+
+    // Re-render current letter if one is selected
+    if (currentLetter) renderItemList(currentLetter);
+    refreshSidebarState();
+    setStatus(`Loaded ${fname} — ${modCount} mod(s) found`);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   EXPORT .GFX  (merge ##= lines and copy to clipboard)
+══════════════════════════════════════════════════════════════════ */
+async function exportGfx() {
+    const modKeys = Object.keys(gfxData).filter(k => gfxData[k] && gfxData[k].trim() !== '');
+    if (modKeys.length === 0 && gfxFileLines.length === 0) {
+        setStatus('Nothing to export — add some .gfx overrides first');
+        return;
+    }
+
+    // Sort keys in canonical order
+    modKeys.sort((a, b) => ALL_KEYS.indexOf(a) - ALL_KEYS.indexOf(b));
+
+    // Pack into ##= lines, respecting MAX_LINE
+    const modLines = [];
+    let current    = '##=';
+
+    for (const key of modKeys) {
+        const entry = `${key}~${gfxData[key]}`;
+        const candidate = current === '##=' ? `##=${entry}` : `${current}|${entry}`;
+        if (candidate.length > MAX_LINE) {
+            modLines.push(current);
+            current = `##=${entry}`;
+        } else {
+            current = candidate;
+        }
+    }
+    if (current !== '##=') modLines.push(current);
+
+    // Reconstruct file: original non-##= lines + new ##= lines
+    const output = [...gfxFileLines, ...modLines].join('\n');
+    await copyToClipboard(output, `${gfxFileName} with ${modKeys.length} mod(s) across ${modLines.length} line(s) — copied to clipboard`);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   EXPORT gfx-itemid.js  (rebuild JS file and copy to clipboard)
+══════════════════════════════════════════════════════════════════ */
+async function exportItemidJS() {
+    // Group keys by capital letter, determine category label
+    const groups = {};
+    for (const key of ALL_KEYS) {
+        if (!jsData[key]) continue;
+        const cap = key[0];
+        if (!groups[cap]) groups[cap] = [];
+        groups[cap].push(key);
+    }
+
+    // Map capital letters to category names (from original comments)
+    const categoryNames = {
+        A: 'Travel Items',      B: 'Tools / Utilities',   C: 'Game Items',
+        D: 'Quest Items',       E: 'Stacked Items',        F: 'Food',
+        G: 'Plant Foods',       H: 'Cooked Foods',         I: 'Raw Fish',
+        J: 'Cooked Fish',       K: 'Mining Items',         L: 'Hats',
+        M: 'Weapons',           N: 'Armour',               O: 'Misc',
+        P: 'Enemies',           Q: 'NPCs',                 R: 'Resources',
+        S: 'Player Items',      T: 'Buildings (32px+)',    U: 'Structures',
+        V: 'UI / Verb Commands',W: 'Registers',            X: 'Logic / Scripting',
+        Y: 'Events',            Z: 'Game States / Actions'
+    };
+
+    let out = 'window.gfxItemID = function(i) {\n';
+    out    += '    var itemMap = {\n';
+
+    let firstGroup = true;
+    for (let cap = 65; cap <= 90; cap++) {
+        const C = String.fromCharCode(cap);
+        if (!groups[C] || groups[C].length === 0) continue;
+        if (!firstGroup) out += '\n';
+        firstGroup = false;
+        out += `        // ${categoryNames[C] || C}\n`;
+        for (const key of groups[C]) {
+            // Escape the description for JS string (no special escaping needed beyond quotes)
+            const desc = jsData[key].replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+            out += `        "${key}": "${desc}",\n`;
+        }
+    }
+
+    out += '\n    };\n';
+    out += '\n    return itemMap[i] || "Unknown"; // Use bracket notation to access properties\n';
+    out += '};\n';
+
+    await copyToClipboard(out, `gfx-itemid.js with ${Object.keys(jsData).length} entries — copied to clipboard`);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   CLEAR GFX MODS
+══════════════════════════════════════════════════════════════════ */
+function clearAllMods() {
+    if (!confirm('Clear all .gfx overrides? (itemid.js edits are unaffected)')) return;
+    gfxData = {};
+    if (currentLetter) renderItemList(currentLetter);
+    refreshSidebarState();
+    setStatus('All .gfx overrides cleared');
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   UTILITIES
+══════════════════════════════════════════════════════════════════ */
+function isValidKey(k) {
+    if (!k || k.length !== 2) return false;
+    const cap = k.charCodeAt(0);
+    if (cap < 65 || cap > 90) return false;
+    const lo  = k.charCodeAt(1);
+    return (lo >= 97 && lo <= 122) || (lo >= 48 && lo <= 57);
+}
+
+function setStatus(msg) {
+    document.getElementById('status-bar').textContent = msg;
+}
+
+async function copyToClipboard(text, successMsg) {
+    try {
+        await navigator.clipboard.writeText(text);
+        setStatus(successMsg);
+    } catch (e) {
+        setStatus('⚠ Clipboard write failed — check browser permissions');
+    }
+}
+</script>
+</body>
+</html>

@@ -8,7 +8,7 @@ window.gfxItemID = function(i) {
         "Ae": "Lava Boots",
         "Af": "Row Boat",
 
-        // Tools/Utilities
+        // Tools / Utilities
         "Ba": "Pick Axe",
         "Bb": "Wood Axe",
         "Bc": "Net",
@@ -26,8 +26,6 @@ window.gfxItemID = function(i) {
         "Cg": "Red Key",
         "Ch": "Crystal Key",
         "Ci": "Treasure Chest",
- 
-        // Qujest Items
 
         // Stacked Items
         "Ea": "Match",
@@ -53,21 +51,22 @@ window.gfxItemID = function(i) {
         "Fg": "Raw Pizza",
 
         // Plant Foods
-        "Ka": "Plant",
+        "Ga": "Plant",
         "Gb": "Tomato",
         "Gc": "Tomatos",
         "Gd": "Tamatos",
         "Ge": "Tomatoes",
         "Gf": "Letcue",
 
-        // Food
-        "Hf": "Bread",
-        "Hf": "Slice Pizza",
-        "Hf": "Half Pizza",
-        "Hf": "Pizza",
-        "Hf": "Pizza",
+        // Cooked Foods
+        "Ha": "Bread",
+        "Hb": "Slice of Pizza",
+        "Hc": "Half Pizza",
+        "Hd": "Most of a Pizza",
+        "He": "Pizza",
         "Hf": "Half Sandwich",
-        "Hf": "Sandwich",
+        "Hg": "Sandwich",
+        "Hp": "Qandy",
 
         // Raw Fish
         "Ia": "Raw Crab",
@@ -76,10 +75,9 @@ window.gfxItemID = function(i) {
         "Ig": "Raw Flounder",
         "Ii": "Raw Lobster",
         "Ik": "Raw Shark",
+        "Il": "Raw Ham",
         "Im": "Raw Crawler",
         "In": "Raw Crawler",
-        "Ip": "Raw Frog Legs",
-        "Iq": "Raw Ham",
 
         // Cooked Fish
         "Ja": "Crab",
@@ -88,10 +86,9 @@ window.gfxItemID = function(i) {
         "Jg": "Flounder",
         "Ji": "Lobster",
         "Jk": "Shark",
+        "Jl": "Ham",
         "Jm": "Crawler",
         "Jn": "Crawler",
-        "Jp": "Legs",
-        "Jq": "Ham",
 
         // Mining Items
         "Ka": "Copper Ore",
@@ -104,20 +101,17 @@ window.gfxItemID = function(i) {
         "Kk": "Diamond",
 
         // Hats
-        "La": "White Hat",
-        "Lb": "Black Hat",
-        "Lc": "Blue Hat",
-        "Ld": "Red Hat",
-        "Ld": "Red Bandana",
-        "Le": "Blue Bandana",
-        "Lf": "Mask",
+        "La": "Black Hat",
+        "Lb": "White Hat",
+        "Lc": "Pink Hat",
+        "Ld": "Blue Hat",
+        "Lf": "Red Bandana",
+        "Lg": "Blue Bandana",
         "Lk": "Cylon Helm",
         "Ll": "Cylon Helm",
 
-        // Swords
+        // Weapons
         "Ma": "Sword",
-
-        // Shields
         "Mk": "Shield",
 
         // Enemies
@@ -127,16 +121,16 @@ window.gfxItemID = function(i) {
         "Pd": "Fire Ant",
 
         // Player Items
-        "Sa": "White Team",
-        "Sb": "Black Team",
+        "Sa": "Black Team",
+        "Sb": "White Team",
         "Sc": "Pink Team",
         "Sd": "Blue Team",
-        "Se": "White Flag",
-        "Sf": "Black Flag",
+        "Se": "Black Flag",
+        "Sf": "White Flag",
         "Sg": "Pink Flag",
         "Sh": "Blue Flag",
-        
-        // Static Objects/Buildings, can be larger than 32x32 px
+
+        // Buildings (32px+)
         "Ta": "City",
         "Tb": "Cart",
         "Tc": "Fernace",
@@ -153,6 +147,8 @@ window.gfxItemID = function(i) {
         "Tn": "Fountain",
         "To": "Bunker",
         "Tp": "Dead Tree",
+
+        // Structures
         "Ua": "Stove",
         "Ub": "Tavern",
         "Uc": "Windmill",
@@ -160,8 +156,10 @@ window.gfxItemID = function(i) {
         "Ue": "Temple",
         "Uf": "Throne",
         "Ug": "Grand Tree",
+        "Uh": "Throne",
+        "Uj": "Grand Tree",
 
-        // UI/Verb Commands (These definitely seem like a different category than physical items)
+        // UI / Verb Commands
         "Va": "$$--[get unique player it/set avatar]",
         "Vb": "Vb",
         "Vc": "Vc",
@@ -198,7 +196,7 @@ window.gfxItemID = function(i) {
         "V8": "V8",
         "V9": "V9",
 
-        // Registers 
+        // Registers
         "Wa": "##",
         "Wb": "##",
         "Wc": "##",
@@ -225,6 +223,7 @@ window.gfxItemID = function(i) {
         "Wx": "Wx##",
         "Wy": "Wy##",
         "Wz": "Wz##",
+        "W0": "W0##",
         "W1": "W1##",
         "W2": "W2##",
         "W3": "W3##",
@@ -234,9 +233,8 @@ window.gfxItemID = function(i) {
         "W7": "W7##",
         "W8": "W8##",
         "W9": "W9##",
-        "W0": "W0##",
 
-        // Logic/Scripting Commands
+        // Logic / Scripting
         "Xa": "Xa",
         "Xb": "Xb",
         "Xc": "clear gate",
@@ -263,6 +261,7 @@ window.gfxItemID = function(i) {
         "Xx": "Xx",
         "Xy": "Xy",
         "Xz": "Xz",
+        "X0": "X0",
         "X1": "X1",
         "X2": "X2",
         "X3": "X3",
@@ -272,9 +271,8 @@ window.gfxItemID = function(i) {
         "X7": "X7",
         "X8": "X8",
         "X9": "X9",
-        "X0": "X0",
 
-        // Game States/Actions/Environmental 
+        // Game States / Actions
         "Za": "Nothing",
         "Zb": "NO",
         "Zc": "Switch Off",
@@ -289,11 +287,11 @@ window.gfxItemID = function(i) {
         "Zl": "Mountain Hideout",
         "Zm": "City Gates",
         "Zn": "Green",
-        "Zo": "Red",
-        "Zo": "Terrain",
-        "Zo": "Pipe",
-        "Zo": "Pipe",
-        "Zo": "Table"
+        "Zo": "Table",
+        "Zp": "Terrain",
+        "Zq": "Pipe",
+        "Zr": "Pipe",
+        "Zs": "Table",
 
     };
 

@@ -212,6 +212,7 @@ window.itemdown = function(code) {
       return;
     }
     // Check if the player clicked THEMSELVES
+    // this check is failing
     if (itemid+uniqueid === playerItem) { 
       invdown(""); // Request local inventory from server
     } else {
@@ -219,10 +220,9 @@ window.itemdown = function(code) {
       let PUP = `<div align="center">`;
       PUP += `<b>${gfxItemID(itemid)}</b><br>`;
       PUP += `<span style="font-size:10px;color:gray;">UID: ${uniqueid}</span><p>`;
-      
+
       // Hook custom server punches for interaction here:
-      PUP += `<a href="gfx:SDPr${itemid}${uniqueid}">Profile Player</a><br>`;
-      PUP += `<a href="gfx:SDTr${itemid}${uniqueid}">Request Trade</a>`;
+      PUP += `<a href="gfx:ID${itemid}${uniqueid}">Profile Player</a><br>`;
       PUP += `</div>`;
       
       pop(PUP);	

@@ -267,7 +267,7 @@ async function gfxTick() {
       while (ptr < gfxPong.length) {
         let verb = gfxPong.substring(ptr, ptr + 2); ptr += 2;
         if (verb === "SP") {
-          let endPtr = gfxPong.indexOf("--", ptr);
+          let endPtr = gfxPong.indexOf("SP", ptr);
           let noun="";
           if (endPtr !== -1) {
             noun = gfxPong.substring(ptr, endPtr); ptr = endPtr + 2; 

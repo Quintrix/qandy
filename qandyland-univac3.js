@@ -168,71 +168,58 @@ function UNIVAC(driveName, itemfile, objfile) {
       }
 
       case 'Xr': { 
-        var itemsToProcess = [];
-        var nextTwo = tape.slice(column, column + 2);
+        // Read exactly one item (2 characters) and advance the column
+        var noun = tape.slice(column, column + 2);
         column += 2; 
-        
-        // If the user typed Xr--[items]--
-        if (nextTwo === '--') {
-          
-          var endCol = tape.indexOf('--', column);
-          if (endCol !== -1) {
-            var chunk = tape.slice(column, endCol);
-            for (var idx = 0; idx < chunk.length; idx += 2) {
-              itemsToProcess.push(chunk.slice(idx, idx + 2));
+
+        // Only Wa through Wz are stackable registers.
+        // Everything else (Aa-Pa, Zj, etc.) acts as a single item.
+        var isStackable = (noun >= 'Wa' && noun <= 'Wz');
+
+        if (!ifnot) { 
+          // ADD ITEM
+          if (isStackable) {
+            var memAddRegex = new RegExp(noun + '(\\d{2})');
+            var matchAdd = state.content.match(memAddRegex);
+            if (matchAdd) {
+              var count = parseInt(matchAdd[1], 10);
+              if (count < 99) {
+                count++;
+                var countStr = (count < 10 ? '0' : '') + count;
+                state.content = state.content.replace(matchAdd[0], noun + countStr);
+              }
+            } else {
+              // Add new stackable register starting at 01
+              state.content += noun + '01';
             }
-            column = endCol + 2;
+          } else {
+            // Standard single item: takes up one empty space ('Za')
+            state.content = state.content.replace('Za', noun);
           }
-        } else {
-          // Normal single item: Xr[item]
-          itemsToProcess.push(nextTwo);
-        }
-
-        // Apply Add/Remove logic to all items in the array
-        for (var idx = 0; idx < itemsToProcess.length; idx++) {
-          var noun = itemsToProcess[idx];
-          var isInventory = (noun >= 'Aa' && noun < 'Qa');
-          var isMemory    = (noun >= 'Qa' && noun <= 'Zz');
-
-          if (ifnot) { // ADD ITEM
-            if (isInventory) {
-              state.content = state.content.replace('Za', noun);
-            } else if (isMemory) {
-              var memAddRegex = new RegExp(noun + '(\\d{2})');
-              var matchAdd = state.content.match(memAddRegex);
-              if (matchAdd) {
-                var count = parseInt(matchAdd[1], 10);
-                if (count < 99) {
-                  count++;
-                  var countStr = (count < 10 ? '0' : '') + count;
-                  state.content = state.content.replace(matchAdd[0], noun + countStr);
-                }
+        } else { 
+          // REMOVE ITEM
+          if (isStackable) {
+            var memRemRegex = new RegExp(noun + '(\\d{2})');
+            var matchRem = state.content.match(memRemRegex);
+            if (matchRem) {
+              var count = parseInt(matchRem[1], 10);
+              if (count > 1) {
+                count--;
+                var countStr = (count < 10 ? '0' : '') + count;
+                state.content = state.content.replace(matchRem[0], noun + countStr);
               } else {
-                state.content += noun + '01';
+                // Remove the register entirely if it drops to 0
+                state.content = state.content.replace(matchRem[0], '');
               }
             }
-          } else { // REMOVE ITEM
-            if (isInventory) {
-              state.content = state.content.replace(noun, 'Za');
-            } else if (isMemory) {
-              var memRemRegex = new RegExp(noun + '(\\d{2})');
-              var matchRem = state.content.match(memRemRegex);
-              if (matchRem) {
-                var count = parseInt(matchRem[1], 10);
-                if (count > 1) {
-                  count--;
-                  var countStr = (count < 10 ? '0' : '') + count;
-                  state.content = state.content.replace(matchRem[0], noun + countStr);
-                } else {
-                  state.content = state.content.replace(matchRem[0], '');
-                }
-              }
-            }
+          } else {
+            // Standard single item: leaves an empty space ('Za') behind
+            state.content = state.content.replace(noun, 'Za');
           }
         }
         break;
-      }      
-
+      }
+      
       case 'Vr': { 
         var noun = tape.slice(column, column + 2); column += 2;
         var zloc = tape.slice(column, column + 2); column += 2;

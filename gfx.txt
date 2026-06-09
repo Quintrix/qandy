@@ -161,9 +161,7 @@
        
        Xp Xp$$   render $$ over head .2 seconds, not = pop message $$ (NA)
        
-       Xq
-       
-       Xr Xr$$   remove from inventory (use NOT to add)
+       Xr Xr$$   add to inventory (use NOT to remove)
        
        Xs 
        Xt
