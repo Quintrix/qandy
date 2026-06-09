@@ -1231,6 +1231,7 @@ function plugboard(req, stacker, plugs, drive, session) {
         break;
                 
       case 'ID':
+        console.log("###1234###");
         if (tape) { runtape(tape); tape=""; }
         let itemId = plugs.slice(column, column + 2);
         let itemZ  = plugs.slice(column + 2, column + 4);
@@ -1240,6 +1241,7 @@ function plugboard(req, stacker, plugs, drive, session) {
         let filesResponse = fileSearch(drive, searchPrefix + '*');
         
         if (filesResponse.success && filesResponse.results.length > 0) {
+        	 console.log("###1244###");
           let matchedPath = null;
           let matchedBase = null;
           
@@ -1253,11 +1255,13 @@ function plugboard(req, stacker, plugs, drive, session) {
           }
 
           if (matchedPath) {
+          	console.log("###1258###");
             let matchedPubId = matchedBase.length >= 8 ? matchedBase.substring(4, 8) : "";
             let matchedFullId = matchedPubId ? itemId + matchedPubId : itemId;
 
             // If the player clicks their own item, send inventory
             if (matchedFullId === player.item) {
+              console.log("###1264###");
               let invLoad = fileLoad(drive, '/', player.fullPath, session);
               let inventoryData = (invLoad.success && invLoad.content) ? invLoad.content : '';
               output += "SPVi" + inventoryData + "SP";
@@ -1265,8 +1269,9 @@ function plugboard(req, stacker, plugs, drive, session) {
             }
             
             // ── GHOST PLAYER CREATION TRIGGER ────────────────────────────────
-            if (itemId >= 'Sa' && itemId <= 'Sh') {
+            if (itemId >= 'Sa' && itemId <= 'Sd') {
               if (!player.item || player.item === "") {
+              	 console.log("###1274###");
                 // The user clicked a hat but doesn't exist yet! 
                 // Run your custom initialization punch code:
                 let initTape = "XnXjVaB1D3J0++XnXr++LaZaZaZaZaZaZaZaZaWm99++VtA1ZeVuVa++Xc";

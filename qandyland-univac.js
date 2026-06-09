@@ -249,9 +249,22 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
       case 'Xn': ifnot = true; break;   
       case 'Xc': ifnot = false; break;  
 
-      // ── NEW: Xa — Claim player-item / assign team ─────────────────────────────
+      // ── Xa — Claim player-item / assign team ─────────────────────────────
       case 'Xa': {
         var newId = tape.slice(column, column + 2); column += 2;
+
+        // Parse the inventory string up to the '--' terminator
+        var inventoryString = "";
+        var endCol = tape.indexOf('--', column);
+        if (endCol !== -1) {
+          inventoryString = tape.slice(column, endCol);
+          column = endCol + 2;
+        } else {
+          // Graceful fallback if terminator is somehow missing: 
+          // consume the rest of the tape
+          inventoryString = tape.slice(column);
+          column = tape.length; 
+        }
 
         if (!state.playerid) {
           state.id = newId;
@@ -262,10 +275,12 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
             state.zStr = register['W1'];
             state.z = parseInt(state.zStr, 10);
           }
-          state.avatar = '';   // ← ADD THIS: fresh claim has no avatar yet
+          state.avatar = '';   
+          state.content = inventoryString; // Initialize inventory from punch code
         } else if (state.id === 'Za') {
           state.id = newId;
-          state.avatar = '';   // ← ADD THIS: lobby→team transition, clear any ghost avatar
+          state.avatar = '';   
+          state.content = inventoryString; // Initialize inventory from punch code
           output += "SPVa--SP";
         } else {
           console.log("UNIVAC() Xa: team already set to " + state.id + ", ignoring " + newId);
@@ -348,40 +363,13 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
       }
 
       case 'Xr': { 
-        // Read the target noun (2 characters)
-        var noun = tape.slice(column, column + 2);
-        column += 2; 
-
-        // Only Wa through Wz are stackable registers.
-        // Everything else (Aa-Pa, Zj, etc.) acts as a single item.
-        var isStackable = (noun >= 'Wa' && noun <= 'Wz');
-
-        if (!ifnot) { 
-          // ADD ITEM / EXPERIENCE
-          if (isStackable) {
-            // Read the next 2 characters as the experience/amount value
-            let valStr = tape.slice(column, column + 2);
-            column += 2;
-            plus(noun, valStr);
-          } else {
-            // Standard single item: takes up one empty space ('Za')
-            state.content = state.content.replace('Za', noun);
-          }
-        } else { 
-          // REMOVE ITEM / STAT DAMAGE
-          if (isStackable) {
-            // Read the next 2 characters as the experience/amount value
-            let valStr = tape.slice(column, column + 2);
-            column += 2;
-            minus(noun, valStr);
-          } else {
-            // Standard single item: leaves an empty space ('Za') behind
-            state.content = state.content.replace(noun, 'Za');
-          }
-        }
+        // Read the first argument (Target or Register)
+        var noun1 = tape.slice(column, column + 2); column += 2; 
+        var noun2 = tape.slice(column, column + 2); column += 2;
+        state.content = state.content.replace(noun1, noun2);
         break;
-      }
-      
+      }      
+
       case 'Vr': { 
         var noun = tape.slice(column, column + 2); column += 2;
         var zloc = tape.slice(column, column + 2); column += 2;
@@ -557,6 +545,8 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
 
   // ── 4. Save and Cleanup ───────────────────────────────────────────────────
   var newPath = 'w/' + state.sector + '/' + state.id + state.zStr + state.playerid + state.avatar;
+
+  console.log("###561### newPath="+newPath+" state.content="+state.content);  
   var saveRes = _deps.fileSave(driveName, '/', newPath, state.content, sessionToken, sessionToken);
   
   if (!saveRes.success) {
