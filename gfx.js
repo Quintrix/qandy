@@ -16,7 +16,7 @@ window.playerItem="Za";   // item-id of team item player has claimed (Sa Sb Sc S
 window.playerZ=-1;        // z-locatin of playerItem
 window.playerAvatar = ""; // players avatar (ie "B0D0")
 window.playerId = "";     // unique 4 character player id 
-window.map="F2";          // map player-item is on
+window.map="A1";          // map player-item is on
 window.mapTiles=[];       // tiles on player's current map
 window.mapExits=[];       // valid exits for map sectors
 window.mapObjs=[];        // objs on map sectors
@@ -266,8 +266,9 @@ async function gfxTick() {
       let ptr = 0;
       while (ptr < gfxPong.length) {
         let verb = gfxPong.substring(ptr, ptr + 2); ptr += 2;
-        if (verb === "SP") {
-          let endPtr = gfxPong.indexOf("SP", ptr);
+
+        if (verb === "S^") {
+          let endPtr = gfxPong.indexOf("^S", ptr);
           let noun="";
           if (endPtr !== -1) {
             noun = gfxPong.substring(ptr, endPtr); ptr = endPtr + 2; 
@@ -741,6 +742,7 @@ function gfxClick(bytecode) {
       break;
             
     case "SD": // Server-Down (send command to server)
+      hpop();
       gfxDo=data;
       break;   
     

@@ -8,20 +8,14 @@
 //   Manifest:    "_dir.sys!"        → "name|size|timestamp|owner|session\n..."
 //
 
-
-
-// the e.txt files are confusing the client, it thinks they are an item in the game
-// we should remove the .txt extension so the filename is only 1 character instead of 4
-
-
-
 'use strict';
 
 // Sysop Variables
+var sysopOffline=true;        // only serves files to localHost
 var sysopVision = 2;          // Radius for Mountain Look
 var sysopCardWidth = 160;     // "Front-and-back punch card" limit
 var sysopGfx = 'capflag.gfx'; // default .gfx file
-var sysopOffline=true;
+
 
 const UNIVAC = require('./qandyland-univac.js');
 UNIVAC.inject({ fileLoad,
@@ -237,7 +231,7 @@ function _boxLine(text) {
 function displayStartupBanner(publicIP, registryStatus, serverId) {
   var line = '═'.repeat(BOX_WIDTH);
   console.log('╔' + line + '╗');
-  console.log(_boxLine('                  KRYSTAL RADIO GRAPHICS PROCESSOR'));
+  console.log(_boxLine('       QANDYLAND SERVER AND UNIVAC PUNCH CODE PROCESSOR '));
   console.log('╠' + line + '╣');
 
     console.log(_boxLine(''));
@@ -1181,8 +1175,6 @@ function plugboard(req, stacker, plugs, drive, session) {
         break;      
 
       case 'OD':
-        if (tape) { runtape(tape); tape=""; }
-        
         let objfile = null; 
         let objid = plugs.slice(column, column + 2);
         let objz  = plugs.slice(column + 2, column + 4);
@@ -1213,7 +1205,7 @@ function plugboard(req, stacker, plugs, drive, session) {
         if (objfile != null) {
           console.log("UNIVAC(" + drive + ", " + player.fullPath + ", " + objfile + ")");
           if (typeof UNIVAC === 'function') {
-            let uResult = UNIVAC(drive, player.fullPath, objfile);
+            let uResult = UNIVAC(drive, player.fullPath, objfile, session);
             if (uResult) {
               player.map = uResult.sector;
               player.z = uResult.z;
@@ -1231,8 +1223,6 @@ function plugboard(req, stacker, plugs, drive, session) {
         break;
                 
       case 'ID':
-        console.log("###1234###");
-        if (tape) { runtape(tape); tape=""; }
         let itemId = plugs.slice(column, column + 2);
         let itemZ  = plugs.slice(column + 2, column + 4);
         column += 4;
@@ -1241,7 +1231,6 @@ function plugboard(req, stacker, plugs, drive, session) {
         let filesResponse = fileSearch(drive, searchPrefix + '*');
         
         if (filesResponse.success && filesResponse.results.length > 0) {
-        	 console.log("###1244###");
           let matchedPath = null;
           let matchedBase = null;
           
@@ -1255,25 +1244,23 @@ function plugboard(req, stacker, plugs, drive, session) {
           }
 
           if (matchedPath) {
-          	console.log("###1258###");
             let matchedPubId = matchedBase.length >= 8 ? matchedBase.substring(4, 8) : "";
             let matchedFullId = matchedPubId ? itemId + matchedPubId : itemId;
 
             // If the player clicks their own item, send inventory
             if (matchedFullId === player.item) {
-              console.log("###1264###");
               let invLoad = fileLoad(drive, '/', player.fullPath, session);
               let inventoryData = (invLoad.success && invLoad.content) ? invLoad.content : '';
-              output += "SPVi" + inventoryData + "SP";
+              output += "S^Vi" + inventoryData + "^S";
               break; 
             }
             
             // ── GHOST PLAYER CREATION TRIGGER ────────────────────────────────
             if (itemId >= 'Sa' && itemId <= 'Sd') {
               if (!player.item || player.item === "") {
-              	 console.log("###1274###");
                 // The user clicked a hat but doesn't exist yet! 
                 // Run your custom initialization punch code:
+                console.log("###1268###");
                 let initTape = "XnXjVaB1D3J0++XnXr++LaZaZaZaZaZaZaZaZaWm99++VtA1ZeVuVa++Xc";
                 runtape(initTape);
                 break; // Stop processing so we don't accidentally try to pick up the item
@@ -1320,9 +1307,6 @@ function plugboard(req, stacker, plugs, drive, session) {
         break;        
 
       case 'VA':
-        console.log("### PLUGBOARD VA ###");
-        if (tape) { runtape(tape); tape=""; }
-
         let vaAvatar = "";
         let vaTermIdx = plugs.indexOf('--', column);
         if (vaTermIdx !== -1) {

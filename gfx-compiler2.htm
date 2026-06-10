@@ -129,28 +129,6 @@
             display: block;
         }
 
-        /* Dynamic Exits UI */
-        .dir-btn {
-            background: #222; color: #7f8c8d; border: 1px solid #444;
-            padding: 5px 8px; border-radius: 4px; cursor: pointer;
-            font-family: monospace; font-size: 0.85em;
-            text-transform: lowercase; transition: all 0.2s;
-        }
-        .dir-btn.active {
-            background: #2c3e50; color: #f1c40f; border-color: #f1c40f;
-            text-transform: uppercase; font-weight: bold;
-        }
-        .dir-btn.disabled {
-            opacity: 0.3; cursor: not-allowed;
-        }
-        .other-btn {
-            background: #331111; color: #e74c3c; border: 1px solid #c0392b;
-            padding: 5px 8px; border-radius: 4px; cursor: pointer;
-            font-family: monospace; font-size: 0.85em; font-weight: bold;
-        }
-        .other-btn:hover { background: #551111; color: #ff7777; }
-
-
         #tooltip { position: absolute; background: rgba(240, 230, 140, 0.8); color: #000; padding: 2px 6px; font-size: 10px; pointer-events: none; border: 1px solid #444; display: none; z-index: 100; font-family: monospace; }
     </style>
     <script src="gfx-itemid.js"></script>
@@ -218,13 +196,11 @@
         </div>
         
         <div class="tool-box" id="exitsBox">
-           <label style="margin-bottom: 5px;">Exits</label>
-           <div id="manualExitRow" style="align-items: center; gap: 10px;">
-               <div id="exitButtonsRow" style="display: flex; gap: 5px; flex-wrap: wrap;"></div>
-               <input type="text" id="manualExitInput" placeholder="e.g. A2B1H1" oninput="saveExitInput()">
+           <div id="manualExitRow">
+               <label>Exits</label>
+               <input type="text" id="manualExitInput" placeholder="e.g. N1S1Z1" oninput="saveExitInput()">
            </div>                
-        </div>        
-        
+        </div>
     </div>
 </div>
 
@@ -407,107 +383,14 @@
     }
     
     function saveExitInput() {
-      // Strips non-alphanumeric chars and updates underlying map data
-      const val = document.getElementById('manualExitInput').value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+      const val = document.getElementById('manualExitInput').value.trim().toUpperCase();
       mapSectors[currentSector].exits = val;
-      updateExitsUI();
     }
 
     function updateExitInput() {
       const input = document.getElementById('manualExitInput');
       if (input) input.value = mapSectors[currentSector]?.exits || "";
     }  
-
-    function updateExitsUI() {
-      const sec = mapSectors[currentSector];
-      if (!sec) return;
-
-      let exitsStr = sec.exits || "";
-      let exitsArr = [];
-      
-      // Parse string into array of 2-character sector chunks
-      for (let i = 0; i < exitsStr.length; i += 2) {
-          if (i + 1 < exitsStr.length) {
-              exitsArr.push(exitsStr.substring(i, i + 2));
-          }
-      }
-
-      // Calculate Valid Neighbors based on A1 to H8 bounds
-      const rIdx = ROWS.indexOf(currentSector[0]);
-      const col = parseInt(currentSector[1]);
-
-      const neighbors = {
-          North: rIdx > 0 ? ROWS[rIdx - 1] + col : null,
-          East: col < COLS ? ROWS[rIdx] + (col + 1) : null,
-          South: rIdx < ROWS.length - 1 ? ROWS[rIdx + 1] + col : null,
-          West: col > 1 ? ROWS[rIdx] + (col - 1) : null
-      };
-
-      const btnContainer = document.getElementById('exitButtonsRow');
-      if(btnContainer) btnContainer.innerHTML = '';
-
-      const neighborIDs = Object.values(neighbors).filter(x => x);
-
-      // Render Compass Buttons (North, East, South, West)
-      for (let dir of ['North', 'East', 'South', 'West']) {
-          const targetID = neighbors[dir];
-          const btn = document.createElement('button');
-          
-          if (!targetID) {
-              // Hit the edge of the map bounds
-              btn.className = 'dir-btn disabled';
-              btn.innerText = dir.toLowerCase();
-              btn.disabled = true;
-          } else {
-              const isActive = exitsArr.includes(targetID);
-              btn.className = 'dir-btn' + (isActive ? ' active' : '');
-              btn.innerText = isActive ? dir.toUpperCase() : dir.toLowerCase();
-              btn.onclick = () => toggleExit(targetID);
-          }
-          if(btnContainer) btnContainer.appendChild(btn);
-      }
-
-      // Render Other Non-Standard Exits (Teleports, etc)
-      exitsArr.forEach(exitID => {
-          if (!neighborIDs.includes(exitID)) {
-              const btn = document.createElement('button');
-              btn.className = 'other-btn';
-              btn.innerText = `[${exitID}]`;
-              btn.title = "Click to remove";
-              btn.onclick = () => toggleExit(exitID);
-              if(btnContainer) btnContainer.appendChild(btn);
-          }
-      });
-
-      // Update text input without overriding currently typed character if active
-      const input = document.getElementById('manualExitInput');
-      if (input && document.activeElement !== input) {
-          input.value = exitsStr;
-      }
-    }
-
-    function toggleExit(targetID) {
-      const sec = mapSectors[currentSector];
-      let exitsArr = [];
-      for (let i = 0; i < sec.exits.length; i += 2) {
-          if (i + 1 < sec.exits.length) exitsArr.push(sec.exits.substring(i, i + 2));
-      }
-
-      if (exitsArr.includes(targetID)) {
-          exitsArr = exitsArr.filter(e => e !== targetID); // Remove it
-      } else {
-          exitsArr.push(targetID); // Add it
-      }
-      sec.exits = exitsArr.join('');
-      
-      updateExitsUI();
-      
-      // Keep input synchronized
-      const input = document.getElementById('manualExitInput');
-      if (input) input.value = sec.exits;
-    }    
-    
-    
 
     function editObject() {
         if (editingIndex === -1) {
@@ -713,8 +596,7 @@ function openGlobalEditor(key) {
       updateGlobalLabels();
       updateObjectList();
       render();
-      //updateExitInput();
-      updateExitsUI(); 
+      updateExitInput(); 
     }
 
     function rejectLogic() {
@@ -749,8 +631,7 @@ function openGlobalEditor(key) {
         document.getElementById('sectorLabel').innerText = currentSector;
         closeEditor();
         render();
-        //updateExitInput();
-        updateExitsUI()
+        updateExitInput();
     }
 
     async function loadDefaultMap() {

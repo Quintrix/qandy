@@ -24,6 +24,7 @@ async function startup(){
     if (ts>0) { setTimeout(function() { startup(); },200); }
     return;
   } else {
+  	 window.map="F2"; // first map displayed
   	 window.gfxDrive = 'capflag.gfx';
     var gameState = await gfxConnect(0);
   }
@@ -112,6 +113,7 @@ window.invdown = function(code) {
 }
 
 window.serverdown = function(code) {
+  hpop();
   // executes any punch code the server sends the client
   // will allow each game to customize all aspects of the game
   console.log('serverdown() code='+code);

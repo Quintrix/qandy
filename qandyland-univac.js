@@ -281,7 +281,7 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
           state.id = newId;
           state.avatar = '';   
           state.content = inventoryString; // Initialize inventory from punch code
-          output += "SPVa--SP";
+          output += "S^Va--^S";
         } else {
           console.log("UNIVAC() Xa: team already set to " + state.id + ", ignoring " + newId);
         }
@@ -290,11 +290,8 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
 
       // ── Va — Set avatar string ────────────────────────────────────────────────
       case 'Va': {
-        // XbVa--     <- avatar = text between Va and -- (in this case null)
         if (!state.playerid) {
-        	 console.log("###220###");
           // Guard: no player ID yet, avatar cannot be set
-          console.log("UNIVAC() Va: no player ID assigned, skipping avatar set");
           var endCol = tape.indexOf('--', column);
           if (endCol !== -1) column = endCol + 2;
           else column += 2;
@@ -302,36 +299,20 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
         }
         var endCol = tape.indexOf('--', column);
         if (endCol !== -1) {
-        	 console.log("###230###");
           state.avatar = tape.slice(column, endCol);
           column = endCol + 2;
         } else {
-        	 console.log("###234###");
           state.avatar = tape.slice(column, column + 2);
           column += 2;
         }
         break;
       }
 
-      case 'Xb': {
-        let clientboard = ""
-        var endCol = tape.indexOf('--', column);
-        if (endCol !== -1) {
-          clientboard = tape.slice(column, endCol);
-          column = endCol + 2;
-        } else {
-          clientboard = tape.slice(column, column + 2);
-          column += 2;
-        }
-        output += "SP" + clientboard + "SP";
-      }    
-                  
       case 'Vm': { 
         var noun = tape.slice(column, column + 2); column += 2;
         var zToken = tape.slice(column, column + 2); column += 2;
         var resolvedZ = state.zStr; 
         if (/^\d{2}$/.test(zToken)) {
-          console.log("verb make item -> "+noun+zToken);
           resolvedZ = zToken; 
         } else if (/^[A-Z]/.test(zToken)) {
           var found = false;
@@ -374,7 +355,7 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
         var noun = tape.slice(column, column + 2); column += 2;
         var zloc = tape.slice(column, column + 2); column += 2;
         var zNum = (zloc < 10 ? '0' : '') + zloc;
-        output += "SPVr" + noun + zNum + "SP";
+        output += "S^Vr" + noun + zNum + "^S";
       }
 
       case 'Xi': { 
@@ -507,10 +488,16 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
         break;
       }
 
-      case 'Vt': { 
+      case 'Vt': {
+        // verb teleport 
         var noun = tape.slice(column, column + 2); column += 2;
-        if (!_isValidExit(driveName, state.sector, noun)) { break; }
-        var targetSector = noun; var targetZStr = state.zStr;
+        var targetSector = noun; 
+        var targetZStr = state.zStr;
+        if (!_isValidExit(driveName, state.sector, noun)) {
+        	 console.log("not a valid exit");
+          break; 
+        	  
+        }
         if (column + 2 <= tape.length) {
           var zToken = tape.slice(column, column + 2); column += 2;
           if (/^\d{2}$/.test(zToken)) {
@@ -536,11 +523,26 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
         break;
       }
 
+      case 'S^': {
+        // Find the matching ^S terminator
+        var endCol = tape.indexOf('^S', column);
+        if (endCol !== -1) {
+          // Slice the content between S^ and ^S and add to output
+          output += 'S^'+tape.slice(column, endCol)+'^S';
+          column = endCol + 2;
+        } else {
+          output += tape.slice(column);
+          column = tape.length;
+        }
+        break;
+      }
+      
       default: {
         console.log('UNIVAC: unknown word [' + word + '] at column ' + (column - 2) + ' – abort script');
         break;
       }
     }
+    
   }
 
   // ── 4. Save and Cleanup ───────────────────────────────────────────────────

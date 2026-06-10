@@ -1,7 +1,248 @@
 
+function plugboard(req, stacker, plugs, drive, session) {
+  let output = "";
+  if (plugs != "RF") { console.log(plugs+" "+drive+" "+session); }
+  function runtape(code) {
+    if (code) {
+      let uResult = UNIVAC(drive, player.fullPath, "RAM:"+code, session);
+      if (uResult) {
+        player.map      = uResult.sector;
+        player.z        = uResult.z;
+        player.avatar   = uResult.avatar;
+        if (uResult.playerid) player.pubId = uResult.playerid;
+        if (uResult.item) player.item  = uResult.item + player.pubId; // e.g. "ZaAaAa"
+        player.fullPath = uResult.fullPath;
+        output += uResult.output;
+        // this get overwritten at line 1141
+      }
+    }
+  }
+  var player = playerIndex.get(session);
+  
+  if (!player) {
+    player = {
+      drive: drive,
+      fullPath: null,
+      map: "A1",
+      z: 0,
+      item: "",
+      avatar: "",
+      pubId: ""
+    };
+  } else {
+    if (!player.map) player.map = "A1";
+    if (player.z == null) player.z = 0;
+    if (!player.item) player.item = "";
+    if (!player.avatar) player.avatar = "";
+  }
+
+  var refresh = true;
+  let column = 0; 
+  
+  let tape="";  
+  while (column < plugs.length) {
+
+    let code = plugs.slice(column, column + 2);
+    column += 2; 
+
+    switch (code) {
+      case 'Vn':
+      case 'Vs':
+      case 'Ve':
+      case 'Vw':
+        if (!player.item || player.item === "") { break; }
+        tape += code;
+        break;
+        
+      case 'Vd': 
+        if (!player.item || player.item === "") { break; }
+        let item = plugs.slice(column, column + 2); column += 2;
+        tape += code+item;
+        break;      
+
+      case 'OD':
+        let objfile = null; 
+        let objid = plugs.slice(column, column + 2);
+        let objz  = plugs.slice(column + 2, column + 4);
+        column += 4;
+        
+        if (player.item === 'Za') {
+        	 if (objid.charAt(0) === 'S') {
+        	 	player.z = objz;
+        	 }
+        }
+
+        let pZStr = (player.z < 10 ? '0' : '') + player.z;
+
+        let odSearchPattern = 'w/' + player.map + '/' + objid + pZStr + '??';
+        let odFilesResponse = fileSearch(drive, odSearchPattern);
+        
+        if (odFilesResponse.success && odFilesResponse.results.length > 0) {
+          for (let i = 0; i < odFilesResponse.results.length; i++) {
+            let entryName = odFilesResponse.results[i].name;
+            let matchedBase = entryName.substring(entryName.lastIndexOf('/') + 1);
+            if (matchedBase.length === 6) {
+              objfile = entryName;
+              break; 
+            }
+          }
+        }
+
+        if (objfile != null) {
+          console.log("UNIVAC(" + drive + ", " + player.fullPath + ", " + objfile + ")");
+          if (typeof UNIVAC === 'function') {
+            let uResult = UNIVAC(drive, player.fullPath, objfile, session);
+            if (uResult) {
+              player.map = uResult.sector;
+              player.z = uResult.z;
+              player.avatar = uResult.avatar;
+              if (uResult.playerid) player.pubId = uResult.playerid;
+              if (uResult.item) player.item = uResult.item + player.pubId;
+              
+              player.fullPath = uResult.fullPath;
+              output += uResult.output;
+            }
+            console.log("###1205### fullPath="+player.fullPath+" objfile="+objfile);
+            // ###1196### fullPath=w/H1/Sa44AaAaAaAa objfile=w/H1/Sa66Za
+          }
+        }
+        break;
+                
+      case 'ID':
+        let itemId = plugs.slice(column, column + 2);
+        let itemZ  = plugs.slice(column + 2, column + 4);
+        column += 4;
+        
+        let searchPrefix = 'w/' + player.map + '/' + itemId;
+        let filesResponse = fileSearch(drive, searchPrefix + '*');
+        
+        if (filesResponse.success && filesResponse.results.length > 0) {
+          let matchedPath = null;
+          let matchedBase = null;
+          
+          for (let i = 0; i < filesResponse.results.length; i++) {
+            let base = filesResponse.results[i].name.split('/').pop();
+            if (base.substring(2, 4) === itemZ) {
+              matchedPath = filesResponse.results[i].name;
+              matchedBase = base;
+              break;
+            }
+          }
+
+          if (matchedPath) {
+            let matchedPubId = matchedBase.length >= 8 ? matchedBase.substring(4, 8) : "";
+            let matchedFullId = matchedPubId ? itemId + matchedPubId : itemId;
+
+            // If the player clicks their own item, send inventory
+            if (matchedFullId === player.item) {
+              let invLoad = fileLoad(drive, '/', player.fullPath, session);
+              let inventoryData = (invLoad.success && invLoad.content) ? invLoad.content : '';
+              output += "S^Vi" + inventoryData + "^S";
+              break; 
+            }
+            
+            // ── GHOST PLAYER CREATION TRIGGER ────────────────────────────────
+            if (itemId >= 'Sa' && itemId <= 'Sd') {
+              if (!player.item || player.item === "") {
+                // The user clicked a hat but doesn't exist yet! 
+                // Run your custom initialization punch code:
+                console.log("###1268###");
+                let initTape = "XnXjVaB1D3J0++XnXr++LaZaZaZaZaZaZaZaZaWm99++VtA1ZeVuVa++Xc";
+                runtape(initTape);
+                break; // Stop processing so we don't accidentally try to pick up the item
+              }
+            }
+            
+            // Pick up standard dynamic items
+            if (itemId >= 'Aa' && itemId < 'Qa') { tape += 'XnVd'+itemId; }
+          }
+        }
+        break;                  
+
+      case 'ST':
+        if (session && playerIndex.has(session)) {
+          output += "ST" + session;
+        } else {
+          let chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+          let pubId = '';
+          for (let i = 0; i < 4; i++) pubId += chars.charAt(Math.floor(Math.random() * chars.length));
+
+          let secret = Math.random().toString(36).substring(2, 10);
+          session = secret;
+
+          player = {
+            drive:    drive,
+            fullPath: null,
+            map:      "A1",
+            item:     "",
+            z:        0,
+            avatar:   "",
+            pubId:    pubId
+          };
+          playerIndex.set(session, player);
+
+          // Create the ghost player file with Za (empty slot) as the item
+          runtape("XaZa");
+          player.item = 'Za'; // mark slot as created so item guards pass
+          let numericZ = parseInt(player.z, 10) || 0;
+          // overwrite UNIVAC output as client has no session token to process it yet
+          output += "ST" + session;
+          var refresh=false;
+        }
+        column = plugs.length;
+        break;        
+
+      case 'VA':
+        let vaAvatar = "";
+        let vaTermIdx = plugs.indexOf('--', column);
+        if (vaTermIdx !== -1) {
+          vaAvatar = plugs.slice(column, vaTermIdx);
+          column = vaTermIdx + 2;
+        } else {
+          vaAvatar = plugs.slice(column);
+          column = plugs.length;
+        }
+
+        if (!player.item || player.item === "") break; 
+        if (vaAvatar !== player.avatar) { runtape("Va" + vaAvatar + "--"); }
+        break;                
+
+      case 'OO':
+        var refresh=false;
+        column = plugs.length; 
+        break;        
+    }
+  }
+
+  if (session) { playerIndex.set(session, player); }
+
+  if (refresh) {
+    let list = fileList(drive, 'w/' + player.map, null, session);
+    let items = [];
+    if (list.success && list.listing) {
+      let files = list.listing.split(' ');
+      files.forEach(f => {
+        if (f.length > 1) { if (f.length !== 6) { items.push(f); }}
+      });
+    }
+    let numericZ = parseInt(player.z, 10) || 0;
+    let z = numericZ < 0 ? "00" : (numericZ < 10 ? "0" + numericZ : String(numericZ));
+
+    let pItemId = player.item ? player.item.substring(0, 2) : "Za";
+    let pPubId = player.pubId ? player.pubId : "0000";
+    if (pPubId.length < 4) pPubId = pPubId.padEnd(4, '0');
+    
+    output = "PI" + pItemId + z + pPubId + output;
+    output += "RF" + player.map + z + items.join(',');
+  }
+  return respondRetro(stacker, output, session);
+}
+
 // ── UNIVAC ────────────────────────────────────────────────────────────────────
 //   ie: UNIVAC(capflag.gfx, w/F2/Sc44B2D0, w/F2/Yj44Sa)
-function UNIVAC(driveName, itemfile, objfile) {
+
+function UNIVAC(driveName, itemfile, objfile, sessionToken) {
+  sessionToken = sessionToken || 'UNIVAC';
 
   if (!_deps) {
     console.error('UNIVAC: dependencies not injected – call UNIVAC.inject(deps) at startup');
@@ -57,6 +298,64 @@ function UNIVAC(driveName, itemfile, objfile) {
   var column = 0;               
   var output = "";              
 
+  // ── Register Math Helpers ─────────────────────────────────────────────────
+  // Parses a 2-char code to find its experiential/numeric value
+  function parseRegValue(valStr) {
+    if (!valStr || valStr.length !== 2) return 1; // Default to 1
+
+    if (/^[A-Z]/.test(valStr)) {
+      var c2 = valStr.charAt(1);
+      // If it's a numeral, add the numeral's value
+      if (/[0-9]/.test(c2)) return parseInt(c2, 10);
+      // If it's a letter, use alphabet position: a=1, b=2, etc.
+      if (/[a-z]/.test(c2)) return c2.charCodeAt(0) - 96; 
+    }
+    
+    // Explicit standard numeric code protection (e.g., "05", "10")
+    if (/^\d{2}$/.test(valStr)) return parseInt(valStr, 10);
+
+    return 1;
+  }
+
+  function plus(reg, valStr) {
+    var amount = parseRegValue(valStr);
+    if (amount <= 0) return; // Ignores commands that evaluate to 0
+
+    var memRegex = new RegExp(reg + '(\\d{2})');
+    var match = state.content.match(memRegex);
+
+    if (match) {
+      var count = parseInt(match[1], 10) + amount;
+      if (count > 99) count = 99; // Hard cap
+      var countStr = (count < 10 ? '0' : '') + count;
+      state.content = state.content.replace(match[0], reg + countStr);
+    } else {
+      // Create new stackable register
+      var count = amount > 99 ? 99 : amount;
+      var countStr = (count < 10 ? '0' : '') + count;
+      state.content += reg + countStr;
+    }
+  }
+
+  function minus(reg, valStr) {
+    var amount = parseRegValue(valStr);
+    if (amount <= 0) return; // Ignores commands that evaluate to 0
+
+    var memRegex = new RegExp(reg + '(\\d{2})');
+    var match = state.content.match(memRegex);
+
+    if (match) {
+      var count = parseInt(match[1], 10) - amount;
+      if (count > 0) {
+        var countStr = (count < 10 ? '0' : '') + count;
+        state.content = state.content.replace(match[0], reg + countStr);
+      } else {
+        // Remove the register entirely if it drops to 0 or below
+        state.content = state.content.replace(match[0], '');
+      }
+    }
+  }
+
   // ── 3. Process punch code ─────────────────────────────────────────────────
   var gateopen = true; 
   var ifnot = false;   
@@ -69,9 +368,22 @@ function UNIVAC(driveName, itemfile, objfile) {
       case 'Xn': ifnot = true; break;   
       case 'Xc': ifnot = false; break;  
 
-      // ── NEW: Xa — Claim player-item / assign team ─────────────────────────────
+      // ── Xa — Claim player-item / assign team ─────────────────────────────
       case 'Xa': {
         var newId = tape.slice(column, column + 2); column += 2;
+
+        // Parse the inventory string up to the '--' terminator
+        var inventoryString = "";
+        var endCol = tape.indexOf('--', column);
+        if (endCol !== -1) {
+          inventoryString = tape.slice(column, endCol);
+          column = endCol + 2;
+        } else {
+          // Graceful fallback if terminator is somehow missing: 
+          // consume the rest of the tape
+          inventoryString = tape.slice(column);
+          column = tape.length; 
+        }
 
         if (!state.playerid) {
           state.id = newId;
@@ -82,11 +394,13 @@ function UNIVAC(driveName, itemfile, objfile) {
             state.zStr = register['W1'];
             state.z = parseInt(state.zStr, 10);
           }
-          state.avatar = '';   // ← ADD THIS: fresh claim has no avatar yet
+          state.avatar = '';   
+          state.content = inventoryString; // Initialize inventory from punch code
         } else if (state.id === 'Za') {
           state.id = newId;
-          state.avatar = '';   // ← ADD THIS: lobby→team transition, clear any ghost avatar
-          output += "SPVa";
+          state.avatar = '';   
+          state.content = inventoryString; // Initialize inventory from punch code
+          output += "S^Va--^S";
         } else {
           console.log("UNIVAC() Xa: team already set to " + state.id + ", ignoring " + newId);
         }
@@ -95,11 +409,8 @@ function UNIVAC(driveName, itemfile, objfile) {
 
       // ── Va — Set avatar string ────────────────────────────────────────────────
       case 'Va': {
-        // XbVa--     <- avatar = text between Va and -- (in this case null)
         if (!state.playerid) {
-        	 console.log("###220###");
           // Guard: no player ID yet, avatar cannot be set
-          console.log("UNIVAC() Va: no player ID assigned, skipping avatar set");
           var endCol = tape.indexOf('--', column);
           if (endCol !== -1) column = endCol + 2;
           else column += 2;
@@ -107,36 +418,20 @@ function UNIVAC(driveName, itemfile, objfile) {
         }
         var endCol = tape.indexOf('--', column);
         if (endCol !== -1) {
-        	 console.log("###230###");
           state.avatar = tape.slice(column, endCol);
           column = endCol + 2;
         } else {
-        	 console.log("###234###");
           state.avatar = tape.slice(column, column + 2);
           column += 2;
         }
         break;
       }
 
-      case 'Xb': {
-        let clientboard = ""
-        var endCol = tape.indexOf('--', column);
-        if (endCol !== -1) {
-          clientboard = tape.slice(column, endCol);
-          column = endCol + 2;
-        } else {
-          clientboard = tape.slice(column, column + 2);
-          column += 2;
-        }
-        output += "SP" + clientboard + "--";
-      }    
-                  
       case 'Vm': { 
         var noun = tape.slice(column, column + 2); column += 2;
         var zToken = tape.slice(column, column + 2); column += 2;
         var resolvedZ = state.zStr; 
         if (/^\d{2}$/.test(zToken)) {
-          console.log("verb make item -> "+noun+zToken);
           resolvedZ = zToken; 
         } else if (/^[A-Z]/.test(zToken)) {
           var found = false;
@@ -157,74 +452,29 @@ function UNIVAC(driveName, itemfile, objfile) {
         var targetPath = 'w/' + state.sector + '/' + noun + resolvedZ;
         console.log("make item "+targetPath);
         if (ifnot) {
-          _deps.fileDelete(driveName, '/', targetPath, 'UNIVAC');
+          _deps.fileDelete(driveName, '/', targetPath, sessionToken);
           console.log("UNIVAC() Vm: removed " + targetPath);
         } else {
           let ts = 'X' + _deps.futureTimestamp(1); 
-          _deps.fileSave(driveName, '/', targetPath, '', 'UNIVAC', 'UNIVAC', ts);
+          _deps.fileSave(driveName, '/', targetPath, '', sessionToken, sessionToken, ts);
           console.log("UNIVAC() Vm: created " + targetPath);
         }
         break;
       }
 
       case 'Xr': { 
-        // Read exactly one item (2 characters) and advance the column
-        var noun = tape.slice(column, column + 2);
-        column += 2; 
-
-        // Only Wa through Wz are stackable registers.
-        // Everything else (Aa-Pa, Zj, etc.) acts as a single item.
-        var isStackable = (noun >= 'Wa' && noun <= 'Wz');
-
-        if (!ifnot) { 
-          // ADD ITEM
-          if (isStackable) {
-            var memAddRegex = new RegExp(noun + '(\\d{2})');
-            var matchAdd = state.content.match(memAddRegex);
-            if (matchAdd) {
-              var count = parseInt(matchAdd[1], 10);
-              if (count < 99) {
-                count++;
-                var countStr = (count < 10 ? '0' : '') + count;
-                state.content = state.content.replace(matchAdd[0], noun + countStr);
-              }
-            } else {
-              // Add new stackable register starting at 01
-              state.content += noun + '01';
-            }
-          } else {
-            // Standard single item: takes up one empty space ('Za')
-            state.content = state.content.replace('Za', noun);
-          }
-        } else { 
-          // REMOVE ITEM
-          if (isStackable) {
-            var memRemRegex = new RegExp(noun + '(\\d{2})');
-            var matchRem = state.content.match(memRemRegex);
-            if (matchRem) {
-              var count = parseInt(matchRem[1], 10);
-              if (count > 1) {
-                count--;
-                var countStr = (count < 10 ? '0' : '') + count;
-                state.content = state.content.replace(matchRem[0], noun + countStr);
-              } else {
-                // Remove the register entirely if it drops to 0
-                state.content = state.content.replace(matchRem[0], '');
-              }
-            }
-          } else {
-            // Standard single item: leaves an empty space ('Za') behind
-            state.content = state.content.replace(noun, 'Za');
-          }
-        }
+        // Read the first argument (Target or Register)
+        var noun1 = tape.slice(column, column + 2); column += 2; 
+        var noun2 = tape.slice(column, column + 2); column += 2;
+        state.content = state.content.replace(noun1, noun2);
         break;
-      }
-      
+      }      
+
       case 'Vr': { 
         var noun = tape.slice(column, column + 2); column += 2;
         var zloc = tape.slice(column, column + 2); column += 2;
         var zNum = (zloc < 10 ? '0' : '') + zloc;
-        output += "SPVr" + noun + zNum + "..";
+        output += "S^Vr" + noun + zNum + "^S";
       }
 
       case 'Xi': { 
@@ -246,10 +496,10 @@ function UNIVAC(driveName, itemfile, objfile) {
         if (ifnot) {
           if (state.content.indexOf('Za') > -1) {
             var targetPath = 'w/' + state.sector + '/' + noun + state.zStr;
-            var checkLoad = _deps.fileLoad(driveName, '/', targetPath, 'UNIVAC');
+            var checkLoad = _deps.fileLoad(driveName, '/', targetPath, sessionToken);
             if (checkLoad.success) {
               state.content = state.content.replace('Za', noun);
-              _deps.fileDelete(driveName, '/', targetPath, 'UNIVAC');
+              _deps.fileDelete(driveName, '/', targetPath, sessionToken);
             }
           }
         } else {
@@ -257,7 +507,7 @@ function UNIVAC(driveName, itemfile, objfile) {
         	   state.content = state.content.replace(noun, 'Za');
         	   var targetPath = 'w/' + state.sector + '/' + noun + state.zStr;
             let ts = 'X' + _deps.futureTimestamp(1); 
-            _deps.fileSave(driveName, '/', targetPath, '', 'UNIVAC', 'UNIVAC', ts);
+            _deps.fileSave(driveName, '/', targetPath, '', sessionToken, sessionToken, ts);
           }
         }
         break;
@@ -357,7 +607,8 @@ function UNIVAC(driveName, itemfile, objfile) {
         break;
       }
 
-      case 'Vt': { 
+      case 'Vt': {
+        // verb teleport 
         var noun = tape.slice(column, column + 2); column += 2;
         if (!_isValidExit(driveName, state.sector, noun)) { break; }
         var targetSector = noun; var targetZStr = state.zStr;
@@ -386,16 +637,35 @@ function UNIVAC(driveName, itemfile, objfile) {
         break;
       }
 
+      case 'S^': {
+        // Find the matching ^S terminator
+        var endCol = tape.indexOf('^S', column);
+        if (endCol !== -1) {
+          // Slice the content between S^ and ^S and add to output
+          output += 'S^'+tape.slice(column, endCol)+'^S';
+          column = endCol + 2;
+        } else {
+          output += tape.slice(column);
+          column = tape.length;
+        }
+        break;
+      }
+      
       default: {
         console.log('UNIVAC: unknown word [' + word + '] at column ' + (column - 2) + ' – abort script');
         break;
       }
     }
+    
   }
+  
+  if (tape) { runtape(tape); tape=""; }  
 
   // ── 4. Save and Cleanup ───────────────────────────────────────────────────
   var newPath = 'w/' + state.sector + '/' + state.id + state.zStr + state.playerid + state.avatar;
-  var saveRes = _deps.fileSave(driveName, '/', newPath, state.content, 'UNIVAC', 'UNIVAC');
+
+  console.log("###561### newPath="+newPath+" state.content="+state.content);  
+  var saveRes = _deps.fileSave(driveName, '/', newPath, state.content, sessionToken, sessionToken);
   
   if (!saveRes.success) {
     console.error('UNIVAC: Failed to save to path ' + newPath + ': ' + saveRes.error);
@@ -403,16 +673,16 @@ function UNIVAC(driveName, itemfile, objfile) {
   }
   
   if (oldPath && oldPath !== newPath) {
-    _deps.fileDelete(driveName, '/', oldPath, 'UNIVAC');
+    _deps.fileDelete(driveName, '/', oldPath, sessionToken);
       // Check if player just claimed this file. 
     // If it started unassigned, but now has a player ID:
     if (!originalPlayerId && state.playerid) {
-      _deps.fileDelete(driveName, '/', 'p/' + originalId, 'UNIVAC');
+      _deps.fileDelete(driveName, '/', 'p/' + originalId, sessionToken);
     }
     
     // Save to the /p/ directory using the new playerid if claimed, otherwise the slot ID
     var pName = state.playerid ? state.playerid : state.id;
-    _deps.fileSave(driveName, '/', 'p/' + pName, state.sector + state.zStr + state.avatar, 'UNIVAC', 'UNIVAC');
+    _deps.fileSave(driveName, '/', 'p/' + pName, state.sector + state.zStr + state.avatar, sessionToken, sessionToken);
   }
   
   return {
