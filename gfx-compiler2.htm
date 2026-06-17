@@ -70,21 +70,6 @@
             margin: 1px;
         }
 
-        .punchcode-text {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            background-color: #006600;
-            color: #FFFFFF;
-            font-family: monospace;
-            font-size: 16px;
-            font-weight: bold;
-            border-radius: 4px;
-            box-sizing: border-box;    
-            overflow: hidden;
-            background: url('t/Ga.png') no-repeat center / cover;
-        }
-
         .punchcode-space {
             width: 32px;
             height: 32px;
@@ -101,15 +86,36 @@
             overflow: hidden;
         }        
 
+        .punchcode-text {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #006600;
+            color: #FFFFFF;
+            font-family: monospace;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 4px;
+            box-sizing: border-box;    
+            overflow: hidden;
+            /* REPLACED BACKGROUND URL WITH THESE */
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+        }
+
         .punchcode-num {
             width: 32px;
             height: 32px;
             display: inline-block;
             vertical-align: middle;
             margin: 1px;
-            background: url('t/Ga.png') no-repeat center / cover;
             flex-shrink: 0;
             position: relative;
+            /* REPLACED BACKGROUND URL WITH THESE */
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
         }
 
         .punchcode-img {
@@ -118,16 +124,41 @@
             display: inline-block;
             vertical-align: middle;
             margin: 1px;
-            background: url('t/Ca.png') no-repeat center / cover;
             flex-shrink: 0;
             position: relative;
+            /* REPLACED BACKGROUND URL WITH THESE */
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
         }
-
+        
         .punchcode-img img {
             width: 32px;
             height: 32px;
             display: block;
         }
+
+        /* Dynamic Exits UI */
+        .dir-btn {
+            background: #222; color: #7f8c8d; border: 1px solid #444;
+            padding: 5px 8px; border-radius: 4px; cursor: pointer;
+            font-family: monospace; font-size: 0.85em;
+            text-transform: lowercase; transition: all 0.2s;
+        }
+        .dir-btn.active {
+            background: #2c3e50; color: #f1c40f; border-color: #f1c40f;
+            text-transform: uppercase; font-weight: bold;
+        }
+        .dir-btn.disabled {
+            opacity: 0.3; cursor: not-allowed;
+        }
+        .other-btn {
+            background: #331111; color: #e74c3c; border: 1px solid #c0392b;
+            padding: 5px 8px; border-radius: 4px; cursor: pointer;
+            font-family: monospace; font-size: 0.85em; font-weight: bold;
+        }
+        .other-btn:hover { background: #551111; color: #ff7777; }
+
 
         #tooltip { position: absolute; background: rgba(240, 230, 140, 0.8); color: #000; padding: 2px 6px; font-size: 10px; pointer-events: none; border: 1px solid #444; display: none; z-index: 100; font-family: monospace; }
     </style>
@@ -166,7 +197,7 @@
               <input type="text" id="newZ" size=2 maxlength="2" placeholder="Z">
               <input type="text" id="newDATA" size=2 maxlength="2" value="00">
               <button onclick="addObject()">+ ADD</button>
-              <button onclick="editObject()">EDIT</button> <!-- NEW BUTTON -->
+              <button onclick="editObject()">EDIT</button> 
               <div id="listItems"></div>
             </div>
            </div>                
@@ -183,12 +214,25 @@
         
         <!-- Setting initially to display: none so it doesn't float at the bottom unexpectedly -->
         <div class="tool-box" id="logicBox" style="display: none;">
-            <div class="stack-header"><span id="logicLabel">LOGIC</span>: <span id="editingObjID"></span></div>
-            <textarea id="punchcodeInput" spellcheck="false" oninput="updateDecompiler()"></textarea>
-            <div id="punchcodeImages" class="tool-box" style="display: flex; flex-wrap: wrap; margin-top: 10px; padding: 5px; min-height: 42px; gap: 2px;">
-                <!-- Images will be inserted here by JS -->
-            </div>            
-            <div id="decompiler"></div>
+
+        <div class="stack-header">
+            <div><span id="logicLabel">LOGIC</span>: <span id="editingObjID"></span>
+                <button onclick="LightMode()">Light</button>
+                <button onclick="DarkMode()">Dark</button>
+                
+                &nbsp;
+                <button onclick="setPunchcodeBg('Ga')">Grass</button>
+                <button onclick="setPunchcodeBg('Ib')">Dungeon</button>
+                <button onclick="setPunchcodeBg('Ca')">Dirt</button>
+                <button onclick="setPunchcodeBg('Ua')">Water</button>
+                <input type="text" id="bgInput" size="2" maxlength="2" value="Ca" oninput="setCustomPunchcodeBg()">
+            </div>
+        </div>
+
+        <div id="pcinput"><textarea id="punchcodeInput" oninput="updateDecompiler()"></textarea></div>
+        <div id="punchcodeImages" class="punchcodeImages"></div>
+        
+        <div id="decompiler"></div>
             <div class="btn-row" style="display:flex; gap:5px; margin-top:10px;">
                 <button class="reject" onclick="rejectLogic()">CLEAR</button>
                 <button class="remove" onclick="removeObject()">DELETE</button>
@@ -196,32 +240,35 @@
         </div>
         
         <div class="tool-box" id="exitsBox">
-           <div id="manualExitRow">
-               <label>Exits</label>
-               <input type="text" id="manualExitInput" placeholder="e.g. N1S1Z1" oninput="saveExitInput()">
+           <label style="margin-bottom: 5px;">Exits</label>
+           <div id="manualExitRow" style="align-items: center; gap: 10px;">
+               <div id="exitButtonsRow" style="display: flex; gap: 5px; flex-wrap: wrap;"></div>
+               <input type="text" id="manualExitInput" placeholder="e.g. A2B1H1" oninput="saveExitInput()">
            </div>                
-        </div>
+        </div>        
+        
     </div>
 </div>
 
 <script>
-    // --- STATE ---
-    let currentSector = "A1";
-    let mapSectors = {};
-    let editingIndex = -1;
-    let editingGlobalKey = null;
-    let globalLogic = { a: "", b: "", c: "" };
+// --- STATE ---
+let currentSector = "A1";
+let mapSectors = {};
+let editingIndex = -1;
+let editingGlobalKey = null;
+let globalLogic = { a: "", b: "", c: "" };
+let punchcodeTextColor = "#FFFFFF"; // current text color (defaults to white) 
     
-    // Bounds restricted to A1-H8 (8x8 world)
-    const ROWS = ["A","B","C","D","E","F","G","H"]; 
-    const COLS = 8;
-    const tileCache = {}, itemCache = {};
-    const canvas = document.getElementById('sectorCanvas');
-    const ctx = canvas.getContext('2d');
-    const tooltip = document.getElementById('tooltip');
+// Bounds restricted to A1-H8 (8x8 world)
+const ROWS = ["A","B","C","D","E","F","G","H"]; 
+const COLS = 8;
+const tileCache = {}, itemCache = {};
+const canvas = document.getElementById('sectorCanvas');
+const ctx = canvas.getContext('2d');
+const tooltip = document.getElementById('tooltip');
 
     const punchcodeItemImageCache = {};
-
+    
     const nav = document.getElementById('sectorNav');
     for(let r=0; r<ROWS.length; r++) {
         for(let c=1; c<=COLS; c++) {
@@ -263,10 +310,8 @@
         if (e.key === "ArrowRight" && colIdx < COLS) { colIdx++; changed = true; }
 
         if (changed) {
-            saveCurrentEditor();
-            currentSector = ROWS[rowIdx] + colIdx;
-            nav.value = currentSector;
-            changeSector();
+          nav.value = ROWS[rowIdx] + colIdx;
+          changeSector();
         }
     });
 
@@ -383,14 +428,107 @@
     }
     
     function saveExitInput() {
-      const val = document.getElementById('manualExitInput').value.trim().toUpperCase();
+      // Strips non-alphanumeric chars and updates underlying map data
+      const val = document.getElementById('manualExitInput').value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
       mapSectors[currentSector].exits = val;
+      updateExitsUI();
     }
 
     function updateExitInput() {
       const input = document.getElementById('manualExitInput');
       if (input) input.value = mapSectors[currentSector]?.exits || "";
     }  
+
+    function updateExitsUI() {
+      const sec = mapSectors[currentSector];
+      if (!sec) return;
+
+      let exitsStr = sec.exits || "";
+      let exitsArr = [];
+      
+      // Parse string into array of 2-character sector chunks
+      for (let i = 0; i < exitsStr.length; i += 2) {
+          if (i + 1 < exitsStr.length) {
+              exitsArr.push(exitsStr.substring(i, i + 2));
+          }
+      }
+
+      // Calculate Valid Neighbors based on A1 to H8 bounds
+      const rIdx = ROWS.indexOf(currentSector[0]);
+      const col = parseInt(currentSector[1]);
+
+      const neighbors = {
+          North: rIdx > 0 ? ROWS[rIdx - 1] + col : null,
+          East: col < COLS ? ROWS[rIdx] + (col + 1) : null,
+          South: rIdx < ROWS.length - 1 ? ROWS[rIdx + 1] + col : null,
+          West: col > 1 ? ROWS[rIdx] + (col - 1) : null
+      };
+
+      const btnContainer = document.getElementById('exitButtonsRow');
+      if(btnContainer) btnContainer.innerHTML = '';
+
+      const neighborIDs = Object.values(neighbors).filter(x => x);
+
+      // Render Compass Buttons (North, East, South, West)
+      for (let dir of ['North', 'East', 'South', 'West']) {
+          const targetID = neighbors[dir];
+          const btn = document.createElement('button');
+          
+          if (!targetID) {
+              // Hit the edge of the map bounds
+              btn.className = 'dir-btn disabled';
+              btn.innerText = dir.toLowerCase();
+              btn.disabled = true;
+          } else {
+              const isActive = exitsArr.includes(targetID);
+              btn.className = 'dir-btn' + (isActive ? ' active' : '');
+              btn.innerText = isActive ? dir.toUpperCase() : dir.toLowerCase();
+              btn.onclick = () => toggleExit(targetID);
+          }
+          if(btnContainer) btnContainer.appendChild(btn);
+      }
+
+      // Render Other Non-Standard Exits (Teleports, etc)
+      exitsArr.forEach(exitID => {
+          if (!neighborIDs.includes(exitID)) {
+              const btn = document.createElement('button');
+              btn.className = 'other-btn';
+              btn.innerText = `[${exitID}]`;
+              btn.title = "Click to remove";
+              btn.onclick = () => toggleExit(exitID);
+              if(btnContainer) btnContainer.appendChild(btn);
+          }
+      });
+
+      // Update text input without overriding currently typed character if active
+      const input = document.getElementById('manualExitInput');
+      if (input && document.activeElement !== input) {
+          input.value = exitsStr;
+      }
+    }
+
+    function toggleExit(targetID) {
+      const sec = mapSectors[currentSector];
+      let exitsArr = [];
+      for (let i = 0; i < sec.exits.length; i += 2) {
+          if (i + 1 < sec.exits.length) exitsArr.push(sec.exits.substring(i, i + 2));
+      }
+
+      if (exitsArr.includes(targetID)) {
+          exitsArr = exitsArr.filter(e => e !== targetID); // Remove it
+      } else {
+          exitsArr.push(targetID); // Add it
+      }
+      sec.exits = exitsArr.join('');
+      
+      updateExitsUI();
+      
+      // Keep input synchronized
+      const input = document.getElementById('manualExitInput');
+      if (input) input.value = sec.exits;
+    }    
+    
+    
 
     function editObject() {
         if (editingIndex === -1) {
@@ -477,6 +615,12 @@ function updateObjectList() {
         return;
       }
 
+      // FIX 1: Safely save and close out of any previously selected object
+      if (editingIndex !== -1 || editingGlobalKey !== null) {
+          saveCurrentEditor();
+          closeEditor();
+      }
+
       const newObject = {
         id: idStr,
         z: zStr,
@@ -488,9 +632,13 @@ function updateObjectList() {
 
       document.getElementById('newID').value = "";
       document.getElementById('newZ').value = "";
+      
       render();
-    }
 
+      // FIX 2: Automatically open the newly created object so you can safely type its punch code!
+      openEditor(mapSectors[currentSector].objects.length - 1);
+    }
+    
     function saveCurrentEditor() {
         if (editingIndex !== -1) {
             try {
@@ -596,7 +744,8 @@ function openGlobalEditor(key) {
       updateGlobalLabels();
       updateObjectList();
       render();
-      updateExitInput(); 
+      //updateExitInput();
+      updateExitsUI(); 
     }
 
     function rejectLogic() {
@@ -631,7 +780,8 @@ function openGlobalEditor(key) {
         document.getElementById('sectorLabel').innerText = currentSector;
         closeEditor();
         render();
-        updateExitInput();
+        //updateExitInput();
+        updateExitsUI()
     }
 
     async function loadDefaultMap() {
@@ -657,12 +807,12 @@ function openGlobalEditor(key) {
       } catch (e) { console.error("Import failed", e); }
     }
  
-    function exportGfx() {
+function exportGfx() {
       saveCurrentEditor();
       let out = "";
 
-      const escapeWhitespace = (str) => (str || "").replace(/\n/g, "++");      
-      
+      const escapeWhitespace = (str) => (str || "").replace(/\n/g, "_NL_");
+
       if (globalLogic.a) out += `a=${globalLogic.a}\n`;
       if (globalLogic.b) out += `b=${globalLogic.b}\n`;
       if (globalLogic.c) out += `c=${globalLogic.c}\n`;
@@ -674,8 +824,10 @@ function openGlobalEditor(key) {
             if (o.data && o.data.trim().length === 2) {
                 meta += o.data; 
             }
-            return o.logic ? `${meta}:${escapeWhitespace(o.logic)}` : meta;
-        }).join(',');
+            // CHANGED: Using '|' as the logic separator instead of ':'
+            return o.logic ? `${meta}|${escapeWhitespace(o.logic)}` : meta;
+        }).join('~'); // CHANGED: Using '~' as the object separator instead of ','
+        
         out += `${label}=${sec.tiles}${sec.exits}.${objStr}\n`;
       }
       navigator.clipboard.writeText(out.trim());
@@ -685,23 +837,28 @@ function openGlobalEditor(key) {
     function parseGfxData(text) {
         globalLogic = { a: "", b: "", c: "" };
         
+        // Ensure this matches the export's placeholder
         const unescapeWhitespace = (str) => (str || "").replace(/_NL_/g, "\n");
 
         text.split('\n').forEach(line => {
-            if(!line.includes('=')) return; 
-            let [label, content] = line.split('=');
-            if(!content) return;
+        
+            const eqIdx = line.indexOf('=');
+            if (eqIdx === -1) return;
+            const label = line.substring(0, eqIdx);
+            const content = line.substring(eqIdx + 1);        
             
             if (label === 'a' || label === 'b' || label === 'c') {
-                globalLogic[label] = unescapeWhitespace(content.trim());
+                globalLogic[label] = unescapeWhitespace(content);
                 return;
             }
 
             let [map, items] = content.split('.');
             let objs = [];
-            if(items) items.split(',').forEach(c => {
+            // CHANGED: Splitting objects by '~' instead of ','
+            if(items) items.split('~').forEach(c => {
                 if(!c) return;
-                let [m, l] = c.split(':');
+                // CHANGED: Splitting metadata and logic by '|' instead of ':'
+                let [m, l] = c.split('|');
                 if (m) {
                     if (m.length >= 6) {
                         objs.push({ id: m.substring(0,2), z: m.substring(2,4), data: m.substring(4,6), logic: l || "" });
@@ -715,7 +872,7 @@ function openGlobalEditor(key) {
         updateGlobalLabels();
         render();
     }
-
+    
     function isWRegister(code) {
         return code.length === 2 && code.charAt(0) === 'W' && (
             (code.charAt(1) >= 'a' && code.charAt(1) <= 'z') ||
@@ -763,7 +920,9 @@ function decompilepunchcode(code) {
                   spacer.style.display = 'inline-block';
                   punchcodeImagesContainer.appendChild(spacer);
                   
-                  if (!output.endsWith(" ") && !output.endsWith("<br>")) output += " ";
+                  // if (!output.endsWith(" ") && !output.endsWith("<br>")) output += " ";
+                  output += " &#8594; ";
+                  
                   column++;
               } else if (char === '\n' || char === '\r') {
                   // Visual Line Break (Forces flexbox to wrap to next line)
@@ -788,6 +947,9 @@ function decompilepunchcode(code) {
       }
 
       // Process all codes
+      
+      let mathlogic = false;
+      
       while (column < code.length) {
         let item = getNextToken();
         if (!item) break; // Reached the end via whitespace
@@ -803,10 +965,16 @@ function decompilepunchcode(code) {
         
         if (item === "Xc") { 
           desc = "<br>";
-          punchcodeImagesContainer.appendChild(createImgBlock('i/Zd.png'));
+          punchcodeImagesContainer.appendChild(createImgBlock('i/Xc.png'));
         } else {
-            
-            punchcodeImagesContainer.appendChild(createImgBlock('i/' + item + '.png'));
+
+            if (item != "Xn") {
+              if (ifnot) {
+                punchcodeImagesContainer.appendChild(createImgBlock('i/' + item + 'n.png'));
+              } else {
+                punchcodeImagesContainer.appendChild(createImgBlock('i/' + item + '.png'));
+              }
+            }
 
             // If an instruction expects parameters, grab the next valid token
             while (desc.startsWith("%%") || desc.startsWith("$$") || desc.startsWith("##")) {
@@ -855,6 +1023,23 @@ function decompilepunchcode(code) {
       return output;
     }
 
+    // Add variable to track the current background selection
+    let punchcodeBg = "Ca"; 
+
+    function setPunchcodeBg(code) {
+        document.getElementById('bgInput').value = code;
+        punchcodeBg = code;
+        updateDecompiler();
+    }
+
+    function setCustomPunchcodeBg() {
+        const code = document.getElementById('bgInput').value.trim();
+        if (code.length === 2) {
+            punchcodeBg = code;
+            updateDecompiler();
+        }
+    }
+
     function createSpacer(text) {
         const wrap = document.createElement('div');
         wrap.className = 'punchcode-space'; 
@@ -865,42 +1050,59 @@ function decompilepunchcode(code) {
         return wrap;
     }
     
-    function createTextBlock(text) {
-        const div = document.createElement('div');
-        div.className = 'punchcode-text';
-        div.textContent = text;
-        return div;
-    }
+function createTextBlock(text) {
+    const div = document.createElement('div');
+    div.className = 'punchcode-text';
+    div.textContent = text;
+    div.style.backgroundImage = `url('t/${punchcodeBg}.png')`; // Apply dynamically
+    div.style.color = punchcodeTextColor;                      // Apply dynamic text color
+    return div;
+}
 
-    function createNumBlock(num) {
-        const wrap = document.createElement('div');
-        wrap.className = 'punchcode-num';
-        if (/^\d{2}$/.test(num)) {
-          const div = document.createElement('div'); 
-          div.className = 'punchcode-text';
-          div.style.backgroundColor = 'transparent'; 
-          div.textContent = num;
-          wrap.appendChild(div);
-          return wrap;
-        } else {
-          const img = document.createElement('img');
-          img.src = "i/" + num + ".png";
-          img.style.width = "32px";
-          img.style.height = "32px";
-          img.style.display = "block";
-          wrap.appendChild(img);
-          return wrap;
-        }
-    }
-    
-    function createImgBlock(src) {
-        const wrap = document.createElement('div');
-        wrap.className = 'punchcode-img';
+function createNumBlock(num) {
+    const wrap = document.createElement('div');
+    wrap.className = 'punchcode-num';
+    wrap.style.backgroundImage = `url('t/${punchcodeBg}.png')`; // Apply dynamically
+
+    if (!/^[A-Z]/.test(String(num)))  {
+        const div = document.createElement('div'); 
+        div.className = 'punchcode-text';
+        div.style.backgroundColor = 'transparent'; 
+        div.style.backgroundImage = 'none'; // Prevent double rendering on the text layer
+        div.style.color = punchcodeTextColor; // <--- ADD THIS HERE TOO
+        div.textContent = num;
+        wrap.appendChild(div);
+        return wrap;
+    } else {
         const img = document.createElement('img');
-        img.src = src;
+        img.src = "i/" + num + ".png";
+        img.style.width = "32px";
+        img.style.height = "32px";
+        img.style.display = "block";
         wrap.appendChild(img);
         return wrap;
     }
+}    
+
+function createImgBlock(src) {
+    const wrap = document.createElement('div');
+    wrap.className = 'punchcode-img';
+    wrap.style.backgroundImage = `url('t/${punchcodeBg}.png')`; // Apply dynamically
+    const img = document.createElement('img');
+    img.src = src;
+    wrap.appendChild(img);
+    return wrap;
+}
+
+function DarkMode() {
+    punchcodeTextColor = "#000000"; // Dark text for readability on light modes
+    updateDecompiler();             // Re-render the blocks to apply the change
+}
+
+function LightMode() {
+    punchcodeTextColor = "#FFFFFF"; // Light text for dark modes
+    updateDecompiler();             // Re-render the blocks to apply the change
+}
 
     window.onload = loadDefaultMap;
 

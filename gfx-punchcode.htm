@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>QPC MACRO CODER</title>
+    <script src="gfx-itemid.js"></script>
+    <script src="punchcode-engine.js"></script>
+    <style>
+        body { background: #222; color: #eee; font-family: monospace; margin: 0; display: flex; height: 100vh; }
+        #sidebar { width: 250px; background: #333; padding: 15px; border-right: 1px solid #444; overflow-y: auto; }
+        #main { flex: 1; display: flex; flex-direction: column; padding: 20px; }
+        #monitor { height: 300px; background: #000; border: 2px solid #555; margin-bottom: 10px; display: flex; flex-wrap: wrap; align-content: flex-start; overflow-y: auto; }
+        textarea { flex: 1; background: #111; color: #2ecc71; border: 1px solid #555; padding: 10px; resize: none; font-size: 1.2em; }
+        .macro-btn { display: block; width: 100%; padding: 10px; margin-bottom: 5px; background: #2c3e50; border: 1px solid #444; color: #fff; cursor: pointer; text-align: left; }
+        .macro-btn.active { border-color: #0af; background: #1a252f; }
+        .toolbar { margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+
+<div id="sidebar">
+    <h3>QPC Macros</h3>
+    <input type="text" id="newMacroName" placeholder="macro name" size="12">
+    <button onclick="addMacro()">Add</button>
+    <div id="macroList" style="margin-top:15px;"></div>
+</div>
+
+<div id="main">
+    <div class="toolbar">
+        <button onclick="importQPC()">IMPORT JSON</button>
+        <button onclick="exportQPC()">EXPORT JSON</button>
+    </div>
+    <div id="monitor"></div>
+    <textarea id="rawInput" placeholder="Enter punch codes here..." oninput="updateActiveMacro()"></textarea>
+</div>
+
+<script>
+    let macros = {};
+    let activeKey = null;
+
+    function addMacro() {
+        const name = document.getElementById('newMacroName').value.trim();
+        if (name && !macros[name]) {
+            macros[name] = "";
+            renderSidebar();
+        }
+    }
+
+    function renderSidebar() {
+        const list = document.getElementById('macroList');
+        list.innerHTML = "";
+        Object.keys(macros).forEach(key => {
+            const btn = document.createElement('button');
+            btn.className = 'macro-btn' + (activeKey === key ? ' active' : '');
+            btn.textContent = key;
+            btn.onclick = () => selectMacro(key);
+            list.appendChild(btn);
+        });
+    }
+
+    function selectMacro(key) {
+        activeKey = key;
+        document.getElementById('rawInput').value = macros[key];
+        renderSidebar();
+        updateMonitor();
+    }
+
+    function updateActiveMacro() {
+        if (!activeKey) return;
+        macros[activeKey] = document.getElementById('rawInput').value;
+        updateMonitor();
+    }
+
+    function updateMonitor() {
+        const monitor = document.getElementById('monitor');
+        monitor.innerHTML = "";
+        monitor.appendChild(decompileToDOM(macros[activeKey] || ""));
+    }
+
+    function exportQPC() {
+        navigator.clipboard.writeText(JSON.stringify(macros, null, 2));
+        alert("JSON Copied to Clipboard!");
+    }
+
+    function importQPC() {
+        navigator.clipboard.readText().then(text => {
+            try {
+                macros = JSON.parse(text);
+                renderSidebar();
+            } catch(e) { alert("Invalid JSON format"); }
+        });
+    }
+</script>
+</body>
+</html>

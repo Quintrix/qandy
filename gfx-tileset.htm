@@ -33,6 +33,7 @@ Open Source Tileset
 <p>
 &nbsp; &nbsp;<a href="?T=T&S=A&E=Z">Tile Set </a> 
 &nbsp; &nbsp;<a href="?T=I&S=A&E=Z">Item Codes</a>
+&nbsp; &nbsp;<a href="?T=P&S=V&E=X">Punch Codes</a>
 &nbsp; &nbsp;<a href="?T=C">Characters</a>
 &nbsp; &nbsp;<a href="javascript:DrawMap();">World Map</a>
 <p><hr width=800><p>
@@ -52,6 +53,7 @@ if (Types=="T") {
   document.write("</tr></table>");
  }
 }
+
 if (Types=="I") {
  for (i=LS;i<LE+1;i++) {
   document.write("<table border=0 bordercolor=navy cellpadding=5><tr>");
@@ -64,6 +66,32 @@ if (Types=="I") {
   document.write("</tr></table>");
  }
 } 
+
+if (Types=="P") {
+ for (i=LS;i<LE+1;i++) {
+  document.write("<table border=0 bordercolor=navy cellpadding=5><tr>");
+  for (j=97;j<115;j++) {
+   document.write("<td align=center><p>");
+   document.write("<img src=\"i/"+String.fromCharCode(i,j)+".png\" onerror=\"ImgError(this);\" height=32 width=32>");
+   document.write("<br>"+String.fromCharCode(i,j)  );
+   document.write("</td>");
+  }
+  document.write("</tr><tr>");
+  for (j=115;j<133 ;j++) {
+   if (j<123) {
+    n=j;
+   } else {
+    n=j-75; 
+   }
+   document.write("<td align=center><p>");
+   document.write("<img src=\"i/"+String.fromCharCode(i,n)+".png\" onerror=\"ImgError(this);\" height=32 width=32>");
+   document.write("<br>"+String.fromCharCode(i,n)  );
+   document.write("</td>");
+  }  
+  document.write("</tr></table><p><br>");
+ }
+} 
+
  
 if (Types=="C") {
  for (i=LS;i<LE+1;i++) {

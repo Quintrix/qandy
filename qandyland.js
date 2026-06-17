@@ -37,7 +37,7 @@ var MAX_NAME_BYTES = 255;
 // Hard-coded limits: modify source to change (not configurable via API or scripts)
 var MAX_TOTAL_DRIVE_SIZE = 5 * 1024 * 1024; // 5 MB per drive
 var MAX_FILE_BYTES = 32 * 1024;             // 32 KB per file
-var MAX_DRIVE_FILES = 1000;
+var MAX_DRIVE_FILES = 10000;
 var SESSION_COOKIE = 'q';
 var TYPE_MAX_BYTES = 65536; // 64 KB display limit
 var VALID_NAME_RE = /^(?!\.)[A-Za-z0-9 \-_.()+=!]+$/;
@@ -946,7 +946,7 @@ function bigbang(driveName, session) {
     // Parse items using comma separation
     var items = [];
     if (itemData) {
-      var rawItems = itemData.split(',');
+      var rawItems = itemData.split('~');
       for (var ri = 0; ri < rawItems.length; ri++) {
         var blob = rawItems[ri].trim();
         if (blob) items.push(blob);
@@ -1002,15 +1002,14 @@ function bigbang(driveName, session) {
 
     // Create item files with Bytecode inside
     for (var ii = 0; ii < sector.items.length; ii++) {
-      var parts = sector.items[ii].split(':');
+      var parts = sector.items[ii].split('|');
       var itemMeta = parts[0];
-      
-      // Strip out whitespace and '++' line breaks, THEN slice the exact limits
-      var rawCode = (parts[1] || '').replace(/\s+|\+\+/g, '');
-      var itemCode = rawCode.slice(0, sysopCardWidth);
-      
-      var itemId = parts[0].substring(0, 2); 
-      
+
+      // Strip out whitespace then slice the exact limits
+      var rawCode = (parts[1] || '').replace(/ /g, "");
+      var itemCode = rawCode.replace(/_NL_/g, "");
+
+      var itemId = itemCode.substring(0, 2);
       var iResult = fileSave(driveName, '/', dirPath + '/' + itemMeta, itemCode, '', 'bigbang');
       if (!iResult.success) errors.push(dirPath + '/' + itemMeta + ': ' + iResult.error);
     }
@@ -1148,8 +1147,12 @@ function plugboard(req, stacker, plugs, drive, session) {
     if (player.z == null) player.z = 0;
     if (!player.item) player.item = "";
     if (!player.avatar) player.avatar = "";
+    if (player.avatar.indexOf('-') !== -1) {
+      let cleanAvatar = player.avatar.replace(/\-../g, '');
+      runtape("Va" + cleanAvatar + "--");
+    }
   }
-
+  
   var refresh = true;
   let column = 0; 
   
@@ -1255,18 +1258,6 @@ function plugboard(req, stacker, plugs, drive, session) {
               break; 
             }
             
-            // ── GHOST PLAYER CREATION TRIGGER ────────────────────────────────
-            if (itemId >= 'Sa' && itemId <= 'Sd') {
-              if (!player.item || player.item === "") {
-                // The user clicked a hat but doesn't exist yet! 
-                // Run your custom initialization punch code:
-                console.log("###1268###");
-                let initTape = "XnXjVaB1D3J0++XnXr++LaZaZaZaZaZaZaZaZaWm99++VtA1ZeVuVa++Xc";
-                runtape(initTape);
-                break; // Stop processing so we don't accidentally try to pick up the item
-              }
-            }
-            
             // Pick up standard dynamic items
             if (itemId >= 'Aa' && itemId < 'Qa') { tape += 'XnVd'+itemId; }
           }
@@ -1349,7 +1340,7 @@ function plugboard(req, stacker, plugs, drive, session) {
     if (pPubId.length < 4) pPubId = pPubId.padEnd(4, '0');
     
     output = "PI" + pItemId + z + pPubId + output;
-    output += "RF" + player.map + z + items.join(',');
+    output += "RF" + player.map + z + items.join('~');
   }
   return respondRetro(stacker, output, session);
 }

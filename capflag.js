@@ -24,9 +24,18 @@ async function startup(){
     if (ts>0) { setTimeout(function() { startup(); },200); }
     return;
   } else {
-  	 window.map="F2"; // first map displayed
+  	 window.map="Fb"; // first map displayed
+    window.PopAlign = "center"; // "center", "click", or "full"
+    window.PopUpVis = "visible"; // current target visibility
+    window.PopForce = "visible";   // forced visibility on mouseout
+    window.lastClickedZ = 0;     // last grid coordinate clicked
   	 window.gfxDrive = 'capflag.gfx';
     var gameState = await gfxConnect(0);
+
+    window.PopForce = "hidden";   // hidden popup on mouseout
+    setTimeout(function() {
+    	pop("<p align=center>Capture the Flag<p align=center>Select player<br>hat to join team!");
+    }, 1000);
   }
 }
 
@@ -38,6 +47,7 @@ window.zdown = function(z) {
 };
 
 window.invdown = function(code) {
+  window.PopForce = "hidden";   // hidden popup on mouseout
   console.log("invdown() items="+items);
   let column = 0; 
   let outputItems = "";
@@ -113,6 +123,7 @@ window.invdown = function(code) {
 }
 
 window.serverdown = function(code) {
+  window.PopForce = "hidden";   // hidden popup on mouseout
   hpop();
   // executes any punch code the server sends the client
   // will allow each game to customize all aspects of the game
@@ -157,7 +168,6 @@ window.serverdown = function(code) {
 
 // avatar = 'Va'     -> gfx.js:256 gfxPong=SPVa--RFH144Sa44AaAa
 window.capflagAvatar = function(avatar) {
-
   let hat="";
   let body="";
   
@@ -189,13 +199,15 @@ window.capflagAvatar = function(avatar) {
     PUP += `<a href="gfx:SDVA${avatar}F6H0I1--"><img src="c/F6.png" height=32 width=32></a><p>`;
   } else {
   	 PUP="<p align=center><font color=red>ERROR:</font><br>No Team Item Selected";
-  } 
+  }
+  window.PopForce = "visible"; 
   pop(PUP);
   return;
 
 }	
 
 window.itemdown = function(code) {
+  window.PopForce = "hidden";   // hidden popup on mouseout
   hpop();
   var itemid = code.substring(0, 2);
   var itemz = code.substring(2, 4);

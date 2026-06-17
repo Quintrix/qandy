@@ -1445,7 +1445,7 @@ async function processMap(text) {
             // 1. Split Tiles/Exits from the Objects
             const parts = allData.split('.');
             const mainData = parts[0];     // Contains Tiles (192 chars) + Exits
-            const objectData = parts[1] || ""; // Contains ID(2)Z(2)DATA(2):LOGIC, ...
+            const objectData = parts[1] || ""; // Contains ID(2)Z(2)DATA(2)|LOGIC~ ...
 
             // 2. Process Tiles (First 192 characters)
             const tilesLength = 96 * 2; 
@@ -1469,15 +1469,19 @@ async function processMap(text) {
             }
 
             // 4. Process Objects (Logic-aware)
+            // UPDATED: Using '~' for chunk delimiter and '|' for logic delimiter
             if (objectData) {
                 sectorItems[label] = [];
-                // Split by comma for multiple objects
-                const objectChunks = objectData.split(',');
+                // Split by tilde for multiple objects
+                const objectChunks = objectData.split('~');
                 objectChunks.forEach(chunk => {
                     if (!chunk) return;
                     
-                    // Split metadata from logic by colon
-                    const [meta, logic] = chunk.split(':');
+                    // Split metadata from logic by pipe
+                    const pipeIdx = chunk.indexOf('|');
+                    const meta = pipeIdx !== -1 ? chunk.substring(0, pipeIdx) : chunk;
+                    const logic = pipeIdx !== -1 ? chunk.substring(pipeIdx + 1) : "";
+
                     if (meta) {
                         if (meta.length >= 6) {
                             // Static Object (ID + Z + DATA)
@@ -1534,6 +1538,7 @@ function exportMap() {
             const exits = sectorExits[sectorLabel] || "";
             
             // 3. Get Objects with Logic/Bytecode
+            // UPDATED: Using '~' for array join and '|' for appending logic
             let objectString = "";
             if (sectorItems[sectorLabel] && sectorItems[sectorLabel].length > 0) {
                 const objSerialized = sectorItems[sectorLabel].map(it => {
@@ -1542,16 +1547,14 @@ function exportMap() {
                     if (it.data && it.data.trim().length === 2) {
                         meta += it.data; 
                     }
-                    // Append :logic only if logic actually exists
-                    return it.logic ? `${meta}:${it.logic}` : meta;
-                }).join(',');
+                    // Append |logic only if logic actually exists
+                    return it.logic ? `${meta}|${it.logic}` : meta;
+                }).join('~');
                 objectString = "." + objSerialized;
             }
             output += `${sectorLabel}=${tilesString}${exits}${objectString}\n`;
         }
     }
-    
-    alert(preservedLines);
     
     for (const [key, value] of Object.entries(preservedLines)) {
         output += `${key}=${value}\n`;

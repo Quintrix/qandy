@@ -36,9 +36,9 @@
            RF   RF<data>  — Refresh current sector
                 PI$$##    — Player has been assigned item $$ at ## z-location
                 VA        — Server request for player avatar (triggers select avatar)
-                SP%%..    — Server Plugs for gfx.js engine to pass on to client, these
-                            let UNIVAC send plugs to the client.js (not the gfx.js engine,
-                            which gives developers direct access to the server results)   
+                S%..%S    — Server Plugs for gfx.js engine to pass on to client, these let
+                            UNIVAC send plugs to gfx.js which sends them to client's serverdown()
+                            function which gives developers access to the UNIVAC's results.   
                 
      ——————————————————————————————————————————————————————————————————————————————————————————
 
@@ -52,7 +52,7 @@
      Let's say a game designer needs 'hit points', so they assign 'Wh' to be hit points.
      The player file is it's 'inventory', if a player has the item Wh in their file they
      have 1 hit point. If they have 'WhWh', they have 2 hit points. 'WhWhWh' would be 3,
-     or they can be stacked 'Wh00' to 'Wh99'.
+     or they can be stacked from 'Wh00' to 'Wh99'.
      
      XiLaVtA1YeXcXiLbVtH8ZeXc = if player's inventory (Xi) has 'black hat' (La) teleport (Vt)
      to sector A1's 'Ze' (teleport), clear gate (xc). if player's inventory (Xi) has 'blue hat'
@@ -62,8 +62,7 @@
      start to finish just a like a punch card, where you can't just move the card in
      and out of the machine - it is read from the start to the finish and yields
      blinding fast processing speeds that combined with a RAM drive with no moving parts
-     and tiny data packets allows for a 'massively multiplayer environment' that no
-     modern JSON API can match. 
+     and tiny data packets allows for a massive multiplayer gaming environment. 
 
      Punch Codes start with an upper-case letter followed by a lower-case letter or a
      numeral. Codes that have two-capital letters are codes for the 'plugboard'. The
@@ -75,8 +74,7 @@
 
      These codes allow .gfx developers to create any type of world they desire, where
      they can program a 'dumb server to do smart things'.   
-     
-     
+      
      Legend:     $$ = byte code (Aa-Zz or A0-Z0)
                  $* = *wildcard (A*-Z*)
                  ## = numeral 00-99
@@ -92,79 +90,107 @@
      Code Format Description:
 
        Va Va$$-- avatar: if the player has been assigned a unique player id, then set the
-                 player-item's avatar to $$ until -- (ie: VaB0D0La-- = B0D0),
-
-       Xa Xa$$   alpha, claim player-item $$ to be assigned unique player-id (AaAa-ZzZz). 
-                 If the player item is 'Za' (nothing) then it is a ghost player that has
-                 not selected a 'team' yet, the developer will write 'lobby' punch code
-                 for the player and call the Xa$$ again this time with Sa, Sb, Sc, or Sd.
-                 Once a team has been selected, the UNIVAC() will not allow it to be 
-                 changed (disables turn-coat exploit).
-
+                 player-item's avatar to $$ until -- (ie: VaB0D0La-- = B0D0La)
+                 
+       Vb
+       Vc Vc     city: enters city 
 
        Vd Vd$$   drop: if player has $$ drop it (remove the if 'not drop' then get $$) 
+
        Ve Ve     east
+       
+       Vf
        
        Vg Vg$$   get: if item is on player's z-location, and player has a Za item in their
                  player file, change the Za to the $$ item and remove the item from the map
                  sector directory
                  
-       Vi Vi     inventory
+       Vh 
+       
+       Vi Vi     inventory - outputs a server plug with the player item's inventory file.
+
+       Vj 
+       
+       Vk 
+       
        Vl Vl     look 
-       Vm Vm$$## make item $$##
+
+       Vm Vm$$## make item $$ and z-location ##, items will expire in 1 minute if not
+                 picked up by a player.
+
        Vn Vn     north                     
-       Vr Vr$$## remove obj $$## from client's current map rendering (re-spawns on scroll)          
+
+       Vo
+       Vp
+       Vq
+       
+       Vr Vr$$## remove obj $$## from client's current map rendering (re-spawns on scroll)
+                 
        Vs Vs     south 
        
-   Vt$$## Vt$$## teleport to map sector $$, must be in the valid 'e' (exits) file, will
+       Vt Vt$$## teleport to map sector $$, must be in the valid 'e' (exits) file, will
                  place player on z-location ##, if ## starts with an upper-case letter, it
-                 will put player on that item's z-location on the new map sector. 
-                   
-       Vw Vw     west 
+                 will put player on that item's z-location on the new map sector. If
+                 'Xn' (not) flag is set, it will teleport the player if item ## is in their
+                 inventory even if the teleport is not a valid destination.
 
+       Vu
+                          
+       Vw Vw     west
+       
+       Vx
+       Vy
+       Vz 
 
        Xa Xa$$   alpha, claim player-item $$ to be assigned unique player-id (AaAa-ZzZz). 
                  If the player item is 'Za' (nothing) then it is a ghost player that has
                  not selected a 'team' yet, the developer will write 'lobby' punch code
                  for the player and call the Xa$$ again this time with Sa, Sb, Sc, or Sd.
                  Once a team has been selected, the UNIVAC() will not allow it to be 
-                 changed (disables turn-coat exploit).
+                 changed (disables turn-coat exploit). This allows for RPG games with
+                 no team, team based games, or the teams could be used as classes in 
+                 adventure games (Wizard, Bard, Warrior, etc).
+                 
+       Xb   
 
-       Va Va$$-- avatar: if the player has been assigned a unique player id, then set the
-                 player-item's avatar to $$ until -- (ie: VaB0D0La-- = B0D0),
+       Xc Xc     close all logic switches
 
-       Xa Xa$$   alpha, claim player-item $$ to be assigned unique player-id (Za = nothing, Sa Sb Sc and Sd are team items)
-       
-       Xb Xb$$-- send punch code to client's server plug board 
+       Xd XdW$## dice roll, set register W$ to random numer from value of Wd to ##  
 
-       Xc Xc     clear all logic gates, if appending code this can be used as a reset
-                 to avoid logic overflow logic and malicious errors.
-       Xd XdW$   decrease register by one, use XnXd to add one to register. (## = 00 - 99, else item id Az - Zz) (NA)
+       Xe Xe#### if ## equal to ## (use XnXe for not equal to)
 
-       Xe
        Xf
-              
-       Xg Xg$$## if W$ if greater than (use Xn (not) for less than)
-       
+       Xg
        Xh
        
        Xi Xi$$   if item $$ is in inventory open gate (if fails gate closes and code is ignored until Xc)
 
        Xj
        Xk
-       Xl
-       Xm
        
-       Xn Xn not (flips next logic gate)
+       Xl Xl#### if ## if less than ##, use XnXl for greater than
+
+       Xm XmW$## math, add ## to value in register W$, use Xn not to subtract
+       
+       Xn Xn     not (flips next logic gate)
        
        Xo
        
-       Xp Xp$$   render $$ over head .2 seconds, not = pop message $$ (NA)
+       Xp Xp$$   render $$ over head .2 seconds
        
-       Xr Xr$$   add to inventory (use NOT to remove)
+       Xq
        
-       Xs 
+       Xr Xr$$$$ replace inventory item $$ with $$ (XrZaIa = replace empty slot
+                 with crab, XrIaZa = replace crab with empty space. 
+       
+       Xs XsW$## set register W$ to equal ##
+       
        Xt
+       Xu
+       Xv
+       Xw
+       Xx
+       Xy
        
        Xz Xz$$   if item $$ is on z-location (NA)
         
@@ -177,14 +203,16 @@
         
         There are two sets of registers that can be used as 'variables':
 
-          Wa-Wz — free, can be used by game developers for hit points, levels, quest flags, etc
-          W0-W9 — stored in the 'a' (alpha) file and used as the UNIVAC's 'memory'
+          W0-W9 — global, stored in the 'a' (alpha) file and used as the UNIVAC's 'memory', these
+                  variables are global.
           
-             W0 — first spawn map sector, the 'lobby'
-             W1 — first byte of next unique player id
-             W2 — second byte of the next unique player id
-          W3-W9 — reserved for future use
-            
+                   W0 — first spawn map sector, the 'lobby'
+                   W1 — first byte of next unique player id
+                   W2 — second byte of the next unique player id
+                   W3-W9 — reserved for future use
+     
+          Wa-Wz — local, can be used by game developers for points, levels, quest flags, etc.
+          
      ——————————————————————————————————————————————————————————————————————————————————————————
 
      The client's serverplug() function:
@@ -194,9 +222,14 @@
      ——————————————————————————————————————————————————————————————————————————————————————————
 
      Item ID Codes - the 'nouns' in the punchcode language, the first character will always
-     be a capital letter, the second character is a lower-case letter or numeral. Items Aa-Pz
-     are 'pick-up' items that players can pick-up and drop. The file gfx-itemid.js contains
-     the master list of all ItemID codes, which are sorted via their first character:
+     be a capital letter, the second character is a lower-case letter or numeral.  The file
+     gfx-itemid.js contains the master list of all ItemID codes, which can be edited using
+     the 'gfx-mods.htm' stand-alone tool, which allows a developer to edit the master
+     gfx-item.js file, or insert mods into a .gfx file that will only affect that particular
+     .gfx game. It is recommend you add mods to your .gfx file so it remains compatiable with
+     any server it is run on. 
+     
+     Items are sorted by the first character of their id:
 
        A — travel items
        B — tools
@@ -216,20 +249,18 @@
        P — unused
        Q — unused
        R — unused
-       S — player items, can use these items without being on it's z-location, for login
-       T — buildings (images can be bigger than 32x32)
-       U — buildings (images can be bigger than 32x32)
+       S — player items, will have an avatar attached
+       T — buildings - images can be bigger than 32x32
+       U — buildings - images can be bigger than 32x32 
        V — v-verbs (game commands)
        W — registers (variables)
        X — x-logic (logic gates)
        Y — server items that have punchcode
        Z — server items that have punchcode 
 
-      * THESE CODES ARE ALL IN DRAFT STAGE AND ARE SUBJECT TO CHANGE!!
-      
      ——————————————————————————————————————————————————————————————————————————————————————————
      
-     The gfx-compiler.js can edit several 'config files, these one character filenames get
+     The gfx-compiler.js can edit several server files, these one character filenames get
      saved in the qandyland.js RAM drive to be used by the UNIVAC():
 
        a — alpha, the UNIVAC()'s 'inventory' with config data
@@ -238,12 +269,10 @@
  
      UNIVAC() inventory file that can include these items:
 
-       Aa$$ — set register that holds player's number of moves  
-       Ab## — ## moves required to walk on forest (tiles R$) (99=not allowed)
-       Ac## — ## moves required to walk on swamp (tiles T$) (99=not allowed)
-       Ad## — ## moves required to walk on mountain (tiles S$) (99=not allowed)
-       Ae## — ## moves required to walk on lava (tiles M$) (99=not allowed)
-       Af## — ## moves required to walk on water (tiles M$) (99=not allowed)
+       W0$$ — spawn new players on map $$  
+       W1## — spawn new players on map z-location ##
+       W2## — player id counter (1st bit)
+       W3## — player id counter (2nd bit)
                
      ——————————————————————————————————————————————————————————————————————————————————————————
 

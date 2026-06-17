@@ -136,6 +136,47 @@ window.gfxChar = function(charID, avatarStr, zPos) {
   const topPos = (32 + 22 + (y - 1) * 32) + "px";
   const leftPos = (32 + 22 + x * 32) + "px";
 
+  // --- Handle one-shot "^[itemId]" overlay (e.g. "^Ia" = caught a crab) ---
+  // Format: a trailing "^" followed by a 2-char item id, e.g. "B0D0J0^Ia"
+  const overlayMatch = avatarStr.match(/\-([A-Za-z0-9]{2})$/);
+  if (overlayMatch) {
+    const overlayId = overlayMatch[1];
+
+    // Strip the marker so the normal part-parser below sees an even-length string
+    avatarStr = avatarStr.substring(0, avatarStr.length - overlayMatch[0].length);
+
+    // Strip it from the *source* avatar string too, so this only fires once
+    if (charID === window.playerItem) {
+      window.playerAvatar = avatarStr;
+    }
+    if (window.movingItems && window.movingItems[charID]) {
+      window.movingItems[charID].avatar = avatarStr;
+    }
+
+    const overlayDomId = "cOverlay" + charID;
+    let overlayEl = document.getElementById(overlayDomId);
+    if (!overlayEl) {
+      overlayEl = document.createElement("img");
+      overlayEl.id = overlayDomId;
+      overlayEl.className = "char";
+      overlayEl.style.position = "absolute";
+      overlayEl.style.height = "32px";
+      overlayEl.style.width = "32px";
+      overlayEl.style.zIndex = "160"; // above hat/sword/shield (150-154)
+      document.body.appendChild(overlayEl);
+    }
+    overlayEl.src = "i/" + overlayId + ".png";
+    overlayEl.style.top = (parseInt(topPos, 10) - 32) + "px"; // one tile above the head
+    overlayEl.style.left = leftPos;
+    overlayEl.style.display = "block";
+
+    // Auto-remove after one visual tick (.2s)
+    setTimeout(function() {
+      const el = document.getElementById(overlayDomId);
+      if (el) el.style.display = "none";
+    }, 200);
+  }
+
   // Reordered: Bottom layer first, top layer last
   const partOrder = ['body', 'head', 'hat', 'sword', 'shield'];
   
@@ -192,55 +233,6 @@ window.gfxChar = function(charID, avatarStr, zPos) {
       el.style.display = "none";
     }
   });
-}
-
-window.gfxZClick = function(z, clickedElement) {
-  var zNum = parseInt(z, 10);
-  window.lastClickedZ = zNum; 
-  if (typeof window.zdown === 'function') { window.zdown(zNum); }
-  var htm = '';
-
-  // 1. Updated Static Objects Parser (comma-separated)
-  var objsData = mapObjs[window.map]; 
-  if (objsData) {
-    var objs = objsData.split(',');
-    for (var i = 0; i < objs.length; i++) {
-      var entry = objs[i].trim();
-      if (!entry) continue;
-      
-      var meta = entry.split(':')[0];
-      var objId = meta.substring(0, 2);
-      var objZ  = parseInt(meta.substring(2, 4), 10);
-      
-      if (objZ === zNum) {
-        htm += '<a href="gfx:OD'+objId+objZ+'">'+gfxItemID(objId)+'</a><br>';
-      }
-    }
-  }
-
-  // 2. Dynamic Items (already comma-delimited)
-  if (mapItems) {
-    var items = mapItems.split(',');
-    for (var j = 0; j < items.length; j++) {
-      if (!items[j] || items[j].length < 4) continue; // Safety check
-      
-      var id = items[j].substring(0, 2);
-      var itemZ = parseInt(items[j].substring(2, 4), 10);
-      var itemZStr = items[j].substring(2, 4); // FIX: Keep the leading zero!
-      
-      // FIX: Safely extract the 4-char ID only if the string is long enough
-      var uniqueid = items[j].length >= 8 ? items[j].substring(4, 8) : "";
-      
-      if (itemZ === zNum) {
-        // Use itemZStr instead of itemZ so "04" doesn't become "4"
-        htm += '<a href="gfx:ID' + id + itemZStr + uniqueid + '">' + gfxItemID(id) + '</a><br>';
-      }
-    }
-  }
-
-  if (htm) { 
-    pop(htm); 
-  }
 }
 
 async function gfxTick() {
@@ -393,13 +385,13 @@ async function gfxFetchMap(filename) {
       // Parse entries to separate static objects from dynamic items
       var filteredObjs = [];
       if (rawObjData) {
-        var entries = rawObjData.split(',');
+        var entries = rawObjData.split('~');
         for (var j = 0; j < entries.length; j++) {
           var entry = entries[j].trim();
           if (!entry) continue;
           
           // Split off the server-side punch code (after the colon) to check base length
-          var basePart = entry.split(':')[0];
+          var basePart = entry.split('|')[0];
           
           // Static objects have a base length of 6 (item-id + item-z + item-data)
           if (basePart.length === 6) {
@@ -410,7 +402,7 @@ async function gfxFetchMap(filename) {
       
       mapTiles[sectorId] = mapData.substring(0, 192); 
       mapExits[sectorId] = mapData.substring(192); 
-      mapObjs[sectorId] = filteredObjs.join(','); 
+      mapObjs[sectorId] = filteredObjs.join('~'); 
     }
     return true;
     
@@ -431,7 +423,7 @@ window.gfxObjects = function(sector) {
    
   if (objsStr) {
     // NEW: Split by comma for variable length objects
-    var objects = objsStr.split(',');
+    var objects = objsStr.split('~');
 
     for (var i = 0; i < objects.length; i++) {
       var entry = objects[i].trim();
@@ -439,7 +431,7 @@ window.gfxObjects = function(sector) {
 
       // Split metadata from bytecode (if present)
       // bytecode is not saved in gfxFetchMap(), there will be no ':' found
-      var parts = entry.split(':');
+      var parts = entry.split('|');
       var objid = parts[0]; // e.g., "Yj44Sa"
       var objcode = parts[1];
 
@@ -504,7 +496,7 @@ function gfxRefresh(rfStr) {
   var serverPlayerZ = rfStr.length >= 4 ? parseInt(rfStr.substring(2, 4), 10) : NaN;
   var items = rfStr.length >= 4 ? rfStr.substring(4) : '';
   mapItems = items;
-  window.items = items.split(',');
+  window.items = items.split('~');
 
   var oldPlayerQueue = [];
   if (window.movingItems && window.movingItems[window.playerItem]) {
@@ -565,7 +557,7 @@ function gfxRefresh(rfStr) {
     }
 
     // Match local player (supports old 2-char matching and new 6-char matching)
-    var isLocalPlayer = (uniqueIId === window.playerItem) || (iId === window.playerItem);
+    // var isLocalPlayer = (uniqueIId === window.playerItem) || (iId === window.playerItem);
 
     if (isLocalPlayer) {
       window.playerAvatar = avatar;
@@ -624,7 +616,7 @@ window.gfxRenderGlobalCanvas = function(myMap, myZ, playerData) {
   const sectorsY = "ABCDEFGH".split("");
   
   // Split the data: [0] is the CSV player list, [1] is the visible sectors string
-  const parts = playerData.split(':');
+  const parts = playerData.split('|');
   const pCSV = parts[0];
   const knownSectors = parts[1] || ""; 
 
@@ -679,7 +671,7 @@ window.gfxRenderGlobalCanvas = function(myMap, myZ, playerData) {
 
 
   // C. Draw Players
-  const pList = pCSV.split(',');
+  const pList = pCSV.split('~');
   pList.forEach(p => {
     if (p.length < 6) return;
     const id = p.substring(0, 2);
@@ -763,11 +755,11 @@ window.gfxZClick = function(z, clickedElement) {
   // 1. Static Objects
   var objsData = mapObjs[window.map]; 
   if (objsData) {
-    var objs = objsData.split(',');
+    var objs = objsData.split('~');
     for (var i = 0; i < objs.length; i++) {
       var entry = objs[i].trim();
       if (!entry) continue;
-      var meta = entry.split(':')[0];
+      var meta = entry.split('|')[0];
       var objId = meta.substring(0, 2);
       var objZ  = parseInt(meta.substring(2, 4), 10);
 
@@ -785,7 +777,7 @@ window.gfxZClick = function(z, clickedElement) {
 
   // 2. Dynamic Items
   if (mapItems) {
-    var items = mapItems.split(',');
+    var items = mapItems.split('~');
     for (var j = 0; j < items.length; j++) {
       var id = items[j].substring(0, 2);
       var itemZ = parseInt(items[j].substring(2, 4), 10);

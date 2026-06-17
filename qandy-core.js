@@ -921,8 +921,8 @@ window.press=function(event) {
   window.PopAlign = "center"; // "center", "click", or "full"
   window.PopUpVis = "hidden"; // current target visibility
   window.PopForce = "hidden";   // forced visibility on mouseout
-  window.PUV = null;           // timeout id
   window.lastClickedZ = 0;     // last grid coordinate clicked
+  window.PUV = null;           // timeout id
 
   const popStyle = document.createElement('style');
   popStyle.textContent = `

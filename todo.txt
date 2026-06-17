@@ -4,20 +4,14 @@
     fix missing space label
     add insert/delete underline/block mode
 
-    fix gfx.js and qandyland.js
-
-    move pop() and hpop() to mouse.js driver
-    then finish draw.js
-    
+    finish draw.js
 
        ascii.js - improve output
         ansi.js - add 256 color codes and cursor controls
        piano.js - use old sound.js driver instead of gwbasic driver 
       mkfile.js - write file to make files using keyboard
       cpanel.js - config script
-    autoexec.js - batch scripts
-
-
+    autoexec.js - run on start-up 
 
     DOS Update:
      
@@ -29,9 +23,12 @@
       Add 'paste' device for cut/paste
       Add 'xmodem' device for upload/download
       Add 'clipboard' device?
+      
+      What is important is that all host scripts honor the concept that
+      the localStorage is part of the <guest> sandbox and it should never
+      use it as it's own drive or execute and scripts from the localStorage.
 
       add total size and number of files to localDir())
       overhaul command_js
-
 
 
