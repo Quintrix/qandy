@@ -83,7 +83,7 @@
                  -- = used by some codes as quotes for --strings-- 
                       (some codes only use it as an end-quote to terminate the input)
                  
-               (NA) = not implemented yet, code's purpose reserved 
+               (NA) = not implemented yet, code's purpose reserved
 
        ——————————————————————————————————————————————————————————————————————————————————————————
        
@@ -257,6 +257,26 @@
        X — x-logic (logic gates)
        Y — server items that have punchcode
        Z — server items that have punchcode 
+
+     ——————————————————————————————————————————————————————————————————————————————————————————
+
+      Map sectors can run from 'Az' to 'Zz', the W4 register holds the lower bound
+      map sector, the default used in capflag.js being 'Hh' which is eight sectors tall
+      and eight sectors wide, the dimensions of a chess board. 
+      
+      If the second character of the map code is a numeral or symbol, it is considered an
+      'extended city'. There are 26 valid symbols so each map has one extended city sector,
+      using graphics and roleplay this can be 'up' with blue sky and clouds, or it can
+      be 'down' as a dark dungeon or sewer giving the engine the illusion of three dimensions,
+      the player is on a world map that can go either up or down.
+
+      Symbol Order  = 0123456789%()+,-:;=[]^_{}@
+      
+      As a 'dumb server that can do smart things' the UNIVAC does not validate registers,
+      thus there is room to expand the V$ W$ and X$ codes to use these symbols, in theory
+      registers W% - W} are not used by the UNIVAC and DevTeam considers them 'illegal
+      registers' in the context of Commodore 64's 'illegal oprends' that are not documented
+      but just exist because of the way the hardware was made.  
 
      ——————————————————————————————————————————————————————————————————————————————————————————
      

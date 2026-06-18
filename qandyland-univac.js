@@ -110,7 +110,7 @@ function _isValidExit(driveName, currentSector, targetSector) {
 // share a fixed 1:1 offset so each world letter has exactly one matching
 // city character:  Aa<->A0 ... Az<->A}
 //
-var _CITY_CHARSET = "abcdefghijklmnopqrstuvwxyz0123456789%()+,-:;=@[]^_{}";
+var _CITY_CHARSET = "abcdefghijklmnopqrstuvwxyz0123456789%()+,-:;=[]^_{}@";
 
 // 'a' -> '0', 'b' -> '1', ... 'z' -> '}'. Returns null if not a world letter.
 function _cityCharFromWorld(worldChar) {
@@ -418,8 +418,44 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
         ifnot=false; // reset ifnot (must stay outside to clear the flag)
         break;
       }
+      
+      //case 'Xb': {
+      //  var regKey = tape.slice(column, column + 2); column += 2;
+      //  var itemCode = tape.slice(column, column + 2); column += 2;
+
+      //  if (!switchopen && /^W[a-z]$/.test(regKey)) {
+      //    var typeChar = itemCode.charAt(0);
+      //    var levelChar = itemCode.charAt(1);
+      //    var addition = 0;
+
+      //    if (/^[0-9]$/.test(typeChar)) {
+      //      // If it starts with a numeral, treat as simple flat add
+      //      addition = parseInt(typeChar, 10);
+      //    } else if (/^[A-Z]$/.test(typeChar)) {
+      //      // Your custom math: (A=0, B=1...) + (a=0*25, b=1*25...)
+      //      var idx1 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".indexOf(typeChar);
+      //      var idx2 = _CITY_CHARSET.indexOf(levelChar);
             
-case 'Xl': {
+      //      // Default to 0 if char not found
+      //      idx1 = Math.max(0, idx1);
+      //      idx2 = Math.max(0, idx2);
+            
+      //      addition = idx1 + (idx2 * 25);
+      //    }
+
+      //    // Convert current register to integer (support 4 digits now)
+      //    var currentVal = parseInt(register[regKey] || "0000", 10);
+      //    var newVal = currentVal + addition;
+          
+      //    // Save as 4-digit string to prevent overflow
+      //    register[regKey] = newVal.toString().padStart(4, '0');
+          
+      //    console.log("Xb BitMath: " + regKey + " now " + newVal);
+      //  }
+      //  break;
+      // }            
+
+      case 'Xl': {
         // if value1 is less than value2
         var value1 = tape.slice(column, column + 2); column += 2;
         var value2 = tape.slice(column, column + 2); column += 2;
@@ -808,7 +844,7 @@ function saveconfig(drive) {
 // the lower-case letter map sector.  
   
 const UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-const LOWER_NUM = "abcdefghijklmnopqrstuvwxyz0123456789%()+,-:;=@[]^_{}";
+const LOWER_NUM = "abcdefghijklmnopqrstuvwxyz0123456789%()+,-:;=[]^_{}@";
 
 function loadconfig(drive) {
   const configfile = _deps.fileLoad(drive, '/', 'w/a', 'UNIVAC');

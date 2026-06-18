@@ -32,3 +32,10 @@
       overhaul command_js
 
 
+   Multi-player Graphics Engine:
+   
+     	Figure out a level system using item id codes for 'experience'. 
+     	Every fish updates the qandy-code for that skill's experience.
+
+
+
