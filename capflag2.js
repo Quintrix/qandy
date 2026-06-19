@@ -47,35 +47,20 @@ function mainloop() {}
 window.zdown = function(z) {
   var localZ = (window.movingItems && window.movingItems[window.playerItem]) ? 
                window.movingItems[window.playerItem].z : window.playerZ;
-
+               
   if (localZ != z) {
       // 1. Check to see if there are no objects or items on the destination z
       let hasStuff = false;
       
-      var objsStr = window.mapObjs[window.map];
-      if (objsStr) {
-       var objects = objsStr.split('~');
-       for (var i = 0; i < objects.length; i++) {
-        var entry = objects[i].trim();
-        if (!entry) continue;
-          var parts = entry.split('|');
-          var objid = parts[0]; 
-          var effectiveZ = (parts.length >= 3) ? parseInt(parts[parts.length - 1], 10) : parseInt(objid.slice(2, 4), 10);
-
-          if (effectiveZ === z) {
-            hasStuff = true;
-            break;
-          }
-        }
-      }
-
-      // FIX: Also check dynamic items/players before deciding the tile is empty!
-      if (!hasStuff && window.items) {
-          for (var j = 0; j < window.items.length; j++) {
-              var itm = window.items[j];
-              if (!itm || itm.length < 4) continue;
-              var itemZ = parseInt(itm.slice(2, 4), 10);
-              if (itemZ === z) {
+      // Look for DOM elements dynamically associated with items/objects at location 'z'
+      // Expected formats: obj_XX_z, itm_XX_z, or i_XX_z
+      let elements = document.querySelectorAll('[id$="_' + z + '"]');
+      for (let i = 0; i < elements.length; i++) {
+          let id = elements[i].id;
+          if (id.startsWith("obj_") || id.startsWith("itm_") || id.startsWith("i_")) {
+              // Exact match on the Z-coordinate prevents false positive overlaps (e.g. z=5 triggering on obj_Aa_15)
+              let parts = id.split('_');
+              if (parts.length >= 3 && parseInt(parts[parts.length - 1], 10) === parseInt(z, 10)) {
                   hasStuff = true;
                   break;
               }
@@ -85,26 +70,34 @@ window.zdown = function(z) {
       if (!hasStuff) {
         window.playerWalk = parseInt(z, 10);
         window.playerDo = ""; // Erase any pending commands, we're just walking
-        
+        // Display image i/Zb.png at the target z for 200 ms (0.2s)
         let wImg = document.createElement("img");
         wImg.src = "i/Zb.png";
         wImg.style.position = "absolute";
         wImg.style.width = "32px";
         wImg.style.height = "32px";
-        wImg.style.pointerEvents = "none"; 
+        wImg.style.pointerEvents = "none"; // Ensure it doesn't block future clicks
         wImg.style.zIndex = "9999";
         let tile = document.getElementById("T" + z);
         if (tile) {
+        	 // I don't think this line of code is executing?
+          let left = tile.style.left;
+          let top = tile.style.top;
           wImg.style.left = tile.style.left;
           wImg.style.top = tile.style.top;
           document.body.appendChild(wImg);
           setTimeout(function() {
-            if (wImg && wImg.parentNode) wImg.parentNode.removeChild(wImg);
+            if (wImg && wImg.parentNode) {
+              wImg.parentNode.removeChild(wImg);
+            }
           }, 200);
         }
-      }
-  }
+    }  }
 }
+
+window.doPlayerWalk = function(z) {
+    
+};
 
 window.walkdown = function () {
     if (window.playerWalk === -1) return; // Not currently auto-walking
@@ -115,7 +108,6 @@ window.walkdown = function () {
 
     // 1. Check if we reached the destination
     if (currentZ === window.playerWalk) {
-    	  console.log("###119 playerDo="+playerDo);
         if (window.playerDo) {
             if (window.gfxDo === "RF") window.gfxDo = "";
             window.gfxDo += window.playerDo; // Execute the final action (e.g. OD, ID)
@@ -347,8 +339,7 @@ window.itemdown = function(code) {
   window.PopForce = "hidden";   // hidden popup on mouseout
   hpop();
   var itemid = code.substring(0, 2);
-  var itemzStr = code.substring(2, 4);
-  var itemz = parseInt(itemzStr, 10);
+  var itemz = code.substring(2, 4);
   var uniqueid = code.length >= 8 ? code.substring(4, 8) : "";
 
   if (itemid === "VA") {
@@ -359,12 +350,12 @@ window.itemdown = function(code) {
 
   if (itemid >= 'Sa' && itemid <= 'Sd') {
     if (playerItem === "Za") {
-      // player has not selected a player item, clear RF default and append
-      if (window.gfxDo === "RF") window.gfxDo = "";
-      window.gfxDo += "ID" + itemid + itemzStr;
+      // player has not seclected a player item
+      window.gfxDo += "ID" + itemid + itemz;
       return;
     }
     // Check if the player clicked THEMSELVES
+    // this check is failing
     if (itemid+uniqueid === playerItem) { 
       invdown(""); // Request local inventory from server
     } else {
@@ -382,18 +373,11 @@ window.itemdown = function(code) {
     return;
   }  
 
-  // Use local visual Z to determine if we are already there (mirrors objdown)
-  var localZ = (window.movingItems && window.movingItems[window.playerItem]) ? 
-               window.movingItems[window.playerItem].z : window.playerZ;
-
-  if (localZ !== itemz)  {
-     // walk player to item then set pending command
-     window.playerWalk = itemz;
-     window.playerDo = "ID" + itemid + itemzStr;
+  if (playerZ != itemz)  {
+  	 // walk player to item then set gfxDo
   } else {
-     // Already standing on the item, clear RF default and pick it up
-     if (window.gfxDo === "RF") window.gfxDo = "";
-     window.gfxDo += "ID" + itemid + itemzStr;
+  	 console.log("gfxDo="+gfxDo);
+    window.gfxDo += "ID" + itemid + itemz;
   }
 }
 
@@ -402,23 +386,22 @@ window.objdown = function(code) {
   var itemid = code.substring(0, 2); 
   var itemzStr = code.substring(2, 4);
   var itemz = parseInt(itemzStr, 10); 
+  console.log("objdown -> code="+code);
 
   var cmd = "OD" + itemid + itemzStr;
 
+  // Use local visual Z to determine if we are already there
   var localZ = (window.movingItems && window.movingItems[window.playerItem]) ? 
                window.movingItems[window.playerItem].z : window.playerZ;
 
   if (localZ === itemz) {
     if (window.gfxDo === "RF") window.gfxDo = "";
     window.gfxDo += cmd;
-    // FIX: Clear memory so it doesn't wander off
-    window.playerWalk = -1;
-    window.playerDo = "";
   } else {
     window.playerWalk = itemz;
     window.playerDo = cmd;
   }
-}
+};
 
 // Math helpers for local movement prediction
 window.moveZ = function(z, cmd) {
@@ -503,3 +486,4 @@ window.keydown = function(key, e) {
     window.movingItems[window.playerItem].queue.push(todo);
   }
 };
+

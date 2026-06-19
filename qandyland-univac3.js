@@ -1,6 +1,3 @@
-
-// ── UNIVAC ────────────────────────────────────────────────────────────────────
-//   ie: UNIVAC(capflag.gfx, w/F2/Sc44B2D0, w/F2/Yj44Sa)
 function UNIVAC(driveName, itemfile, objfile, sessionToken) {
   sessionToken = sessionToken || 'UNIVAC';
 
@@ -12,6 +9,10 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
   var _global = typeof window !== 'undefined' ? window : (typeof global !== 'undefined' ? global : this);
   if (!_global.register) _global.register = {};
   var register = _global.register;
+  if (!register['W4']) { 
+    register['W4']="Dd"; // set default value
+    loadconfig(driveName); 
+  }
 
 // ── 1. Parse the item file path ───────────────────────────────────────────
   var parsedItem = null;
@@ -200,6 +201,7 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
         if (state.content.indexOf(noun) === -1) { ifinv = true; }
         if (ifnot) ifinv = !ifinv;
         if (ifinv) { switchopen = true; }
+        ifnot=false; // reset ifnot
         break;
       }
       
@@ -221,7 +223,7 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
         var target = value1; // e.g., "Wd"
         var value2 = tape.slice(column, column + 2); column += 2;
         
-        if (target.charAt(0) === "W") {
+        if (!switchopen && target.charAt(0) === "W") {
           // Get the actual integer values from the registers
           var v1 = parseInt(getRegValue(value1), 10);
           var v2 = parseInt(getRegValue(value2), 10);
@@ -246,7 +248,7 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
         var target = value1; // e.g., "Wd"
         var value2 = tape.slice(column, column + 2); column += 2;
         
-        if (target.charAt(0) === "W") {
+        if (!switchopen && target.charAt(0) === "W") {
           // Get the actual integer values from the registers
           var v1 = parseInt(getRegValue(value1), 10);
           var v2 = parseInt(getRegValue(value2), 10);
@@ -254,14 +256,52 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
           if (ifnot) {
             var result = v1 - v2;
             if (result < 0) { result=0; }
-          if (roll > 99) roll = 99;
-          	var result = v1 + v2;
-          	if (result > 99) { result=99; }
+          } else {
+            var result = v1 + v2;
+            if (result > 99) { result=99; }
           }
           register[target] = result.toString().padStart(2, '0');
         }
+        ifnot=false; // reset ifnot (must stay outside to clear the flag)
+        break;
       }
       
+      //case 'Xb': {
+      //  var regKey = tape.slice(column, column + 2); column += 2;
+      //  var itemCode = tape.slice(column, column + 2); column += 2;
+
+      //  if (!switchopen && /^W[a-z]$/.test(regKey)) {
+      //    var typeChar = itemCode.charAt(0);
+      //    var levelChar = itemCode.charAt(1);
+      //    var addition = 0;
+
+      //    if (/^[0-9]$/.test(typeChar)) {
+      //      // If it starts with a numeral, treat as simple flat add
+      //      addition = parseInt(typeChar, 10);
+      //    } else if (/^[A-Z]$/.test(typeChar)) {
+      //      // Your custom math: (A=0, B=1...) + (a=0*25, b=1*25...)
+      //      var idx1 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".indexOf(typeChar);
+      //      var idx2 = _CITY_CHARSET.indexOf(levelChar);
+            
+      //      // Default to 0 if char not found
+      //      idx1 = Math.max(0, idx1);
+      //      idx2 = Math.max(0, idx2);
+            
+      //      addition = idx1 + (idx2 * 25);
+      //    }
+
+      //    // Convert current register to integer (support 4 digits now)
+      //    var currentVal = parseInt(register[regKey] || "0000", 10);
+      //    var newVal = currentVal + addition;
+          
+      //    // Save as 4-digit string to prevent overflow
+      //    register[regKey] = newVal.toString().padStart(4, '0');
+          
+      //    console.log("Xb BitMath: " + regKey + " now " + newVal);
+      //  }
+      //  break;
+      // }            
+
       case 'Xl': {
         // if value1 is less than value2
         var value1 = tape.slice(column, column + 2); column += 2;
@@ -271,7 +311,11 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
         // Apply ifnot (Xn) inversion
         var result = (v1 < v2);
         if (ifnot) result = !result;
-        if (result) { switchopen = true; }
+        
+        // FIX: Open the switch if the condition is NOT met
+        if (!result) { switchopen = true; } 
+        
+        ifnot=false; // reset ifnot
         break;
       }
 
@@ -283,9 +327,13 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
         // Apply ifnot (Xn) inversion
         var result = (v1 == v2);
         if (ifnot) result = !result;
-        if (result) { switchopen = true; }
+        
+        // FIX: Open the switch if the condition is NOT met
+        if (!result) { switchopen = true; } 
+        
+        ifnot=false; // reset ifnot
         break;      
-      }            
+      }
 
       // ── Item Management ───────────────────────────────────────────
 
@@ -390,64 +438,78 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
 
           var col = currentZ % GFX_COLS;
           var row = Math.floor(currentZ / GFX_COLS);
-          var targetZ     = currentZ;
+          
+          var tempZ       = currentZ;
+          var targetMap   = currentMap;
           var isEdge      = false;
           var dirChar     = '';
           var moveBlocked = false;
 
+          // Calculate destination tile and check if it lands on an edge
           if (word === 'Vn') {
             dirChar = 'N';
-            if (row === 0) moveBlocked = true;
+            if (row === 0) moveBlocked = true; // Prevent walking off-grid entirely
             else {
-              targetZ = currentZ - GFX_COLS;
-              if (Math.floor(targetZ / GFX_COLS) === 0) isEdge = true;
+              tempZ = currentZ - GFX_COLS;
+              if (Math.floor(tempZ / GFX_COLS) === 0) isEdge = true;
             }
           } else if (word === 'Vs') {
             dirChar = 'S';
             if (row === GFX_ROWS - 1) moveBlocked = true;
             else {
-              targetZ = currentZ + GFX_COLS;
-              if (Math.floor(targetZ / GFX_COLS) === GFX_ROWS - 1) isEdge = true;
+              tempZ = currentZ + GFX_COLS;
+              if (Math.floor(tempZ / GFX_COLS) === GFX_ROWS - 1) isEdge = true;
             }
           } else if (word === 'Ve') {
             dirChar = 'E';
             if (col === GFX_COLS - 1) moveBlocked = true;
             else {
-              targetZ = currentZ + 1;
-              if (targetZ % GFX_COLS === GFX_COLS - 1) isEdge = true;
+              tempZ = currentZ + 1;
+              if (tempZ % GFX_COLS === GFX_COLS - 1) isEdge = true;
             }
           } else if (word === 'Vw') {
             dirChar = 'W';
             if (col === 0) moveBlocked = true;
             else {
-              targetZ = currentZ - 1;
-              if (targetZ % GFX_COLS === 0) isEdge = true;
+              tempZ = currentZ - 1;
+              if (tempZ % GFX_COLS === 0) isEdge = true;
             }
           }
 
           if (moveBlocked) break; 
 
-          var finalZ   = targetZ;
-          var finalMap = currentMap;
+          var targetZ = tempZ;
 
           if (isEdge) {
-            var targetSector = null;
-            if (_deps && typeof _deps.calculateTargetSector === 'function') {
-              targetSector = _deps.calculateTargetSector(currentMap, dirChar);
-            } else if (typeof calculateTargetSector === 'function') {
-              targetSector = calculateTargetSector(currentMap, dirChar);
+            var nextSector = null;
+            var maxMapBounds = register['W4'] || 'Hh'; 
+            var cityWorldChar = _isCitySector(currentMap) ? _worldCharFromCity(currentMap.charAt(1)) : null;
+
+            if (cityWorldChar !== null) {
+              // Walking off the edge of an 'extended city map' teleports the
+              // player back to its matching 'world' lower-case sector
+              // (ie: A0 -> Aa ... A} -> Az), instead of scrolling n/s/e/w.
+              nextSector = currentMap.charAt(0) + cityWorldChar;
+            } else {
+              // Calculate the neighboring sector code
+              if (_deps && typeof _deps.calculateTargetSector === 'function') {
+                nextSector = _deps.calculateTargetSector(currentMap, dirChar, maxMapBounds);
+              } else if (typeof calculateTargetSector === 'function') {
+                nextSector = calculateTargetSector(currentMap, dirChar, maxMapBounds);
+              }
             }
 
-            if (targetSector && targetSector !== '  ' && targetSector !== '00'
-                && _isValidExit(driveName, currentMap, targetSector)) {
-              if      (word === 'Vn') finalZ = targetZ + GFX_TOTAL_TILES - GFX_COLS;
-              else if (word === 'Vs') finalZ = targetZ - GFX_TOTAL_TILES + GFX_COLS;
-              else if (word === 'Ve') finalZ = targetZ - GFX_COLS + 1;
-              else if (word === 'Vw') finalZ = targetZ + GFX_COLS - 1;
-
-              finalMap = targetSector;
-            } else {
-              break; 
+            // Check the 'e' exits file to ensure the new map is a legal exit.
+            // City -> world teleports are always legal and skip this check,
+            // since that relationship isn't listed in the 'e' exit file.
+            if (nextSector && (cityWorldChar !== null || _isValidExit(driveName, currentMap, nextSector))) {
+              targetMap = nextSector;
+              
+              // Wrap the player's position to the opposite side of the new map
+              if (word === 'Vn') targetZ = tempZ + ((GFX_ROWS - 1) * GFX_COLS);
+              if (word === 'Vs') targetZ = tempZ - ((GFX_ROWS - 1) * GFX_COLS);
+              if (word === 'Ve') targetZ = tempZ - (GFX_COLS - 1);
+              if (word === 'Vw') targetZ = tempZ + (GFX_COLS - 1);
             }
           }
 
@@ -459,16 +521,15 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
             }
           }
 
-          state.sector = finalMap;
-          state.z      = finalZ;
-          state.zStr   = (finalZ < 10 ? '0' : '') + finalZ;
+          state.sector = targetMap;
+          state.z      = targetZ;
+          state.zStr   = (targetZ < 10 ? '0' : '') + targetZ;
           state.avatar = newAvatar;
         }
         break;
       }
-
+      
       case 'Vt': {
-        // Read strictly 4 arguments to keep tape in sync
         var targetSector = tape.slice(column, column + 2); column += 2;
         var zToken       = tape.slice(column, column + 2); column += 2;
         
@@ -501,7 +562,24 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
         break;
       }
 
-      case 'Xp': { 
+      // ── Vc — Enter city: teleport from the current 'world' sector to ──────
+      //         its matching 'extended city map' sector (ie: Aa -> A0)
+      case 'Vc': {
+        // No arguments to read. Execute if switch closed.
+        if (!switchopen) {
+          var cityChar = _cityCharFromWorld(state.sector.charAt(1));
+          if (cityChar === null) {
+            console.log("UNIVAC() Vc: " + state.sector + " has no matching city map, ignoring");
+          } else {
+            state.sector = state.sector.charAt(0) + cityChar;
+            state.z      = 0;
+            state.zStr   = '00';
+          }
+        }
+        break;
+      }
+
+      case 'Vp': { 
         // Read arguments
         var noun = tape.slice(column, column + 2); column += 2;
         if (!switchopen) {
@@ -589,4 +667,3 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
     output:   output
  };
 }
-

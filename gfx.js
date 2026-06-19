@@ -15,7 +15,10 @@ var mapy=11;
 window.playerItem="Za";   // item-id of team item player has claimed (Sa Sb Sc Sd or Za for 'nothing')
 window.playerZ=-1;        // z-locatin of playerItem
 window.playerAvatar = ""; // players avatar (ie "B0D0")
-window.playerId = "";     // unique 4 character player id 
+window.playerId = "";     // unique 4 character player id
+window.playerWalk = -1;   // z-location player clicks to walk to, -1 = standing still
+window.playerDo = "";     // command to send server when player reaches destination
+  
 window.map="A1";          // map player-item is on
 window.mapTiles=[];       // tiles on player's current map
 window.mapExits=[];       // valid exits for map sectors
@@ -354,6 +357,12 @@ window.gfxVisualTick = function() {
             }
         }
     }
+    
+    if (playerWalk > -1) {
+    	// if player is walking, let client know it is time to take next step
+    	walkdown();
+    }
+    
 }
 
 var tiles = [];
@@ -596,6 +605,7 @@ function gfxRefresh(rfStr) {
         var coords = zToXY(destZ);
         var img = document.createElement('img');
         img.className = 'item';
+        img.id = 'itm_' + iId + '_' + destZ;   // <-- ADD THIS LINE
         img.src = 'i/' + iId + '.png'; // Base item-id is still used for non-avatar files
         img.style.position = 'absolute';
         img.style.top  = (32 + 20 + (coords.y * 32)) + 'px';
@@ -761,16 +771,12 @@ window.gfxZClick = function(z, clickedElement) {
       if (!entry) continue;
       var meta = entry.split('|')[0];
       var objId = meta.substring(0, 2);
-      var objZ  = parseInt(meta.substring(2, 4), 10);
-
-      console.log("###776### objZ="+objZ+" zNum="+zNum);
-      //gfx.js:781 ###776### objZ=44 zNum=66
-      //gfx.js:781 ###776### objZ=69 zNum=66
-      //gfx.js:781 ###776### objZ=66 zNum=66
+      var objZStr = meta.substring(2, 4);             // Added String Variant
+      var objZ  = parseInt(objZStr, 10);              // Changed parseInt reference
 
       if (objZ === zNum) {
-        // NEW: OD + Vu (Use) + objId
-        htm += `<a href="gfx:OD${objId}${objZ}">${gfxItemID(objId)}</a><br>`;
+        // Use objZStr to maintain zero padding in server punch code
+        htm += `<a href="gfx:OD${objId}${objZStr}">${gfxItemID(objId)}</a><br>`;
       }
     }
   }
@@ -780,10 +786,12 @@ window.gfxZClick = function(z, clickedElement) {
     var items = mapItems.split('~');
     for (var j = 0; j < items.length; j++) {
       var id = items[j].substring(0, 2);
-      var itemZ = parseInt(items[j].substring(2, 4), 10);
-      var uniqueid = items[j].substring(4, 8);
+      var itemZStr = items[j].substring(2, 4);        // Added String Variant
+      var itemZ = parseInt(itemZStr, 10);             // Changed parseInt reference
+      var uniqueid = items[j].length >= 8 ? items[j].substring(4, 8) : "";
       if (itemZ === zNum) {
-        htm += '<a href="gfx:ID' + id + itemZ + uniqueid + '">' + gfxItemID(id) + '</a><br>';
+        // Use itemZStr to maintain zero padding in server punch code
+        htm += '<a href="gfx:ID' + id + itemZStr + uniqueid + '">' + gfxItemID(id) + '</a><br>';
       }
     }
   }

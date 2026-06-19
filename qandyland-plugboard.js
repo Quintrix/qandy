@@ -3,13 +3,13 @@ function plugboard(req, stacker, plugs, drive, session) {
   if (plugs != "RF") { console.log(plugs+" "+drive+" "+session); }
   function runtape(code) {
     if (code) {
-      let uResult = UNIVAC(drive, player.fullPath, "RAM:"+code);
+      let uResult = UNIVAC(drive, player.fullPath, "RAM:"+code, session);
       if (uResult) {
         player.map      = uResult.sector;
         player.z        = uResult.z;
         player.avatar   = uResult.avatar;
-        if (uResult.pubId) player.pubId = uResult.pubId;
-        if (uResult.item) player.item  = uResult.item + player.pubId; // e.g. "ZaB0D0"
+        if (uResult.playerid) player.pubId = uResult.playerid;
+        if (uResult.item) player.item  = uResult.item + player.pubId; // e.g. "ZaAaAa"
         player.fullPath = uResult.fullPath;
         output += uResult.output;
         // this get overwritten at line 1141
@@ -33,8 +33,12 @@ function plugboard(req, stacker, plugs, drive, session) {
     if (player.z == null) player.z = 0;
     if (!player.item) player.item = "";
     if (!player.avatar) player.avatar = "";
+    if (player.avatar.indexOf('-') !== -1) {
+      let cleanAvatar = player.avatar.replace(/\-../g, '');
+      runtape("Va" + cleanAvatar + "--");
+    }
   }
-
+  
   var refresh = true;
   let column = 0; 
   
@@ -60,8 +64,6 @@ function plugboard(req, stacker, plugs, drive, session) {
         break;      
 
       case 'OD':
-        if (tape) { runtape(tape); tape=""; }
-        
         let objfile = null; 
         let objid = plugs.slice(column, column + 2);
         let objz  = plugs.slice(column + 2, column + 4);
@@ -92,15 +94,14 @@ function plugboard(req, stacker, plugs, drive, session) {
         if (objfile != null) {
           console.log("UNIVAC(" + drive + ", " + player.fullPath + ", " + objfile + ")");
           if (typeof UNIVAC === 'function') {
-            let uResult = UNIVAC(drive, player.fullPath, objfile);
-            console.log("###1196### fullPath="+player.fullPath+" objfile="+objfile);
-            // ###1196### fullPath=w/H1/Za44AaAa objfile=w/H1/Sa66Za
+            let uResult = UNIVAC(drive, player.fullPath, objfile, session);
             if (uResult) {
-              //@@
               player.map = uResult.sector;
               player.z = uResult.z;
               player.avatar = uResult.avatar;
-              if (uResult.pubId) player.pubId = uResult.pubId;
+              if (uResult.playerid) player.pubId = uResult.playerid;
+              if (uResult.item) player.item = uResult.item + player.pubId;
+              
               player.fullPath = uResult.fullPath;
               output += uResult.output;
             }
@@ -111,7 +112,6 @@ function plugboard(req, stacker, plugs, drive, session) {
         break;
                 
       case 'ID':
-        if (tape) { runtape(tape); tape=""; }
         let itemId = plugs.slice(column, column + 2);
         let itemZ  = plugs.slice(column + 2, column + 4);
         column += 4;
@@ -140,19 +140,8 @@ function plugboard(req, stacker, plugs, drive, session) {
             if (matchedFullId === player.item) {
               let invLoad = fileLoad(drive, '/', player.fullPath, session);
               let inventoryData = (invLoad.success && invLoad.content) ? invLoad.content : '';
-              output += "SPVi" + inventoryData + "..";
+              output += "S^Vi" + inventoryData + "^S";
               break; 
-            }
-            
-            // ── GHOST PLAYER CREATION TRIGGER ────────────────────────────────
-            if (itemId >= 'Sa' && itemId <= 'Sh') {
-              if (!player.item || player.item === "") {
-                // The user clicked a hat but doesn't exist yet! 
-                // Run your custom initialization punch code:
-                let initTape = "XnXjVaB1D3J0++XnXr++LaZaZaZaZaZaZaZaZaWm99++VtA1ZeVuVa++Xc";
-                runtape(initTape);
-                break; // Stop processing so we don't accidentally try to pick up the item
-              }
             }
             
             // Pick up standard dynamic items
@@ -195,9 +184,6 @@ function plugboard(req, stacker, plugs, drive, session) {
         break;        
 
       case 'VA':
-        console.log("### PLUGBOARD VA ###");
-        if (tape) { runtape(tape); tape=""; }
-
         let vaAvatar = "";
         let vaTermIdx = plugs.indexOf('--', column);
         if (vaTermIdx !== -1) {
@@ -234,7 +220,14 @@ function plugboard(req, stacker, plugs, drive, session) {
     }
     let numericZ = parseInt(player.z, 10) || 0;
     let z = numericZ < 0 ? "00" : (numericZ < 10 ? "0" + numericZ : String(numericZ));
-    output += "RF" + player.map + z + items.join(',');
+
+    let pItemId = player.item ? player.item.substring(0, 2) : "Za";
+    let pPubId = player.pubId ? player.pubId : "0000";
+    if (pPubId.length < 4) pPubId = pPubId.padEnd(4, '0');
+    
+    output = "PI" + pItemId + z + pPubId + output;
+    output += "RF" + player.map + z + items.join('~');
   }
   return respondRetro(stacker, output, session);
 }
+

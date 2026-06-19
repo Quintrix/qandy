@@ -1178,6 +1178,7 @@ function plugboard(req, stacker, plugs, drive, session) {
         break;      
 
       case 'OD':
+        if (tape) { runtape(tape); tape = ""; }
         let objfile = null; 
         let objid = plugs.slice(column, column + 2);
         let objz  = plugs.slice(column + 2, column + 4);
@@ -1226,6 +1227,7 @@ function plugboard(req, stacker, plugs, drive, session) {
         break;
                 
       case 'ID':
+        if (tape) { runtape(tape); tape = ""; }
         let itemId = plugs.slice(column, column + 2);
         let itemZ  = plugs.slice(column + 2, column + 4);
         column += 4;
@@ -1251,6 +1253,7 @@ function plugboard(req, stacker, plugs, drive, session) {
             let matchedFullId = matchedPubId ? itemId + matchedPubId : itemId;
 
             // If the player clicks their own item, send inventory
+            console.log("###1256 matchedFullId="+matchedFullId+" player.item="+player.item);
             if (matchedFullId === player.item) {
               let invLoad = fileLoad(drive, '/', player.fullPath, session);
               let inventoryData = (invLoad.success && invLoad.content) ? invLoad.content : '';
@@ -1265,6 +1268,7 @@ function plugboard(req, stacker, plugs, drive, session) {
         break;                  
 
       case 'ST':
+        if (tape) { runtape(tape); tape = ""; }
         if (session && playerIndex.has(session)) {
           output += "ST" + session;
         } else {
@@ -1298,6 +1302,7 @@ function plugboard(req, stacker, plugs, drive, session) {
         break;        
 
       case 'VA':
+        if (tape) { runtape(tape); tape = ""; }
         let vaAvatar = "";
         let vaTermIdx = plugs.indexOf('--', column);
         if (vaTermIdx !== -1) {
