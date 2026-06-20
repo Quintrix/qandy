@@ -901,7 +901,7 @@ function bigbang(driveName, session) {
 
   if (!drives[driveName]) return { success: false, error: 'drive not mounted: ' + driveName };
 
-  // Load capflag.gfx from the server's working directory
+  // Load .gfx map file from the server's working directory
   var gfxPath = path.join(process.cwd(), sysopGfx);
   var raw;
   try {
@@ -909,6 +909,41 @@ function bigbang(driveName, session) {
   } catch (e) {
     return { success: false, error: 'cannot read ' + sysopGfx + ': ' + (e.message || String(e)) };
   }
+
+  // --- NEW: Load matching .qpc tapes file ---
+  var qpcPath = path.join(process.cwd(), sysopGfx.replace(/\.gfx$/i, '.qpc'));
+  var qpcTapes = {};
+  try {
+    if (fs.existsSync(qpcPath)) {
+      var rawQpc = fs.readFileSync(qpcPath, 'utf8');
+      var qpcLines = rawQpc.split(/\r?\n/);
+      for (var qi = 0; qi < qpcLines.length; qi++) {
+        var qLine = qpcLines[qi].trim();
+        if (!qLine) continue;
+        var match = qLine.match(/^\[(.*?)\](.*)$/);
+        if (match) {
+          var tapeName = match[1];
+          // Pre-clean tape code formatting so it's ready to inject
+          var tapeCode = match[2].replace(/ /g, "").replace(/_NL_/g, "").replace(/\\n/g, "").replace(/\\r/g, "").replace(/\\\\/g, "\\");
+          qpcTapes[tapeName] = tapeCode;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Could not read QPC tapes file:', e.message);
+  }
+
+  // Helper to expand tags once (left-to-right, no recursion)
+  function expandTags(sourceCode) {
+    if (!sourceCode) return '';
+    return sourceCode.replace(/\[(.*?)\]/g, function(fullMatch, tagName) {
+      if (qpcTapes[tagName] !== undefined) {
+        return qpcTapes[tagName];
+      }
+      return fullMatch; // Leave unchanged if tape is missing
+    });
+  }
+  // ------------------------------------------
 
   var lines = raw.split('\n');
   var sectors = [];       // { id, tiles, exits, items[] }
@@ -977,15 +1012,18 @@ function bigbang(driveName, session) {
   // Save 1-character system files into /w/ using their dynamic keys (e.g. w/a, w/b)
   for (var fi = 0; fi < systemFiles.length; fi++) {
     var sysFile = systemFiles[fi];
+    
+    // EXPAND QPC TAGS FIRST
+    var rawCode = expandTags(sysFile.data);
+    
     // Strip out whitespace 
-    var rawCode=sysFile.data;
     var raw1 = rawCode.replace(/ /g, "");
     var item1 = raw1.replace(/_NL_/g, "");
     var item2 = item1.replace(/\\n/g, "");
     var itemCode = item2.replace(/\\r/g, "").replace(/\\\\/g, "\\");
     
-    var sfResult = fileSave(driveName, '/', 'w/' + sysFile.id, itemCode, 'UNIVAC', 'UNIVAC');
-    if (!sfResult.success) errors.push('w/' + sysFile.id + ': ' + sfResult.error);  //'
+    var sfResult = fileSave(driveName, '/', 'w/' + sysFile.id, itemCode, 'UNIVAC', 'UNIVAC'); //'
+    if (!sfResult.success) errors.push('w/' + sysFile.id + ': ' + sfResult.error);
   }
   
   // Process Sector Items
@@ -1012,11 +1050,14 @@ function bigbang(driveName, session) {
       var parts = sector.items[ii].split('|');
       var itemMeta = parts[0];
 
+      // EXPAND QPC TAGS FIRST
+      var rawCode = expandTags(parts[1] || '');
+
       // Strip out whitespace then slice the exact limits
-      var rawCode = (parts[1] || '').replace(/ /g, "");
-      var item1 = rawCode.replace(/_NL_/g, "");
-      var item2 = item1.replace(/\\n/g, "");
-      var itemCode = item2.replace(/\\r/g, "")
+      var item1 = rawCode.replace(/ /g, "");
+      var item2 = item1.replace(/_NL_/g, "");
+      var item3 = item2.replace(/\\n/g, "");
+      var itemCode = item3.replace(/\\r/g, "");
 
       var itemId = itemCode.substring(0, 2);
       var iResult = fileSave(driveName, '/', dirPath + '/' + itemMeta, itemCode, '', 'bigbang');
@@ -1025,21 +1066,6 @@ function bigbang(driveName, session) {
 
     created.push(sector.id);
   }
-
-  // 
-  // need a File System Consistency Checker:
-  //
-  // it should ensure all directories and files created have known path names
-  // to prevent malicious user from 'hiding' data files in directories that 
-  // don't exist preventing the terminal operator to know they exist
-  // It may become some type of stand alone 'check disk' tool.
-  //
-  // this is not today's task, we will do this when we have finalized the .gfx format
-  // so we will know what we are checking for. This is to make sure I don't forget.
-
-  //
-  // -Joe 
-  //
 
   if (errors.length > 0) {
     return { success: false, error: errors.join('; '), maps: created };
@@ -1374,7 +1400,7 @@ function plugboard(req, stacker, plugs, drive, session) {
 
   if (tape) { runtape(tape); tape=""; }
   
-  runfile('w/c'); // 'c' (after b) executes after command is processed
+  runfile('w/c'); // 'c' (after b) file executes after command is processed
   
   if (session) { playerIndex.set(session, player); }
 

@@ -15,7 +15,7 @@
         .stack-header { font-weight: bold; color: #0af; margin-bottom: 10px; border-bottom: 1px solid #444; padding-bottom: 5px; display: flex; justify-content: space-between; align-items: center; }
         
         .tool-box { background: #2c3e50; padding: 10px; margin-bottom: 15px; border-radius: 4px; border: 1px solid #34495e; }
-        .tool-box label { font-size: 0.7em; color: #95a5a6; display: block; margin-bottom: 5px; text-transform: uppercase; }
+        .tool-box label { font-size: 0.7em; color: #95a5a6; display: block; margin-bottom: 5px; }
         
         input[type="text"] { background: #111; color: #fff; border: 1px solid #555; padding: 4px; text-align: center; font-family: monospace; }
         
@@ -60,7 +60,7 @@
         .cross-slot.disabled { opacity: 0.3; cursor: default; border: none; }
         
         #manualExitRow { display: flex; gap: 5px; margin-top: 5px; }
-        #manualExitRow input { flex: 1; text-transform: uppercase; }
+        #manualExitRow input { flex: 1; }
 
         .punchcodeImages img, 
         .punchcode-text {
@@ -98,7 +98,6 @@
             border-radius: 4px;
             box-sizing: border-box;    
             overflow: hidden;
-            /* REPLACED BACKGROUND URL WITH THESE */
             background-size: cover;
             background-position: center;
             background-repeat: no-repeat;
@@ -112,7 +111,6 @@
             margin: 1px;
             flex-shrink: 0;
             position: relative;
-            /* REPLACED BACKGROUND URL WITH THESE */
             background-size: cover;
             background-position: center;
             background-repeat: no-repeat;
@@ -126,7 +124,6 @@
             margin: 1px;
             flex-shrink: 0;
             position: relative;
-            /* REPLACED BACKGROUND URL WITH THESE */
             background-size: cover;
             background-position: center;
             background-repeat: no-repeat;
@@ -143,11 +140,11 @@
             background: #222; color: #7f8c8d; border: 1px solid #444;
             padding: 5px 8px; border-radius: 4px; cursor: pointer;
             font-family: monospace; font-size: 0.85em;
-            text-transform: lowercase; transition: all 0.2s;
+            transition: all 0.2s;
         }
         .dir-btn.active {
             background: #2c3e50; color: #f1c40f; border-color: #f1c40f;
-            text-transform: uppercase; font-weight: bold;
+            font-weight: bold;
         }
         .dir-btn.disabled {
             opacity: 0.3; cursor: not-allowed;
@@ -159,9 +156,22 @@
         }
         .other-btn:hover { background: #551111; color: #ff7777; }
 
-
-        #tooltip { position: absolute; background: rgba(240, 230, 140, 0.8); color: #000; padding: 2px 6px; font-size: 10px; pointer-events: none; border: 1px solid #444; display: none; z-index: 100; font-family: monospace; }
-    </style>
+        #tooltip { 
+            position: absolute; 
+            background: rgba(240, 230, 140, 0.9);
+            color: #000; 
+            padding: 6px 10px;
+            font-size: 16px;
+            font-weight: bold;
+            pointer-events: none; 
+            border: 1px solid #444; 
+            display: none;
+            width: 100%; 
+            z-index: 100; 
+            font-family: monospace; 
+            border-radius: 4px;
+        }
+        </style>
     <script src="gfx-itemid.js"></script>
 </head>
 <body>
@@ -180,14 +190,14 @@
         </div>
     </div>
 
-
     <div id="panel">
 
         <div class="tool-box" id="toolbar">
           <div style="font-weight: bold; color: #0af;"> &nbsp; PUNCH CODE COMPILER:</div>
-          <button onclick="importGfx()">IMPORT</button>
-          <button onclick="exportGfx()">EXPORT</button>
+          <button onclick="importGfx()">IMPORT MAP (.GFX)</button>
+          <button onclick="exportGfx()">EXPORT MAP (.GFX)</button>
           <select id="sectorNav" onchange="changeSector()"></select>
+          <button id="cityToggleBtn" onclick="toggleCity()">ENTER CITY</button>
         </div>
         
         <div id="stackView">
@@ -209,17 +219,33 @@
             <div id="global-a"><div class="object-entry" onclick="openGlobalEditor('a')">[<b>a</b>] Alpha (On Connect) <span id="global-lbl-a" style="color: #888;"></span></div></div>
             <div id="global-b"><div class="object-entry" onclick="openGlobalEditor('b')">[<b>b</b>] Before (Pre-Tick) <span id="global-lbl-b" style="color: #888;"></span></div></div>
             <div id="global-c"><div class="object-entry" onclick="openGlobalEditor('c')">[<b>c</b>] After (Post-Tick) <span id="global-lbl-c" style="color: #888;"></span></div></div>
+            <div id="global-f"><div class="object-entry" onclick="openGlobalEditor('f')">[<b>f</b>] Functions (File F) <span id="global-lbl-f" style="color: #888;"></span></div></div>
+          </div>
+        </div>
+
+        <!-- NEW QPC MACRO STACK -->
+        <div id="qpcStackView">
+          <div class="tool-box" style="background: #1a252f;">
+            <div style="font-weight: bold; color: #0af; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+                QPC SCRIPTS:
+                <div>
+                    <button style="background: #0af;" onclick="importQpc()">IMPORT .QPC</button>
+                    <button style="background: #0af;" onclick="exportQpc()">EXPORT .QPC</button>
+                </div>
+            </div>
+            <div style="margin-bottom: 10px; display: flex; gap: 5px;">
+                <input type="text" id="newQpcName" placeholder="tape name" style="flex: 2; ">
+                <button style="background: #0af;" onclick="addQpc()">+ ADD TAPE</button>
+            </div>
+            <div id="qpcListItems"></div>
           </div>
         </div>
         
-        <!-- Setting initially to display: none so it doesn't float at the bottom unexpectedly -->
         <div class="tool-box" id="logicBox" style="display: none;">
-
         <div class="stack-header">
             <div><span id="logicLabel">LOGIC</span>: <span id="editingObjID"></span>
                 <button onclick="LightMode()">Light</button>
                 <button onclick="DarkMode()">Dark</button>
-                
                 &nbsp;
                 <button onclick="setPunchcodeBg('Ga')">Grass</button>
                 <button onclick="setPunchcodeBg('Ib')">Dungeon</button>
@@ -252,43 +278,128 @@
 
 <script>
 // --- STATE ---
-let currentSector = "A1";
+let currentSector = "Aa";
 let mapSectors = {};
 let editingIndex = -1;
 let editingGlobalKey = null;
-let globalLogic = { a: "", b: "", c: "" };
-let punchcodeTextColor = "#FFFFFF"; // current text color (defaults to white) 
-    
-// Bounds restricted to A1-H8 (8x8 world)
-const ROWS = ["A","B","C","D","E","F","G","H"]; 
+let globalLogic = { a: "", b: "", c: "", f: "" };
+let punchcodeTextColor = "#FFFFFF"; 
+
+// QPC Script Macros State
+let qpcData = {};
+let editingQpcKey = null;
+
+// Maximum possible map bounds Aa to Zz
+const UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const LOWER = "abcdefghijklmnopqrstuvwxyz";    
+const CITY_SYMBOLS = "0123456789%()+,-:;=@[]^_{}";
+
 const COLS = 8;
 const tileCache = {}, itemCache = {};
 const canvas = document.getElementById('sectorCanvas');
 const ctx = canvas.getContext('2d');
 const tooltip = document.getElementById('tooltip');
 
-    const punchcodeItemImageCache = {};
-    
-    const nav = document.getElementById('sectorNav');
-    for(let r=0; r<ROWS.length; r++) {
-        for(let c=1; c<=COLS; c++) {
-            let opt = document.createElement('option');
-            opt.value = opt.textContent = ROWS[r] + (c);
-            nav.appendChild(opt);
+const punchcodeItemImageCache = {};
+const nav = document.getElementById('sectorNav');
+
+    // Helper: Find W4 register dynamically from Global Alpha script
+    function getMapBounds() {
+        let maxX = 'H', maxY = 'h'; // Defaults to 8x8 (Aa-Hh)
+        if (globalLogic.a) {
+            // Look for Xs W4 [XX] or XsW4[XX]
+            const match = globalLogic.a.match(/Xs\s*W4\s*([A-Z][a-z])/);
+            if (match) {
+                maxX = match[1].charAt(0);
+                maxY = match[1].charAt(1);
+            }
         }
+        return {
+            maxX: Math.max(0, UPPER.indexOf(maxX)),
+            maxY: Math.max(0, LOWER.indexOf(maxY))
+        };
     }
 
-    function initBlank() {
-        globalLogic = { a: "", b: "", c: "" };
-        ROWS.forEach(r => {
-            for(let c=1; c<=COLS; c++) {
-                // Initialize 12 rows worth of tiles (96 total) per sector logic
-                mapSectors[r+c] = { tiles: "Ga".repeat(96), exits: "", objects: [] };
+    // Helper: Rebuild the Dropdown list based on W4 boundaries
+    function updateNavDropdown() {
+        nav.innerHTML = '';
+        const bounds = getMapBounds();
+        
+        // Append Standard Map Layer Options
+        for(let x = 0; x <= bounds.maxX; x++) {
+            for(let y = 0; y <= bounds.maxY; y++) {
+                let opt = document.createElement('option');
+                let sec = UPPER[x] + LOWER[y];
+                opt.value = opt.textContent = sec;
+                nav.appendChild(opt);
             }
-        });
+        }
+
+        // Append City Maps Layer Options
+        for(let x = 0; x <= bounds.maxX; x++) {
+            for(let y = 0; y <= bounds.maxY; y++) {
+                let opt = document.createElement('option');
+                let sec = UPPER[x] + CITY_SYMBOLS[y];
+                opt.value = opt.textContent = sec;
+                nav.appendChild(opt);
+            }
+        }
+        
+        // Force fallback if the map shrinks and player is out-of-bounds
+        if (nav.querySelector(`option[value="${currentSector}"]`)) {
+            nav.value = currentSector;
+        } else {
+            currentSector = "Aa";
+            nav.value = "Aa";
+            document.getElementById('sectorLabel').innerText = currentSector;
+            updateCityButton();
+            render();
+        }
+    }
+        
+    function initBlank() {
+        globalLogic = { a: "", b: "", c: "", f: "" };
+        mapSectors = {};
+        qpcData = {};
+        
+        // Initialize ALL 676 potential sectors and 676 extended city sectors
+        for(let x = 0; x < 26; x++) {
+            for(let y = 0; y < 26; y++) {
+                let sec = UPPER[x] + LOWER[y];
+                mapSectors[sec] = { tiles: "Ga".repeat(96), exits: "", objects: [] };
+                
+                let citySec = UPPER[x] + CITY_SYMBOLS[y];
+                mapSectors[citySec] = { tiles: "Ga".repeat(96), exits: "", objects: [] };
+            }
+        }
+        currentSector = "Aa";
+        updateNavDropdown();
         updateBrushPreview();
         updateGlobalLabels();
+        updateQpcList();
+        updateCityButton();
         render();
+    }
+
+    function updateCityButton() {
+        const btn = document.getElementById('cityToggleBtn');
+        if (!btn) return;
+        const isCity = CITY_SYMBOLS.includes(currentSector[1]);
+        btn.innerText = isCity ? "EXIT CITY" : "ENTER CITY";
+        btn.style.background = isCity ? "#8e44ad" : ""; // Noticeable purple color for City Mode
+    }
+
+    function toggleCity() {
+        saveCurrentEditor();
+        let isCity = CITY_SYMBOLS.includes(currentSector[1]);
+        let xChar = currentSector[0];
+        let yIdx = isCity ? CITY_SYMBOLS.indexOf(currentSector[1]) : LOWER.indexOf(currentSector[1]);
+        
+        if (yIdx !== -1) {
+            currentSector = isCity ? (xChar + LOWER[yIdx]) : (xChar + CITY_SYMBOLS[yIdx]);
+            nav.value = currentSector;
+            changeSector();
+        }
     }
 
     // --- NAVIGATION ---
@@ -300,18 +411,33 @@ const tooltip = document.getElementById('tooltip');
         
         if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') return;
         
-        let rowIdx = ROWS.indexOf(currentSector[0]);
-        let colIdx = parseInt(currentSector.slice(1));
+        let xIdx = UPPER.indexOf(currentSector[0]);
+        let isCity = false;
+        let yIdx = LOWER.indexOf(currentSector[1]);
+        if (yIdx === -1) {
+            yIdx = CITY_SYMBOLS.indexOf(currentSector[1]);
+            isCity = true;
+        }
+
+        if (xIdx === -1 || yIdx === -1) return; // Ignore legacy formats
+
+        const bounds = getMapBounds();
         let changed = false;
 
-        if (e.key === "ArrowUp" && rowIdx > 0) { rowIdx--; changed = true; }
-        if (e.key === "ArrowDown" && rowIdx < ROWS.length - 1) { rowIdx++; changed = true; }
-        if (e.key === "ArrowLeft" && colIdx > 1) { colIdx--; changed = true; }
-        if (e.key === "ArrowRight" && colIdx < COLS) { colIdx++; changed = true; }
+        if (e.key === "ArrowUp") { xIdx--; changed = true; }
+        if (e.key === "ArrowDown") { xIdx++; changed = true; }
+        if (e.key === "ArrowLeft") { yIdx--; changed = true; }
+        if (e.key === "ArrowRight") { yIdx++; changed = true; }
 
         if (changed) {
-          nav.value = ROWS[rowIdx] + colIdx;
-          changeSector();
+            // Toroidal wrap math strictly within current layer bounds
+            if (xIdx < 0) xIdx = bounds.maxX;
+            if (xIdx > bounds.maxX) xIdx = 0;
+            if (yIdx < 0) yIdx = bounds.maxY;
+            if (yIdx > bounds.maxY) yIdx = 0;
+
+            nav.value = UPPER[xIdx] + (isCity ? CITY_SYMBOLS[yIdx] : LOWER[yIdx]);
+            changeSector();
         }
     });
 
@@ -416,7 +542,7 @@ const tooltip = document.getElementById('tooltip');
 
     function addManualExit() {
       const input = document.getElementById('manualExitInput');
-      const code = input.value.trim().toUpperCase();
+      const code = input.value.trim();
       if (code.length === 2) {
         let sec = mapSectors[currentSector];
         if (!sec.exits.includes(code)) {
@@ -428,8 +554,8 @@ const tooltip = document.getElementById('tooltip');
     }
     
     function saveExitInput() {
-      // Strips non-alphanumeric chars and updates underlying map data
-      const val = document.getElementById('manualExitInput').value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+      // Strips completely invalid characters but permits alphanumeric and all city symbols
+      const val = document.getElementById('manualExitInput').value.replace(/[^a-zA-Z0-9%()+,:;=@\[\]_{}^-]/g, '');
       mapSectors[currentSector].exits = val;
       updateExitsUI();
     }
@@ -446,43 +572,51 @@ const tooltip = document.getElementById('tooltip');
       let exitsStr = sec.exits || "";
       let exitsArr = [];
       
-      // Parse string into array of 2-character sector chunks
       for (let i = 0; i < exitsStr.length; i += 2) {
           if (i + 1 < exitsStr.length) {
               exitsArr.push(exitsStr.substring(i, i + 2));
           }
       }
 
-      // Calculate Valid Neighbors based on A1 to H8 bounds
-      const rIdx = ROWS.indexOf(currentSector[0]);
-      const col = parseInt(currentSector[1]);
-
-      const neighbors = {
-          North: rIdx > 0 ? ROWS[rIdx - 1] + col : null,
-          East: col < COLS ? ROWS[rIdx] + (col + 1) : null,
-          South: rIdx < ROWS.length - 1 ? ROWS[rIdx + 1] + col : null,
-          West: col > 1 ? ROWS[rIdx] + (col - 1) : null
-      };
-
-      const btnContainer = document.getElementById('exitButtonsRow');
+      const xIdx = UPPER.indexOf(currentSector[0]);
+      let isCity = false;
+      let yIdx = LOWER.indexOf(currentSector[1]);
+      if (yIdx === -1) {
+          yIdx = CITY_SYMBOLS.indexOf(currentSector[1]);
+          isCity = true;
+      }
+      
+      var btnContainer = document.getElementById('exitButtonsRow');
       if(btnContainer) btnContainer.innerHTML = '';
 
-      const neighborIDs = Object.values(neighbors).filter(x => x);
+      if (xIdx === -1 || yIdx === -1) return; // Prevent crash on old A1-H8 legacy files
 
+      const bounds = getMapBounds();
+      const wrap = (val, max) => val < 0 ? max : (val > max ? 0 : val);
+
+      // Calculates toroidal (wrap-around) exits automatically mapped to the current dimension (Standard vs City)
+      const neighbors = {
+          North: UPPER[wrap(xIdx - 1, bounds.maxX)] + (isCity ? CITY_SYMBOLS[yIdx] : LOWER[yIdx]),
+          East:  UPPER[xIdx] + (isCity ? CITY_SYMBOLS[wrap(yIdx + 1, bounds.maxY)] : LOWER[wrap(yIdx + 1, bounds.maxY)]),
+          South: UPPER[wrap(xIdx + 1, bounds.maxX)] + (isCity ? CITY_SYMBOLS[yIdx] : LOWER[yIdx]),
+          West:  UPPER[xIdx] + (isCity ? CITY_SYMBOLS[wrap(yIdx - 1, bounds.maxY)] : LOWER[wrap(yIdx - 1, bounds.maxY)])
+      };
+      
+      const neighborIDs = Object.values(neighbors);
+      
       // Render Compass Buttons (North, East, South, West)
       for (let dir of ['North', 'East', 'South', 'West']) {
           const targetID = neighbors[dir];
           const btn = document.createElement('button');
           
           if (!targetID) {
-              // Hit the edge of the map bounds
               btn.className = 'dir-btn disabled';
-              btn.innerText = dir.toLowerCase();
+              btn.innerText = dir;
               btn.disabled = true;
           } else {
               const isActive = exitsArr.includes(targetID);
               btn.className = 'dir-btn' + (isActive ? ' active' : '');
-              btn.innerText = isActive ? dir.toUpperCase() : dir.toLowerCase();
+              btn.innerText = isActive ? dir : dir;
               btn.onclick = () => toggleExit(targetID);
           }
           if(btnContainer) btnContainer.appendChild(btn);
@@ -500,7 +634,6 @@ const tooltip = document.getElementById('tooltip');
           }
       });
 
-      // Update text input without overriding currently typed character if active
       const input = document.getElementById('manualExitInput');
       if (input && document.activeElement !== input) {
           input.value = exitsStr;
@@ -515,20 +648,17 @@ const tooltip = document.getElementById('tooltip');
       }
 
       if (exitsArr.includes(targetID)) {
-          exitsArr = exitsArr.filter(e => e !== targetID); // Remove it
+          exitsArr = exitsArr.filter(e => e !== targetID);
       } else {
-          exitsArr.push(targetID); // Add it
+          exitsArr.push(targetID);
       }
       sec.exits = exitsArr.join('');
       
       updateExitsUI();
       
-      // Keep input synchronized
       const input = document.getElementById('manualExitInput');
       if (input) input.value = sec.exits;
     }    
-    
-    
 
     function editObject() {
         if (editingIndex === -1) {
@@ -555,11 +685,118 @@ const tooltip = document.getElementById('tooltip');
         }
         render();
     }
+
+    // --- QPC SCRIPT MACROS ---
+    function updateQpcList() {
+        const logicBox = document.getElementById('logicBox');
+        const list = document.getElementById('qpcListItems');
+        list.innerHTML = "";
+
+        for (const [name, code] of Object.entries(qpcData)) {
+            const div = document.createElement('div');
+            div.className = 'object-entry';
+            div.style.borderColor = '#000000';
+
+            const len = Math.floor((code || "").replace(/\s/g, "").length / 2);
+            div.innerHTML = `[<b style="color:#e67e22;">${name}</b>] <span style="color: #888;">(${len} inst)</span>`;
+            div.onclick = () => openQpcEditor(name);
+            list.appendChild(div);
+
+            if (editingQpcKey === name && logicBox) {
+                list.appendChild(logicBox);
+                logicBox.style.display = 'block';
+            }
+        }
+    }
+
+    function addQpc() {
+        const nameStr = document.getElementById('newQpcName').value.trim();
+        if (!nameStr) {
+            alert("Please enter a name for the QPC tape.");
+            return;
+        }
+        if (qpcData[nameStr] !== undefined) {
+            alert("A QPC tape with this name already exists.");
+            return;
+        }
+
+        saveCurrentEditor();
+        closeEditor();
+
+        qpcData[nameStr] = "";
+        document.getElementById('newQpcName').value = "";
+        
+        updateQpcList();
+        openQpcEditor(nameStr);
+    }
+
+    function openQpcEditor(name) {
+        if (editingQpcKey === name) {
+            saveCurrentEditor();
+            closeEditor();
+            return;
+        }
+
+        saveCurrentEditor();
+
+        editingIndex = -1;
+        editingGlobalKey = null;
+        editingQpcKey = name;
+
+        updateObjectList(); 
+        updateQpcList();
+
+        document.getElementById('logicLabel').innerText = "QPC TAPE";
+        document.getElementById('editingObjID').innerText = `[${name}]`;
+        
+        const punchInput = document.getElementById('punchcodeInput');
+        if (punchInput) {
+            punchInput.value = qpcData[name] || "";
+        }
+
+        updateDecompiler();
+    }
+
+    async function importQpc() {
+        try {
+            const text = await navigator.clipboard.readText();
+            if (!text) return;
+            parseQpcData(text);
+            showToast("QPC SCRIPTS IMPORTED!");
+        } catch(e) { console.error("Import QPC failed", e); }
+    }
+
+    function parseQpcData(text) {
+        const unescapeWhitespace = (str) => (str || "").replace(/\\n/g, "\n").replace(/\\r/g, "\r").replace(/\\\\/g, "\\");
+        const lines = text.split(/\r?\n/);
+        for (let line of lines) {
+            line = line.trim();
+            if (!line) continue;
+            const match = line.match(/^\[(.*?)\](.*)$/);
+            if (match) {
+                qpcData[match[1]] = unescapeWhitespace(match[2]);
+            }
+        }
+        updateQpcList();
+    }
+
+    function exportQpc() {
+        saveCurrentEditor();
+        let out = "";
+        
+        const escapeWhitespace = (str) => (str || "").replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/\r/g, "\\r");
+
+        for (const [name, code] of Object.entries(qpcData)) {
+            out += `[${name}]${escapeWhitespace(code)}\n`;
+        }
+
+        navigator.clipboard.writeText(out.trim());
+        showToast("QPC EXPORTED TO CLIPBOARD!");
+    }
     
-function updateObjectList() {
+    function updateObjectList() {
       const logicBox = document.getElementById('logicBox');
       
-      // FIX: Always detach and safely tuck away logicBox to prevent it from being destroyed!
       if (logicBox) {
           document.getElementById('panel').appendChild(logicBox);
       }
@@ -576,33 +813,37 @@ function updateObjectList() {
         div.onclick = () => openEditor(idx);
         list.appendChild(div);
 
-        // Accordion logic insertion for objects
         if (idx === editingIndex && logicBox) {
             list.appendChild(logicBox);
             logicBox.style.display = 'block';
         }
       });
 
-      // FIX: Put the logic box back in the global slot if a global script is selected
       if (editingGlobalKey !== null && logicBox) {
           document.getElementById('global-' + editingGlobalKey).appendChild(logicBox);
           logicBox.style.display = 'block';
+      } else if (editingQpcKey !== null && logicBox) {
+          // Handled by updateQpcList
       } else if (editingIndex === -1 && logicBox) {
           logicBox.style.display = 'none';
       }
     }
 
     function updateGlobalLabels() {
-        // Strip whitespace before calculating the amount of 2-character instructions
         const getCount = (str) => Math.floor((str || "").replace(/\s/g, "").length / 2);
         
         const lenA = getCount(globalLogic.a);
         const lenB = getCount(globalLogic.b);
         const lenC = getCount(globalLogic.c);
+        const lenF = getCount(globalLogic.f);
         
         document.getElementById('global-lbl-a').innerText = lenA > 0 ? `(${lenA} inst)` : "";
         document.getElementById('global-lbl-b').innerText = lenB > 0 ? `(${lenB} inst)` : "";
         document.getElementById('global-lbl-c').innerText = lenC > 0 ? `(${lenC} inst)` : "";
+        document.getElementById('global-lbl-f').innerText = lenF > 0 ? `(${lenF} inst)` : "";
+        
+        updateNavDropdown();
+        render();        
     }
         
     function addObject() {
@@ -615,8 +856,7 @@ function updateObjectList() {
         return;
       }
 
-      // FIX 1: Safely save and close out of any previously selected object
-      if (editingIndex !== -1 || editingGlobalKey !== null) {
+      if (editingIndex !== -1 || editingGlobalKey !== null || editingQpcKey !== null) {
           saveCurrentEditor();
           closeEditor();
       }
@@ -634,24 +874,30 @@ function updateObjectList() {
       document.getElementById('newZ').value = "";
       
       render();
-
-      // FIX 2: Automatically open the newly created object so you can safely type its punch code!
       openEditor(mapSectors[currentSector].objects.length - 1);
     }
     
     function saveCurrentEditor() {
+        const punchInput = document.getElementById('punchcodeInput');
+        if (!punchInput) return;
+        let val = punchInput.value;
+
         if (editingIndex !== -1) {
             try {
-              mapSectors[currentSector].objects[editingIndex].logic = document.getElementById('punchcodeInput').value;
-            } catch (error) {
-              console.log("ERROR: "+error);
-            }
+                mapSectors[currentSector].objects[editingIndex].logic = val;
+            } catch (error) { console.log("ERROR: "+error); }
         } else if (editingGlobalKey !== null) {
-            globalLogic[editingGlobalKey] = document.getElementById('punchcodeInput').value;
+            globalLogic[editingGlobalKey] = val;
+            if (editingGlobalKey === 'a') {
+                updateNavDropdown();
+                updateExitsUI();
+            }
+        } else if (editingQpcKey !== null) {
+            qpcData[editingQpcKey] = val;
         }
     }
 
-function openGlobalEditor(key) {
+    function openGlobalEditor(key) {
         if (editingGlobalKey === key) {
             saveCurrentEditor();
             closeEditor();
@@ -662,8 +908,10 @@ function openGlobalEditor(key) {
 
         editingIndex = -1;
         editingGlobalKey = key;
+        editingQpcKey = null;
 
         updateObjectList(); 
+        updateQpcList();
 
         const logicBox = document.getElementById('logicBox');
         if (logicBox) {
@@ -675,6 +923,7 @@ function openGlobalEditor(key) {
         if (key === 'a') title = "ALPHA (ON CONNECT)";
         if (key === 'b') title = "BEFORE (PRE-TICK)";
         if (key === 'c') title = "AFTER (POST-TICK)";
+        if (key === 'f') title = "FIRE ITEM"; 
 
         document.getElementById('logicLabel').innerText = "GLOBAL PUNCH CODE";
         document.getElementById('editingObjID').innerText = title;
@@ -699,6 +948,8 @@ function openGlobalEditor(key) {
 
       editingIndex = idx;
       editingGlobalKey = null;
+      editingQpcKey = null;
+      
       updateGlobalLabels();
 
       const obj = mapSectors[currentSector].objects[idx];
@@ -719,11 +970,13 @@ function openGlobalEditor(key) {
 
       updateDecompiler();
       updateObjectList(); 
+      updateQpcList();
     }
 
     function closeEditor() {
       editingIndex = -1;
       editingGlobalKey = null;
+      editingQpcKey = null;
 
       const logicBox = document.getElementById('logicBox');
       document.getElementById('panel').appendChild(logicBox);
@@ -743,8 +996,8 @@ function openGlobalEditor(key) {
       updateDecompiler();
       updateGlobalLabels();
       updateObjectList();
+      updateQpcList();
       render();
-      //updateExitInput();
       updateExitsUI(); 
     }
 
@@ -757,6 +1010,8 @@ function openGlobalEditor(key) {
             mapSectors[currentSector].objects.splice(editingIndex, 1);
         } else if (editingGlobalKey !== null) {
             globalLogic[editingGlobalKey] = "";
+        } else if (editingQpcKey !== null) {
+            delete qpcData[editingQpcKey];
         }
         closeEditor();
     }
@@ -765,12 +1020,11 @@ function openGlobalEditor(key) {
         const code = document.getElementById('punchcodeInput').value;
         const display = document.getElementById('decompiler');
         if (!display) return;
-        
-        if (code.trim() === "") {
-            display.innerHTML = "(no instructions)";
-        } else {
-            const res = decompilepunchcode(code);
-            display.innerHTML = res;
+    
+        display.style.display = 'none'; 
+    
+        if (code.trim() !== "") {
+            decompilepunchcode(code);
         }
     }
     
@@ -779,23 +1033,42 @@ function openGlobalEditor(key) {
         currentSector = nav.value;
         document.getElementById('sectorLabel').innerText = currentSector;
         closeEditor();
+        updateCityButton();
         render();
-        //updateExitInput();
-        updateExitsUI()
+        updateExitsUI();
     }
 
     async function loadDefaultMap() {
         initBlank(); 
         try {
-            const response = await fetch('capflag.gfx');
-            if (!response.ok) throw new Error('File not found');
-            const text = await response.text();
-            parseGfxData(text);
+            // 1. Attempt to load the GFX file
+            try {
+                const responseGfx = await fetch('capflag.gfx');
+                if (responseGfx.ok) {
+                    const textGfx = await responseGfx.text();
+                    parseGfxData(textGfx);
+                    console.log("Successfully loaded capflag.gfx");
+                }
+            } catch (e) {
+                console.warn("Could not load capflag.gfx automatically.");
+            }
 
+            // 2. Attempt to load the QPC file
+            try {
+                const responseQpc = await fetch('capflag.qpc');
+                if (responseQpc.ok) {
+                    const textQpc = await responseQpc.text();
+                    parseQpcData(textQpc); // Uses our new specific parser
+                    console.log("Successfully loaded capflag.qpc");
+                }
+            } catch (e) {
+                console.warn("Could not load capflag.qpc automatically.");
+            }
+
+            // Update UI
             changeSector(); 
-            console.log("Successfully loaded capflag.gfx");
         } catch (error) {
-            console.warn("Could not load capflag.gfx automatically. Remaining blank.", error);
+            console.warn("Error during startup sequence.", error);
         }
     }
 
@@ -807,71 +1080,114 @@ function openGlobalEditor(key) {
       } catch (e) { console.error("Import failed", e); }
     }
  
-function exportGfx() {
+    function exportGfx() {
       saveCurrentEditor();
       let out = "";
 
-      const escapeWhitespace = (str) => (str || "").replace(/\n/g, "_NL_");
+      // 1. Better New Line Strategy: Standard backslash escaping
+      const escapeWhitespace = (str) => (str || "")
+        .replace(/\\/g, "\\\\")
+        .replace(/\n/g, "\\n")
+        .replace(/\r/g, "\\r");
 
       if (globalLogic.a) out += `a=${globalLogic.a}\n`;
       if (globalLogic.b) out += `b=${globalLogic.b}\n`;
       if (globalLogic.c) out += `c=${globalLogic.c}\n`;
+      if (globalLogic.f) out += `f=${globalLogic.f}\n`;
 
-      for(const label in mapSectors) {
-        let sec = mapSectors[label];
-        let objStr = sec.objects.map(o => {
-            let meta = o.id + o.z;
-            if (o.data && o.data.trim().length === 2) {
-                meta += o.data; 
-            }
-            // CHANGED: Using '|' as the logic separator instead of ':'
-            return o.logic ? `${meta}|${escapeWhitespace(o.logic)}` : meta;
-        }).join('~'); // CHANGED: Using '~' as the object separator instead of ','
-        
-        out += `${label}=${sec.tiles}${sec.exits}.${objStr}\n`;
+      const bounds = getMapBounds();
+      let validLabels = new Set();
+      for (let x = 0; x <= bounds.maxX; x++) {
+        for (let y = 0; y <= bounds.maxY; y++) {
+            validLabels.add(UPPER[x] + LOWER[y]);
+            validLabels.add(UPPER[x] + CITY_SYMBOLS[y]);
+        }
       }
-      navigator.clipboard.writeText(out.trim());
-      alert("GFX EXPORTED!");
-    }
 
-    function parseGfxData(text) {
-        globalLogic = { a: "", b: "", c: "" };
-        
-        // Ensure this matches the export's placeholder
-        const unescapeWhitespace = (str) => (str || "").replace(/_NL_/g, "\n");
+      const defaultTiles = "Ga".repeat(96);
 
-        text.split('\n').forEach(line => {
-        
-            const eqIdx = line.indexOf('=');
-            if (eqIdx === -1) return;
-            const label = line.substring(0, eqIdx);
-            const content = line.substring(eqIdx + 1);        
+      for (const label in mapSectors) {
+        if (validLabels.has(label)) {
+            let sec = mapSectors[label];
             
-            if (label === 'a' || label === 'b' || label === 'c') {
-                globalLogic[label] = unescapeWhitespace(content);
-                return;
+            // 2. Filter out completely empty/default sectors
+            if (sec.tiles === defaultTiles && (!sec.exits || sec.exits === "") && sec.objects.length === 0) {
+                continue;
             }
 
-            let [map, items] = content.split('.');
-            let objs = [];
-            // CHANGED: Splitting objects by '~' instead of ','
-            if(items) items.split('~').forEach(c => {
-                if(!c) return;
-                // CHANGED: Splitting metadata and logic by '|' instead of ':'
-                let [m, l] = c.split('|');
-                if (m) {
-                    if (m.length >= 6) {
-                        objs.push({ id: m.substring(0,2), z: m.substring(2,4), data: m.substring(4,6), logic: l || "" });
-                    } else if (m.length >= 4) {
-                        objs.push({ id: m.substring(0,2), z: m.substring(2,4), data: "", logic: l || "" });
-                    }
+            let objStr = sec.objects.map(o => {
+                let meta = o.id + o.z;
+                if (o.data && o.data.trim().length === 2) {
+                    meta += o.data; 
                 }
-            });
-            mapSectors[label] = { tiles: map.substring(0,192), exits: map.substring(192), objects: objs };
-        });
-        updateGlobalLabels();
-        render();
+                return o.logic ? `${meta}|${escapeWhitespace(o.logic)}` : meta;
+            }).join('~');
+            
+            out += `${label}=${sec.tiles}${sec.exits}.${objStr}\n`;
+        }
+      }
+    
+      navigator.clipboard.writeText(out.trim());
+      showToast("GFX EXPORTED TO CLIPBOARD!");
     }
+
+    function showToast(msg) {
+      const toast = document.createElement('div');
+      toast.innerText = msg;
+      toast.style.cssText = `
+        position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+        background: #0af; color: #111; padding: 10px 20px; border-radius: 4px;
+        font-weight: bold; font-family: monospace; z-index: 1000;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.5); border: 1px solid #000;
+        transition: opacity 0.5s ease-in-out;
+      `;
+      document.body.appendChild(toast);
+    
+      // Fade out after 2.5 seconds, remove from DOM after 3
+      setTimeout(() => toast.style.opacity = '0', 2500);
+      setTimeout(() => document.body.removeChild(toast), 3000);
+    }
+
+function parseGfxData(text) {
+    globalLogic = { a: "", b: "", c: "", f: "" };
+    
+    // Unescape our new standards, but keep legacy _NL_ support for old saves
+    const unescapeWhitespace = (str) => (str || "")
+        .replace(/_NL_/g, "\n")
+        .replace(/\\n/g, "\n")
+        .replace(/\\r/g, "\r")
+        .replace(/\\\\/g, "\\");
+
+    text.split('\n').forEach(line => {
+        const eqIdx = line.indexOf('=');
+        if (eqIdx === -1) return;
+        const label = line.substring(0, eqIdx);
+        const content = line.substring(eqIdx + 1);        
+        
+        if (label === 'a' || label === 'b' || label === 'c' || label === 'f') {
+            globalLogic[label] = unescapeWhitespace(content);
+            return;
+        }
+
+        let [map, items] = content.split('.');
+        let objs = [];
+        if(items) items.split('~').forEach(c => {
+            if(!c) return;
+            let [m, rawl] = c.split('|');
+            let l = unescapeWhitespace(rawl);
+            if (m) {
+                if (m.length >= 6) {
+                    objs.push({ id: m.substring(0,2), z: m.substring(2,4), data: m.substring(4,6), logic: l || "" });
+                } else if (m.length >= 4) {
+                    objs.push({ id: m.substring(0,2), z: m.substring(2,4), data: "", logic: l || "" });
+                }
+            }
+        });
+        mapSectors[label] = { tiles: map.substring(0,192), exits: map.substring(192), objects: objs };
+    });
+    updateGlobalLabels();
+    render();
+}
     
     function isWRegister(code) {
         return code.length === 2 && code.charAt(0) === 'W' && (
@@ -887,143 +1203,202 @@ function exportGfx() {
     function getCodeDescription(code) {
         if (code === "Za") return "nothing (null)";
         if (code === "Z1") return "exit Z1"; 
-        if (code.match(/^[A-H][1-8]$/)) return `sector ${code}`; 
         
-        const itemText = gfxItemID(code);
-        if (itemText !== "Item " + code) return itemText; 
+        const itemText = typeof gfxItemID === "function" ? gfxItemID(code) : "Unknown";
+        if (itemText !== "Item " + code && itemText !== "Unknown") return itemText; 
+
+        // Gracefully identifies both Standard and City sectors without breaking Item lookups
+        if (code.length === 2 && code.charAt(0) >= 'A' && code.charAt(0) <= 'Z' && (LOWER.includes(code.charAt(1)) || CITY_SYMBOLS.includes(code.charAt(1)))) {
+            return `sector ${code}`; 
+        }
 
         return `code "${code}"`; 
     }
 
-function decompilepunchcode(code) {
-      if (!code) code = "";
-      
-      let output = "";
-      let column = 0;
-      let ifnot = false; 
+    function decompilepunchcode(initialCode) {
+        const punchcodeImagesContainer = document.getElementById('punchcodeImages');
+        punchcodeImagesContainer.innerHTML = "";
+        if (!initialCode) return;
 
-      const punchcodeImagesContainer = document.getElementById('punchcodeImages');
-      punchcodeImagesContainer.innerHTML = "";
+        function bindHover(element, desc, startIdx, endIdx) {
+            element.style.cursor = "pointer"; 
+            
+            element.addEventListener('mousemove', (e) => {
+                const ta = document.getElementById('punchcodeInput');
+                ta.focus({ preventScroll: true }); 
+                ta.setSelectionRange(startIdx, endIdx);
 
-      // Helper function to grab the next 2 characters while simultaneously 
-      // converting spaces and line breaks into visual UI blocks.
-      function getNextToken() {
-          let token = null;
-          while (column < code.length) {
-              let char = code.charAt(column);
-              
-              if (char === ' ' || char === '\t') {
-                  // Visual Space (16px empty block)
-                  const spacer = document.createElement('div');
-                  spacer.style.width = '16px';
-                  spacer.style.height = '32px';
-                  spacer.style.display = 'inline-block';
-                  punchcodeImagesContainer.appendChild(spacer);
-                  
-                  // if (!output.endsWith(" ") && !output.endsWith("<br>")) output += " ";
-                  output += " &#8594; ";
-                  
-                  column++;
-              } else if (char === '\n' || char === '\r') {
-                  // Visual Line Break (Forces flexbox to wrap to next line)
-                  const br = document.createElement('div');
-                  br.style.flexBasis = '100%';
-                  br.style.height = '0';
-                  punchcodeImagesContainer.appendChild(br);
-                  
-                  if (!output.endsWith("<br>")) output += "<br>";
-                  
-                  // Skip \r\n combos cleanly if they exist
-                  if (char === '\r' && code.charAt(column + 1) === '\n') column++;
-                  column++;
-              } else {
-                  // Grab the actual 2-character punchcode
-                  token = code.substring(column, column + 2);
-                  column += 2;
-                  break;
-              }
-          }
-          return token;
-      }
-
-      // Process all codes
-      
-      let mathlogic = false;
-      
-      while (column < code.length) {
-        let item = getNextToken();
-        if (!item) break; // Reached the end via whitespace
-        if (item.length < 2) break; // Ignore a malformed 1-character tail
-
-        let desc = typeof gfxItemID === "function" ? gfxItemID(item) : "Unknown";
-        if (desc === "Unknown") desc = item;
-
-        if (item === "Xn") { 
-          ifnot = true;
-          desc = " ";
-        }
-        
-        if (item === "Xc") { 
-          desc = "<br>";
-          punchcodeImagesContainer.appendChild(createImgBlock('i/Xc.png'));
-        } else {
-
-            if (item != "Xn") {
-              if (ifnot) {
-                punchcodeImagesContainer.appendChild(createImgBlock('i/' + item + 'n.png'));
-              } else {
-                punchcodeImagesContainer.appendChild(createImgBlock('i/' + item + '.png'));
-              }
-            }
-
-            // If an instruction expects parameters, grab the next valid token
-            while (desc.startsWith("%%") || desc.startsWith("$$") || desc.startsWith("##")) {
-                let prefix = desc.substring(0, 2);
-                let nextcode = getNextToken();
-                
-                if (!nextcode) break; // No parameter found
-
-                if (prefix === "%%") {
-                    desc = desc.substring(2) + " " + nextcode;
-                    punchcodeImagesContainer.appendChild(createTextBlock(nextcode));
-                }
-                
-                if (prefix === "$$") {
-                    desc = desc.substring(2) + " [" + gfxItemID(nextcode) + "] ";
-                    punchcodeImagesContainer.appendChild(createImgBlock('i/' + nextcode + '.png'));
-                }
-                
-                if (prefix === "##") {
-                    desc = desc.substring(2) + " " + nextcode;
-                    punchcodeImagesContainer.appendChild(createNumBlock(nextcode));
-                }
-            }
-        }
-
-        // Handle If-Not text formatting
-        if (desc.match(/\[(.*?)\/(.*?)\]/)) {
-            desc = desc.replace(/\[(.*?)\/(.*?)\]/g, (match, left, right) => {
-                return ifnot ? right : left;
+                const tooltip = document.getElementById('tooltip');
+                tooltip.style.display = 'block';
+                tooltip.innerText = desc;
+                tooltip.style.left = (e.pageX + 15) + 'px';
+                tooltip.style.top = (e.pageY + 15) + 'px';
             });
-            ifnot = false; 
+
+            element.addEventListener('mouseleave', () => {
+                document.getElementById('tooltip').style.display = 'none';
+            });
         }
-        
-        // Finalize Text Decompiler output
-        let baseText = desc.trim();
-        if (baseText && baseText !== "<br>") {
-          if (output.length > 0 && !output.endsWith(" ") && !output.endsWith("<br>")) {
-            output += " ";
-          }
-          output += baseText;
-        } else if (baseText === "<br>") {
-          if (!output.endsWith("<br>")) output += "<br>";
+
+        function parseAndRender(srcString, overrideStart = null, overrideEnd = null) {
+            let col = 0;
+            let ifnot = false;
+            let ifnotStartIdx = null; 
+
+            while (col < srcString.length) {
+                let startIdx = col;
+                let char = srcString.charAt(col);
+                
+                // Handle Space
+                if (char === ' ' || char === '\t') {
+                    const spacer = document.createElement('div');
+                    spacer.style.width = '16px';
+                    spacer.style.height = '32px';
+                    spacer.style.display = 'inline-block';
+                    punchcodeImagesContainer.appendChild(spacer);
+                    col++;
+                    continue;
+                } 
+                // Handle Newline
+                else if (char === '\n' || char === '\r') {
+                    const br = document.createElement('div');
+                    br.style.flexBasis = '100%';
+                    br.style.height = '0';
+                    punchcodeImagesContainer.appendChild(br);
+                    if (char === '\r' && srcString.charAt(col + 1) === '\n') col++;
+                    col++;
+                    continue;
+                }
+
+                // Extract Token (Tag or 2-char code)
+                let text = "";
+                let endIdx = col;
+
+                if (char === '[') {
+                    let closeIdx = srcString.indexOf(']', col);
+                    if (closeIdx !== -1) {
+                        text = srcString.substring(col, closeIdx + 1);
+                        endIdx = closeIdx + 1;
+                        col = endIdx;
+                    } else {
+                        let len = Math.min(2, srcString.length - col);
+                        text = srcString.substring(col, col + len);
+                        endIdx = col + len;
+                        col = endIdx;
+                    }
+                } else {
+                    let len = Math.min(2, srcString.length - col);
+                    text = srcString.substring(col, col + len);
+                    endIdx = col + len;
+                    col = endIdx;
+                }
+
+                // Parent Highlight Overrides (for QPC expanding)
+                let hlStart = overrideStart !== null ? overrideStart : startIdx;
+                let hlEnd   = overrideEnd !== null ? overrideEnd : endIdx;
+
+                // Handle QPC Tape Tag
+                if (text.startsWith('[') && text.endsWith(']')) {
+                    let macroName = text.substring(1, text.length - 1);
+                    let macroCode = qpcData[macroName];
+                    if (macroCode !== undefined) {
+                        // Recursively render tape content, passing the parent tag's textarea coords
+                        parseAndRender(macroCode, hlStart, hlEnd);
+                    } else {
+                        // Unknown Tag
+                        let block = createTextBlock(text);
+                        punchcodeImagesContainer.appendChild(block);
+                        bindHover(block, "Missing Tape: " + text, hlStart, hlEnd);
+                    }
+                    continue;
+                }
+
+                // --- Standard Code Handling ---
+                let item = text;
+                let rawDesc = typeof gfxItemID === "function" ? gfxItemID(item) : "Unknown";
+                if (rawDesc === "Unknown") rawDesc = getCodeDescription(item);
+
+                if (item === "Xn") { 
+                    ifnot = true;
+                    ifnotStartIdx = hlStart;
+                    continue; 
+                }
+                
+                let blockEl = null;
+
+                if (item === "Xc") { 
+                    blockEl = createImgBlock('i/Xc.png');
+                    punchcodeImagesContainer.appendChild(blockEl);
+                    bindHover(blockEl, rawDesc, hlStart, hlEnd);
+                } else {
+                    let imgSrc = ifnot ? ('i/' + item + 'n.png') : ('i/' + item + '.png');
+                    blockEl = createImgBlock(imgSrc);
+                    punchcodeImagesContainer.appendChild(blockEl);
+                    
+                    let cleanDesc = rawDesc.replace(/^[%\$#]{2}/, ''); 
+                    let tooltipDesc = cleanDesc;
+
+                    if (cleanDesc.match(/\[(.*?)\/(.*?)\]/)) {
+                        tooltipDesc = cleanDesc.replace(/\[(.*?)\/(.*?)\]/g, (match, left, right) => {
+                            return ifnot ? right : left;
+                        });
+                    } else {
+                        tooltipDesc = ifnot ? ("If Not: " + cleanDesc) : cleanDesc;
+                    }
+
+                    let finalStart = ifnot ? ifnotStartIdx : hlStart;
+                    bindHover(blockEl, tooltipDesc || item, finalStart, hlEnd);
+
+                    let currentDesc = rawDesc; 
+                    
+                    // Consume prefix parameters sequentially inline
+                    while (currentDesc.startsWith("%%") || currentDesc.startsWith("$$") || currentDesc.startsWith("##")) {
+                        let prefix = currentDesc.substring(0, 2);
+                        
+                        // skip spaces before next token
+                        let nStart = col;
+                        while(nStart < srcString.length && (srcString.charAt(nStart) === ' ' || srcString.charAt(nStart) === '\t' || srcString.charAt(nStart) === '\n' || srcString.charAt(nStart) === '\r')) {
+                            nStart++;
+                        }
+                        if (nStart >= srcString.length) break;
+
+                        let nextcode = srcString.substring(nStart, nStart + 2);
+                        col = nStart + 2;
+
+                        let paramHlStart = overrideStart !== null ? overrideStart : nStart;
+                        let paramHlEnd = overrideStart !== null ? overrideEnd : col;
+
+                        let paramBlock = null;
+                        let paramDesc = "";
+
+                        if (prefix === "%%") {
+                            currentDesc = currentDesc.substring(2);
+                            paramDesc = "Param: " + getCodeDescription(nextcode);
+                            paramBlock = createTextBlock(nextcode);
+                        } else if (prefix === "$$") {
+                            currentDesc = currentDesc.substring(2);
+                            paramDesc = "Item: " + (typeof gfxItemID === "function" ? gfxItemID(nextcode) : nextcode);
+                            paramBlock = createImgBlock('i/' + nextcode + '.png');
+                        } else if (prefix === "##") {
+                            currentDesc = currentDesc.substring(2);
+                            paramDesc = "Number: " + nextcode;
+                            paramBlock = createNumBlock(nextcode);
+                        }
+
+                        if (paramBlock) {
+                            punchcodeImagesContainer.appendChild(paramBlock);
+                            bindHover(paramBlock, paramDesc, paramHlStart, paramHlEnd);
+                        }
+                    }
+                }
+                ifnot = false; 
+            }
         }
-      }
-      
-      return output;
+
+        // Trigger parser
+        parseAndRender(initialCode);
     }
 
-    // Add variable to track the current background selection
     let punchcodeBg = "Ca"; 
 
     function setPunchcodeBg(code) {
@@ -1050,59 +1425,59 @@ function decompilepunchcode(code) {
         return wrap;
     }
     
-function createTextBlock(text) {
-    const div = document.createElement('div');
-    div.className = 'punchcode-text';
-    div.textContent = text;
-    div.style.backgroundImage = `url('t/${punchcodeBg}.png')`; // Apply dynamically
-    div.style.color = punchcodeTextColor;                      // Apply dynamic text color
-    return div;
-}
-
-function createNumBlock(num) {
-    const wrap = document.createElement('div');
-    wrap.className = 'punchcode-num';
-    wrap.style.backgroundImage = `url('t/${punchcodeBg}.png')`; // Apply dynamically
-
-    if (!/^[A-Z]/.test(String(num)))  {
-        const div = document.createElement('div'); 
+    function createTextBlock(text) {
+        const div = document.createElement('div');
         div.className = 'punchcode-text';
-        div.style.backgroundColor = 'transparent'; 
-        div.style.backgroundImage = 'none'; // Prevent double rendering on the text layer
-        div.style.color = punchcodeTextColor; // <--- ADD THIS HERE TOO
-        div.textContent = num;
-        wrap.appendChild(div);
-        return wrap;
-    } else {
+        div.textContent = text;
+        div.style.backgroundImage = `url('t/${punchcodeBg}.png')`; 
+        div.style.color = punchcodeTextColor;                      
+        return div;
+    }
+
+    function createNumBlock(num) {
+        const wrap = document.createElement('div');
+        wrap.className = 'punchcode-num';
+        wrap.style.backgroundImage = `url('t/${punchcodeBg}.png')`; 
+
+        if (!/^[A-Z]/.test(String(num)))  {
+            const div = document.createElement('div'); 
+            div.className = 'punchcode-text';
+            div.style.backgroundColor = 'transparent'; 
+            div.style.backgroundImage = 'none'; 
+            div.style.color = punchcodeTextColor; 
+            div.textContent = num;
+            wrap.appendChild(div);
+            return wrap;
+        } else {
+            const img = document.createElement('img');
+            img.src = "i/" + num + ".png";
+            img.style.width = "32px";
+            img.style.height = "32px";
+            img.style.display = "block";
+            wrap.appendChild(img);
+            return wrap;
+        }
+    }    
+
+    function createImgBlock(src) {
+        const wrap = document.createElement('div');
+        wrap.className = 'punchcode-img';
+        wrap.style.backgroundImage = `url('t/${punchcodeBg}.png')`; 
         const img = document.createElement('img');
-        img.src = "i/" + num + ".png";
-        img.style.width = "32px";
-        img.style.height = "32px";
-        img.style.display = "block";
+        img.src = src;
         wrap.appendChild(img);
         return wrap;
     }
-}    
 
-function createImgBlock(src) {
-    const wrap = document.createElement('div');
-    wrap.className = 'punchcode-img';
-    wrap.style.backgroundImage = `url('t/${punchcodeBg}.png')`; // Apply dynamically
-    const img = document.createElement('img');
-    img.src = src;
-    wrap.appendChild(img);
-    return wrap;
-}
+    function DarkMode() {
+        punchcodeTextColor = "#000000"; 
+        updateDecompiler();             
+    }
 
-function DarkMode() {
-    punchcodeTextColor = "#000000"; // Dark text for readability on light modes
-    updateDecompiler();             // Re-render the blocks to apply the change
-}
-
-function LightMode() {
-    punchcodeTextColor = "#FFFFFF"; // Light text for dark modes
-    updateDecompiler();             // Re-render the blocks to apply the change
-}
+    function LightMode() {
+        punchcodeTextColor = "#FFFFFF"; 
+        updateDecompiler();             
+    }
 
     window.onload = loadDefaultMap;
 

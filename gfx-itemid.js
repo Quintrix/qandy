@@ -150,7 +150,7 @@ window.gfxItemID = function(i) {
 
         // Structures
         "Ua": "Stove",
-        "Ub": "Tavern",
+        "Ub": "Fishing Guild",
         "Uc": "Windmill",
         "Ud": "Tower",
         "Ue": "Temple",

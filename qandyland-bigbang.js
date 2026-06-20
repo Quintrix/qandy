@@ -1,26 +1,3 @@
-// ── bigbang() – GFX World Generation ─────────────────────────────────────────
-//
-// Creates a multiplayer world on the server by reading capflag.gfx from the
-// server's working directory.  The client is never trusted for map data.
-//
-// bigbang(driveName, session)
-//   driveName – drive name to create world on (e.g. "gfx")
-//   session   – caller session token
-//
-// .gfx file format (one sector per line):
-//   [sector]=[96 tiles][valid exits].[item id][item z][item data]...
-//   sector  – upper-case letter + lower-case letter or numeral (e.g. A1, _L)
-//   tiles   – 2-char code each, 96 tiles = 192 chars
-//   exits   – 2-char sector codes for allowed movement (after tile chars)
-//   .       – separator before item list
-//   items   – 6-char entries: 2=id, 2=z-location, 2=data
-//
-// A system file will always be 1 character 
-// A static object filename will always be 6 characters (item z-location data)
-// A dynamic item filename will always be 4 characters (item z-location)
-// A player item will always be at least 8 characters (item a-location face body)
-//
-
 
 function bigbang(driveName, session) {
 
@@ -36,7 +13,8 @@ function bigbang(driveName, session) {
   }
 
   var lines = raw.split('\n');
-  var sectors = [];   // { id, exits, items[] }
+  var sectors = [];       // { id, tiles, exits, items[] }
+  var systemFiles = [];   // { id, data } for global UNIVAC scripts
   var playerCodes = [];
   var seenCodes   = {};
 
@@ -50,13 +28,14 @@ function bigbang(driveName, session) {
     var sectorId  = line.substring(0, eqIdx);
     var rest      = line.substring(eqIdx + 1);
 
+    // Ignore metadata entirely (e.g. ##=Pa:White Flag)
+    if (sectorId === '##') continue;
+
     // Single-character keys are flat script files inside /w/, not map sectors
     if (sectorId.length === 1) {
-    	// validate text first
-      fileSave(driveName, '/', 'w/a', rest, 'UNIVAC', 'UNIVAC');
+      systemFiles.push({ id: sectorId, data: rest });
       continue;
     }
-
 
     var dotIdx    = rest.indexOf('.');
     var mapData   = dotIdx >= 0 ? rest.substring(0, dotIdx) : rest;
@@ -65,16 +44,17 @@ function bigbang(driveName, session) {
     // tiles are first 192 chars (96 × 2); exits are the remainder
     var tiles = mapData.substring(0, 192); 
     var exitStr = mapData.substring(192);
-    // NEW: Parse items using comma separation
+    
+    // Parse items using comma separation
     var items = [];
     if (itemData) {
-      var rawItems = itemData.split(',');
+      var rawItems = itemData.split('~');
       for (var ri = 0; ri < rawItems.length; ri++) {
         var blob = rawItems[ri].trim();
         if (blob) items.push(blob);
       }
     }
-    sectors.push({ id: sectorId, exits: exitStr, items: items });
+    sectors.push({ id: sectorId, tiles: tiles, exits: exitStr, items: items });
   }
 
   if (sectors.length === 0) {
@@ -89,6 +69,26 @@ function bigbang(driveName, session) {
   if (!wDir.success && wDir.error !== 'directory already exists') {
     return { success: false, error: 'failed to create /w/ directory: ' + wDir.error };
   }
+
+  // Create empty /p/ root directory for connecting players
+  var pDir = dirMake(driveName, '/', 'p', session);
+  if (!pDir.success && pDir.error !== 'directory already exists') {
+    return { success: false, error: 'failed to create /p/ directory: ' + pDir.error };
+  }
+
+  // Save 1-character system files into /w/ using their dynamic keys (e.g. w/a, w/b)
+  for (var fi = 0; fi < systemFiles.length; fi++) {
+    var sysFile = systemFiles[fi];
+    // Strip out whitespace 
+    var rawCode=sysFile.data;
+    var raw1 = rawCode.replace(/ /g, "");
+    var item1 = raw1.replace(/_NL_/g, "");
+    var item2 = item1.replace(/\\n/g, "");
+    var itemCode = item2.replace(/\\r/g, "").replace(/\\\\/g, "\\");
+    
+    var sfResult = fileSave(driveName, '/', 'w/' + sysFile.id, itemCode, 'UNIVAC', 'UNIVAC');
+    if (!sfResult.success) errors.push('w/' + sysFile.id + ': ' + sfResult.error);  //'
+  }
   
   // Process Sector Items
   for (var si = 0; si < sectors.length; si++) {
@@ -101,35 +101,32 @@ function bigbang(driveName, session) {
       continue;
     }
 
+    // m(.txt) – valid terrain tiles (192 chars)
+    var mResult = fileSave(driveName, '/', dirPath + '/m', sector.tiles, session, 'bigbang');
+    if (!mResult.success) errors.push(dirPath + '/m: ' + mResult.error);
+
     // e(.txt) – valid exits
     var eResult = fileSave(driveName, '/', dirPath + '/e', sector.exits, session, 'bigbang');
     if (!eResult.success) errors.push(dirPath + '/e: ' + eResult.error);
 
     // Create item files with Bytecode inside
     for (var ii = 0; ii < sector.items.length; ii++) {
-      var parts = sector.items[ii].split(':');
+      var parts = sector.items[ii].split('|');
       var itemMeta = parts[0];
-      var itemCode = (parts[1] || '').slice(0, sysopCardWidth);
-      
-      var itemId=parts[0].substring(0,2); 
 
-      var pDir = dirMake(driveName, '/', 'p', session);
-      
+      // Strip out whitespace then slice the exact limits
+      var rawCode = (parts[1] || '').replace(/ /g, "");
+      var item1 = rawCode.replace(/_NL_/g, "");
+      var item2 = item1.replace(/\\n/g, "");
+      var itemCode = item2.replace(/\\r/g, "")
+
+      var itemId = itemCode.substring(0, 2);
       var iResult = fileSave(driveName, '/', dirPath + '/' + itemMeta, itemCode, '', 'bigbang');
       if (!iResult.success) errors.push(dirPath + '/' + itemMeta + ': ' + iResult.error);
     }
 
-
     created.push(sector.id);
   }
-
-  // 
-  // need a File System Consistency Checker:
-  //
-  // it should ensure all directories and files created have known path names
-  // to prevent malicious user from 'hiding' data files in directories that 
-  // don't exist preventing the terminal operator to know they exist
-  //
 
   if (errors.length > 0) {
     return { success: false, error: errors.join('; '), maps: created };
