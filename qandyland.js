@@ -977,8 +977,15 @@ function bigbang(driveName, session) {
   // Save 1-character system files into /w/ using their dynamic keys (e.g. w/a, w/b)
   for (var fi = 0; fi < systemFiles.length; fi++) {
     var sysFile = systemFiles[fi];
-    var sfResult = fileSave(driveName, '/', 'w/' + sysFile.id, sysFile.data, 'UNIVAC', 'UNIVAC');
-    if (!sfResult.success) errors.push('w/' + sysFile.id + ': ' + sfResult.error);
+    // Strip out whitespace 
+    var rawCode=sysFile.data;
+    var raw1 = rawCode.replace(/ /g, "");
+    var item1 = raw1.replace(/_NL_/g, "");
+    var item2 = item1.replace(/\\n/g, "");
+    var itemCode = item2.replace(/\\r/g, "").replace(/\\\\/g, "\\");
+    
+    var sfResult = fileSave(driveName, '/', 'w/' + sysFile.id, itemCode, 'UNIVAC', 'UNIVAC');
+    if (!sfResult.success) errors.push('w/' + sysFile.id + ': ' + sfResult.error);  //'
   }
   
   // Process Sector Items
@@ -1007,7 +1014,9 @@ function bigbang(driveName, session) {
 
       // Strip out whitespace then slice the exact limits
       var rawCode = (parts[1] || '').replace(/ /g, "");
-      var itemCode = rawCode.replace(/_NL_/g, "");
+      var item1 = rawCode.replace(/_NL_/g, "");
+      var item2 = item1.replace(/\\n/g, "");
+      var itemCode = item2.replace(/\\r/g, "")
 
       var itemId = itemCode.substring(0, 2);
       var iResult = fileSave(driveName, '/', dirPath + '/' + itemMeta, itemCode, '', 'bigbang');
@@ -1130,6 +1139,23 @@ function plugboard(req, stacker, plugs, drive, session) {
       }
     }
   }
+  
+  function runfile(filepath) {
+    if (typeof UNIVAC === 'function') {
+      console.log("UNIVAC(" + drive + ", " + player.fullPath + ", " + filepath + ")");
+      let uResult = UNIVAC(drive, player.fullPath, filepath, session);
+      if (uResult) {
+        player.map      = uResult.sector;
+        player.z        = uResult.z;
+        player.avatar   = uResult.avatar;
+        if (uResult.playerid) player.pubId = uResult.playerid;
+        if (uResult.item) player.item  = uResult.item + player.pubId;
+        player.fullPath = uResult.fullPath;
+        output += uResult.output;
+      }
+    }
+  }  
+
   var player = playerIndex.get(session);
   
   if (!player) {
@@ -1153,10 +1179,13 @@ function plugboard(req, stacker, plugs, drive, session) {
     }
   }
   
+  let tape="";
+   
+  runfile('w/b'); // 'b' (before) executes before command is processed
+  
   var refresh = true;
   let column = 0; 
   
-  let tape="";  
   while (column < plugs.length) {
 
     let code = plugs.slice(column, column + 2);
@@ -1252,6 +1281,25 @@ function plugboard(req, stacker, plugs, drive, session) {
             let matchedPubId = matchedBase.length >= 8 ? matchedBase.substring(4, 8) : "";
             let matchedFullId = matchedPubId ? itemId + matchedPubId : itemId;
 
+            // intercept 'Zj' (fire) and run global script
+            if (itemId === 'Zj') {
+              console.log("UNIVAC(" + drive + ", " + player.fullPath + ", w/f)");
+              if (typeof UNIVAC === 'function') {
+                let uResult = UNIVAC(drive, player.fullPath, 'w/f', session);
+                if (uResult) {
+                  player.map = uResult.sector;
+                  player.z = uResult.z;
+                  player.avatar = uResult.avatar;
+                  if (uResult.playerid) player.pubId = uResult.playerid;
+                  if (uResult.item) player.item = uResult.item + player.pubId;
+                  
+                  player.fullPath = uResult.fullPath;
+                  output += uResult.output;
+                }
+              }
+              break; // Skip the rest of the ID logic, we are done!
+            }
+            
             // If the player clicks their own item, send inventory
             console.log("###1256 matchedFullId="+matchedFullId+" player.item="+player.item);
             if (matchedFullId === player.item) {
@@ -1325,6 +1373,8 @@ function plugboard(req, stacker, plugs, drive, session) {
   }
 
   if (tape) { runtape(tape); tape=""; }
+  
+  runfile('w/c'); // 'c' (after b) executes after command is processed
   
   if (session) { playerIndex.set(session, player); }
 

@@ -118,8 +118,12 @@
     const MAX_UNDO = 20; // Limit memory usage
 
     let sectorExits = {};  // Example: { "A1": "A2B1", "A2": "A1A3B2", ... }
-    let lastEditedSector = "A1";
 
+    const UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const LOWER = "abcdefghijklmnopqrstuvwxyz";
+
+    let lastEditedSector = "Aa";
+    
     let selection = null; // {x, y, w, h} in tile coordinates
     let isSelecting = false;
     let selectionStart = null; // {x, y}
@@ -827,11 +831,9 @@ function borders() {
 
 function drawSectorBorders(ctx, tileSize, sectorsWide, sectorsTall, sectorTileWidth, sectorTileHeight) {
     ctx.save();
-    const ROWS = ["A","B","C","D","E","F","G","H"];
-
     for (let r = 0; r < sectorsTall; r++) {
         for (let c = 0; c < sectorsWide; c++) {
-            const currentLabel = `${ROWS[r]}${c + 1}`;
+            const currentLabel = `${UPPER[r]}${LOWER[c]}`;
             const exits = sectorExits[currentLabel] || "";
 
             const x = c * sectorTileWidth * tileSize;
@@ -839,12 +841,11 @@ function drawSectorBorders(ctx, tileSize, sectorsWide, sectorsTall, sectorTileWi
             const w = sectorTileWidth * tileSize;
             const h = sectorTileHeight * tileSize;
 
-            // 1. Vertical Border (Check connection to the East/Right neighbor)
+            // 1. Vertical Border (East/Right neighbor)
             if (c < sectorsWide - 1) {
-                const rightNeighbor = `${ROWS[r]}${c + 2}`;
+                const rightNeighbor = `${UPPER[r]}${LOWER[c + 1]}`;
                 const neighborExits = sectorExits[rightNeighbor] || "";
                 
-                // Connection exists if Current labels Right OR Right labels Current
                 const canGoNext = exits.includes(rightNeighbor);
                 const canComeBack = neighborExits.includes(currentLabel);
 
@@ -862,9 +863,9 @@ function drawSectorBorders(ctx, tileSize, sectorsWide, sectorsTall, sectorTileWi
                 ctx.stroke();
             }
 
-            // 2. Horizontal Border (Check connection to the South/Bottom neighbor)
+            // 2. Horizontal Border (South/Bottom neighbor)
             if (r < sectorsTall - 1) {
-                const downNeighbor = `${ROWS[r + 1]}${c + 1}`;
+                const downNeighbor = `${UPPER[r + 1]}${LOWER[c]}`;
                 const neighborExits = sectorExits[downNeighbor] || "";
 
                 const canGoDown = exits.includes(downNeighbor);
@@ -888,6 +889,38 @@ function drawSectorBorders(ctx, tileSize, sectorsWide, sectorsTall, sectorTileWi
     ctx.restore();
 }
 
+function showLOSTool() {
+    activeTool = 'terrain';
+    const terrains = { "Ga": "Grass (Clear)", "Ra": "Forest (Dense)", "Sa": "Mountain (High)", "Ta": "Swamp (Low)", "Ya": "Wall (Block)" };
+    
+    let gridHtml = `<div style="display:grid; grid-template-columns:repeat(${SECTORS_WIDE}, 30px); gap:2px; background:#111; padding:5px;">`;
+    
+    for (let r = 0; r < SECTORS_TALL; r++) {
+        for (let c = 0; c < SECTORS_WIDE; c++) {
+            const label = `${UPPER[r]}${LOWER[c]}`;
+            const type = sectorLOS[label] || "Ga";
+            gridHtml += `<div onclick="cycleLOS('${label}')" title="${label}: ${terrains[type]}" 
+                style="width:30px; height:30px; cursor:pointer; background:url('t/${type}.png'); background-size:cover; border:1px solid #444; font-size:9px; color:white; text-shadow:1px 1px black;">${label}</div>`;
+        }
+    }
+    gridHtml += `</div>`;
+
+    const popup = document.getElementById('toolPopup');
+    popup.innerHTML = `
+        <div id="toolPopupHeader" style="cursor:move; background:#2c3e50; padding:8px; border-radius:6px 6px 0 0; font-weight:bold;">
+            World Lines of Sight
+            <span style="float:right;cursor:pointer;" onclick="document.getElementById('toolPopup').style.display='none'">✕</span>
+        </div>
+        <div style="padding:15px;">
+            <p style="font-size:0.8em; color:#aaa; margin-top:0;">Click a sector to cycle terrain type:</p>
+            ${gridHtml}
+            <div style="margin-top:10px; font-size:0.75em; color:#0af;">Ga: Grass | Ra: Forest | Sa: Mtn | Ta: Swamp | Ya: Wall</div>
+            <button onclick="document.getElementById('toolPopup').style.display='none'" style="margin-top:10px; width:100%;">Done</button>
+        </div>
+    `;
+    popup.style.display = "block";
+    makeDraggable(popup, document.getElementById('toolPopupHeader'));
+}
 
     function drawTile(x, y) {
         if (x < 0 || x >= TILE_W || y < 0 || y >= TILE_H) return;
@@ -1056,8 +1089,8 @@ canvas.addEventListener('mousedown', (e) => {
     const sectorY = Math.floor(ty / SECTOR_TILE_HEIGHT);
     
     // Update the tracker
-    lastEditedSector = `${ROWS[sectorY]}${sectorX + 1}`;
-
+    lastEditedSector = `${UPPER[sectorY]}${LOWER[sectorX]}`;    
+    
     // Optional: If the Exits Editor is already open, refresh it to the new sector immediately
     if (document.getElementById('toolPopup').style.display === 'block' && exitEditSector !== null) {
         showExitsEditor(lastEditedSector);
@@ -1085,8 +1118,7 @@ canvas.addEventListener('mousedown', (e) => {
     if (activeTool === 'items') {
         const sectorX = Math.floor(tx / SECTOR_TILE_WIDTH);
         const sectorY = Math.floor(ty / SECTOR_TILE_HEIGHT);
-        const ROWS = ["A","B","C","D","E","F","G","H"];
-        const label = `${ROWS[sectorY]}${sectorX + 1}`;
+        const label = `${UPPER[sectorY]}${LOWER[sectorX]}`;    
     
         // Calculate 0-95 index
         const localX = tx % SECTOR_TILE_WIDTH;
@@ -1216,15 +1248,14 @@ function showExitsEditor(sectorLabel) {
     const currExits = sectorExits[sectorLabel] || '';
     const popup = document.getElementById('toolPopup');
     
-    // Calculate Cardinal Neighbors
-    const ROWS = ["A","B","C","D","E","F","G","H"];
-    let rowChar = sectorLabel.charAt(0), colNum = parseInt(sectorLabel.slice(1));
-    let r = ROWS.indexOf(rowChar), c = colNum;
+    // Calculate Cardinal Neighbors using UPPER and LOWER
+    let r = UPPER.indexOf(sectorLabel.charAt(0));
+    let c = LOWER.indexOf(sectorLabel.charAt(1));
 
-    const n = (r > 0) ? ROWS[r-1] + c : null;
-    const s = (r < 11) ? ROWS[r+1] + c : null;
-    const w = (c > 1) ? ROWS[r] + (c-1) : null;
-    const e = (c < 8) ? ROWS[r] + (c+1) : null;
+    const n = (r > 0) ? UPPER[r-1] + LOWER[c] : null;
+    const s = (r < SECTORS_TALL - 1) ? UPPER[r+1] + LOWER[c] : null;
+    const w = (c > 0) ? UPPER[r] + LOWER[c-1] : null;
+    const e = (c < SECTORS_WIDE - 1) ? UPPER[r] + LOWER[c+1] : null;
 
     const isSelected = (code) => currExits.includes(code);
     const btnStyle = (code) => isSelected(code) ? 'background:#0af; color:#fff; border:1px solid #fff;' : 'background:#222; color:#777; border:1px solid #444;';
@@ -1236,7 +1267,6 @@ function showExitsEditor(sectorLabel) {
         </div>
         <div style="padding:16px; display:flex; flex-direction:column; align-items:center; gap:15px;">
             
-            <!-- Compass Diamond -->
             <div style="display:grid; grid-template-columns: 50px 60px 50px; grid-template-rows: 40px 40px 40px; gap:5px; align-items:center; text-align:center; font-family:monospace;">
                 <div></div>
                 <button onclick="toggleExit('${n}')" style="${btnStyle(n)}; visibility:${n?'visible':'hidden'}">${n||''}</button>
@@ -1253,7 +1283,7 @@ function showExitsEditor(sectorLabel) {
 
             <div style="width:100%;">
                 <label style="font-size:0.8em; color:#aaa;">Exit String:</label>
-                <input type="text" id="exitsInput" maxlength="12" value="${currExits}" 
+                <input type="text" id="exitsInput" maxlength="16" value="${currExits}" 
                        style="width:100%; background:#111; color:#0f0; border:1px solid #444; padding:5px; font-family:monospace; letter-spacing:2px;" 
                        autocomplete="off">
             </div>
@@ -1278,54 +1308,57 @@ function toggleExit(targetCode) {
     if (!targetCode || targetCode === 'null') return;
     
     let input = document.getElementById('exitsInput');
-    let val = input.value.toUpperCase();
-    
-    // Split string into 2-character chunks
+    let val = input.value; // No more .toUpperCase() here!
     let parts = val.match(/.{1,2}/g) || [];
     
     if (parts.includes(targetCode)) {
-        // Remove it
         parts = parts.filter(p => p !== targetCode);
     } else {
-        // Add it (max 6 exits for logic safety, though string can hold more)
-        if (parts.length < 6) parts.push(targetCode);
+        if (parts.length < 8) parts.push(targetCode);
     }
     
     input.value = parts.join("");
-    
-    // Save immediately to the data object so the UI refresh shows the change
     sectorExits[exitEditSector] = input.value;
-    
-    // Refresh the popup to update button colors
     showExitsEditor(exitEditSector);
     renderFullMap();
 }
 
 function validateExitsInput() {
     const input = document.getElementById('exitsInput');
-    input.value = input.value.toUpperCase().replace(/[^A-L1-8]/g, '');
+    // Allows upper/lower cases and all City symbols to be entered manually
+    input.value = input.value.replace(/[^a-zA-Z0-9%()+,:;=@\[\]_{}^-]/g, '');
     sectorExits[exitEditSector] = input.value;
     renderFullMap();
 }
 
 function saveExitsInput() {
-    // Already saved via the live-binding in this version, just close.
     document.getElementById('toolPopup').style.display = 'none';
 }
-function autoCalculateExits(isRound) {
-    const ROWS = ["A","B","C","D","E","F","G","H"];
-    const rowCount = 12;
-    const colCount = 8;
+
+function resetExitsToNatural(sectorLabel) {
+    let r = UPPER.indexOf(sectorLabel.charAt(0));
+    let c = LOWER.indexOf(sectorLabel.charAt(1));
+    let exits = "";
+    if (r > 0) exits += `${UPPER[r-1]}${LOWER[c]}`;
+    if (r < SECTORS_TALL - 1) exits += `${UPPER[r+1]}${LOWER[c]}`;
+    if (c > 0) exits += `${UPPER[r]}${LOWER[c-1]}`;
+    if (c < SECTORS_WIDE - 1) exits += `${UPPER[r]}${LOWER[c+1]}`;
     
-    // Clear current exits before recalculating
+    document.getElementById('exitsInput').value = exits;
+    validateExitsInput();
+}
+
+function autoCalculateExits(isRound) {
+    const rowCount = SECTORS_TALL;
+    const colCount = SECTORS_WIDE;
+    
     sectorExits = {};
 
     for (let r = 0; r < rowCount; r++) {
         for (let c = 0; c < colCount; c++) {
-            const currentLabel = `${ROWS[r]}${c + 1}`;
+            const currentLabel = `${UPPER[r]}${LOWER[c]}`;
             let neighbors = [];
 
-            // Directions: North, South, West, East
             const directions = [
                 { dr: -1, dc: 0 }, // North
                 { dr: 1, dc: 0 },  // South
@@ -1338,14 +1371,12 @@ function autoCalculateExits(isRound) {
                 let nc = c + dir.dc;
 
                 if (isRound) {
-                    // Toroidal Wrap logic: (val + max) % max
                     nr = (nr + rowCount) % rowCount;
                     nc = (nc + colCount) % colCount;
-                    neighbors.push(`${ROWS[nr]}${nc + 1}`);
+                    neighbors.push(`${UPPER[nr]}${LOWER[nc]}`);
                 } else {
-                    // Flat Box logic: only push if within bounds
                     if (nr >= 0 && nr < rowCount && nc >= 0 && nc < colCount) {
-                        neighbors.push(`${ROWS[nr]}${nc + 1}`);
+                        neighbors.push(`${UPPER[nr]}${LOWER[nc]}`);
                     }
                 }
             });
@@ -1357,29 +1388,6 @@ function autoCalculateExits(isRound) {
     alert(`Exits calculated for ${isRound ? 'Round' : 'Flat'} world!`);
     renderFullMap();
 }
-
-function validateExitsInput() {
-    const val = document.getElementById('exitsInput').value.toUpperCase();
-    document.getElementById('exitsInput').value = val;
-    // Validate: up to 8 characters, each 2 chars A-L + [1-8]
-    let valid = (/^([A-L][1-8]){0,4}$/).test(val);
-    // This element 'exitsValidation' doesn't exist, so this will throw an error or do nothing
-    // document.getElementById('exitsValidation').innerHTML =
-    //     valid ?
-    //       `<span style="color:#3fa">Valid exits:</span> ${val.match(/.{1,2}/g)?.join(' ')||''}` :
-    //       `<span style="color:#f66">Invalid! Use 2-char codes, e.g. A2B1</span>`;
-}
-
-function saveExitsInput() {
-    const val = document.getElementById('exitsInput').value.toUpperCase();
-    if (!/^([A-L][1-8]){0,4}$/.test(val)) {
-        alert("Invalid exits! Use sector codes like A2B1 (2 chars each, up to 4).");
-        return;
-    }
-    sectorExits[exitEditSector] = val;
-    document.getElementById('toolPopup').style.display = 'none';
-}
-
 // Generates the 4 "natural" exits (within map bounds) for a sector
 function resetExitsToNatural(sectorLabel) {
     const ROWS = ["A","B","C","D","E","F","G","H"];
@@ -1407,125 +1415,114 @@ async function importMap() {
 }
 
 async function processMap(text) {
-        console.log('processMap='+text);
-        const lines = text.split('\n');
-        const ROWS = ["A","B","C","D","E","F","G","H"];
-        const SECTOR_W = 8;
-        const SECTOR_H = 12;
+    console.log('processMap=' + text);
+    const lines = text.split('\n');
+    const SECTOR_W = 8;
+    const SECTOR_H = 12;
 
-        // Reset mapData and sectorItems before loading new data
-        mapData = []; // Clear existing map
-        for (let y = 0; y < TILE_H; y++) { // Re-initialize mapData structure
-            mapData[y] = Array(TILE_W).fill('Ga'); // Fill with default grass initially
+    mapData = []; 
+    for (let y = 0; y < TILE_H; y++) { 
+        mapData[y] = Array(TILE_W).fill('Ga'); 
+    }
+
+    sectorExits = {};
+    sectorItems = {};
+    preservedLines = {}; 
+    
+    uniqueTileCodes.clear(); 
+    uniqueItemCodes.clear(); 
+
+    lines.forEach(line => {
+        if (!line.includes('=')) return;
+
+        const [label, allData] = line.trim().split('=');
+        if (!label || !allData) return;
+        
+        // Find indices dynamically based on the Aa-Zz format
+        const rChar = label.charAt(0);
+        const cChar = label.charAt(1);
+        const rIndex = UPPER.indexOf(rChar);
+        const cIndex = LOWER.indexOf(cChar);
+
+        // MAGIC: If the second character isn't a lowercase letter, or it's out of bounds of 
+        // our current visual map editor size, we preserve it untouched. (This saves City Maps!)
+        if (label.length !== 2 || rIndex === -1 || cIndex === -1 || rIndex >= SECTORS_TALL || cIndex >= SECTORS_WIDE) {
+            preservedLines[label] = allData;
+            return;
         }
 
-        sectorExits = {};
-        sectorItems = {};
-        preservedLines = {}; 
+        const parts = allData.split('.');
+        const mainData = parts[0];     
+        const objectData = parts[1] || ""; 
+
+        const tilesLength = 96 * 2; 
+        const tilesString = mainData.substring(0, tilesLength);
         
-        uniqueTileCodes.clear(); // Clear for new import
-        uniqueItemCodes.clear(); // Clear for new import
+        const exitString = mainData.substring(tilesLength);
+        sectorExits[label] = exitString;
 
-        lines.forEach(line => {
-            if (!line.includes('=')) return;
+        for (let i = 0; i < 96; i++) {
+            const tileCode = tilesString.substring(i * 2, (i * 2) + 2);
+            const sx = i % SECTOR_W;
+            const sy = Math.floor(i / SECTOR_W);
+            const globalX = (cIndex * SECTOR_W) + sx;
+            const globalY = (rIndex * SECTOR_H) + sy;
 
-            const [label, allData] = line.trim().split('=');
-            if (!label || !allData) return;
-            
-            const rIndex = ROWS.indexOf(label.charAt(0));
-            const cIndex = parseInt(label.substring(1)) - 1;
-
-            if (label.length !== 2 || rIndex === -1 || isNaN(cIndex) || cIndex < 0 || cIndex >= 8) {
-                preservedLines[label] = allData;
-                return;
+            if (globalX < TILE_W && globalY < TILE_H) {
+                mapData[globalY][globalX] = tileCode;
+                uniqueTileCodes.add(tileCode); 
             }
-            
-            if (rIndex === -1 || isNaN(cIndex)) return;
-            
-            // 1. Split Tiles/Exits from the Objects
-            const parts = allData.split('.');
-            const mainData = parts[0];     // Contains Tiles (192 chars) + Exits
-            const objectData = parts[1] || ""; // Contains ID(2)Z(2)DATA(2)|LOGIC~ ...
+        }
 
-            // 2. Process Tiles (First 192 characters)
-            const tilesLength = 96 * 2; 
-            const tilesString = mainData.substring(0, tilesLength);
-            
-            // 3. Process Exits (Everything after the first 192 characters in part 0)
-            const exitString = mainData.substring(tilesLength);
-            sectorExits[label] = exitString;
+        if (objectData) {
+            sectorItems[label] = [];
+            const objectChunks = objectData.split('~');
+            objectChunks.forEach(chunk => {
+                if (!chunk) return;
+                
+                const pipeIdx = chunk.indexOf('|');
+                const meta = pipeIdx !== -1 ? chunk.substring(0, pipeIdx) : chunk;
+                const logic = pipeIdx !== -1 ? chunk.substring(pipeIdx + 1) : "";
 
-            for (let i = 0; i < 96; i++) {
-                const tileCode = tilesString.substring(i * 2, (i * 2) + 2);
-                const sx = i % SECTOR_W;
-                const sy = Math.floor(i / SECTOR_W);
-                const globalX = (cIndex * SECTOR_W) + sx;
-                const globalY = (rIndex * SECTOR_H) + sy;
-
-                if (globalX < TILE_W && globalY < TILE_H) {
-                    mapData[globalY][globalX] = tileCode;
-                    uniqueTileCodes.add(tileCode); // Add for preloading
-                }
-            }
-
-            // 4. Process Objects (Logic-aware)
-            // UPDATED: Using '~' for chunk delimiter and '|' for logic delimiter
-            if (objectData) {
-                sectorItems[label] = [];
-                // Split by tilde for multiple objects
-                const objectChunks = objectData.split('~');
-                objectChunks.forEach(chunk => {
-                    if (!chunk) return;
-                    
-                    // Split metadata from logic by pipe
-                    const pipeIdx = chunk.indexOf('|');
-                    const meta = pipeIdx !== -1 ? chunk.substring(0, pipeIdx) : chunk;
-                    const logic = pipeIdx !== -1 ? chunk.substring(pipeIdx + 1) : "";
-
-                    if (meta) {
-                        if (meta.length >= 6) {
-                            // Static Object (ID + Z + DATA)
-                            const item = {
-                                id: meta.substring(0, 2),
-                                z: meta.substring(2, 4),
-                                data: meta.substring(4, 6),
-                                logic: logic || ""
-                            };
-                            sectorItems[label].push(item);
-                            uniqueItemCodes.add(item.id);
-                        } else if (meta.length >= 4) {
-                            // Dynamic Item (ID + Z)
-                            const item = {
-                                id: meta.substring(0, 2),
-                                z: meta.substring(2, 4),
-                                data: "", // No data provided
-                                logic: logic || ""
-                            };
-                            sectorItems[label].push(item);
-                            uniqueItemCodes.add(item.id);
-                        }
+                if (meta) {
+                    if (meta.length >= 6) {
+                        const item = {
+                            id: meta.substring(0, 2),
+                            z: meta.substring(2, 4),
+                            data: meta.substring(4, 6),
+                            logic: logic || ""
+                        };
+                        sectorItems[label].push(item);
+                        uniqueItemCodes.add(item.id);
+                    } else if (meta.length >= 4) {
+                        const item = {
+                            id: meta.substring(0, 2),
+                            z: meta.substring(2, 4),
+                            data: "", 
+                            logic: logic || ""
+                        };
+                        sectorItems[label].push(item);
+                        uniqueItemCodes.add(item.id);
                     }
-                });
-            }
-        });
+                }
+            });
+        }
+    });
 
-        // After importing new data, preload the new images and then render
-        await preloadAllImages(); 
-        renderFullMap();
+    await preloadAllImages(); 
+    renderFullMap();
 }
 
 function exportMap() {
     const SECTOR_W = 8;
     const SECTOR_H = 12;
-    const ROWS = ["A","B","C","D","E","F","G","H"];
     let output = "";
 
     for (let r = 0; r < SECTORS_TALL; r++) { 
         for (let c = 0; c < SECTORS_WIDE; c++) { 
-            const sectorLabel = `${ROWS[r]}${c + 1}`;
+            const sectorLabel = `${UPPER[r]}${LOWER[c]}`;
             let tilesString = "";
 
-            // 1. Get 192 characters of tile data (96 tiles)
             for (let sy = 0; sy < SECTOR_H; sy++) {
                 for (let sx = 0; sx < SECTOR_W; sx++) {
                     const globalX = (c * SECTOR_W) + sx;
@@ -1534,20 +1531,15 @@ function exportMap() {
                 }
             }
 
-            // 2. Get Exits
             const exits = sectorExits[sectorLabel] || "";
             
-            // 3. Get Objects with Logic/Bytecode
-            // UPDATED: Using '~' for array join and '|' for appending logic
             let objectString = "";
             if (sectorItems[sectorLabel] && sectorItems[sectorLabel].length > 0) {
                 const objSerialized = sectorItems[sectorLabel].map(it => {
                     let meta = it.id + it.z;
-                    // Add 2-character DATA only if it exists and is valid (Static objects)
                     if (it.data && it.data.trim().length === 2) {
                         meta += it.data; 
                     }
-                    // Append |logic only if logic actually exists
                     return it.logic ? `${meta}|${it.logic}` : meta;
                 }).join('~');
                 objectString = "." + objSerialized;
@@ -1556,10 +1548,10 @@ function exportMap() {
         }
     }
     
+    // Append the City Maps and Scripts exactly as they were loaded!
     for (const [key, value] of Object.entries(preservedLines)) {
         output += `${key}=${value}\n`;
     }
-
 
     navigator.clipboard.writeText(output.trim()).then(() => {
         alert("Map exported to clipboard in Object-compatible format!");

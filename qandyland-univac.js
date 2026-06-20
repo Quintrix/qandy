@@ -688,9 +688,11 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
         
         if (!switchopen) {
           var targetZStr = state.zStr;
-          if (!_isValidExit(driveName, state.sector, targetSector)) {
-             console.log("not a valid exit");
-             break; 
+          if (!ifnot) {
+          	if (!_isValidExit(driveName, state.sector, targetSector)) {
+              console.log("not a valid exit");
+              break;
+            } 
           }
           if (/^\d{2}$/.test(zToken)) {
             targetZStr = zToken;

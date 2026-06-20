@@ -64,6 +64,7 @@ function plugboard(req, stacker, plugs, drive, session) {
         break;      
 
       case 'OD':
+        if (tape) { runtape(tape); tape = ""; }
         let objfile = null; 
         let objid = plugs.slice(column, column + 2);
         let objz  = plugs.slice(column + 2, column + 4);
@@ -112,6 +113,7 @@ function plugboard(req, stacker, plugs, drive, session) {
         break;
                 
       case 'ID':
+        if (tape) { runtape(tape); tape = ""; }
         let itemId = plugs.slice(column, column + 2);
         let itemZ  = plugs.slice(column + 2, column + 4);
         column += 4;
@@ -136,7 +138,27 @@ function plugboard(req, stacker, plugs, drive, session) {
             let matchedPubId = matchedBase.length >= 8 ? matchedBase.substring(4, 8) : "";
             let matchedFullId = matchedPubId ? itemId + matchedPubId : itemId;
 
+            // intercept 'Zj' (fire) and run global script
+            if (itemId === 'Zj') {
+              console.log("UNIVAC(" + drive + ", " + player.fullPath + ", w/f)");
+              if (typeof UNIVAC === 'function') {
+                let uResult = UNIVAC(drive, player.fullPath, 'w/f', session);
+                if (uResult) {
+                  player.map = uResult.sector;
+                  player.z = uResult.z;
+                  player.avatar = uResult.avatar;
+                  if (uResult.playerid) player.pubId = uResult.playerid;
+                  if (uResult.item) player.item = uResult.item + player.pubId;
+                  
+                  player.fullPath = uResult.fullPath;
+                  output += uResult.output;
+                }
+              }
+              break; // Skip the rest of the ID logic, we are done!
+            }
+            
             // If the player clicks their own item, send inventory
+            console.log("###1256 matchedFullId="+matchedFullId+" player.item="+player.item);
             if (matchedFullId === player.item) {
               let invLoad = fileLoad(drive, '/', player.fullPath, session);
               let inventoryData = (invLoad.success && invLoad.content) ? invLoad.content : '';
@@ -151,6 +173,7 @@ function plugboard(req, stacker, plugs, drive, session) {
         break;                  
 
       case 'ST':
+        if (tape) { runtape(tape); tape = ""; }
         if (session && playerIndex.has(session)) {
           output += "ST" + session;
         } else {
@@ -184,6 +207,7 @@ function plugboard(req, stacker, plugs, drive, session) {
         break;        
 
       case 'VA':
+        if (tape) { runtape(tape); tape = ""; }
         let vaAvatar = "";
         let vaTermIdx = plugs.indexOf('--', column);
         if (vaTermIdx !== -1) {
@@ -230,4 +254,3 @@ function plugboard(req, stacker, plugs, drive, session) {
   }
   return respondRetro(stacker, output, session);
 }
-

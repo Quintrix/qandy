@@ -219,6 +219,7 @@
             <div id="global-a"><div class="object-entry" onclick="openGlobalEditor('a')">[<b>a</b>] Alpha (On Connect) <span id="global-lbl-a" style="color: #888;"></span></div></div>
             <div id="global-b"><div class="object-entry" onclick="openGlobalEditor('b')">[<b>b</b>] Before (Pre-Tick) <span id="global-lbl-b" style="color: #888;"></span></div></div>
             <div id="global-c"><div class="object-entry" onclick="openGlobalEditor('c')">[<b>c</b>] After (Post-Tick) <span id="global-lbl-c" style="color: #888;"></span></div></div>
+            <div id="global-f"><div class="object-entry" onclick="openGlobalEditor('f')">[<b>f</b>] Functions (File F) <span id="global-lbl-f" style="color: #888;"></span></div></div>
           </div>
         </div>
         
@@ -263,7 +264,7 @@ let currentSector = "Aa";
 let mapSectors = {};
 let editingIndex = -1;
 let editingGlobalKey = null;
-let globalLogic = { a: "", b: "", c: "" };
+let globalLogic = { a: "", b: "", c: "", f: "" };
 let punchcodeTextColor = "#FFFFFF"; 
 
 // Maximum possible map bounds Aa to Zz
@@ -335,7 +336,7 @@ const nav = document.getElementById('sectorNav');
     }
         
     function initBlank() {
-        globalLogic = { a: "", b: "", c: "" };
+        globalLogic = { a: "", b: "", c: "", f: "" };
         mapSectors = {};
         // Initialize ALL 676 potential sectors and 676 extended city sectors
         for(let x = 0; x < 26; x++) {
@@ -699,10 +700,12 @@ const nav = document.getElementById('sectorNav');
         const lenA = getCount(globalLogic.a);
         const lenB = getCount(globalLogic.b);
         const lenC = getCount(globalLogic.c);
+        const lenF = getCount(globalLogic.f);
         
         document.getElementById('global-lbl-a').innerText = lenA > 0 ? `(${lenA} inst)` : "";
         document.getElementById('global-lbl-b').innerText = lenB > 0 ? `(${lenB} inst)` : "";
         document.getElementById('global-lbl-c').innerText = lenC > 0 ? `(${lenC} inst)` : "";
+        document.getElementById('global-lbl-f').innerText = lenF > 0 ? `(${lenF} inst)` : "";
         
         updateNavDropdown();
         render();        
@@ -779,6 +782,7 @@ const nav = document.getElementById('sectorNav');
         if (key === 'a') title = "ALPHA (ON CONNECT)";
         if (key === 'b') title = "BEFORE (PRE-TICK)";
         if (key === 'c') title = "AFTER (POST-TICK)";
+        if (key === 'f') title = "FIRE ITEM"; 
 
         document.getElementById('logicLabel').innerText = "GLOBAL PUNCH CODE";
         document.getElementById('editingObjID').innerText = title;
@@ -913,73 +917,112 @@ const nav = document.getElementById('sectorNav');
       saveCurrentEditor();
       let out = "";
 
-      const escapeWhitespace = (str) => (str || "").replace(/\n/g, "_NL_");
+      // 1. Better New Line Strategy: Standard backslash escaping
+      const escapeWhitespace = (str) => (str || "")
+        .replace(/\\/g, "\\\\")
+        .replace(/\n/g, "\\n")
+        .replace(/\r/g, "\\r");
 
       if (globalLogic.a) out += `a=${globalLogic.a}\n`;
       if (globalLogic.b) out += `b=${globalLogic.b}\n`;
       if (globalLogic.c) out += `c=${globalLogic.c}\n`;
+      if (globalLogic.f) out += `f=${globalLogic.f}\n`;
 
       const bounds = getMapBounds();
       let validLabels = new Set();
       for (let x = 0; x <= bounds.maxX; x++) {
-          for (let y = 0; y <= bounds.maxY; y++) {
-              validLabels.add(UPPER[x] + LOWER[y]);
-              validLabels.add(UPPER[x] + CITY_SYMBOLS[y]);
-          }
+        for (let y = 0; y <= bounds.maxY; y++) {
+            validLabels.add(UPPER[x] + LOWER[y]);
+            validLabels.add(UPPER[x] + CITY_SYMBOLS[y]);
+        }
       }
+
+      const defaultTiles = "Ga".repeat(96);
 
       for (const label in mapSectors) {
-          if (validLabels.has(label)) {
-              let sec = mapSectors[label];
-              let objStr = sec.objects.map(o => {
-                  let meta = o.id + o.z;
-                  if (o.data && o.data.trim().length === 2) {
-                      meta += o.data; 
-                  }
-                  return o.logic ? `${meta}|${escapeWhitespace(o.logic)}` : meta;
-              }).join('~');
-              
-              out += `${label}=${sec.tiles}${sec.exits}.${objStr}\n`;
-          }
-      }
-      navigator.clipboard.writeText(out.trim());
-      alert("GFX EXPORTED!");
-    }
-
-    function parseGfxData(text) {
-        globalLogic = { a: "", b: "", c: "", f: "" };
-        const unescapeWhitespace = (str) => (str || "").replace(/_NL_/g, "\n");
-
-        text.split('\n').forEach(line => {
-            const eqIdx = line.indexOf('=');
-            if (eqIdx === -1) return;
-            const label = line.substring(0, eqIdx);
-            const content = line.substring(eqIdx + 1);        
+        if (validLabels.has(label)) {
+            let sec = mapSectors[label];
             
-            if (label === 'a' || label === 'b' || label === 'c') {
-                globalLogic[label] = unescapeWhitespace(content);
-                return;
+            // 2. Filter out completely empty/default sectors
+            if (sec.tiles === defaultTiles && (!sec.exits || sec.exits === "") && sec.objects.length === 0) {
+                continue;
             }
 
-            let [map, items] = content.split('.');
-            let objs = [];
-            if(items) items.split('~').forEach(c => {
-                if(!c) return;
-                let [m, rawl] = c.split('|');
-                let l = unescapeWhitespace(rawl);
-                if (m) {
-                    if (m.length >= 6) {
-                        objs.push({ id: m.substring(0,2), z: m.substring(2,4), data: m.substring(4,6), logic: l || "" });
-                    } else if (m.length >= 4) {
-                        objs.push({ id: m.substring(0,2), z: m.substring(2,4), data: "", logic: l || "" });
-                    }
+            let objStr = sec.objects.map(o => {
+                let meta = o.id + o.z;
+                if (o.data && o.data.trim().length === 2) {
+                    meta += o.data; 
                 }
-            });
-            mapSectors[label] = { tiles: map.substring(0,192), exits: map.substring(192), objects: objs };
-        });
-        updateGlobalLabels();
-        render();
+                return o.logic ? `${meta}|${escapeWhitespace(o.logic)}` : meta;
+            }).join('~');
+            
+            out += `${label}=${sec.tiles}${sec.exits}.${objStr}\n`;
+        }
+      }
+    
+      navigator.clipboard.writeText(out.trim());
+    
+      // 3. Use the new temporary popup notification
+      showToast("GFX EXPORTED TO CLIPBOARD!");
     }
+
+    function showToast(msg) {
+      const toast = document.createElement('div');
+      toast.innerText = msg;
+      toast.style.cssText = `
+        position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+        background: #0af; color: #111; padding: 10px 20px; border-radius: 4px;
+        font-weight: bold; font-family: monospace; z-index: 1000;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.5); border: 1px solid #000;
+        transition: opacity 0.5s ease-in-out;
+      `;
+      document.body.appendChild(toast);
+    
+      // Fade out after 2.5 seconds, remove from DOM after 3
+      setTimeout(() => toast.style.opacity = '0', 2500);
+      setTimeout(() => document.body.removeChild(toast), 3000);
+    }
+
+function parseGfxData(text) {
+    globalLogic = { a: "", b: "", c: "", f: "" };
+    
+    // Unescape our new standards, but keep legacy _NL_ support for old saves
+    const unescapeWhitespace = (str) => (str || "")
+        .replace(/_NL_/g, "\n")
+        .replace(/\\n/g, "\n")
+        .replace(/\\r/g, "\r")
+        .replace(/\\\\/g, "\\");
+
+    text.split('\n').forEach(line => {
+        const eqIdx = line.indexOf('=');
+        if (eqIdx === -1) return;
+        const label = line.substring(0, eqIdx);
+        const content = line.substring(eqIdx + 1);        
+        
+        if (label === 'a' || label === 'b' || label === 'c' || label === 'f') {
+            globalLogic[label] = unescapeWhitespace(content);
+            return;
+        }
+
+        let [map, items] = content.split('.');
+        let objs = [];
+        if(items) items.split('~').forEach(c => {
+            if(!c) return;
+            let [m, rawl] = c.split('|');
+            let l = unescapeWhitespace(rawl);
+            if (m) {
+                if (m.length >= 6) {
+                    objs.push({ id: m.substring(0,2), z: m.substring(2,4), data: m.substring(4,6), logic: l || "" });
+                } else if (m.length >= 4) {
+                    objs.push({ id: m.substring(0,2), z: m.substring(2,4), data: "", logic: l || "" });
+                }
+            }
+        });
+        mapSectors[label] = { tiles: map.substring(0,192), exits: map.substring(192), objects: objs };
+    });
+    updateGlobalLabels();
+    render();
+}
     
     function isWRegister(code) {
         return code.length === 2 && code.charAt(0) === 'W' && (
