@@ -86,6 +86,11 @@ function _parseItemPath(itemfile) {
   return { sector: sector, filename: filename, id: id, z: z, zStr: zRaw, playerid: playerid, avatar: avatar };
 }
 
+function _updatePFile(driveName, id, newSector, zStr, avatar) {
+  // Massive Speedup: No more Regex. Just instantly overwrite the player's specific file in the /p/ directory.
+  _deps.fileSave(driveName, '/', 'p/' + id, newSector + zStr + avatar, sessionToken, sessionToken);
+}
+
 //
 // Check whether targetSector appears in the current sector's 'e' exit file.
 // The e file is a flat string of 2-character sector codes, e.g. 'D2E1E3F2'.
@@ -129,9 +134,19 @@ function _isCitySector(sector) {
 
 //
 // Update the 'p' registry file so all clients see the player's new location.
+// The p file format is one line per player:  [item-id]=[sector][z][avatar]\n
+// e.g.  Sa=F225B1D3J0
+//
 function _updatePFile(driveName, id, newSector, zStr, avatar) {
-  // Massive Speedup: No more Regex. Just instantly overwrite the player's specific file in the /p/ directory.
-  _deps.fileSave(driveName, '/', 'p/' + id, newSector + zStr + avatar, 'UNIVAC', 'UNIVAC');
+  var pLoad = _deps.fileLoad(driveName, '/', 'p', 'UNIVAC');
+  if (!pLoad.success || !pLoad.content) return;
+
+  var escaped  = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  var pUpdated = pLoad.content.replace(
+    new RegExp('^(' + escaped + ')=.*$', 'm'),
+    '$1=' + newSector + zStr + avatar
+  );
+  _deps.fileSave(driveName, '/', 'p', pUpdated, sessionToken, sessionToken);
 }
 
 // Terrain codes: A$-K$ walkable | M$ Lava | R$ Forest | S$ Mountain | T$ Swamp
@@ -152,32 +167,6 @@ function _canWalkTerrain(tileCode, inv) {
     case 'S': return master || has('Ad') || has('Ae'); // Mountains (Ad OR Ae)
     case 'T': return master || has('Ac');              // Swamp
     default:  return false;                            // L-Z, symbols, Walls
-  }
-}
-
-// Movement point cost calculator based on W5 Boot Register and Terrain code
-function _getMoveCost(w5Value, tileCode) {
-  if (!tileCode || tileCode.length < 2) return 1;
-  var t = tileCode.charAt(0);
-  
-  var tier = 0; // Walkable (A$-K$)
-  if (t === 'R' || t === 'T') tier = 1; // Forest, Swamp (Requires Travel level)
-  if (t === 'S' || t === 'M') tier = 2; // Mountain, Lava (Requires Mtn/Lava level)
-
-  switch (w5Value) {
-    case 'Ab': // Hiking Boots: Grass free (0), Tier 1 costs 1
-      return (tier === 0) ? 0 : 1;
-    case 'Ac': // Swamp Boots: Tier 1 costs 2, Grass costs 1
-      return (tier >= 1) ? 2 : 1;
-    case 'Ad': // Mountain Boots
-    case 'Ae': // Lava+Mtn Boots
-      if (tier >= 2) return 3;
-      if (tier === 1) return 2;
-      return 1;
-    case 'Aa': // Travel Boots / Master Boots
-      return 1;
-    default:   // Boots disabled or no boots equipped: standard 1 pt cost
-      return 1;
   }
 }
 
@@ -289,6 +278,21 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
     return null;
   }
 
+  // Parses a 2-char code to find its experiential/numeric value
+  function parseRegValue(valStr) {
+    if (!valStr || valStr.length !== 2) return 1; // Default to 1
+
+    if (/^[A-Z]/.test(valStr)) {
+      var c2 = valStr.charAt(1);
+      if (/[0-9]/.test(c2)) return parseInt(c2, 10);
+      if (/[a-z]/.test(c2)) return c2.charCodeAt(0) - 96; 
+    }
+    
+    if (/^\d{2}$/.test(valStr)) return parseInt(valStr, 10);
+
+    return 1;
+  }
+
   // Resolves "05", "W2", "Wa" etc. directly to its numeric value
   function getRegValue(valStr) {
     if (!valStr || valStr.length !== 2) return 0;
@@ -318,7 +322,6 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
   // Cache sector 'm' files in RAM for the duration of this tape read
   var _mapCache = {};
   function getTileAt(sec, zIdx) {
-    if (zIdx < 0) return 'Ga'; // Safe fallback for top/left off-map wrapping logic 
     if (!_mapCache[sec]) {
       var mLoad = _deps.fileLoad(driveName, '/', 'w/' + sec + '/m', 'UNIVAC');
       _mapCache[sec] = (mLoad.success && mLoad.content) ? mLoad.content : null;
@@ -552,7 +555,7 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
         break;
       }      
 
-      case 'Vm': { 
+case 'Vm': { 
         // make item at player's current z-location
         var noun = tape.slice(column, column + 2); column += 2;
 
@@ -667,22 +670,12 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
           }
 
           var w5Active = (register['W5'] && register['W5'] !== '00');
-          var w6Active = (register['W6'] && register['W6'] !== '00');
 
-          // Safely determine the local map tile we evaluate terrain/cost against
-          var localTile = 'Ga';
-          if (isEdge) {
-            // If stepping off the map entirely, evaluate cost based on the tile we are leaving
-            localTile = getTileAt(currentMap, currentZ);
-          } else {
-            // Otherwise, evaluate based on the specific tile we are entering
-            localTile = getTileAt(currentMap, tempZ);
-          }
-
-          // 2. GATEKEEPER A: Validate stepping onto the tile
+          // 2. GATEKEEPER A: Validate stepping onto the tile of the CURRENT map
           if (w5Active) {
+            var localTile = getTileAt(currentMap, tempZ);
             if (!_canWalkTerrain(localTile, state.content)) {
-              console.log("UNIVAC: Step blocked on tile [" + localTile + "]");
+              console.log("UNIVAC: Step blocked on current map tile [" + localTile + "]");
               column = tape.length;
               break;
             }
@@ -692,26 +685,6 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
             column = tape.length; // Snap tape head on grid-edge collision
             break;
           } 
-
-          // 3. GATEKEEPER B: Movement Points via W6 Register
-          if (w6Active && /^W[a-z]$/.test(register['W6'])) {
-            var poolReg = register['W6'];
-            var currentPoints = parseInt(register[poolReg] || '00', 10);
-            if (isNaN(currentPoints)) currentPoints = 0;
-
-            var moveCost = _getMoveCost(register['W5'], localTile);
-
-            if (currentPoints < moveCost) {
-              console.log("UNIVAC: Move blocked, insufficient points (Need: " + moveCost + ", Have: " + currentPoints + ")");
-              column = tape.length; // Snap tape head
-              break;
-            }
-
-            // Deduct the point cost
-            currentPoints -= moveCost;
-            if (currentPoints < 0) currentPoints = 0;
-            register[poolReg] = currentPoints.toString().padStart(2, '0');
-          }
 
           var targetZ = tempZ;
 
