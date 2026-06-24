@@ -15,6 +15,7 @@ var mapy=11;
 window.playerItem="Za";   // item-id of team item player has claimed (Sa Sb Sc Sd or Za for 'nothing')
 window.playerZ=-1;        // z-locatin of playerItem
 window.playerAvatar = ""; // players avatar (ie "B0D0")
+window.playerInven = "";  // inventory
 window.playerId = "";     // unique 4 character player id
 window.playerWalk = -1;   // z-location player clicks to walk to, -1 = standing still
 window.playerDo = "";     // command to send server when player reaches destination
@@ -287,6 +288,19 @@ async function gfxTick() {
           let noun = gfxPong.substring(ptr); 
           gfxRefresh(noun); 
           ptr = gfxPong.length; // no more commands after RF
+        }
+        
+        if (verb === "Vi") {
+          // get player inventory data
+          let endPtr = gfxPong.indexOf("--", ptr);
+          if (endPtr !== -1) {
+            window.playerInven = gfxPong.substring(ptr, endPtr);
+            ptr = endPtr + 2; // Advance pointer past the "--" terminator
+          } else {
+            // Fallback just in case the string is malformed
+            window.playerInven = gfxPong.substring(ptr);
+            ptr = gfxPong.length; 
+          }
         }
 
         // 3. Handle Look Mode (Variable-Length Command)

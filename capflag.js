@@ -45,6 +45,8 @@ function mainloop() {}
 
 
 window.zdown = function(z) {
+  window.PopForce = "hidden";
+  hpop();
   var localZ = (window.movingItems && window.movingItems[window.playerItem]) ? 
                window.movingItems[window.playerItem].z : window.playerZ;
 
@@ -69,7 +71,7 @@ window.zdown = function(z) {
         }
       }
 
-      // FIX: Also check dynamic items/players before deciding the tile is empty!
+      // Also check dynamic items/players before deciding the tile is empty!
       if (!hasStuff && window.items) {
           for (var j = 0; j < window.items.length; j++) {
               var itm = window.items[j];
@@ -176,27 +178,42 @@ window.isWalkable = function(z) {
     if (z < 0 || z > 95) return false;
     if (!window.mapTiles || !window.mapTiles[window.map]) return false;
     
-    // Extract the 2-character tile code at location z
     var code = window.mapTiles[window.map].substring(z * 2, z * 2 + 2);
-    
-    // Any tile from 'Aa' to 'La' is walkable
-    return (code >= 'Aa' && code <= 'La');
+    var type = code.charAt(0);
+
+    // A$ through K$ are universally walkable
+    if (type >= 'A' && type <= 'K') return true;
+
+    // Pull the player's personal gear string (Fixed variable name)
+    var inv = window.playerInven || window.playerInventory || ""; 
+    var has = function(item) { return inv.indexOf(item) !== -1; };
+    var master = has('Aa'); // Travel Boots
+
+    switch (type) {
+        case 'M': return master || has('Ae');              // Lava
+        case 'R': return master || has('Ab');              // Forest
+        case 'S': return master || has('Ad') || has('Ae'); // Mountains
+        case 'T': return master || has('Ac');              // Swamp
+        default:  return false;                            // Walls / restricted
+    }
 };
 
 window.invdown = function(code) {
   window.PopForce = "hidden";   // hidden popup on mouseout
-  console.log("invdown() items="+items);
+  console.log("invdown() code=" + code);
+  
   let column = 0; 
   let outputItems = "";
-  let outputStats = ""
-  let statCounts = {}; // Dictionary to tally up multiples of the same stat
+  let outputStats = "";
+  let statCounts = {}; 
+  let items = ""; // <-- 1. Explicitly declare local items string
 
   if (code) {
     if (code.charAt(0) === '-') {
     	// clicked a single item on the inventory display
-    	item=code.substring(1,3);
-    	items=code.substring(3);
-    	desc=gfxItemID(item);
+    	let item = code.substring(1,3);
+    	items = code.substring(3);
+    	let desc = gfxItemID(item);
     	console.log("inventory down: item="+item+" items = "+items);
     	let PUP = `<div align="center">`;
     	PUP += `${desc}<p>`;
@@ -206,6 +223,8 @@ window.invdown = function(code) {
       PUP += `</div>`;
       pop(PUP);
     	return;
+    } else {
+        items = code; // <-- 2. Catch normal inventory strings here!
     }
     	
     while (column < items.length) {
@@ -213,15 +232,11 @@ window.invdown = function(code) {
       column += 2;
       // Items less than 'Qa' are standard visual inventory items
       if (verb < "Qa") {
-        // Add item image 'i/[verb].png' to outputItems
-        // Click calls gfxDisplayInv(item) and prevents default anchor jumping
         outputItems += `<a href="gfx:IN-${verb}${items}">`;
         outputItems += `<img src="i/${verb}.png" height="32" width="32" alt="${verb}"></a> &nbsp; `;
       } else {
-        // Items 'Qa' and above are stats. Increment their count.
         num = items.substring(column, column + 2);
         if (num.charAt(0) >= "A" && num.charAt(0) <="Z") {
-          // if not a numeral, do NOT advnace read head and add 1 to stat count
           statCounts[verb] = (statCounts[verb] || 0) + 1;
         } else {
         	  column += 2;
@@ -238,7 +253,6 @@ window.invdown = function(code) {
     }
   }
   
-  // Build the outputStats string (e.g., "Wm 99")
   for (let stat in statCounts) {
   	 if (stat != "Za") {
   	 	let type=stat;
@@ -248,14 +262,12 @@ window.invdown = function(code) {
     }
   }
 
-  // Combine them, putting the stats at the beginning of the output
   let output = outputStats;
   if (outputStats !== "" && outputItems !== "") {
-    output += "<p>"; // Add some spacing between stats and items if both exist
+    output += "<p>"; 
   }
   output += outputItems;
   
-  // Display using the engine's standard popup
   pop(output);  
 }
 
@@ -264,17 +276,13 @@ window.serverdown = function(code) {
   hpop();
   // executes any punch code the server sends the client
   // will allow each game to customize all aspects of the game
-  console.log('serverdown() code='+code);
-  // capflag.js:42 serverdown() code=VaSa--
+
   let column = 0; 
 
   while (column < code.length) {
     var verb = code.substring(column, column + 2); column += 2;
   
     if (verb === "Va") {
-    	// Va--     <- avatar = text between Va and -- (in this case null)
-      // extract avatar capflagAvatar(team+avatar);
-      // call capflagAvatar(avatar);
       capflagAvatar("");
     }
 
@@ -290,13 +298,13 @@ window.serverdown = function(code) {
     if (verb === "Vi") { 
       let nextDotDot = code.indexOf("..", column);
       if (nextDotDot < 0) {
-        items = code.substring(column, code.length);
+        window.playerInven = code.substring(column, code.length);
         column = code.length;
       } else {
-        items = code.substring(column, nextDotDot);
+        window.playerInven = code.substring(column, nextDotDot);
         column = nextDotDot + 2;
       }
-      invdown(items);
+      invdown(playerInven);
     }  
   }
   
@@ -482,7 +490,7 @@ window.keydown = function(key, e) {
       }
   }
 
-  var todo = null;
+var todo = null;
   switch (keyStr) {
     case "ArrowUp":   case "w": case "W": todo = "Vn"; break;
     case "ArrowDown": case "s": case "S": todo = "Vs"; break;
@@ -491,6 +499,14 @@ window.keydown = function(key, e) {
   }
   
   if (todo) {
+    var targetZ = window.moveZ(testZ, todo);
+
+    // If it's a standard move (not stepping off the map edge to change rooms) 
+    // and the destination tile is unwalkable, abort the keypress entirely:
+    if (targetZ !== testZ && !window.isWalkable(targetZ)) {
+        return; 
+    }
+
     // Append to server buffer
     if (window.gfxDo === "RF") window.gfxDo = "";
     window.gfxDo += todo;

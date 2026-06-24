@@ -26,9 +26,10 @@ UNIVAC.inject({ fileLoad,
                 futureTimestamp
               });
 
-var http   = require('http');
-var path   = require('path');
-var fs     = require('fs');
+var exec = require('child_process').exec;
+var http = require('http');
+var path = require('path');
+var fs   = require('fs');
 
 // ── Configuration ─────────────────────────────────────────────────────────────
 var PORT = parseInt(process.argv[2], 10) || 8080;
@@ -2013,12 +2014,10 @@ function _proceedWithStartup() {
 }
 
 (function _initializeServer() {
-  //_applyServerConfig();
   _proceedWithStartup();
 
   // Start the HTTP server
   server.listen(PORT, function () {
-    // Optional: Retrieve the local address or a public IP if known
     var publicIP = '127.0.0.1'; 
     displayStartupBanner(publicIP, null, null);
     
@@ -2026,6 +2025,25 @@ function _proceedWithStartup() {
     if (process.stdin.isTTY) {
       process.stdout.write('qandyland.js ');
     }
+
+    // --- NEW AUTO-OPEN BROWSER CODE ---
+    var url = 'http://localhost:' + PORT + '/index.htm';
+    var startCmd;
+
+    if (process.platform === 'win32') { // Windows
+      startCmd = 'start chrome "' + url + '"';
+    } else if (process.platform === 'darwin') { // Mac
+      startCmd = 'open -a "Google Chrome" "' + url + '"';
+    } else if (process.platform === 'android') { // Android (Termux)
+      startCmd = 'termux-open-url "' + url + '"'; 
+    } else { // Linux
+      startCmd = 'google-chrome "' + url + '"';
+    }
+
+    exec(startCmd, function(err) {
+      // Silently fail if Chrome isn't found, so it doesn't crash the server
+    });
+    // ----------------------------------
   });
 })();
 

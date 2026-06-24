@@ -149,27 +149,6 @@ function _updatePFile(driveName, id, newSector, zStr, avatar) {
   _deps.fileSave(driveName, '/', 'p', pUpdated, sessionToken, sessionToken);
 }
 
-// Terrain codes: A$-K$ walkable | M$ Lava | R$ Forest | S$ Mountain | T$ Swamp
-// Boots: Aa (Travel/Master) | Ab (Hiking) | Ac (Swamp) | Ad (Mountain) | Ae (Lava+Mtn)
-function _canWalkTerrain(tileCode, inv) {
-  if (!tileCode || tileCode.length < 2) return false;
-  var t = tileCode.charAt(0);
-
-  // A$ through K$ are universally walkable (Grass, dirt, paths, etc)
-  if (t >= 'A' && t <= 'K') return true;
-
-  var has = function(item) { return inv.indexOf(item) !== -1; };
-  var master = has('Aa'); // Travel Boots
-
-  switch (t) {
-    case 'M': return master || has('Ae');              // Lava
-    case 'R': return master || has('Ab');              // Forest
-    case 'S': return master || has('Ad') || has('Ae'); // Mountains (Ad OR Ae)
-    case 'T': return master || has('Ac');              // Swamp
-    default:  return false;                            // L-Z, symbols, Walls
-  }
-}
-
 // ── UNIVAC ────────────────────────────────────────────────────────────────────
 //   ie: UNIVAC(capflag.gfx, w/F2/Sc44B2D0, w/F2/Yj44Sa)
 function UNIVAC(driveName, itemfile, objfile, sessionToken) {
@@ -242,42 +221,7 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
   var column = 0;               
   var output = "";              
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
-  
-  // Resolves a target Z location from a sector based on an Item ID token
-  function findItemZ(sectorCode, token) {
-    if (typeof _deps.fileList === 'function') {
-      var listRes = _deps.fileList(driveName, 'w/' + sectorCode, null, 'UNIVAC');
-      if (listRes && listRes.success && listRes.listing) {
-        var paddedList = ' ' + listRes.listing;
-        var searchToken = ' ' + token;
-        var idx = paddedList.indexOf(searchToken);
-        if (idx !== -1) {
-          var zStart = idx + searchToken.length;
-          return paddedList.substring(zStart, zStart + 2);
-        }
-      }
-    }
-    return null;
-  }
-
-  // Finds a 6-character object in the given sector whose last 2 chars are numerals
-  function findCityExitZ(sectorCode) {
-    if (typeof _deps.fileList === 'function') {
-      var listRes = _deps.fileList(driveName, 'w/' + sectorCode, null, 'UNIVAC');
-      if (listRes && listRes.success && listRes.listing) {
-        var files = listRes.listing.trim().split(/\s+/);
-        for (var i = 0; i < files.length; i++) {
-          var fname = files[i];
-          if (fname.length === 6 && /^\d{2}$/.test(fname.substring(4, 6))) {
-            return fname.substring(4, 6);
-          }
-        }
-      }
-    }
-    return null;
-  }
-
+  // ── Register Math Helpers ─────────────────────────────────────────────────
   // Parses a 2-char code to find its experiential/numeric value
   function parseRegValue(valStr) {
     if (!valStr || valStr.length !== 2) return 1; // Default to 1
@@ -317,20 +261,6 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
     // A=65, B=66... a=97, 0=48. 
     // This ensures 'Aa' < 'Ab' and 'A0' < 'A1' and 'Aa' < 'Ba'
     return (str.charCodeAt(0) * 100) + str.charCodeAt(1);
-  }
-
-  // Cache sector 'm' files in RAM for the duration of this tape read
-  var _mapCache = {};
-  function getTileAt(sec, zIdx) {
-    if (!_mapCache[sec]) {
-      var mLoad = _deps.fileLoad(driveName, '/', 'w/' + sec + '/m', 'UNIVAC');
-      _mapCache[sec] = (mLoad.success && mLoad.content) ? mLoad.content : null;
-    }
-    var data = _mapCache[sec];
-    if (!data) return 'Ga'; // Sector has no 'm' file -> default to Ga (Grass)
-    var charIdx = zIdx * 2;
-    if (charIdx + 2 > data.length) return 'Ga'; // Map file too short -> default to Ga
-    return data.substring(charIdx, charIdx + 2);
   }
 
   // ── 3. Process punch code ─────────────────────────────────────────────────
@@ -489,6 +419,42 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
         break;
       }
       
+      //case 'Xb': {
+      //  var regKey = tape.slice(column, column + 2); column += 2;
+      //  var itemCode = tape.slice(column, column + 2); column += 2;
+
+      //  if (!switchopen && /^W[a-z]$/.test(regKey)) {
+      //    var typeChar = itemCode.charAt(0);
+      //    var levelChar = itemCode.charAt(1);
+      //    var addition = 0;
+
+      //    if (/^[0-9]$/.test(typeChar)) {
+      //      // If it starts with a numeral, treat as simple flat add
+      //      addition = parseInt(typeChar, 10);
+      //    } else if (/^[A-Z]$/.test(typeChar)) {
+      //      // Your custom math: (A=0, B=1...) + (a=0*25, b=1*25...)
+      //      var idx1 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".indexOf(typeChar);
+      //      var idx2 = _CITY_CHARSET.indexOf(levelChar);
+            
+      //      // Default to 0 if char not found
+      //      idx1 = Math.max(0, idx1);
+      //      idx2 = Math.max(0, idx2);
+            
+      //      addition = idx1 + (idx2 * 25);
+      //    }
+
+      //    // Convert current register to integer (support 4 digits now)
+      //    var currentVal = parseInt(register[regKey] || "0000", 10);
+      //    var newVal = currentVal + addition;
+          
+      //    // Save as 4-digit string to prevent overflow
+      //    register[regKey] = newVal.toString().padStart(4, '0');
+          
+      //    console.log("Xb BitMath: " + regKey + " now " + newVal);
+      //  }
+      //  break;
+      // }            
+
       case 'Xl': {
         // if value1 is less than value2
         var value1 = tape.slice(column, column + 2); column += 2;
@@ -524,27 +490,8 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
 
       // ── Item Management ───────────────────────────────────────────
 
-      case 'Vi': {
-        // send inventory string to client
-        if (!switchopen) {
-          // Remove all whitespace from the inventory string
-          var cleanInv = state.content.replace(/\s+/g, '');
-          output += "Vi" + cleanInv + "--";
-        }
-        break;
-      }
-      
-      case 'Vp': { 
-        // Read arguments
-        var noun = tape.slice(column, column + 2); column += 2;
-        if (!switchopen) {
-          state.avatar += '-' + noun;
-        }
-        break;
-      }
-
       case 'Vm': { 
-        // make item 
+        // Read arguments
         var noun = tape.slice(column, column + 2); column += 2;
         var zToken = tape.slice(column, column + 2); column += 2;
 
@@ -553,9 +500,17 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
           if (/^\d{2}$/.test(zToken)) {
             resolvedZ = zToken; 
           } else if (/^[A-Z]/.test(zToken)) {
-            var foundZ = findItemZ(state.sector, zToken);
-            if (foundZ !== null) {
-              resolvedZ = foundZ;
+            if (typeof _deps.fileList === 'function') {
+              var listRes = _deps.fileList(driveName, 'w/' + state.sector, null, 'UNIVAC');
+              if (listRes && listRes.success && listRes.listing) {
+                var paddedList = ' ' + listRes.listing;
+                var searchToken = ' ' + zToken;
+                var idx = paddedList.indexOf(searchToken);
+                if (idx !== -1) {
+                  var zStart = idx + searchToken.length;
+                  resolvedZ = paddedList.substring(zStart, zStart + 2);
+                }
+              }
             }
           }
           var targetPath = 'w/' + state.sector + '/' + noun + resolvedZ;
@@ -584,8 +539,8 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
         break;
       }      
 
-      case 'Vr': { 
-        // remove object $$ from client's map (spawns on scroll on)
+      case 'Vr': { // remove object $$ from client's map (spawns on scroll on)
+        // Read arguments
         var noun = tape.slice(column, column + 2); column += 2;
         var zloc = tape.slice(column, column + 2); column += 2;
         if (!switchopen) {
@@ -616,7 +571,6 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
               _deps.fileSave(driveName, '/', targetPath, '', sessionToken, sessionToken, ts);
             }
           }
-          output+="Vi";
         }
         break;
       }
@@ -675,22 +629,7 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
             }
           }
 
-          var w5Active = (register['W5'] && register['W5'] !== '00');
-
-          // 2. GATEKEEPER A: Validate stepping onto the tile of the CURRENT map
-          if (w5Active) {
-            var localTile = getTileAt(currentMap, tempZ);
-            if (!_canWalkTerrain(localTile, state.content)) {
-              console.log("UNIVAC: Step blocked on current map tile [" + localTile + "]");
-              column = tape.length;
-              break;
-            }
-          }
-
-          if (moveBlocked) {
-            column = tape.length; // Snap tape head on grid-edge collision
-            break;
-          } 
+          if (moveBlocked) break; 
 
           var targetZ = tempZ;
 
@@ -719,22 +658,11 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
             if (nextSector && (cityWorldChar !== null || _isValidExit(driveName, currentMap, nextSector))) {
               targetMap = nextSector;
               
-              if (cityWorldChar !== null) {
-                // We are exiting a city map back to the world. Check for an exit object.
-                var exitZ = findCityExitZ(currentMap);
-                if (exitZ !== null) {
-                  targetZ = parseInt(exitZ, 10);
-                } else {
-                  // If no specific exit object exists, leave player at exactly the Z location they are at
-                  targetZ = currentZ; 
-                }
-              } else {
-                // Wrap the player's position to the opposite side of the new map (normal scroll)
-                if (word === 'Vn') targetZ = tempZ + ((GFX_ROWS - 1) * GFX_COLS);
-                if (word === 'Vs') targetZ = tempZ - ((GFX_ROWS - 1) * GFX_COLS);
-                if (word === 'Ve') targetZ = tempZ - (GFX_COLS - 1);
-                if (word === 'Vw') targetZ = tempZ + (GFX_COLS - 1);
-              }
+              // Wrap the player's position to the opposite side of the new map
+              if (word === 'Vn') targetZ = tempZ + ((GFX_ROWS - 1) * GFX_COLS);
+              if (word === 'Vs') targetZ = tempZ - ((GFX_ROWS - 1) * GFX_COLS);
+              if (word === 'Ve') targetZ = tempZ - (GFX_COLS - 1);
+              if (word === 'Vw') targetZ = tempZ + (GFX_COLS - 1);
             }
           }
 
@@ -766,16 +694,22 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
               break;
             } 
           }
-          
           if (/^\d{2}$/.test(zToken)) {
             targetZStr = zToken;
           } else if (/^[A-Z]/.test(zToken)) {
-            var foundZ = findItemZ(targetSector, zToken);
-            if (foundZ !== null) {
-              targetZStr = foundZ;
+            if (typeof _deps.fileList === 'function') {
+              var listRes = _deps.fileList(driveName, 'w/' + targetSector, null, 'UNIVAC');
+              if (listRes && listRes.success && listRes.listing) {
+                var paddedList = ' ' + listRes.listing;
+                var searchToken = ' ' + zToken;
+                var idx = paddedList.indexOf(searchToken);
+                if (idx !== -1) {
+                  var zStart = idx + searchToken.length;
+                  targetZStr = paddedList.substring(zStart, zStart + 2);
+                }
+              }
             }
           }
-          
           state.sector = targetSector;
           state.zStr   = targetZStr;
           state.z      = parseInt(targetZStr, 10);
@@ -785,68 +719,30 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
 
       // ── Vc — Enter city: teleport from the current 'world' sector to ──────
       //         its matching 'extended city map' sector (ie: Aa -> A0)
-      //         Exit city (XnVc): return to world map using matching map.
       case 'Vc': {
-        // Always consume the next 2 characters
-        var zToken = tape.slice(column, column + 2); column += 2;
-
+        // No arguments to read. Execute if switch closed.
         if (!switchopen) {
-          if (!ifnot) {
-            // ENTER CITY (Vc)
-            var cityChar = _cityCharFromWorld(state.sector.charAt(1));
-            if (cityChar === null) {
-              console.log("UNIVAC() Vc: " + state.sector + " has no matching city map, ignoring");
-            } else {
-              var targetSector = state.sector.charAt(0) + cityChar;
-              var targetZStr = state.zStr; 
-              
-              if (/^\d{2}$/.test(zToken)) {
-                targetZStr = zToken;
-              } else if (/^[A-Z]/.test(zToken)) {
-                var foundZ = findItemZ(targetSector, zToken);
-                if (foundZ !== null) targetZStr = foundZ;
-              }
-
-              state.sector = targetSector;
-              state.zStr   = targetZStr;
-              state.z      = parseInt(targetZStr, 10);
-            }
+          var cityChar = _cityCharFromWorld(state.sector.charAt(1));
+          if (cityChar === null) {
+            console.log("UNIVAC() Vc: " + state.sector + " has no matching city map, ignoring");
           } else {
-            // EXIT CITY (XnVc)
-            var worldChar = _worldCharFromCity(state.sector.charAt(1));
-            if (worldChar === null) {
-              console.log("UNIVAC() XnVc: " + state.sector + " has no matching world map, ignoring");
-            } else {
-              var targetSector = state.sector.charAt(0) + worldChar;
-              var targetZStr = state.zStr;
-
-              // 1. Check for an exit object in the CURRENT city sector
-              var exitZ = findCityExitZ(state.sector);
-
-              if (exitZ !== null) {
-                targetZStr = exitZ;
-              } else {
-                // 2. Fallback to zToken logic
-                if (/^\d{2}$/.test(zToken)) {
-                  targetZStr = zToken;
-                } else if (/^[A-Z]/.test(zToken)) {
-                  var foundZ = findItemZ(targetSector, zToken);
-                  if (foundZ !== null) targetZStr = foundZ;
-                }
-              }
-
-              state.sector = targetSector;
-              state.zStr   = targetZStr;
-              state.z      = parseInt(targetZStr, 10);
-            }
+            state.sector = state.sector.charAt(0) + cityChar;
+            state.z      = 0;
+            state.zStr   = '00';
           }
-          ifnot = false; // flag was consumed
-        } else {
-           if (ifnot) ifnot = false; 
         }
         break;
       }
 
+      case 'Vp': { 
+        // Read arguments
+        var noun = tape.slice(column, column + 2); column += 2;
+        if (!switchopen) {
+          state.avatar += '-' + noun;
+        }
+        break;
+      }
+      
       case 'S^': {
         // Read through block safely to keep tape head synced
         var endCol = tape.indexOf('^S', column);
@@ -868,11 +764,12 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
       }
       
       default: {
-      	 console.log('UNIVAC: unknown word [' + word + '] at column ' + (column - 2) + ' – abort script');
-          break; 
+          break; // break switch(word)
       }
-      // If it didn't start with W, it's a true unknown command
-      break;
+
+        // If it didn't start with W, it's a true unknown command
+        console.log('UNIVAC: unknown word [' + word + '] at column ' + (column - 2) + ' – abort script');
+        break;
     }
   }
 
@@ -1107,6 +1004,8 @@ function flipAvatarDirection(avatarStr, cmd) {
   }
   return base + popup;
 }
+
+
 
 // ── Exports ───────────────────────────────────────────────────────────────────
 
