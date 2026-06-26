@@ -552,34 +552,64 @@ function gfxRefresh(rfStr) {
     var iId = entry.slice(0, 2);
 
     // --- PUNCH CODE MARKER INTERCEPTION ---
-    if ((iId === 'Vx' || iId === 'Vy') && entry.length === 6) {
-        var targetOrigId = entry.substring(2, 4);
-        var newData = entry.substring(4, 6);
+    // --- PUNCH CODE MARKER INTERCEPTION ---
+    if (iId.charAt(0) === 'V' || iId.charAt(0) === 'X') {
+        var param1 = entry.substring(2, 4);
+        var param2 = entry.substring(4, 6);
         
-        // Find the specific DOM object using the original ID it was spawned with
-        var objEl = document.querySelector('.objs[data-orig-id="' + targetOrigId + '"]');
-        if (objEl) {
-            if (iId === 'Vx') {
-                objEl.setAttribute('data-id', newData);
-                objEl.src = 'i/' + newData + '.png'; // Triggers onload resizing for large items
-            } else if (iId === 'Vy') {
-                var newZ = parseInt(newData, 10);
-                var coords = zToXY(newZ);
-                objEl.setAttribute('data-z', newZ);
-                objEl.setAttribute('data-zstr', newData);
+        switch (iId) {
+            case 'Vx': {
+                var objEl = document.querySelector('.objs[data-orig-id="' + param1 + '"]');
+                if (objEl) {
+                    objEl.setAttribute('data-id', param2);
+                    objEl.src = 'i/' + param2 + '.png'; // Triggers onload resizing for large items
+                }
+                break;
+            }
+            case 'Vy': {
+                var objEl = document.querySelector('.objs[data-orig-id="' + param1 + '"]');
+                if (objEl) {
+                    var newZ = parseInt(param2, 10);
+                    var coords = zToXY(newZ);
+                    objEl.setAttribute('data-z', newZ);
+                    objEl.setAttribute('data-zstr', param2);
+                    
+                    // Reposition (onload will take over logic if it's a large item)
+                    var baseTop = 32 + 20 + (coords.y * 32);
+                    var baseLeft = 32 + 22 + (coords.x * 32);
+                    var currentId = objEl.getAttribute('data-id');
+                    
+                    if (currentId.charAt(0) === 'T' || currentId.charAt(0) === 'U') {
+                        baseTop -= (objEl.height - 32);
+                        baseLeft -= (objEl.width - 32);
+                    }
+                    
+                    objEl.style.top = baseTop + "px";
+                    objEl.style.left = baseLeft + "px";
+                }
+                break;
+            }
+            case 'Xz': {
+                var targetZ = parseInt(param1, 10);
+                var tileCode = param2;
                 
-                // Reposition (onload will take over logic if it's a large item)
-                var baseTop = 32 + 20 + (coords.y * 32);
-                var baseLeft = 32 + 22 + (coords.x * 32);
-                var currentId = objEl.getAttribute('data-id');
-                
-                if (currentId.charAt(0) === 'T' || currentId.charAt(0) === 'U') {
-                    baseTop -= (objEl.height - 32);
-                    baseLeft -= (objEl.width - 32);
+                // 1. Update the DOM visually
+                var tileEl = document.getElementById("T" + targetZ);
+                if (tileEl) {
+                    tileEl.src = "t/" + tileCode + ".png";
                 }
                 
-                objEl.style.top = baseTop + "px";
-                objEl.style.left = baseLeft + "px";
+                // 2. Update the client map cache so it persists if the sector redrawn
+                var mapData = window.mapTiles[window.map];
+                if (mapData) {
+                    var charIdx = targetZ * 2;
+                    while (mapData.length < charIdx + 2) mapData += 'Ga'; // Safety pad
+                    window.mapTiles[window.map] = mapData.substring(0, charIdx) + tileCode + mapData.substring(charIdx + 2);
+                    
+                    // Invalidate the look canvas cache so it redraws the updated tile if viewed
+                    if (window.terrainCache) { window.terrainCache = null; }
+                }
+                break;
             }
         }
         continue; // Skip normal item rendering logic for this marker
@@ -841,7 +871,7 @@ window.gfxZClick = function(z, clickedElement) {
       var id = items[j].substring(0, 2);
       
       // Skip punch code markers, they are not clickable items
-      if ((id === 'Vx' || id === 'Vy') && items[j].length === 6) continue;
+      if (id.charAt(0) === 'V' || id.charAt(0) === 'X') continue;
       
       var itemZStr = items[j].substring(2, 4);        // Added String Variant
       var itemZ = parseInt(itemZStr, 10);             // Changed parseInt reference

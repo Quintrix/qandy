@@ -876,7 +876,32 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
           // If the sector token is a register (like W0), use its value, otherwise use literal
           var targetSector = (secToken.charAt(0) === 'W') ? (register[secToken] || secToken) : secToken;
           var targetZ = getRegValue(zToken);
+          var targetZStr = targetZ.toString().padStart(2, '0');
           
+          // --- Marker Logic: Update client map tile visually via file sync ---
+          var listRes = typeof _deps.fileList === 'function' ? _deps.fileList(driveName, 'w/' + targetSector, null, sessionToken) : {success: false, listing: ''};
+          var files = (listRes.success && listRes.listing) ? listRes.listing.trim().split(/\s+/) : [];
+          var markerToDelete = null;
+
+          // Locate any existing Xz marker for this specific z-location
+          for (var i = 0; i < files.length; i++) {
+            if (files[i].length === 6 && files[i].substring(0, 2) === 'Xz' && files[i].substring(2, 4) === targetZStr) {
+              markerToDelete = files[i];
+              break;
+            }
+          }
+
+          if (markerToDelete) { 
+            _deps.fileDelete(driveName, '/', 'w/' + targetSector + '/' + markerToDelete, sessionToken); 
+          }
+          
+          // Drop the fresh Xz marker (the filename itself is the payload)
+          var markerFile = 'Xz' + targetZStr + tileCode;
+          var tsMarker = _deps.futureTimestamp(1);
+          _deps.fileSave(driveName, '/', 'w/' + targetSector + '/' + markerFile, '', sessionToken, sessionToken, tsMarker);
+          console.log("UNIVAC() Xz: deployed client marker " + markerFile + " to w/" + targetSector);
+
+          // --- Server-side 'm' file modification for physical collision / persistence ---
           var mPath = 'w/' + targetSector + '/m';
           var mLoad = _deps.fileLoad(driveName, '/', mPath, 'UNIVAC');
           var mContent = (mLoad.success && mLoad.content) ? mLoad.content : '';
@@ -953,7 +978,7 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
                     }
                     if (originalId !== newId) {
                       var markerFile = 'Vx' + originalId + newId;
-                      var tsMarker = 'X' + _deps.futureTimestamp(1);
+                      var tsMarker = _deps.futureTimestamp(1);
                       _deps.fileSave(driveName, '/', 'w/' + oSector + '/' + markerFile, '', sessionToken, sessionToken, tsMarker);
                     }
                     
@@ -962,7 +987,7 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
                       _deps.fileRename(driveName, '/', objfile, newObjFile, sessionToken);
                     } else {
                       _deps.fileDelete(driveName, '/', objfile, sessionToken);
-                      var tsObj = 'X' + _deps.futureTimestamp(1); 
+                      var tsObj = _deps.futureTimestamp(1); 
                       _deps.fileSave(driveName, '/', newObjFile, tape, sessionToken, sessionToken, tsObj);
                     }
                     console.log("UNIVAC() Vx: modified object " + objfile + " -> " + newObjFile);
@@ -1043,7 +1068,7 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
                     
                     // Drop the fresh Vy marker
                     var markerFile = 'Vy' + originalId + targetZStr;
-                    var tsMarker = 'X' + _deps.futureTimestamp(1);
+                    var tsMarker = _deps.futureTimestamp(1);
                     _deps.fileSave(driveName, '/', 'w/' + oSector + '/' + markerFile, '', sessionToken, sessionToken, tsMarker);
 
                     // Modify the actual object file on disk

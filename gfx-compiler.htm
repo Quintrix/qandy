@@ -387,16 +387,15 @@ btn.style.background = isCity ? "#8e44ad" : ""; // Noticeable purple color for C
 }
 
 function toggleCity() {
-saveCurrentEditor();
-let isCity = CITY_SYMBOLS.includes(currentSector[1]);
-let xChar = currentSector[0];
-let yIdx = isCity ? CITY_SYMBOLS.indexOf(currentSector[1]) : LOWER.indexOf(currentSector[1]);
+    let isCity = CITY_SYMBOLS.includes(currentSector[1]);
+    let xChar = currentSector[0];
+    let yIdx = isCity ? CITY_SYMBOLS.indexOf(currentSector[1]) : LOWER.indexOf(currentSector[1]);
 
-if (yIdx !== -1) {
-currentSector = isCity ? (xChar + LOWER[yIdx]) : (xChar + CITY_SYMBOLS[yIdx]);
-nav.value = currentSector;
-changeSector();
-}
+    if (yIdx !== -1) {
+        // Just update the dropdown menu's value and let changeSector() handle the rest
+        nav.value = isCity ? (xChar + LOWER[yIdx]) : (xChar + CITY_SYMBOLS[yIdx]);
+        changeSector();
+    }
 }
 
 // --- NAVIGATION ---

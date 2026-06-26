@@ -200,9 +200,9 @@ window.invdown = function(code) {
   
   let column = 0; 
   let outputItems = "";
-  let outputStats = "";
-  let statCounts = {}; 
-  let items = ""; // <-- 1. Explicitly declare local items string
+  let wRegisters = {}; 
+  let wzValue = 0;
+  let items = ""; 
 
   if (code) {
     if (code.charAt(0) === '-') {
@@ -220,24 +220,31 @@ window.invdown = function(code) {
       pop(PUP);
     	return;
     } else {
-        items = code; // <-- 2. Catch normal inventory strings here!
+        items = code; 
     }
     	
     while (column < items.length) {
-      var verb = items.substring(column, column + 2); 
+      let verb = items.substring(column, column + 2); 
       column += 2;
-      // Items less than 'Qa' are standard visual inventory items
-      if (verb < "Qa") {
+      
+      // Items less than 'Pa' are standard visual inventory items
+      if (verb < "Pa") {
         outputItems += `<a href="gfx:IN-${verb}${items}">`;
         outputItems += `<img src="i/${verb}.png" height="32" width="32" alt="${verb}"></a> &nbsp; `;
       } else {
-        num = items.substring(column, column + 2);
-        if (num.charAt(0) >= "A" && num.charAt(0) <="Z") {
-          statCounts[verb] = (statCounts[verb] || 0) + 1;
-        } else {
-        	  column += 2;
-        	  statCounts[verb] = (statCounts[verb] || 0) + parseInt(num, 10);
-         }
+        // Items >= 'Pa' are registers and strictly have a 2-character value following them
+        let valStr = items.substring(column, column + 2);
+        column += 2;
+        
+        // Track movement points for the progress bar
+        if (verb === "Wz") {
+          wzValue = parseInt(valStr, 10) || 0;
+        }
+        
+        // Limit displayed stats to starting character "W"
+        if (verb.charAt(0) === "W") {
+          wRegisters[verb] = valStr;
+        }
       }
     }
   } else {
@@ -249,20 +256,26 @@ window.invdown = function(code) {
     }
   }
   
-  for (let stat in statCounts) {
-  	 if (stat != "Za") {
-  	 	let type=stat;
-      if (type=="Wm") { type="Moves"; }
-  	 	if (type=="Wa") { type="Armband"; }
-      outputStats += `${type} ${statCounts[stat]}<br>`;
-    }
+  // 1. Calculate and display Wz## Progress Bar
+  let greenW = Math.max(0, Math.min(100, wzValue));
+  let redW = 100 - greenW;
+  let output = `<div align="center"><img src="i/Zn.png" width="${greenW}px" height="6px"><img src="i/Zo.png" width="${redW}px" height="6px"></div><p>`;
+
+  // 2. Display Visual Inventory Items (< Pa)
+  if (outputItems !== "") {
+    output += outputItems + "<p>";
   }
 
-  let output = outputStats;
-  if (outputStats !== "" && outputItems !== "") {
-    output += "<p>"; 
+  // 3. Display W Registers alphabetically
+  let outputStats = "";
+  let wKeys = Object.keys(wRegisters).sort();
+  for (let i = 0; i < wKeys.length; i++) {
+    let stat = wKeys[i];
+    let desc = typeof gfxItemID === "function" ? gfxItemID(stat) : stat;
+    outputStats += `${stat} ${wRegisters[stat]} ${desc}<br>`;
   }
-  output += outputItems;
+
+  output += outputStats;
   
   pop(output);  
 }
