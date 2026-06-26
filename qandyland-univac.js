@@ -1,3 +1,4 @@
+
 'use strict';
 
 //
@@ -247,7 +248,7 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
       return;
     }
   }
-  console.log("object punch code = " + objLoad.content);
+  // console.log("object punch code = " + objLoad.content);
 
   var tape = objLoad.content;   
   var column = 0;               
@@ -370,6 +371,7 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
         }
 
         if (!switchopen) {
+          var appliedXa = false;
           if (!state.playerid) {
             state.id = newId;
             loadconfig(driveName);
@@ -381,13 +383,29 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
             }
             state.avatar = '';   
             state.content = inventoryString;
+            appliedXa = true;
           } else if (state.id === 'Za') {
             state.id = newId;
             state.avatar = '';   
             state.content = inventoryString;
             output += "S^Va--^S";
+            appliedXa = true;
           } else {
             console.log("UNIVAC() Xa: team already set to " + state.id + ", ignoring " + newId);
+          }
+
+          if (appliedXa) {
+            // Scan for W user-registers and apply their value to the register mapping
+            // so later math commands read the correct quantity before Cleanup.
+            state.content = state.content.replace(/(W[a-z])(\d{2})?/g, function(match, rk, val) {
+              if (val) {
+                register[rk] = val;
+                return match;     // Keep the existing formatted pair (e.g. Wz99)
+              } else {
+                register[rk] = '01';
+                return rk + '01'; // If there's no numeral suffix, treat it as quantity 1 and sanitize
+              }
+            });
           }
         }
         break;
@@ -742,7 +760,7 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
               
               if (cityWorldChar !== null) {
                 // We are exiting a city map back to the world. Check for an exit object.
-                var exitZ = findCityExitZ(currentMap);
+                var exitZ = findCityExitZ(nextSector);
                 if (exitZ !== null) {
                   targetZ = parseInt(exitZ, 10);
                 } else {
@@ -808,9 +826,6 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
       //         its matching 'extended city map' sector (ie: Aa -> A0)
       //         Exit city (XnVc): return to world map using matching map.
       case 'Vc': {
-        // Always consume the next 2 characters
-        var zToken = tape.slice(column, column + 2); column += 2;
-
         if (!switchopen) {
           if (!ifnot) {
             // ENTER CITY (Vc)
@@ -820,13 +835,9 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
             } else {
               var targetSector = state.sector.charAt(0) + cityChar;
               var targetZStr = state.zStr; 
-              
-              if (/^\d{2}$/.test(zToken)) {
-                targetZStr = zToken;
-              } else if (/^[A-Z]/.test(zToken)) {
-                var foundZ = findItemZ(targetSector, zToken);
-                if (foundZ !== null) targetZStr = foundZ;
-              }
+
+              var exitZ = findCityExitZ(targetSector);
+              if (exitZ !== null) { targetZStr = exitZ; }
 
               state.sector = targetSector;
               state.zStr   = targetZStr;
@@ -840,22 +851,8 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
             } else {
               var targetSector = state.sector.charAt(0) + worldChar;
               var targetZStr = state.zStr;
-
-              // 1. Check for an exit object in the CURRENT city sector
-              var exitZ = findCityExitZ(state.sector);
-
-              if (exitZ !== null) {
-                targetZStr = exitZ;
-              } else {
-                // 2. Fallback to zToken logic
-                if (/^\d{2}$/.test(zToken)) {
-                  targetZStr = zToken;
-                } else if (/^[A-Z]/.test(zToken)) {
-                  var foundZ = findItemZ(targetSector, zToken);
-                  if (foundZ !== null) targetZStr = foundZ;
-                }
-              }
-
+              var exitZ = findCityExitZ(targetSector);
+              if (exitZ !== null) { targetZStr = exitZ; }
               state.sector = targetSector;
               state.zStr   = targetZStr;
               state.z      = parseInt(targetZStr, 10);
@@ -868,6 +865,244 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
         break;
       }
 
+      // ── z-location commands ───────────────────────────────────────────
+      case 'Xz': {
+        // modify 'm' tile on sector $$ at z-location ## to tile %%
+        var secToken = tape.slice(column, column + 2); column += 2;
+        var zToken   = tape.slice(column, column + 2); column += 2;
+        var tileCode = tape.slice(column, column + 2); column += 2;
+
+        if (!switchopen) {
+          // If the sector token is a register (like W0), use its value, otherwise use literal
+          var targetSector = (secToken.charAt(0) === 'W') ? (register[secToken] || secToken) : secToken;
+          var targetZ = getRegValue(zToken);
+          
+          var mPath = 'w/' + targetSector + '/m';
+          var mLoad = _deps.fileLoad(driveName, '/', mPath, 'UNIVAC');
+          var mContent = (mLoad.success && mLoad.content) ? mLoad.content : '';
+          
+          var charIdx = targetZ * 2;
+          
+          // Pad with 'Ga' (Grass fallback) if the map file string is too short to reach this Z-index
+          while (mContent.length < charIdx + 2) {
+            mContent += 'Ga';
+          }
+          
+          // Inject the new tile code
+          mContent = mContent.substring(0, charIdx) + tileCode + mContent.substring(charIdx + 2);
+          
+          // Save and update RAM cache for this tape run
+          _deps.fileSave(driveName, '/', mPath, mContent, sessionToken, sessionToken);
+          _mapCache[targetSector] = mContent; 
+        }
+        break;
+      }
+
+      case 'Vx': {
+        var token = tape.slice(column, column + 2); column += 2;
+        
+        if (!switchopen) {
+          if (ifnot) {
+            // Save the object's 2-character item ID into the target register
+            if (token.charAt(0) === 'W') {
+              if (objfile && objfile.substring(0, 4) !== "RAM:") {
+                var oParts = objfile.replace(/^\//, '').split('/');
+                if (oParts.length >= 3 && oParts[0] === 'w' && oParts[2].length >= 6) {
+                  var oId = oParts[2].substring(0, 2);
+                  register[token] = oId;
+                  console.log("register["+token+"] = "+oId);
+                }
+              }
+            }
+          } else {
+            // Change the object's item ID to the token (or value inside register)
+            if (objfile && objfile.substring(0, 4) !== "RAM:") {
+              var oParts = objfile.replace(/^\//, '').split('/');
+              if (oParts.length >= 3 && oParts[0] === 'w') {
+                var oSector = oParts[1];
+                var oFilename = oParts[2];
+                
+                if (oFilename.length >= 6) {
+                  var oId = oFilename.substring(0, 2);
+                  var oZ = oFilename.substring(2, 4);
+                  var oData = oFilename.substring(4);
+                  
+                  // If token is a register (like Wa), use its value, otherwise use literal (like Zc)
+                  var newId = (token.charAt(0) === 'W') ? (register[token] || token) : token;
+                  
+                  if (oId !== newId) {
+                    var newFilename = newId + oZ + oData;
+                    var newObjFile = 'w/' + oSector + '/' + newFilename;
+                    
+                    // --- Marker Logic: Update client visual override seamlessly ---
+                    var listRes = typeof _deps.fileList === 'function' ? _deps.fileList(driveName, 'w/' + oSector, null, sessionToken) : {success: false, listing: ''};
+                    var files = (listRes.success && listRes.listing) ? listRes.listing.split(' ') : [];
+                    var originalId = oId;
+                    var markerToDelete = null;
+
+                    for (var i = 0; i < files.length; i++) {
+                      if (files[i].length === 6 && files[i].substring(0, 2) === 'Vx' && files[i].substring(4, 6) === oId) {
+                        originalId = files[i].substring(2, 4);
+                        markerToDelete = files[i];
+                        break;
+                      }
+                    }
+
+                    if (markerToDelete) { 
+                      _deps.fileDelete(driveName, '/', 'w/' + oSector + '/' + markerToDelete, sessionToken); 
+                    }
+                    if (originalId !== newId) {
+                      var markerFile = 'Vx' + originalId + newId;
+                      var tsMarker = 'X' + _deps.futureTimestamp(1);
+                      _deps.fileSave(driveName, '/', 'w/' + oSector + '/' + markerFile, '', sessionToken, sessionToken, tsMarker);
+                    }
+                    
+                    // Modify the actual object file on disk
+                    if (typeof _deps.fileRename === 'function') {
+                      _deps.fileRename(driveName, '/', objfile, newObjFile, sessionToken);
+                    } else {
+                      _deps.fileDelete(driveName, '/', objfile, sessionToken);
+                      var tsObj = 'X' + _deps.futureTimestamp(1); 
+                      _deps.fileSave(driveName, '/', newObjFile, tape, sessionToken, sessionToken, tsObj);
+                    }
+                    console.log("UNIVAC() Vx: modified object " + objfile + " -> " + newObjFile);
+                    objfile = newObjFile; // Update path for subsequent commands
+                  }
+                }
+              }
+            } else {
+              console.log("UNIVAC() Vx: cannot modify a RAM object.");
+            }
+          }
+        }
+        
+        ifnot = false; // flag was consumed
+        break;
+      }
+
+      case 'Vy': {
+        var token = tape.slice(column, column + 2); column += 2;
+        
+        if (!switchopen) {
+          if (ifnot) {
+            // Save the object's z-location into the target register
+            if (token.charAt(0) === 'W') {
+              if (objfile && objfile.substring(0, 4) !== "RAM:") {
+                var oParts = objfile.replace(/^\//, '').split('/');
+                if (oParts.length >= 3 && oParts[0] === 'w' && oParts[2].length >= 6) {
+                  var oZ = oParts[2].substring(2, 4);
+                  register[token] = oZ; // oZ is already safely zero-padded (e.g. '05')
+                }
+              }
+            }
+          } else {
+            // Move the object to the z-location token (or value inside register)
+            if (objfile && objfile.substring(0, 4) !== "RAM:") {
+              var oParts = objfile.replace(/^\//, '').split('/');
+              if (oParts.length >= 3 && oParts[0] === 'w') {
+                var oSector = oParts[1];
+                var oFilename = oParts[2];
+                
+                if (oFilename.length >= 6) {
+                  var oId = oFilename.substring(0, 2);
+                  var oZ = oFilename.substring(2, 4);
+                  var oData = oFilename.substring(4);
+                  
+                  // Use getRegValue to resolve the integer string, then zero-pad it
+                  var targetZStr = getRegValue(token).toString().padStart(2, '0');
+                  
+                  if (oZ !== targetZStr) {
+                    var newFilename = oId + targetZStr + oData;
+                    var newObjFile = 'w/' + oSector + '/' + newFilename;
+                    
+                    // --- Marker Logic: Update client visual override seamlessly ---
+                    var listRes = typeof _deps.fileList === 'function' ? _deps.fileList(driveName, 'w/' + oSector, null, sessionToken) : {success: false, listing: ''};
+                    var files = (listRes.success && listRes.listing) ? listRes.listing.split(' ') : [];
+                    var originalId = oId;
+                    var markerToDelete = null;
+
+                    // A Vx marker may exist, we need to trace back to the true original ID for the Vy marker.
+                    for (var i = 0; i < files.length; i++) {
+                      if (files[i].length === 6 && files[i].substring(0, 2) === 'Vx' && files[i].substring(4, 6) === oId) {
+                        originalId = files[i].substring(2, 4);
+                        break;
+                      }
+                    }
+
+                    // Locate and remove old Vy marker
+                    for (var i = 0; i < files.length; i++) {
+                      if (files[i].length === 6 && files[i].substring(0, 2) === 'Vy' && files[i].substring(2, 4) === originalId) {
+                        markerToDelete = files[i];
+                        break;
+                      }
+                    }
+
+                    if (markerToDelete) { 
+                      _deps.fileDelete(driveName, '/', 'w/' + oSector + '/' + markerToDelete, sessionToken); 
+                    }
+                    
+                    // Drop the fresh Vy marker
+                    var markerFile = 'Vy' + originalId + targetZStr;
+                    var tsMarker = 'X' + _deps.futureTimestamp(1);
+                    _deps.fileSave(driveName, '/', 'w/' + oSector + '/' + markerFile, '', sessionToken, sessionToken, tsMarker);
+
+                    // Modify the actual object file on disk
+                    if (typeof _deps.fileRename === 'function') {
+                      _deps.fileRename(driveName, '/', objfile, newObjFile, sessionToken);
+                    } else {
+                      _deps.fileDelete(driveName, '/', objfile, sessionToken);
+                      var tsObj = 'X' + _deps.futureTimestamp(1); 
+                      _deps.fileSave(driveName, '/', newObjFile, tape, sessionToken, sessionToken, tsObj);
+                    }
+                    console.log("UNIVAC() Vy: modified object " + objfile + " -> " + newObjFile);
+                    objfile = newObjFile; // Update path for subsequent commands
+                  }
+                }
+              }
+            } else {
+              console.log("UNIVAC() Vy: cannot modify a RAM object.");
+            }
+          }
+        }
+        
+        ifnot = false; // flag was consumed
+        break;
+      }            
+
+      case 'Vz': {
+        // move player item's z-location to ## on the current sector
+        // this cost no movement points and is not bound by travel restrictions or boots
+        // ifnot saves player-z location
+        var zToken = tape.slice(column, column + 2); column += 2;
+        if (!switchopen) {
+          if (ifnot) {
+            // Save current z-location to register ## ie: register['Ws']
+           if (zToken.charAt(0) === 'W' && LOWER_NUM.indexOf(zToken.charAt(1)) !== -1) {
+              register[zToken] = state.zStr;
+            }
+          } else {
+            // Move player to Z-location ##
+            var targetZ = getRegValue(zToken);
+            state.z = targetZ;
+            state.zStr = targetZ.toString().padStart(2, '0');
+          }
+        }
+        ifnot = false; // flag was consumed
+        break;
+      }
+      
+      case 'Xx': {
+        // exit the script, close all switches
+        if (!switchopen) {
+        	  column = tape.length;
+        	  var switchopen = false; 
+           var ifnot = false;
+           break;
+        }   
+        var switchopen = false; 
+        var ifnot = false;
+      }
+      
       case 'S^': {
         // Read through block safely to keep tape head synced
         var endCol = tape.indexOf('^S', column);

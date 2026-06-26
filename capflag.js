@@ -54,21 +54,14 @@ window.zdown = function(z) {
       // 1. Check to see if there are no objects or items on the destination z
       let hasStuff = false;
       
-      var objsStr = window.mapObjs[window.map];
-      if (objsStr) {
-       var objects = objsStr.split('~');
-       for (var i = 0; i < objects.length; i++) {
-        var entry = objects[i].trim();
-        if (!entry) continue;
-          var parts = entry.split('|');
-          var objid = parts[0]; 
-          var effectiveZ = (parts.length >= 3) ? parseInt(parts[parts.length - 1], 10) : parseInt(objid.slice(2, 4), 10);
-
-          if (effectiveZ === z) {
-            hasStuff = true;
-            break;
+      // Read collisions dynamically from the live DOM (handles Vx/Vy shifted objects)
+      var staticObjs = document.querySelectorAll('.objs');
+      for (var i = 0; i < staticObjs.length; i++) {
+          var objZ = parseInt(staticObjs[i].getAttribute('data-z'), 10);
+          if (objZ === z) {
+              hasStuff = true;
+              break;
           }
-        }
       }
 
       // Also check dynamic items/players before deciding the tile is empty!
@@ -76,6 +69,9 @@ window.zdown = function(z) {
           for (var j = 0; j < window.items.length; j++) {
               var itm = window.items[j];
               if (!itm || itm.length < 4) continue;
+              // Ignore punch code markers for collision
+              if (itm.length === 6 && (itm.charAt(0) === 'V' || itm.charAt(0) === 'X')) continue;
+              
               var itemZ = parseInt(itm.slice(2, 4), 10);
               if (itemZ === z) {
                   hasStuff = true;

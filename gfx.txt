@@ -140,7 +140,9 @@
        
        Vx
        Vy
-       Vz 
+       
+       Vz Vz##   move player item's z-location to ## on the current sector, this bypasses
+                 all movement restrictions and does not cost any movement points.  
 
        Xa Xa$$   alpha, claim player-item $$ to be assigned unique player-id (AaAa-ZzZz). 
                  If the player item is 'Za' (nothing) then it is a ghost player that has
@@ -191,8 +193,8 @@
        Xw
        Xx
        Xy
-       
-       Xz Xz$$   if item $$ is on z-location (NA)
+
+       Xz Xz$$##%% modify 'm' tile on sector $$ at z-location ## to tile %% (Aa-Zz or A0-Z9)
         
        
       ** If appending code, can start with this to avoid logic overflow bugs and exploits   

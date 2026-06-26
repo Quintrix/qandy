@@ -12,10 +12,8 @@
 
 // Sysop Variables
 var sysopOffline=true;        // only serves files to localHost
-var sysopVision = 2;          // Radius for Mountain Look
 var sysopCardWidth = 160;     // "Front-and-back punch card" limit
 var sysopGfx = 'capflag.gfx'; // default .gfx file
-
 
 const UNIVAC = require('./qandyland-univac.js');
 UNIVAC.inject({ fileLoad,
@@ -36,9 +34,9 @@ var PORT = parseInt(process.argv[2], 10) || 8080;
 var MANIFEST_KEY  = '_dir.sys!';
 var MAX_NAME_BYTES = 255;
 // Hard-coded limits: modify source to change (not configurable via API or scripts)
-var MAX_TOTAL_DRIVE_SIZE = 5 * 1024 * 1024; // 5 MB per drive
-var MAX_FILE_BYTES = 32 * 1024;             // 32 KB per file
-var MAX_DRIVE_FILES = 10000;
+var MAX_TOTAL_DRIVE_SIZE = 10 * 1024 * 1024; // 10 MB per drive
+var MAX_FILE_BYTES = 64 * 1024;             // 64 KB per file
+var MAX_DRIVE_FILES = 20000;
 var SESSION_COOKIE = 'q';
 var TYPE_MAX_BYTES = 65536; // 64 KB display limit
 var VALID_NAME_RE = /^(?!\.)[A-Za-z0-9 \-_.()+=!]+$/;
@@ -1169,7 +1167,7 @@ function plugboard(req, stacker, plugs, drive, session) {
   
   function runfile(filepath) {
     if (typeof UNIVAC === 'function') {
-      console.log("UNIVAC(" + drive + ", " + player.fullPath + ", " + filepath + ")");
+      //console.log("UNIVAC(" + drive + ", " + player.fullPath + ", " + filepath + ")");
       let uResult = UNIVAC(drive, player.fullPath, filepath, session);
       if (uResult) {
         player.map      = uResult.sector;
@@ -1207,7 +1205,6 @@ function plugboard(req, stacker, plugs, drive, session) {
   }
   
   let tape="";
-   
   runfile('w/b'); // 'b' (before) executes before command is processed
   
   var refresh = true;
@@ -1276,7 +1273,7 @@ function plugboard(req, stacker, plugs, drive, session) {
               player.fullPath = uResult.fullPath;
               output += uResult.output;
             }
-            console.log("###1205### fullPath="+player.fullPath+" objfile="+objfile);
+            // console.log("###1205### fullPath="+player.fullPath+" objfile="+objfile);
             // ###1196### fullPath=w/H1/Sa44AaAaAaAa objfile=w/H1/Sa66Za
           }
         }
@@ -1411,7 +1408,12 @@ function plugboard(req, stacker, plugs, drive, session) {
     if (list.success && list.listing) {
       let files = list.listing.split(' ');
       files.forEach(f => {
-        if (f.length > 1) { if (f.length !== 6) { items.push(f); }}
+        if (f.length > 1) { 
+          // Allow 6-character files if they are 'V' or 'X' (Punch Code Markers)
+          if (f.length !== 6 || f.charAt(0) === 'V' || f.charAt(0) === 'X') { 
+            items.push(f); 
+          }
+        }
       });
     }
     let numericZ = parseInt(player.z, 10) || 0;

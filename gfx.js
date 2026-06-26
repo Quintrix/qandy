@@ -459,7 +459,8 @@ window.gfxObjects = function(sector) {
       var objcode = parts[1];
 
       var iId = objid.slice(0, 2);
-      var z = parseInt(objid.slice(2, 4), 10);
+      var zStr = objid.slice(2, 4);
+      var z = parseInt(zStr, 10);
       var data = objid.slice(4, 6);
       
       var coords = zToXY(z);
@@ -467,23 +468,32 @@ window.gfxObjects = function(sector) {
       img.id = 'obj_' + iId + '_' + z; 
       img.className = 'objs';
       img.src = 'i/' + iId + '.png';
+      
+      // Store exact data tracking properties so marker updates find and read them cleanly!
+      img.setAttribute('data-orig-id', iId);
+      img.setAttribute('data-id', iId);
+      img.setAttribute('data-z', z);
+      img.setAttribute('data-zstr', zStr);
+      
       img.style.position = 'absolute';
       img.style.top = (32 + 20 + (coords.y * 32)) + "px";
       img.style.left = (32 + 22 + (coords.x * 32)) + "px";
       img.style.zIndex = '110'; 
 
       // Adjustment logic for large items (Flagpoles, Buildings)
-      if (iId.charAt(0)==="T" || iId.charAt(0)==="U") {
-        img.onload = function() {
-          var currentTop = parseInt(this.style.top, 10) || 0;
-          var currentLeft = parseInt(this.style.left, 10) || 0;
-          this.style.top = (currentTop - this.height + 32) + "px";
-          this.style.left = (currentLeft - this.width + 32) + "px";
+      img.onload = function() {
+        var currentId = this.getAttribute('data-id');
+        if (currentId.charAt(0) === "T" || currentId.charAt(0) === "U") {
+          var baseTop = 32 + 20 + (zToXY(parseInt(this.getAttribute('data-z'), 10)).y * 32);
+          var baseLeft = 32 + 22 + (zToXY(parseInt(this.getAttribute('data-z'), 10)).x * 32);
+          this.style.top = (baseTop - this.height + 32) + "px";
+          this.style.left = (baseLeft - this.width + 32) + "px";
         }
       }
 
+      // Note: We leave onclick static here because gfxZClick now polls the DOM dynamically for exact z location!
       img.onclick = (function(capturedZ) {
-        return function() { gfxZClick(capturedZ, this); };
+        return function() { gfxZClick(parseInt(this.getAttribute('data-z'), 10), this); };
       })(z);
       document.body.appendChild(img);
     }
@@ -540,6 +550,41 @@ function gfxRefresh(rfStr) {
     var entry = window.items[j];
     if (!entry || entry.length < 4) continue;
     var iId = entry.slice(0, 2);
+
+    // --- PUNCH CODE MARKER INTERCEPTION ---
+    if ((iId === 'Vx' || iId === 'Vy') && entry.length === 6) {
+        var targetOrigId = entry.substring(2, 4);
+        var newData = entry.substring(4, 6);
+        
+        // Find the specific DOM object using the original ID it was spawned with
+        var objEl = document.querySelector('.objs[data-orig-id="' + targetOrigId + '"]');
+        if (objEl) {
+            if (iId === 'Vx') {
+                objEl.setAttribute('data-id', newData);
+                objEl.src = 'i/' + newData + '.png'; // Triggers onload resizing for large items
+            } else if (iId === 'Vy') {
+                var newZ = parseInt(newData, 10);
+                var coords = zToXY(newZ);
+                objEl.setAttribute('data-z', newZ);
+                objEl.setAttribute('data-zstr', newData);
+                
+                // Reposition (onload will take over logic if it's a large item)
+                var baseTop = 32 + 20 + (coords.y * 32);
+                var baseLeft = 32 + 22 + (coords.x * 32);
+                var currentId = objEl.getAttribute('data-id');
+                
+                if (currentId.charAt(0) === 'T' || currentId.charAt(0) === 'U') {
+                    baseTop -= (objEl.height - 32);
+                    baseLeft -= (objEl.width - 32);
+                }
+                
+                objEl.style.top = baseTop + "px";
+                objEl.style.left = baseLeft + "px";
+            }
+        }
+        continue; // Skip normal item rendering logic for this marker
+    }
+
     var destZ = parseInt(entry.slice(2, 4), 10);
     if (isNaN(destZ)) continue;
     
@@ -776,22 +821,16 @@ window.gfxZClick = function(z, clickedElement) {
   gfxClick("ZD" + zStr);
   
   var htm = '';
-  // 1. Static Objects
-  var objsData = mapObjs[window.map]; 
-  if (objsData) {
-    var objs = objsData.split('~');
-    for (var i = 0; i < objs.length; i++) {
-      var entry = objs[i].trim();
-      if (!entry) continue;
-      var meta = entry.split('|')[0];
-      var objId = meta.substring(0, 2);
-      var objZStr = meta.substring(2, 4);             // Added String Variant
-      var objZ  = parseInt(objZStr, 10);              // Changed parseInt reference
 
-      if (objZ === zNum) {
-        // Use objZStr to maintain zero padding in server punch code
-        htm += `<a href="gfx:OD${objId}${objZStr}">${gfxItemID(objId)}</a><br>`;
-      }
+  // 1. Static Objects (Reads directly from visually updated DOM elements)
+  var staticObjs = document.querySelectorAll('.objs');
+  for (var i = 0; i < staticObjs.length; i++) {
+    var el = staticObjs[i];
+    var objZ = parseInt(el.getAttribute('data-z'), 10);
+    if (objZ === zNum) {
+      var objId = el.getAttribute('data-id');
+      var objZStr = el.getAttribute('data-zstr');
+      htm += `<a href="gfx:OD${objId}${objZStr}">${gfxItemID(objId)}</a><br>`;
     }
   }
 
@@ -800,6 +839,10 @@ window.gfxZClick = function(z, clickedElement) {
     var items = mapItems.split('~');
     for (var j = 0; j < items.length; j++) {
       var id = items[j].substring(0, 2);
+      
+      // Skip punch code markers, they are not clickable items
+      if ((id === 'Vx' || id === 'Vy') && items[j].length === 6) continue;
+      
       var itemZStr = items[j].substring(2, 4);        // Added String Variant
       var itemZ = parseInt(itemZStr, 10);             // Changed parseInt reference
       var uniqueid = items[j].length >= 8 ? items[j].substring(4, 8) : "";
