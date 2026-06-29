@@ -7,7 +7,7 @@ window.gfxSession = null;
 window.gfxConnected = null;
 
 var _serverUrl = 'http://localhost:8080/qandyland.js';
-var _registryUrl = 'https://qandy.vercel.app/api/servers';
+var _serverUrl = 'https://qandy.onrender.com/';
 
 var mapx=7;
 var mapy=11;
