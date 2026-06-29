@@ -6,8 +6,8 @@ window.gfxPong = "..";   // server response
 window.gfxSession = null;
 window.gfxConnected = null;
 
+var _serverUrl = 'http://qandy.onrender.com:10000/qandyland.js';
 var _serverUrl = 'http://localhost:8080/qandyland.js';
-var _serverUrl = 'http://qandy.onrender.com:8080/qandyland.js';
 
 var mapx=7;
 var mapy=11;
