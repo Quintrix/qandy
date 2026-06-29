@@ -1,0 +1,20 @@
+{
+  "name": "qandy",
+  "version": "1.0.0",
+  "description": "Qandy Pocket Computer     Quintrix and Crew Software",
+  "main": "ansi.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Quintrix/qandy.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Quintrix/qandy/issues"
+  },
+  "homepage": "https://github.com/Quintrix/qandy#readme"
+}

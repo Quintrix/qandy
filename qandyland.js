@@ -30,7 +30,7 @@ var path = require('path');
 var fs   = require('fs');
 
 // ── Configuration ─────────────────────────────────────────────────────────────
-var PORT = parseInt(process.argv[2], 10) || 8080;
+const PORT = process.env.PORT || 8080; 
 var MANIFEST_KEY  = '_dir.sys!';
 var MAX_NAME_BYTES = 255;
 // Hard-coded limits: modify source to change (not configurable via API or scripts)
