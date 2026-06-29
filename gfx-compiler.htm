@@ -214,10 +214,11 @@ canvas { background: #000; box-shadow: 0 0 20px rgba(0,0,0,0.5); cursor: crossha
     <div id="globalStackView">
       <div class="tool-box" style="background: #1a252f;">
         <div style="font-weight: bold; color: #0af; margin-bottom: 10px;">GLOBAL STACK:</div>
-        <div id="global-a"><div class="object-entry" onclick="openGlobalEditor('a')">[<b>a</b>] Alpha (On Connect) <span id="global-lbl-a" style="color: #888;"></span></div></div>
+        <div id="global-a"><div class="object-entry" onclick="openGlobalEditor('a')">[<b>a</b>] Alpha (UNIVAC config) <span id="global-lbl-a" style="color: #888;"></span></div></div>
         <div id="global-b"><div class="object-entry" onclick="openGlobalEditor('b')">[<b>b</b>] Before (Pre-Tick) <span id="global-lbl-b" style="color: #888;"></span></div></div>
         <div id="global-c"><div class="object-entry" onclick="openGlobalEditor('c')">[<b>c</b>] After (Post-Tick) <span id="global-lbl-c" style="color: #888;"></span></div></div>
-        <div id="global-f"><div class="object-entry" onclick="openGlobalEditor('f')">[<b>f</b>] Functions (File F) <span id="global-lbl-f" style="color: #888;"></span></div></div>
+        <div id="global-f"><div class="object-entry" onclick="openGlobalEditor('f')">[<b>f</b>] Fire (Item Zj) <span id="global-lbl-f" style="color: #888;"></span></div></div>
+        <div id="global-t"><div class="object-entry" onclick="openGlobalEditor('t')">[<b>t</b>] Tag (PVP) <span id="global-lbl-t" style="color: #888;"></span></div></div>
       </div>
     </div>
 
@@ -279,7 +280,7 @@ let currentSector = "Aa";
 let mapSectors = {};
 let editingIndex = -1;
 let editingGlobalKey = null;
-let globalLogic = { a: "", b: "", c: "", f: "" };
+let globalLogic = { a: "", b: "", c: "", f: "", t: "" };
 let punchcodeTextColor = "#FFFFFF";
 
 // QPC Script Macros State
@@ -355,7 +356,7 @@ render();
 }
 
 function initBlank() {
-globalLogic = { a: "", b: "", c: "", f: "" };
+globalLogic = { a: "", b: "", c: "", f: "", t: "" };
 mapSectors = {};
 qpcData = {};
 
@@ -930,11 +931,13 @@ const lenA = getCount(globalLogic.a);
 const lenB = getCount(globalLogic.b);
 const lenC = getCount(globalLogic.c);
 const lenF = getCount(globalLogic.f);
+const lenT = getCount(globalLogic.t);
 
 document.getElementById('global-lbl-a').innerText = lenA > 0 ? `(${lenA} inst)` : "";
 document.getElementById('global-lbl-b').innerText = lenB > 0 ? `(${lenB} inst)` : "";
 document.getElementById('global-lbl-c').innerText = lenC > 0 ? `(${lenC} inst)` : "";
 document.getElementById('global-lbl-f').innerText = lenF > 0 ? `(${lenF} inst)` : "";
+document.getElementById('global-lbl-t').innerText = lenT > 0 ? `(${lenT} inst)` : ""; 
 
 updateNavDropdown();
 render();
@@ -1018,6 +1021,7 @@ if (key === 'a') title = "ALPHA (ON CONNECT)";
 if (key === 'b') title = "BEFORE (PRE-TICK)";
 if (key === 'c') title = "AFTER (POST-TICK)";
 if (key === 'f') title = "FIRE ITEM";
+if (key === 't') title = "TAG (PVP)";
 
 document.getElementById('logicLabel').innerText = "GLOBAL PUNCH CODE";
 document.getElementById('editingObjID').innerText = title;
@@ -1184,10 +1188,11 @@ function exportGfx() {
   .replace(/\n/g, "\\n")
   .replace(/\r/g, "\\r");
 
-  if (globalLogic.a) out += `a=${globalLogic.a}\n`;
-  if (globalLogic.b) out += `b=${globalLogic.b}\n`;
-  if (globalLogic.c) out += `c=${globalLogic.c}\n`;
-  if (globalLogic.f) out += `f=${globalLogic.f}\n`;
+  if (globalLogic.a) out += `a=${escapeWhitespace(globalLogic.a)}\n`;
+  if (globalLogic.b) out += `b=${escapeWhitespace(globalLogic.b)}\n`;
+  if (globalLogic.c) out += `c=${escapeWhitespace(globalLogic.c)}\n`;
+  if (globalLogic.f) out += `f=${escapeWhitespace(globalLogic.f)}\n`;
+  if (globalLogic.t) out += `t=${escapeWhitespace(globalLogic.t)}\n`;
 
   var bounds = getMapBounds();
   let validLabels = new Set();
@@ -1240,7 +1245,7 @@ setTimeout(() => document.body.removeChild(toast), 3000);
 }
 
 function parseGfxData(text) {
-globalLogic = { a: "", b: "", c: "", f: "" };
+globalLogic = { a: "", b: "", c: "", f: "", t: "" };
 
 // Unescape our new standards, but keep legacy _NL_ support for old saves
 const unescapeWhitespace = (str) => (str || "")
@@ -1255,7 +1260,7 @@ if (eqIdx === -1) return;
 const label = line.substring(0, eqIdx);
 const content = line.substring(eqIdx + 1);
 
-if (label === 'a' || label === 'b' || label === 'c' || label === 'f') {
+if (label === 'a' || label === 'b' || label === 'c' || label === 'f' || label === 't') {
 globalLogic[label] = unescapeWhitespace(content);
 return;
 }

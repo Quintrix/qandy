@@ -140,23 +140,44 @@ window.gfxChar = function(charID, avatarStr, zPos) {
   const topPos = (32 + 22 + (y - 1) * 32) + "px";
   const leftPos = (32 + 22 + x * 32) + "px";
 
-  // --- Handle one-shot "^[itemId]" overlay (e.g. "^Ia" = caught a crab) ---
-  // Format: a trailing "^" followed by a 2-char item id, e.g. "B0D0J0^Ia"
-  const overlayMatch = avatarStr.match(/\-([A-Za-z0-9]{2})$/);
-  if (overlayMatch) {
-    const overlayId = overlayMatch[1];
+  // --- Handle overlays and modifiers (-[itemId] and -[register%]) ---
+  let overlayId = null;
+  let registerVal = null;
+  let originalAvatarStr = avatarStr;
 
-    // Strip the marker so the normal part-parser below sees an even-length string
-    avatarStr = avatarStr.substring(0, avatarStr.length - overlayMatch[0].length);
+  while (true) {
+    // 1. Check for tag register meter (-00 to -99)
+    const regMatch = avatarStr.match(/\-([0-9]{2})$/);
+    if (regMatch) {
+      registerVal = parseInt(regMatch[1], 10);
+      avatarStr = avatarStr.substring(0, avatarStr.length - 3);
+      continue;
+    }
+    
+    // 2. Check for one-shot item overlay (Requires upper-case first character)
+    const itemMatch = avatarStr.match(/\-([A-Z][A-Za-z0-9])$/);
+    if (itemMatch) {
+      overlayId = itemMatch[1];
+      avatarStr = avatarStr.substring(0, avatarStr.length - 3);
+      continue;
+    }
+    
+    // Break ensures the loop safely exits when no more modifiers exist
+    break; 
+  }
 
-    // Strip it from the *source* avatar string too, so this only fires once
+  // Strip modifiers from the source string so this block only fires once per event
+  if (originalAvatarStr !== avatarStr) {
     if (charID === window.playerItem) {
       window.playerAvatar = avatarStr;
     }
     if (window.movingItems && window.movingItems[charID]) {
       window.movingItems[charID].avatar = avatarStr;
     }
+  }
 
+  // 1. Render One-Shot Item Overlay (-XX)
+  if (overlayId) {
     const overlayDomId = "cOverlay" + charID;
     let overlayEl = document.getElementById(overlayDomId);
     if (!overlayEl) {
@@ -166,7 +187,7 @@ window.gfxChar = function(charID, avatarStr, zPos) {
       overlayEl.style.position = "absolute";
       overlayEl.style.height = "32px";
       overlayEl.style.width = "32px";
-      overlayEl.style.zIndex = "160"; // above hat/sword/shield (150-154)
+      overlayEl.style.zIndex = "160"; // above hat/sword/shield
       document.body.appendChild(overlayEl);
     }
     overlayEl.src = "i/" + overlayId + ".png";
@@ -174,16 +195,71 @@ window.gfxChar = function(charID, avatarStr, zPos) {
     overlayEl.style.left = leftPos;
     overlayEl.style.display = "block";
 
-    // Auto-remove after one visual tick (.2s)
-    setTimeout(function() {
-      const el = document.getElementById(overlayDomId);
-      if (el) el.style.display = "none";
-    }, 200);
+    // Auto-remove after .8s
+    if (overlayEl.hideTimeout) clearTimeout(overlayEl.hideTimeout);
+    overlayEl.hideTimeout = setTimeout(function() {
+      overlayEl.style.display = "none";
+    }, 800);
   }
 
-  // Reordered: Bottom layer first, top layer last
+  // 2. Render Tag Register Meter (-##)
+  const meterDomId = "cMeter" + charID;
+  let meterEl = document.getElementById(meterDomId);
+
+  if (registerVal !== null) {
+    if (!meterEl) {
+      meterEl = document.createElement("div");
+      meterEl.id = meterDomId;
+      meterEl.className = "char"; // Standard cleanup using gfxRefresh
+      meterEl.style.position = "absolute";
+      meterEl.style.height = "6px";
+      meterEl.style.width = "32px";
+      meterEl.style.zIndex = "165"; 
+      
+      const greenBar = document.createElement("img");
+      greenBar.id = meterDomId + "_g";
+      greenBar.src = "i/Zn.png";
+      greenBar.style.position = "absolute";
+      greenBar.style.height = "6px";
+      greenBar.style.left = "0px";
+      greenBar.style.top = "0px";
+      
+      const redBar = document.createElement("img");
+      redBar.id = meterDomId + "_r";
+      redBar.src = "i/Zm.png";
+      redBar.style.position = "absolute";
+      redBar.style.height = "6px";
+      redBar.style.top = "0px";
+      
+      meterEl.appendChild(greenBar);
+      meterEl.appendChild(redBar);
+      document.body.appendChild(meterEl);
+    }
+    
+    meterEl.style.top = (parseInt(topPos, 10) - 8) + "px"; // 8 pixels above character head
+    meterEl.style.left = leftPos;
+    meterEl.style.display = "block";
+    
+    // Calculate widths (Using floor leaves a thin 1px red sliver at 99%)
+    const greenWidth = Math.floor(32 * (registerVal / 100));
+    const redWidth = 32 - greenWidth;
+    
+    const greenBar = document.getElementById(meterDomId + "_g");
+    const redBar = document.getElementById(meterDomId + "_r");
+    
+    if (greenBar && redBar) {
+      greenBar.style.width = greenWidth + "px";
+      redBar.style.width = redWidth + "px";
+      redBar.style.left = greenWidth + "px"; // Red starts exactly where green ends
+    }
+  } else if (meterEl) {
+    // Hide it if the register state clears but the user remains rendered
+    meterEl.style.display = "none";
+  }
+
+  // 3. Render base components (Reordered: Bottom layer first, top layer last)
   const partOrder = ['body', 'head', 'hat', 'sword', 'shield'];
-  
+    
   const idPrefixes = { 
     body: 'b',   // Base layer
     head: 'f',   // Face sits on body
@@ -249,8 +325,8 @@ async function gfxTick() {
 
     // no plugs work in 'look' mode, must exit look mode to get/use items    
     if (typeof isLooking !== 'undefined' && isLooking === true) { 
-      plugs = "Ql"; 
-      window.gfxDo = "Ql"; 
+      plugs = "Vl"; 
+      window.gfxDo = "Vl"; 
     }
 
     console.log("plugs="+plugs);
@@ -304,7 +380,8 @@ async function gfxTick() {
         }
 
         // 3. Handle Look Mode (Variable-Length Command)
-        if (verb === "Ql") {
+        if (verb === "Vl") {
+        	 console.log("###308### gfxPong="+gfxPong);
           window.isLooking = true; 
           let myMap = gfxPong.substring(ptr, ptr + 2);
           let myZ = gfxPong.substring(ptr + 2, ptr + 4);
@@ -709,6 +786,7 @@ function gfxRefresh(rfStr) {
 
 window.isLooking = false;
 window.terrainCache = null;
+window.lastKnownSectors = "";
 
 window.gfxRenderGlobalCanvas = function(myMap, myZ, playerData) {
   // 1. Setup Constants and Canvas
@@ -718,6 +796,11 @@ window.gfxRenderGlobalCanvas = function(myMap, myZ, playerData) {
   const parts = playerData.split('|');
   const pCSV = parts[0];
   const knownSectors = parts[1] || ""; 
+
+  if (window.lastKnownSectors !== knownSectors) {
+    window.terrainCache = null;
+    window.lastKnownSectors = knownSectors;
+  }
 
   if (!window.lookCanvas) {
     window.lookCanvas = document.createElement('canvas');
@@ -734,6 +817,41 @@ window.gfxRenderGlobalCanvas = function(myMap, myZ, playerData) {
   window.lookCanvas.style.display = 'block';
   const ctx = window.lookCanvas.getContext('2d');
 
+  // Fill main canvas with black first, so the normal map doesn't show through transparent areas
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, window.lookCanvas.width, window.lookCanvas.height);
+
+  // Helper function to draw players accurately
+  function drawPlayers() {
+    if (!pCSV) return;
+    const pList = pCSV.split('~');
+    pList.forEach(p => {
+      if (p.length < 6) return;
+      const id = p.substring(0, 2);
+      const sec = p.substring(2, 4);
+      const z = parseInt(p.substring(4, 6), 10);
+      
+      const sy = sec.charCodeAt(0) - 65; // 'A' -> 0
+      const sx = sec.charCodeAt(1) - 97; // 'a' -> 0
+      
+      if (sy < 0 || sy > 7 || sx < 0 || sx > 7) return;
+
+      const tx = z % 8; const ty = Math.floor(z / 8);
+
+      if (id.charAt(0) === 'S') ctx.fillStyle = '#00FFFF';
+      else if (id.charAt(0) === 'T') ctx.fillStyle = '#FF00FF';
+      else ctx.fillStyle = '#FFFFFF';
+
+      // Use startsWith to ensure players remain highlighted even if client adds unique IDs
+      if (window.playerItem && window.playerItem.startsWith(id)) {
+          ctx.fillStyle = '#FFFF00';
+          ctx.fillRect((sx * 32) + (tx * 4) - 1, (sy * 48) + (ty * 4) - 1, 6, 6);
+      } else {
+          ctx.fillRect((sx * 32) + (tx * 4), (sy * 48) + (ty * 4), 4, 4);
+      }
+    });
+  }
+
   // 2. Pre-render Terrain Cache if missing
   if (!window.terrainCache) {
     window.terrainCache = document.createElement('canvas');
@@ -741,23 +859,37 @@ window.gfxRenderGlobalCanvas = function(myMap, myZ, playerData) {
     window.terrainCache.height = 384;
     const tCtx = window.terrainCache.getContext('2d');
 
-    var tileId="";
+    // Pre-fill terrain cache with black initially
+    tCtx.fillStyle = '#000000';
+    tCtx.fillRect(0, 0, 256, 384);
+
     for (let sy = 0; sy < 8; sy++) {
       for (let sx = 0; sx < 8; sx++) {
-        const sectorId = sectorsY[sy] + (sx + 1);
+        // Corrected sector generation ('a' -> 97)
+        const sectorId = sectorsY[sy] + String.fromCharCode(97 + sx);
+        
+        // Only load and draw tiles if we have terrain data AND it is a known sector
         const data = window.mapTiles[sectorId];
-        if (!data) continue;
+        if (!data || !knownSectors.includes(sectorId)) {
+          continue;
+        }
+
         for (let t = 0; t < 96; t++) {
-        	 if (!knownSectors.includes(sectorId)) {
-        	 	tileId = 'Qf';
-        	 } else {
-            tileId = data.substring(t * 2, t * 2 + 2);
-          }
+          const tileId = data.substring(t * 2, t * 2 + 2);
+          if (tileId === 'Qf') continue; // Optimize: 'Qf' (Fog/Black) is already filled
+          
           const tx = t % 8; const ty = Math.floor(t / 8);
           const img = new Image();
           img.src = 'm/' + tileId + '.png';
+          
+          // Render individually as they are fetched
           img.onload = function() {
             tCtx.drawImage(img, (sx * 32) + (tx * 4), (sy * 48) + (ty * 4));
+            // Draw to the active view directly to stop visually lagging loads
+            if (window.isLooking) {
+              ctx.drawImage(img, (sx * 32) + (tx * 4), (sy * 48) + (ty * 4));
+              drawPlayers(); // Redraw players so they aren't hidden under fresh tiles
+            }
           }
         }
       }
@@ -765,33 +897,11 @@ window.gfxRenderGlobalCanvas = function(myMap, myZ, playerData) {
   }
 
   // 3. DRAWING PHASE
-  // A. Draw full terrain first
+  // A. Draw full terrain cache
   ctx.drawImage(window.terrainCache, 0, 0);
 
-
-  // C. Draw Players
-  const pList = pCSV.split('~');
-  pList.forEach(p => {
-    if (p.length < 6) return;
-    const id = p.substring(0, 2);
-    const sec = p.substring(2, 4);
-    const z = parseInt(p.substring(4, 6), 10);
-    
-    const sy = sec.charCodeAt(0) - 65; 
-    const sx = parseInt(sec.charAt(1), 10) - 1; 
-    const tx = z % 8; const ty = Math.floor(z / 8);
-
-    if (id.charAt(0) === 'S') ctx.fillStyle = '#00FFFF';
-    else if (id.charAt(0) === 'T') ctx.fillStyle = '#FF00FF';
-    else ctx.fillStyle = '#FFFFFF';
-
-    if (id === window.playerItem) {
-        ctx.fillStyle = '#FFFF00';
-        ctx.fillRect((sx * 32) + (tx * 4) - 1, (sy * 48) + (ty * 4) - 1, 6, 6);
-    } else {
-        ctx.fillRect((sx * 32) + (tx * 4), (sy * 48) + (ty * 4), 4, 4);
-    }
-  });
+  // B. Draw Players initially
+  drawPlayers();
 };
 
 window.gfxGameState = async function(drive) {
@@ -871,14 +981,18 @@ window.gfxZClick = function(z, clickedElement) {
       var id = items[j].substring(0, 2);
       
       // Skip punch code markers, they are not clickable items
-      if (id.charAt(0) === 'V' || id.charAt(0) === 'X') continue;
+      if (id.charAt(0) === 'V' || id.charAt(0) === 'W' || id.charAt(0) === 'X') continue;
       
-      var itemZStr = items[j].substring(2, 4);        // Added String Variant
-      var itemZ = parseInt(itemZStr, 10);             // Changed parseInt reference
+      var itemZStr = items[j].substring(2, 4); // Added String Variant
+      var itemZ = parseInt(itemZStr, 10);      // Changed parseInt reference
       var uniqueid = items[j].length >= 8 ? items[j].substring(4, 8) : "";
       if (itemZ === zNum) {
         // Use itemZStr to maintain zero padding in server punch code
-        htm += '<a href="gfx:ID' + id + itemZStr + uniqueid + '">' + gfxItemID(id) + '</a><br>';
+        if (uniqueid === playerId) {
+        	 htm += '<a href="gfx:ID' + id + itemZStr + uniqueid + '">Inventory</a><br>';
+        } else {
+        	 htm += '<a href="gfx:ID' + id + itemZStr + uniqueid + '">' + gfxItemID(id) + '</a><br>';
+        }
       }
     }
   }

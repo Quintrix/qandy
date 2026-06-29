@@ -156,13 +156,14 @@ window.walkdown = function () {
     if (moveCmd) {
         if (window.gfxDo === "RF") window.gfxDo = "";
         window.gfxDo += moveCmd; // Send to UNIVAC
-        
+        beep(900, 25, 0.01);
         // Feed visual tick
         if (!window.movingItems) window.movingItems = {};
         if (!window.movingItems[window.playerItem]) {
             window.movingItems[window.playerItem] = { z: currentZ, queue: [], avatar: window.playerAvatar };
         }
         window.movingItems[window.playerItem].queue.push(moveCmd);
+        
     } else {
         // We are blocked on all sides (or the object isn't on a walkable tile). End the walk.
         window.playerWalk = -1;
@@ -385,16 +386,9 @@ window.itemdown = function(code) {
     if (itemid+uniqueid === playerItem) { 
       invdown(""); // Request local inventory from server
     } else {
-      // They clicked ANOTHER player -> Show Profile Menu
-      let PUP = `<div align="center">`;
-      PUP += `<b>${gfxItemID(itemid)}</b><br>`;
-      PUP += `<span style="font-size:10px;color:gray;">UID: ${uniqueid}</span><p>`;
-
-      // Hook custom server punches for interaction here:
-      PUP += `<a href="gfx:ID${itemid}${uniqueid}">Profile Player</a><br>`;
-      PUP += `</div>`;
-      
-      pop(PUP);	
+      // They clicked ANOTHER player -> Tag Player
+      if (window.gfxDo === "RF") window.gfxDo = "";
+      window.gfxDo += "Xt" + uniqueid;      
     }    	  
     return;
   }  
@@ -421,6 +415,12 @@ window.objdown = function(code) {
   var itemz = parseInt(itemzStr, 10); 
 
   var cmd = "OD" + itemid + itemzStr;
+
+  // Intercept the 'Xt' Tag command logic and pull the target unique ID 
+  if (itemid === "Xt") {
+    var uniqueid = code.length >= 8 ? code.substring(4, 8) : code.substring(4);
+    cmd = "Xt" + uniqueid;
+  }
 
   var localZ = (window.movingItems && window.movingItems[window.playerItem]) ? 
                window.movingItems[window.playerItem].z : window.playerZ;
@@ -463,6 +463,12 @@ window.keydown = function(key, e) {
   var keyStr = (typeof e === 'object' && e.key) ? e.key : key;
   if (window.playerItem === "Za" || !window.playerItem) return;
 
+  if (key === 27) {
+    // esc key, exit look mode  	
+    isLooking = false;
+    window.gfxDo = "RF";
+  }
+  
   // enter 'look around' mode
   if (keyStr === "l" || keyStr === "L") {
     if (window.gfxDo === "RF") window.gfxDo = "";
@@ -499,7 +505,7 @@ window.keydown = function(key, e) {
       }
   }
 
-var todo = null;
+  var todo = null;
   switch (keyStr) {
     case "ArrowUp":   case "w": case "W": todo = "Vn"; break;
     case "ArrowDown": case "s": case "S": todo = "Vs"; break;

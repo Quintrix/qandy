@@ -233,7 +233,7 @@ window.gfxItemID = function(i) {
         "W4": "%% map lower bounds",
         "W5": "%% travel boots enabled ",
         "W6": "%% movement counter register",
-        "W7": "%% W7",
+        "W7": "%% register to use for tag",
         "W8": "%% W8",
         "W9": "%% W9",
 

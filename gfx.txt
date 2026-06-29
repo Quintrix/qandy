@@ -113,7 +113,8 @@
        
        Vk 
        
-       Vl Vl     look 
+       Vl Vl     look around - returns list of players and sectors the user can see from
+                 their current location 
 
        Vm Vm$$## make item $$ and z-location ##, items will expire in 1 minute if not
                  picked up by a player.
@@ -124,7 +125,8 @@
        Vp
        Vq
        
-       Vr Vr$$## remove obj $$## from client's current map rendering (re-spawns on scroll)
+       Vr Vr$$   remove obj $$ from client's current map rendering (re-spawns on scroll),
+                 object is expected to be on the player z-location
                  
        Vs Vs     south 
        
@@ -165,7 +167,9 @@
        Xg
        Xh
        
-       Xi Xi$$   if item $$ is in inventory open gate (if fails gate closes and code is ignored until Xc)
+       Xi Xi$$   if item $$ is in inventory close switch (if fails switch opens and code
+                 is ignored until Xc). XnXi will close the switch if the item is NOT
+                 in the player's inventory.
 
        Xj
        Xk
@@ -178,7 +182,7 @@
        
        Xo
        
-       Xp Xp$$   render $$ over head .2 seconds
+       Xp Xp$$   render $$ over head .8 of a second
        
        Xq
        
@@ -187,7 +191,35 @@
        
        Xs XsW$## set register W$ to equal ##
        
-       Xt
+       Xt Xt%%%% tag player with unique id %%%%, server should ensure they are on opposite
+                 teams by comparing the S$ 'team item' which will be either Sa or Sb
+                 depending on which team they are on. 
+                 
+                 This function should check the W7 register to see which W$ register to
+                 use for the dice roll, if W7 is not set tag is disabled. 
+                 
+                 It should then create a code-item file in the map sector directory Xt%%%%
+                 where %%%% is the unique player ID being tagged. Inside the file will
+                 be %%%%## where %%%% is the unique player ID that sent the tag, and ##
+                 is the value of their W$ register W7 is set to use. 
+                 
+                 So now when the plugboard is scanning for code-items and see an item
+                 starting with Vt it can check the %%%% player id to see if it is the
+                 current player being processed, and if so execute a global 't' punch
+                 code file, setting the W@ register to the ## value in the file.
+                 
+                 This script will calculate how much damage the tag did, and then send
+                 a tag back which means each game can write their own rules on how
+                 PVP should work. Example punch code tag script:
+                 
+                 XsWaW@ XsW@00 XdW@Wa // set Wa = W@, set W@ = 00, set W@ to dice roll 00-Wa (opponents Wz)
+                 XsWa00 XdWaWz        // set Wa = 00, set Wa to dice roll 00-Wz 
+                 XlWaW@ XnXm          // If Wa less than W@, W@ wins, calc damage: 
+                   XnXmW@Wa XnXmWzW@  // Wz = Wz - (W@ - Wa)
+                 Xc
+
+
+
        Xu
        Xv
        Xw
@@ -214,6 +246,11 @@
                    W3-W9 — reserved for future use
      
           Wa-Wz — local, can be used by game developers for points, levels, quest flags, etc.
+          
+          W_-W@ - the 'illegal' registers named after the C64 registers that are not
+                  documented but work because of the way the CPU was made. These registers
+                  are valid extended city symbols that don't get saved in the player's
+                  file so they can be used for temporary purposes: _()[]{}^,:;+-=%@
           
      ——————————————————————————————————————————————————————————————————————————————————————————
 

@@ -1146,6 +1146,115 @@ function isValidDriveName(drive) {
   return !!(drive && /^[A-Za-z0-9_.-]+$/.test(drive) && drive.length <= 64);
 }
 
+// ── Line of Sight & Geometry Helpers ──────────────────────────────────────────
+
+const Y_AXIS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const X_AXIS = "abcdefghijklmnopqrstuvwxyz0123456789";
+
+function sectorToCoords(sector) {
+  if (!sector || sector.length !== 2) return null;
+  let y = Y_AXIS.indexOf(sector[0]);
+  let x = X_AXIS.indexOf(sector[1]);
+  // If a sector isn't in standard coordinates (like "_L"), it has no LoS neighbors
+  if (y === -1 || x === -1) return null; 
+  return { x, y };
+}
+
+function coordsToSector(x, y) {
+  if (y < 0 || y >= Y_AXIS.length || x < 0 || x >= X_AXIS.length) return null;
+  return Y_AXIS[y] + X_AXIS[x];
+}
+
+// Fast check for the Vl95$$ file to determine terrain
+function getSectorTerrain(drive, sector) {
+  if (!drive || !drive.manifestMap) return 'A'; // Default flat
+  let prefix = 'w/' + sector + '/Vl95';
+  
+  // Since we use a Map, iterating keys is extremely fast
+  for (let key of drive.manifestMap.keys()) {
+    if (key.startsWith(prefix) && key.length >= prefix.length + 1) {
+      return key.charAt(prefix.length); // Returns the first character of $$
+    }
+  }
+  return 'A'; // Default to flat
+}
+
+// Calculates all visible sectors based on player's current elevation and terrain
+function calculateLineOfSight(driveName, centerSector) {
+  let drive = drives[driveName];
+  let centerPos = sectorToCoords(centerSector);
+  if (!centerPos) return [centerSector]; // Return just the center for special rooms like _L
+
+  let terrainChar = getSectorTerrain(drive, centerSector);
+  let elevation = 0;
+  let viewType = 'mid'; // Default flat
+
+  // Determine player's vantage point
+  if (terrainChar === 'M' || terrainChar === 'S' || terrainChar === 'W') {
+    elevation = 1;
+    viewType = 'high';
+  } else if (terrainChar === 'R' || terrainChar === 'T') {
+    elevation = 0;
+    viewType = 'low';
+  }
+
+  let visible = new Set();
+  visible.add(centerSector);
+
+  // Define relative coordinate offsets based on elevation/terrain
+  let offsets = [];
+  if (viewType === 'low') {
+    // Radius 1 Cross (Swamp/Forest)
+    offsets = [ [0,-1], [0,1], [-1,0], [1,0] ];
+  } else if (viewType === 'mid') {
+    // Radius 2 Diamond (Flat)
+    offsets = [
+      [0,-1], [0,-2], [0,1], [0,2],     // N, S
+      [-1,0], [-2,0], [1,0], [2,0],     // E, W
+      [-1,-1], [1,-1], [-1,1], [1,1]    // Diagonals
+    ];
+  } else if (viewType === 'high') {
+    // Radius 2 Square (Minus extreme corners)
+    for (let dx = -2; dx <= 2; dx++) {
+      for (let dy = -2; dy <= 2; dy++) {
+        if (Math.abs(dx) === 2 && Math.abs(dy) === 2) continue; // Skip corners
+        if (dx === 0 && dy === 0) continue;
+        offsets.push([dx, dy]);
+      }
+    }
+  }
+
+  for (let off of offsets) {
+    let tx = centerPos.x + off[0];
+    let ty = centerPos.y + off[1];
+    let targetSector = coordsToSector(tx, ty);
+    if (!targetSector) continue; // Off the edge of the map
+
+    // If we have 0 elevation, check if our line of sight is blocked by a forest/swamp in front of us
+    let isBlocked = false;
+    if (elevation === 0 && (Math.abs(off[0]) === 2 || Math.abs(off[1]) === 2)) {
+      // Find the sector 1-step between us and the 2-step target
+      let midX = centerPos.x + Math.sign(off[0]);
+      let midY = centerPos.y + Math.sign(off[1]);
+      let midSector = coordsToSector(midX, midY);
+      
+      if (midSector) {
+        let midTerrain = getSectorTerrain(drive, midSector);
+        // If the intermediate sector is a Forest (R), Swamp (T), or Wall (anything else abnormal), it blocks LoS
+        if (midTerrain === 'R' || midTerrain === 'T' || (!'ABCDEFGHIJK'.includes(midTerrain) && !'MSW'.includes(midTerrain))) {
+          isBlocked = true;
+        }
+      }
+    }
+
+    if (!isBlocked) {
+      visible.add(targetSector);
+    }
+  }
+
+  return Array.from(visible);
+}
+
 function plugboard(req, stacker, plugs, drive, session) {
   let output = "";
   if (plugs != "RF") { console.log(plugs+" "+drive+" "+session); }
@@ -1278,7 +1387,7 @@ function plugboard(req, stacker, plugs, drive, session) {
           }
         }
         break;
-                
+               
       case 'ID':
         if (tape) { runtape(tape); tape = ""; }
         let itemId = plugs.slice(column, column + 2);
@@ -1337,7 +1446,87 @@ function plugboard(req, stacker, plugs, drive, session) {
             if (itemId >= 'Aa' && itemId < 'Qa') { tape += 'XnVd'+itemId; }
           }
         }
-        break;                  
+        break;
+        
+      case 'Xt':
+        // tag another player
+        if (tape) { runtape(tape); tape = ""; }
+        let playerid = plugs.slice(column, column + 4);
+        column = column + 4;
+        tape='Xt'+playerid;
+        runtape(tape);
+        break;
+
+      case 'Vl':
+        if (tape) { runtape(tape); tape = ""; }
+        refresh = false; // Turn off the default 'RF' generation
+        
+        let activeSectors = {}; 
+        
+        // 1. Scan the global player registry for all active sector locations
+        let pListRes = fileList(drive, 'p/', null, session);
+        if (pListRes && pListRes.success && pListRes.listing) {
+          let pFiles = pListRes.listing.trim().split(/\s+/);
+          for (let i = 0; i < pFiles.length; i++) {
+            if (!pFiles[i]) continue;
+            let pLoad = fileLoad(drive, '/', 'p/' + pFiles[i], session);
+            if (pLoad.success && pLoad.content && pLoad.content.length >= 2) {
+              let sec = pLoad.content.substring(0, 2);
+              activeSectors[sec] = true;
+            }
+          }
+        }
+        
+        // 2. Calculate local Line of Sight and add them to activeSectors
+        let myVisibleSectors = calculateLineOfSight(drive, player.map);
+        for (let i = 0; i < myVisibleSectors.length; i++) {
+          activeSectors[myVisibleSectors[i]] = true;
+        }
+        
+        let pCSVArr = [];
+        let knownSectorsArr = [];
+        let myTeam = player.item ? player.item.charAt(0) : 'Z'; 
+
+        // 3. Evaluate all active sectors
+        for (let sec in activeSectors) {
+          let secListRes = fileList(drive, 'w/' + sec, null, session);
+          if (secListRes && secListRes.success && secListRes.listing) {
+            let wFiles = secListRes.listing.trim().split(/\s+/);
+            let secPlayers = [];
+            let teammateInSector = false;
+            let isDirectLoS = myVisibleSectors.includes(sec);
+            
+            for (let j = 0; j < wFiles.length; j++) {
+              let fname = wFiles[j];
+              if (fname && fname.length >= 8) {
+                let fid = fname.substring(0, 2);
+                if (fid >= 'Sa' && fid < 'Ua') {
+                  let fz = fname.substring(2, 4);
+                  secPlayers.push(fid + sec + fz);
+                  if (fid.charAt(0) === myTeam) {
+                    teammateInSector = true;
+                  }
+                }
+              }
+            }
+            
+            // Player knows about the sector if they have Direct LoS OR a teammate is there broadcasting
+            if (teammateInSector || isDirectLoS) {
+              knownSectorsArr.push(sec);
+              // Send player info if someone is there
+              if (secPlayers.length > 0) {
+                pCSVArr = pCSVArr.concat(secPlayers);
+              }
+            }
+          }
+        }
+
+        let pCSV = pCSVArr.join('~');
+        let knownSectorsStr = knownSectorsArr.join('');
+        let zStr = player.z < 10 ? "0" + player.z : String(player.z);
+        
+        output += "Vl" + player.map + zStr + pCSV + "|" + knownSectorsStr;
+        break;
 
       case 'ST':
         if (tape) { runtape(tape); tape = ""; }
@@ -1398,10 +1587,30 @@ function plugboard(req, stacker, plugs, drive, session) {
 
   if (tape) { runtape(tape); tape=""; }
   
+  // --- PvP Tag Intercept ---
+  if (player.pubId && player.map) {
+    let tagPath = 'w/' + player.map + '/Xt' + player.pubId;
+    let tagRes = fileLoad(drive, '/', tagPath, session);
+    if (tagRes.success && tagRes.content) {
+      let attackerId = tagRes.content.substring(0, 4);
+      let attackVal  = tagRes.content.substring(4, 6);
+      
+      // Delete the tag immediately so it only executes once
+      fileDelete(drive, '/', tagPath, session);
+      
+      console.log("plugboard: Player " + player.pubId + " was tagged by " + attackerId + " (Power: " + attackVal + ")");
+      
+      // Inject the incoming attack value into temporary register W@ and execute the global 't' file
+      runtape('XsW@' + attackVal);
+      runfile('w/t');
+    }
+  }
+  
   runfile('w/c'); // 'c' (after b) file executes after command is processed
   
   if (session) { playerIndex.set(session, player); }
 
+  
   if (refresh) {
     let list = fileList(drive, 'w/' + player.map, null, session);
     let items = [];

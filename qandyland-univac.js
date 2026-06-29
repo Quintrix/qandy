@@ -1,4 +1,3 @@
-
 'use strict';
 
 //
@@ -106,7 +105,7 @@ function _isValidExit(driveName, currentSector, targetSector) {
 // share a fixed 1:1 offset so each world letter has exactly one matching
 // city character:  Aa<->A0 ... Az<->A}
 //
-var _CITY_CHARSET = "abcdefghijklmnopqrstuvwxyz0123456789%()+,-:;=[]^_{}@";
+var _CITY_CHARSET = "abcdefghijklmnopqrstuvwxyz0123456789_()[]{}^,:;+-=%@";
 
 // 'a' -> '0', 'b' -> '1', ... 'z' -> '}'. Returns null if not a world letter.
 function _cityCharFromWorld(worldChar) {
@@ -215,9 +214,9 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
     content = itemLoad.content;
   }
 
-  // ── stuff W[] with user-register values (Wa-Wz) from the item file ─────
-  for (var _rk in register) { if (/^W[a-z]$/.test(_rk)) delete register[_rk]; }
-  var _userRegMatches = content.match(/W[a-z]\d{2}/g) || [];
+  // ── stuff W[] with user-register values (Wa-Wz and W@) from the item file ─────
+  for (var _rk in register) { if (/^W[a-z@]$/.test(_rk)) delete register[_rk]; }
+  var _userRegMatches = content.match(/W[a-z@]\d{2}/g) || [];
   _userRegMatches.forEach(function(m) {
     register[m.substring(0, 2)] = m.substring(2, 4);
   });
@@ -294,7 +293,7 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
   function getRegValue(valStr) {
     if (!valStr || valStr.length !== 2) return 0;
 
-    // 1. If it's a register reference (e.g., 'Wa', 'W0'), pull the value stored in the register
+    // 1. If it's a register reference (e.g., 'Wa', 'W0', 'W@'), pull the value stored in the register
     if (valStr.charAt(0) === 'W') {
       return resolveToValue(register[valStr] || "00");
     }
@@ -397,7 +396,7 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
           if (appliedXa) {
             // Scan for W user-registers and apply their value to the register mapping
             // so later math commands read the correct quantity before Cleanup.
-            state.content = state.content.replace(/(W[a-z])(\d{2})?/g, function(match, rk, val) {
+            state.content = state.content.replace(/(W[a-z@])(\d{2})?/g, function(match, rk, val) {
               if (val) {
                 register[rk] = val;
                 return match;     // Keep the existing formatted pair (e.g. Wz99)
@@ -448,8 +447,8 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
         var regKey = tape.slice(column, column + 2); column += 2;
         var val = tape.slice(column, column + 2); column += 2;
         // validate that it is a user register before setting
-        if (!switchopen && /^W[a-z]$/.test(regKey)) {
-          // If the value is a register (e.g., 'Wa'), use its current value, else use the raw value
+        if (!switchopen && /^W[a-z@]$/.test(regKey)) {
+          // If the value is a register (e.g., 'Wa' or 'W@'), use its current value, else use the raw value
           register[regKey] = (val.charAt(0) === 'W') ? (register[val] || "00") : val;
         }
         break;
@@ -494,9 +493,11 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
           if (ifnot) {
             var result = v1 - v2;
             if (result < 0) { result=0; }
+            console.log("XnXm (subtract) value1="+value1+" ("+v1+") value2="+value2+" ("+v2+") result="+result);
           } else {
             var result = v1 + v2;
             if (result > 99) { result=99; }
+            console.log("Xm (add) value1="+value1+" ("+v1+") value2="+value2+" ("+v2+") result="+result);
           }
           register[target] = result.toString().padStart(2, '0');
         }
@@ -510,9 +511,15 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
         var value2 = tape.slice(column, column + 2); column += 2;
         var v1 = getRegValue(value1);
         var v2 = getRegValue(value2);
+        
         // Apply ifnot (Xn) inversion
         var result = (v1 < v2);
-        if (ifnot) result = !result;
+        if (ifnot) {
+        	 result = !result;
+          console.log("XnXl (more than) value1="+value1+"("+v1+") value2="+value2+" ("+v2+")");
+        } else {
+        	 console.log("Xl (less than) value1="+value1+"("+v1+") value2="+value2+" ("+v2+")");
+        }
         
         // FIX: Open the switch if the condition is NOT met
         if (!result) { switchopen = true; } 
@@ -553,7 +560,13 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
         // Read arguments
         var noun = tape.slice(column, column + 2); column += 2;
         if (!switchopen) {
-          state.avatar += '-' + noun;
+        	 // if noun === register, add the value of the register, ie:
+        	 // if Wz set to 99, 
+        	 if (noun.charAt(0) === 'W') {
+        	 	state.avatar += '-' + register[noun];
+        	 } else {  
+            state.avatar += '-' + noun;
+          }
         }
         break;
       }
@@ -864,6 +877,133 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
         }
         break;
       }
+      
+      // ── look around commands ───────────────────────────────────────────
+      case 'Vl': {
+        // Vl: Look mode activation
+        if (!switchopen) {
+          var activeSectors = {}; 
+          
+          // 1. Scan the global player registry to find all sectors currently occupied by any player
+          var pListRes = _deps.fileList(driveName, 'p/', null, sessionToken);
+          if (pListRes && pListRes.success && pListRes.listing) {
+            var pFiles = pListRes.listing.trim().split(/\s+/);
+            for (var i = 0; i < pFiles.length; i++) {
+              if (!pFiles[i]) continue;
+              var pLoad = _deps.fileLoad(driveName, '/', 'p/' + pFiles[i], 'UNIVAC');
+              if (pLoad.success && pLoad.content && pLoad.content.length >= 2) {
+                var sec = pLoad.content.substring(0, 2);
+                activeSectors[sec] = true;
+              }
+            }
+          }
+          
+          // 2. Ensure the player's own immediate sector is always evaluated
+          activeSectors[state.sector] = true;
+          
+          var pCSVArr = [];
+          var knownSectorsArr = [];
+          
+          // Team is determined by the first character of the item ID (e.g., 'S' or 'T')
+          var myTeam = state.id; 
+
+          // 3. Evaluate each active sector for visibility and presence of players
+          for (var sec in activeSectors) {
+            var secListRes = _deps.fileList(driveName, 'w/' + sec, null, sessionToken);
+            if (secListRes && secListRes.success && secListRes.listing) {
+              var wFiles = secListRes.listing.trim().split(/\s+/);
+              var secPlayers = [];
+              var teammateInSector = false;
+              
+              for (var j = 0; j < wFiles.length; j++) {
+                var fname = wFiles[j];
+                
+                // Active player files have: id(2) + zStr(2) + playerId(4) + avatar(0+) => length >= 8
+                if (fname && fname.length >= 8) {
+                  var fid = fname.substring(0, 2);
+                  
+                  // Ensure it is a valid player slot (Sa through Tz)
+                  if (fid >= 'Sa' && fid < 'Ua') {
+                    var fz = fname.substring(2, 4);
+                    secPlayers.push(fid + sec + fz);
+                    
+                    // Check if this player belongs to the client's team
+                    if (fid === myTeam) {
+                      teammateInSector = true;
+                    }
+                  }
+                }
+              }
+              
+              // Only expose players and clear the map "Fog of War" if a teammate is physically in this sector
+              if (teammateInSector) {
+                knownSectorsArr.push(sec);
+                pCSVArr = pCSVArr.concat(secPlayers);
+              }
+            }
+          }
+
+          var pCSV = pCSVArr.join('~');
+          var knownSectorsStr = knownSectorsArr.join('');
+          
+          // Return the specific Vl formatted payload expected by the client's canvas rendering logic
+          // Format: Vl[sector_2][z_2][csvPlayers]|[knownSectors]
+          output += "Vl" + state.sector + state.zStr + pCSV + "|" + knownSectorsStr;
+        }
+        break;
+      }      
+
+      // ── PvP Tag Command ────────────────────────────────────────────────
+      case 'Xt': {
+        var targetId = tape.slice(column, column + 4); 
+        column += 4;
+        
+        if (!switchopen && !ifnot) {
+          // Verify that W7 is set and active to determine attack power
+          var w7 = register['W7'];
+          if (w7 && w7 !== '00') {
+            var attackVal = getRegValue(w7).toString().padStart(2, '0');
+            var myTeamId = state.id;
+
+            // Scan the current sector to locate the target and identify their team
+            var listRes = typeof _deps.fileList === 'function' ? _deps.fileList(driveName, 'w/' + state.sector, null, sessionToken) : {success: false, listing: ''};
+            if (listRes.success && listRes.listing) {
+              var files = listRes.listing.trim().split(/\s+/);
+              var targetTeamId = null;
+
+              for (var i = 0; i < files.length; i++) {
+                var fname = files[i];
+                // Player files: [Team:2][Z:2][PubId:4]... (length >= 8 validates it is claimed)
+                if (fname.length >= 8 && fname.substring(4, 8) === targetId) {
+                  targetTeamId = fname.substring(0, 2);
+                  break;
+                }
+              }
+
+              // Ensure the target exists in this room and is on an opposing team
+              console.log("###970### targetTeamId="+targetTeamId+" myTeamId="+myTeamId);
+              // ###970### targetTeamId=S myTeamIdS
+  
+              if (targetTeamId && targetTeamId !== myTeamId) {
+                // Drop the tag marker!
+                // Filename = Xt[targetID]. Contents = [myID][attackPower]
+                var tagPath = 'w/' + state.sector + '/Xt' + targetId;
+                var tagContent = state.playerid + attackVal;
+                // Allow the tag to expire via lazy garbage collection after 1 minute if target goes offline
+                var tsTag = _deps.futureTimestamp(1);
+                _deps.fileSave(driveName, '/', tagPath, tagContent, sessionToken, sessionToken, 'X' + tsTag);
+                console.log("UNIVAC() Xt: Tagged player " + targetId + " (Power: " + attackVal + ")");
+              } else {
+                console.log("UNIVAC() Xt: Target " + targetId + " not found or on same team.");
+              }
+            }
+          } else {
+            console.log("UNIVAC() Xt: Tag failed, W7 register not set.");
+          }
+        }
+        ifnot = false;
+        break;
+      }
 
       // ── z-location commands ───────────────────────────────────────────
       case 'Xz': {
@@ -1160,7 +1300,7 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
   // ── 4. Save and Cleanup ───────────────────────────────────────────────────
 
   for (var _rk in register) {
-    if (!/^W[a-z]$/.test(_rk)) continue; // only user registers (Wa-Wz) live in inventory
+    if (!/^W[a-z@]$/.test(_rk)) continue; // only user registers (Wa-Wz and W@) live in inventory
     var _rv = register[_rk];
     var _re = new RegExp(_rk + '\\d{2}');
     if (!_rv || _rv === '00') {
@@ -1392,5 +1532,4 @@ function flipAvatarDirection(avatarStr, cmd) {
 // ── Exports ───────────────────────────────────────────────────────────────────
 
 UNIVAC.inject = inject;
-
 module.exports = UNIVAC;
