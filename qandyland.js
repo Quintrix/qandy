@@ -30,7 +30,9 @@ var path = require('path');
 var fs   = require('fs');
 
 // ── Configuration ─────────────────────────────────────────────────────────────
-const PORT = process.env.PORT || 8080; 
+
+var PORT = process.env.PORT || 8080;  
+
 var MANIFEST_KEY  = '_dir.sys!';
 var MAX_NAME_BYTES = 255;
 // Hard-coded limits: modify source to change (not configurable via API or scripts)
@@ -2228,7 +2230,7 @@ function _proceedWithStartup() {
   _proceedWithStartup();
 
   // Start the HTTP server
-  server.listen(PORT, function () {
+  server.listen(PORT, '0.0.0.0.', function () {
     var publicIP = '127.0.0.1'; 
     displayStartupBanner(publicIP, null, null);
     
@@ -2237,24 +2239,6 @@ function _proceedWithStartup() {
       process.stdout.write('qandyland.js ');
     }
 
-    // --- NEW AUTO-OPEN BROWSER CODE ---
-    var url = 'http://localhost:' + PORT + '/index.htm';
-    var startCmd;
-
-    if (process.platform === 'win32') { // Windows
-      startCmd = 'start chrome "' + url + '"';
-    } else if (process.platform === 'darwin') { // Mac
-      startCmd = 'open -a "Google Chrome" "' + url + '"';
-    } else if (process.platform === 'android') { // Android (Termux)
-      startCmd = 'termux-open-url "' + url + '"'; 
-    } else { // Linux
-      startCmd = 'google-chrome "' + url + '"';
-    }
-
-    exec(startCmd, function(err) {
-      // Silently fail if Chrome isn't found, so it doesn't crash the server
-    });
-    // ----------------------------------
   });
 })();
 
