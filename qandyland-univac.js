@@ -390,7 +390,7 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
             output += "S^Va--^S";
             appliedXa = true;
           } else {
-            console.log("UNIVAC() Xa: team already set to " + state.id + ", ignoring " + newId);
+            //console.log("UNIVAC() Xa: team already set to " + state.id + ", ignoring " + newId);
           }
 
           if (appliedXa) {
@@ -469,7 +469,7 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
           var max = Math.max(v1, v2);
           // Calculate random number between min and max inclusive
           var roll = Math.floor(Math.random() * (max - min + 1)) + min;
-          console.log("dice roll: target="+target+" v1="+v1+" v2="+v2+" roll="+roll);
+          //console.log("dice roll: target="+target+" v1="+v1+" v2="+v2+" roll="+roll);
           // Clamp the result
           if (roll < 0) roll = 0;
           if (roll > 99) roll = 99;
@@ -493,11 +493,11 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
           if (ifnot) {
             var result = v1 - v2;
             if (result < 0) { result=0; }
-            console.log("XnXm (subtract) value1="+value1+" ("+v1+") value2="+value2+" ("+v2+") result="+result);
+            //console.log("XnXm (subtract) value1="+value1+" ("+v1+") value2="+value2+" ("+v2+") result="+result);
           } else {
             var result = v1 + v2;
             if (result > 99) { result=99; }
-            console.log("Xm (add) value1="+value1+" ("+v1+") value2="+value2+" ("+v2+") result="+result);
+            //console.log("Xm (add) value1="+value1+" ("+v1+") value2="+value2+" ("+v2+") result="+result);
           }
           register[target] = result.toString().padStart(2, '0');
         }
@@ -516,9 +516,9 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
         var result = (v1 < v2);
         if (ifnot) {
         	 result = !result;
-          console.log("XnXl (more than) value1="+value1+"("+v1+") value2="+value2+" ("+v2+")");
+          //console.log("XnXl (more than) value1="+value1+"("+v1+") value2="+value2+" ("+v2+")");
         } else {
-        	 console.log("Xl (less than) value1="+value1+"("+v1+") value2="+value2+" ("+v2+")");
+        	 //console.log("Xl (less than) value1="+value1+"("+v1+") value2="+value2+" ("+v2+")");
         }
         
         // FIX: Open the switch if the condition is NOT met
@@ -592,15 +592,15 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
           var resolvedZ = state.zStr; 
           
           var targetPath = 'w/' + state.sector + '/' + noun + resolvedZ;
-          console.log("make item "+targetPath);
+          //console.log("make item "+targetPath);
           
           if (ifnot) {
             _deps.fileDelete(driveName, '/', targetPath, sessionToken);
-            console.log("UNIVAC() Vm: removed " + targetPath);
+            //console.log("UNIVAC() Vm: removed " + targetPath);
           } else {
             let ts = 'X' + _deps.futureTimestamp(1); 
             _deps.fileSave(driveName, '/', targetPath, '', sessionToken, sessionToken, ts);
-            console.log("UNIVAC() Vm: created " + targetPath);
+            //console.log("UNIVAC() Vm: created " + targetPath);
           }
         }
         break;
@@ -713,7 +713,7 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
           // 2. GATEKEEPER A: Validate stepping onto the tile
           if (w5Active) {
             if (!_canWalkTerrain(localTile, state.content)) {
-              console.log("UNIVAC: Step blocked on tile [" + localTile + "]");
+              //console.log("UNIVAC: Step blocked on tile [" + localTile + "]");
               column = tape.length;
               break;
             }
@@ -733,7 +733,7 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
             var moveCost = _getMoveCost(register['W5'], localTile);
 
             if (currentPoints < moveCost) {
-              console.log("UNIVAC: Move blocked, insufficient points (Need: " + moveCost + ", Have: " + currentPoints + ")");
+              //console.log("UNIVAC: Move blocked, insufficient points (Need: " + moveCost + ", Have: " + currentPoints + ")");
               column = tape.length; // Snap tape head
               break;
             }
@@ -814,7 +814,7 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
           var targetZStr = state.zStr;
           if (!ifnot) {
           	if (!_isValidExit(driveName, state.sector, targetSector)) {
-              console.log("not a valid exit");
+              //console.log("not a valid exit");
               break;
             } 
           }
@@ -844,7 +844,7 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
             // ENTER CITY (Vc)
             var cityChar = _cityCharFromWorld(state.sector.charAt(1));
             if (cityChar === null) {
-              console.log("UNIVAC() Vc: " + state.sector + " has no matching city map, ignoring");
+              //console.log("UNIVAC() Vc: " + state.sector + " has no matching city map, ignoring");
             } else {
               var targetSector = state.sector.charAt(0) + cityChar;
               var targetZStr = state.zStr; 
@@ -860,7 +860,7 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
             // EXIT CITY (XnVc)
             var worldChar = _worldCharFromCity(state.sector.charAt(1));
             if (worldChar === null) {
-              console.log("UNIVAC() XnVc: " + state.sector + " has no matching world map, ignoring");
+              //console.log("UNIVAC() XnVc: " + state.sector + " has no matching world map, ignoring");
             } else {
               var targetSector = state.sector.charAt(0) + worldChar;
               var targetZStr = state.zStr;
@@ -981,7 +981,7 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
               }
 
               // Ensure the target exists in this room and is on an opposing team
-              console.log("###970### targetTeamId="+targetTeamId+" myTeamId="+myTeamId);
+              //console.log("###970### targetTeamId="+targetTeamId+" myTeamId="+myTeamId);
               // ###970### targetTeamId=S myTeamIdS
   
               if (targetTeamId && targetTeamId !== myTeamId) {
@@ -992,13 +992,13 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
                 // Allow the tag to expire via lazy garbage collection after 1 minute if target goes offline
                 var tsTag = _deps.futureTimestamp(1);
                 _deps.fileSave(driveName, '/', tagPath, tagContent, sessionToken, sessionToken, 'X' + tsTag);
-                console.log("UNIVAC() Xt: Tagged player " + targetId + " (Power: " + attackVal + ")");
+                //console.log("UNIVAC() Xt: Tagged player " + targetId + " (Power: " + attackVal + ")");
               } else {
-                console.log("UNIVAC() Xt: Target " + targetId + " not found or on same team.");
+                //console.log("UNIVAC() Xt: Target " + targetId + " not found or on same team.");
               }
             }
           } else {
-            console.log("UNIVAC() Xt: Tag failed, W7 register not set.");
+            //console.log("UNIVAC() Xt: Tag failed, W7 register not set.");
           }
         }
         ifnot = false;
@@ -1039,7 +1039,7 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
           var markerFile = 'Xz' + targetZStr + tileCode;
           var tsMarker = _deps.futureTimestamp(1);
           _deps.fileSave(driveName, '/', 'w/' + targetSector + '/' + markerFile, '', sessionToken, sessionToken, tsMarker);
-          console.log("UNIVAC() Xz: deployed client marker " + markerFile + " to w/" + targetSector);
+          //console.log("UNIVAC() Xz: deployed client marker " + markerFile + " to w/" + targetSector);
 
           // --- Server-side 'm' file modification for physical collision / persistence ---
           var mPath = 'w/' + targetSector + '/m';
@@ -1075,7 +1075,7 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
                 if (oParts.length >= 3 && oParts[0] === 'w' && oParts[2].length >= 6) {
                   var oId = oParts[2].substring(0, 2);
                   register[token] = oId;
-                  console.log("register["+token+"] = "+oId);
+                  //console.log("register["+token+"] = "+oId);
                 }
               }
             }
@@ -1130,13 +1130,13 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
                       var tsObj = _deps.futureTimestamp(1); 
                       _deps.fileSave(driveName, '/', newObjFile, tape, sessionToken, sessionToken, tsObj);
                     }
-                    console.log("UNIVAC() Vx: modified object " + objfile + " -> " + newObjFile);
+                    //console.log("UNIVAC() Vx: modified object " + objfile + " -> " + newObjFile);
                     objfile = newObjFile; // Update path for subsequent commands
                   }
                 }
               }
             } else {
-              console.log("UNIVAC() Vx: cannot modify a RAM object.");
+              //console.log("UNIVAC() Vx: cannot modify a RAM object.");
             }
           }
         }
@@ -1219,13 +1219,13 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
                       var tsObj = 'X' + _deps.futureTimestamp(1); 
                       _deps.fileSave(driveName, '/', newObjFile, tape, sessionToken, sessionToken, tsObj);
                     }
-                    console.log("UNIVAC() Vy: modified object " + objfile + " -> " + newObjFile);
+                    //console.log("UNIVAC() Vy: modified object " + objfile + " -> " + newObjFile);
                     objfile = newObjFile; // Update path for subsequent commands
                   }
                 }
               }
             } else {
-              console.log("UNIVAC() Vy: cannot modify a RAM object.");
+              //console.log("UNIVAC() Vy: cannot modify a RAM object.");
             }
           }
         }
@@ -1289,7 +1289,7 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
       }
       
       default: {
-      	 console.log('UNIVAC: unknown word [' + word + '] at column ' + (column - 2) + ' – abort script');
+      	 //console.log('UNIVAC: unknown word [' + word + '] at column ' + (column - 2) + ' – abort script');
           break; 
       }
       // If it didn't start with W, it's a true unknown command
@@ -1379,7 +1379,7 @@ function loadconfig(drive) {
   if (!configfile || !configfile.success || typeof configfile.content !== 'string') return;
   
   let config = configfile.content;
-  console.log("loadconfig() config=" + config);
+  //console.log("loadconfig() config=" + config);
   
   for (let column = 0; column < config.length; column += 4) {
     const code = config.substring(column, column + 2); 

@@ -842,7 +842,7 @@ function fileList(driveName, cwd, pattern, session) {
       if (now >= expTime) {
         // Delete it from the server immediately
         fileDelete(driveName, '/', e.name, 'system');
-        console.log('[GC-Lazy] Expired item removed on read: ' + e.name);
+        //console.log('[GC-Lazy] Expired item removed on read: ' + e.name);
         // Skip adding it to the return array
         continue;
       }
@@ -1259,7 +1259,9 @@ function calculateLineOfSight(driveName, centerSector) {
 
 function plugboard(req, stacker, plugs, drive, session) {
   let output = "";
-  if (plugs != "RF") { console.log(plugs+" "+drive+" "+session); }
+  if (plugs != "RF") { 
+    // console.log(plugs+" "+drive+" "+session);
+  }
   function runtape(code) {
     if (code) {
       let uResult = UNIVAC(drive, player.fullPath, "RAM:"+code, session);
@@ -1371,7 +1373,7 @@ function plugboard(req, stacker, plugs, drive, session) {
         }
 
         if (objfile != null) {
-          console.log("UNIVAC(" + drive + ", " + player.fullPath + ", " + objfile + ")");
+          // console.log("UNIVAC(" + drive + ", " + player.fullPath + ", " + objfile + ")");
           if (typeof UNIVAC === 'function') {
             let uResult = UNIVAC(drive, player.fullPath, objfile, session);
             if (uResult) {
@@ -1418,7 +1420,7 @@ function plugboard(req, stacker, plugs, drive, session) {
 
             // intercept 'Zj' (fire) and run global script
             if (itemId === 'Zj') {
-              console.log("UNIVAC(" + drive + ", " + player.fullPath + ", w/f)");
+              // console.log("UNIVAC(" + drive + ", " + player.fullPath + ", w/f)");
               if (typeof UNIVAC === 'function') {
                 let uResult = UNIVAC(drive, player.fullPath, 'w/f', session);
                 if (uResult) {
@@ -1436,7 +1438,7 @@ function plugboard(req, stacker, plugs, drive, session) {
             }
             
             // If the player clicks their own item, send inventory
-            console.log("###1256 matchedFullId="+matchedFullId+" player.item="+player.item);
+            // console.log("###1256 matchedFullId="+matchedFullId+" player.item="+player.item);
             if (matchedFullId === player.item) {
               let invLoad = fileLoad(drive, '/', player.fullPath, session);
               let inventoryData = (invLoad.success && invLoad.content) ? invLoad.content : '';
@@ -1600,7 +1602,7 @@ function plugboard(req, stacker, plugs, drive, session) {
       // Delete the tag immediately so it only executes once
       fileDelete(drive, '/', tagPath, session);
       
-      console.log("plugboard: Player " + player.pubId + " was tagged by " + attackerId + " (Power: " + attackVal + ")");
+      // console.log("plugboard: Player " + player.pubId + " was tagged by " + attackerId + " (Power: " + attackVal + ")");
       
       // Inject the incoming attack value into temporary register W@ and execute the global 't' file
       runtape('XsW@' + attackVal);
