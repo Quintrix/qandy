@@ -7,7 +7,7 @@ window.gfxSession = null;
 window.gfxConnected = null;
 
 var _serverUrl = 'http://localhost:10000/qandyland.js';
-var _serverUrl = 'http://qandy.onrender.com:10000/qandyland.js';
+var _serverUrl = 'https://qandy.onrender.com/qandyland.js';
 
 var mapx=7;
 var mapy=11;
@@ -94,9 +94,6 @@ window.gfxInit = async function() {
 }
 
 window.gfxConnect = async function(serverIndex) {
-  // hard coded for development
-  server = { host: 'localhost', port: 8080 };
-  _serverUrl = "http://" + server.host + ":" + server.port + "/qandyland.js";
 
   try {
     await gfxFetchMap(gfxDrive);
