@@ -31,7 +31,7 @@ var fs   = require('fs');
 
 // ── Configuration ─────────────────────────────────────────────────────────────
 
-var PORT = process.env.PORT || 8080;  
+var PORT = process.env.PORT || 10000;  
 
 var MANIFEST_KEY  = '_dir.sys!';
 var MAX_NAME_BYTES = 255;
