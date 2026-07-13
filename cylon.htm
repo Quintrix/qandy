@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cylon Bootloader</title>
+    <script src="qandy-sound.js"></script>
+    <style>
+        html, body {
+            background-color: #000;
+            color: #0f0;
+            font-family: monospace;
+            margin: 0;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden; /* Prevent body scrolling */
+        }
+        
+        /* Main Display Screen */
+        #screen-wrapper {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            height: 100vh;
+            background-color: #050505;
+            position: relative;
+            box-sizing: border-box;
+            overflow: hidden;
+            transition: height 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        #video-layer {
+            flex: 1;
+            order: 1; 
+            padding: 15px 15px 0 15px; /* Top, Right, Bottom(0 for seamless merging), Left */
+            box-sizing: border-box;
+            overflow-y: auto;
+            font-size: 1.2rem;
+            line-height: 1.4;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            transition: flex 0.4s cubic-bezier(0.22, 1, 0.36, 1), padding 0.4s ease, opacity 0.4s ease;
+        }
+
+        #browser-layer {
+            display: none; /* Hidden by default on boot */
+            flex: 1;
+            order: 1; 
+            border: none;
+            width: 100%;
+            background: #000000; 
+            transition: flex 0.4s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.4s ease;
+        }
+
+        /* Collapse the webpage smoothly when the keyboard opens */
+        body.kb-open #browser-layer {
+            flex: 0 0 0px;
+            opacity: 0;
+        }
+
+        body.kb-open #video-layer {
+            flex: 0 0 0px;       /* Shrinks the layer to 0 height */
+            padding-top: 0;      /* Removes padding so it hides completely */
+            padding-bottom: 0;
+            opacity: 0;          /* Fades out the text */
+        }
+
+        /* Persistent Input Prompt */
+        #input-bar {
+            flex: 0 0 auto;
+            order: 2; /* Naturally stays at the bottom of the screen-wrapper */
+            padding: 0 15px 15px 15px; /* Matched horizontal padding to video-layer */
+            background: transparent;
+            font-size: 1.2rem; /* Match terminal */
+            line-height: 1.4; /* Match terminal */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            position: relative;
+            box-sizing: border-box;
+            cursor: text;
+        }
+
+        /* Virtual Keyboard Overlay */
+        #kb-overlay {
+            position: fixed;
+            bottom: 0; left: 0; right: 0;
+            height: 85vh;
+            background: rgba(10, 10, 10, 0.95);
+            z-index: 99999;
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box;
+            user-select: none; -webkit-user-select: none;
+            overflow-y: auto; overflow-x: hidden;
+            transform: translateY(100%);
+            transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+            will-change: transform;
+        }
+
+        #kb-overlay.is-open {
+            transform: translateY(0);
+        }
+
+        /* Terminal Input Text Rendering */
+        #kb-input-lines { width: 100%; box-sizing: border-box; }
+        #kb-line1, #kb-line2 {
+            white-space: pre; overflow: hidden; line-height: 1.4; width: 100%;
+            cursor: text;
+        }
+        #kb-line2-indent { display: inline-block; }
+        #kb-prompt { color: #0f0; } /* Match Terminal Color */
+        #kb-input-render1, #kb-input-render2 { color: #0f0; } /* Match Terminal Color */
+        
+        .kb-selected { background: #0f0; color: #000; }
+        .kb-cursor-bar {
+            display: inline-block; width: 2px; height: 1.2rem; background: #0f0;
+            margin: 0; vertical-align: text-bottom;
+            animation: blink 1s infinite steps(2, start);
+        }
+        .kb-cursor-block {
+            display: inline-block; min-width: 0.6em; height: 1.2rem;
+            background: #0f0; color: #000; vertical-align: text-bottom;
+            animation: blink 1s infinite steps(2, start);
+        }
+        @keyframes blink { 0% { opacity: 1; } 100% { opacity: 0; } }
+        
+        #kb-mode-indicator {
+            position: absolute; top: 0; right: 15px;
+            color: #0a0; font-size: 0.8rem; border: 1px solid #0a0; border-radius: 3px;
+            padding: 2px 4px; background: rgba(0,0,0,0.55); opacity: 0.6;
+            pointer-events: none; z-index: 2;
+        }
+
+        /* Keyboard Grid Buttons */
+        #kb-grid {
+            display: flex; flex-direction: column; flex: 1; padding: 1vh 1vw; gap: 1vh;
+            background: transparent; box-sizing: border-box; min-height: 0; min-width: 0; width: 100%;
+        }
+        .kb-row { display: flex; flex: 1; gap: 1vw; min-height: 0; }
+        .kb-col { display: flex; flex-direction: column; gap: 1vh; min-height: 0; }
+        .kb-key {
+            background: #222; color: #fff; border: 1px solid #444; border-radius: 6px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 3.5vh; cursor: pointer; text-transform: uppercase;
+            transition: background 0.05s; text-align: center; padding: 0 2px; box-sizing: border-box;
+        }
+        .kb-key.active { background: #666; color: #fff; border-color: #888; }
+        .kb-key.locked { background: #ddd; color: #000; }
+
+        .kb-key-dual {
+            font-size: 5vh;
+            text-transform: none;
+        }
+        .kb-side-panel {
+            flex: 0 0 9vh;
+            border-bottom: 1px solid #222;
+        }
+        .kb-fn-key, .kb-nav-key { font-size: 3vh; }
+        .kb-cols-wrap { display: flex; flex: 1; gap: 1vw; min-height: 0; }
+        .kb-fn-row { flex: 0 0 9vh; display: flex; gap: 1vw; }
+        .kb-main-block { flex: 1; min-width: 0; }
+        .kb-nav-block { width: 15vw; flex: 0 0 auto; justify-content: flex-end; }
+    </style>
+</head>
+<body>
+
+<!-- MAIN DISPLAY & PROMPT -->
+<div id="screen-wrapper">
+    <div id="video-layer"></div>
+    <iframe id="browser-layer"></iframe>
+    <div id="input-bar">
+        <span id="kb-mode-indicator">INS</span>
+        <div id="kb-input-lines">
+            <div id="kb-line1"><span id="kb-prompt"></span><span id="kb-input-render1"></span></div>
+            <div id="kb-line2"><span id="kb-line2-indent"></span><span id="kb-input-render2"></span></div>
+        </div>
+    </div>
+</div>
+
+<!-- VIRTUAL KEYBOARD OVERLAY (Grid container) -->
+<div id="kb-overlay">
+    <div id="kb-grid"></div>
+</div>
+
+
+<script>
+// ============================================================================
+// 1. STATE & VIRTUAL FILE SYSTEM (Qandy DOS)
+// ============================================================================
+
+let inputBuffer = "";
+let cursorPos = 0;
+let selAnchor = null;   // null = no active selection; otherwise selection spans [selAnchor, cursorPos)
+let insertMode = true;  // true = insert, false = overwrite
+let clipboard = "";
+let cmdHistory = [];
+let historyIdx = -1;
+let cwd = "/";
+
+const vfs = {
+    '/': ['system', 'docs', 'boot.sys'],
+    '/system': ['kernel.bin', 'config.txt', 'qandy.sys'],
+    '/docs': ['readme.txt', 'manual.doc']
+};
+
+// ============================================================================
+// 2. DISPLAY COMPONENT
+// ============================================================================
+
+function escapeHTML(str) {
+    return str.replace(/[&<>'"]/g, tag => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+    }[tag] || tag));
+}
+
+function print(html) {
+    const term = document.getElementById('video-layer');
+    const line = document.createElement('div');
+    line.innerHTML = html; // Safe for system strings
+    term.appendChild(line);
+    term.scrollTop = term.scrollHeight; // Auto-scroll to bottom
+}
+
+// ============================================================================
+// 3. COMMAND COMPONENT
+// ============================================================================
+
+function command(cmdStr) {
+    cmdStr = cmdStr.trim();
+    
+    if (cmdStr) {
+        cmdHistory.push(cmdStr);
+        historyIdx = -1;
+    }
+
+    if (!cmdStr) return;
+
+    // Print to terminal history
+    print("Qandy " + escapeHTML(cmdStr)); 
+
+    let video = document.getElementById('video-layer');
+    let browser = document.getElementById('browser-layer');
+
+    // 1. Check if the user wants to go back to the terminal
+    if (cmdStr.toLowerCase() === 'exit') {
+        browser.style.display = 'none';
+        video.style.display = 'block';
+        browser.src = ''; // Stop loading the page
+        print("Returned to terminal.");
+        return;
+    }
+
+    // 2. Format the input as a URL
+    let url = cmdStr;
+    //// If they just typed "example.com", add the https://
+    //if (!/^https?:\/\//i.test(url)) {
+    //    url = 'https://' + url;
+    //}
+
+    print("Loading: " + escapeHTML(url) + " ...");
+
+    // 3. Hide terminal text, show the iframe, and load the site
+    video.style.display = 'none';
+    browser.style.display = 'block';
+    browser.src = url;
+}
+
+function navigateHistory(direction) {
+    if (cmdHistory.length === 0) return;
+    
+    if (direction === -1) { // Up
+        if (historyIdx < cmdHistory.length - 1) historyIdx++;
+    } else { // Down
+        if (historyIdx > 0) historyIdx--;
+        else historyIdx = -1;
+    }
+    
+    if (historyIdx === -1) {
+        inputBuffer = "";
+    } else {
+        inputBuffer = cmdHistory[cmdHistory.length - 1 - historyIdx];
+    }
+}
+
+// ============================================================================
+// 4. KEYBOARD COMPONENT
+// ============================================================================
+
+window.normalKeys = {
+    '`':'`', '1':'1', '2':'2', '3':'3', '4':'4', '5':'5', '6':'6', '7':'7', '8':'8', '9':'9', '0':'0',
+    '-':'-', '=':'=', '[':'[', ']':']', '\\':'\\', ';':';', "'":"'", ',':',', '.':'.', '/':'/',
+    'q':'q', 'w':'w', 'e':'e', 'r':'r', 't':'t', 'y':'y', 'u':'u', 'i':'i', 'o':'o', 'p':'p',
+    'a':'a', 's':'s', 'd':'d', 'f':'f', 'g':'g', 'h':'h', 'j':'j', 'k':'k', 'l':'l',
+    'z':'z', 'x':'x', 'c':'c', 'v':'v', 'b':'b', 'n':'n', 'm':'m'
+};
+
+window.shiftedKeys = {
+    '`':'~', '1':'!', '2':'@', '3':'#', '4':'$', '5':'%', '6':'^', '7':'&', '8':'*', '9':'(', '0':')',
+    '-':'_', '=':'+', '[':'{', ']':'}', '\\':'|', ';':':', "'":'"', ',':'<', '.':'>', '/':'?',
+    'q':'Q', 'w':'W', 'e':'E', 'r':'R', 't':'T', 'y':'Y', 'u':'U', 'i':'I', 'o':'O', 'p':'P',
+    'a':'A', 's':'S', 'd':'D', 'f':'F', 'g':'G', 'h':'H', 'j':'J', 'k':'K', 'l':'L',
+    'z':'Z', 'x':'X', 'c':'C', 'v':'V', 'b':'B', 'n':'N', 'm':'M'
+};
+
+function keyboard() {
+    document.getElementById('kb-line1').addEventListener('click', function(e) { handleLineClick(e, 0); });
+    document.getElementById('kb-line2').addEventListener('click', function(e) { handleLineClick(e, 1); });
+
+    window.modState = { shift: new Set(), ctrl: new Set(), alt: new Set() };
+    window.shift = 0; window.ctrl = 0; window.alt = 0; window.caps = false;
+    window.allKeys = [];
+
+    function spacerDef(flex) {
+        return {id: '_sp_' + Math.random().toString(36).slice(2), label: '', flex: flex, isSpacer: true};
+    }
+
+    function setModifier(type, id, on) {
+        if (on) window.modState[type].add(id); else window.modState[type].delete(id);
+        window[type] = window.modState[type].size > 0 ? 1 : 0;
+    }
+
+    function isLetterKey(lookup) {
+        return /^[a-z]$/.test(lookup);
+    }
+
+    function computeActiveChar(def) {
+        var lookup = def.label.toLowerCase();
+        var normal = (window.normalKeys && window.normalKeys[lookup]) || def.label;
+        var shifted = (window.shiftedKeys && window.shiftedKeys[lookup]) || def.label;
+        var shiftOn = !!window.shift;
+        var capsOn = !!window.caps;
+
+        if (isLetterKey(lookup)) {
+            return (capsOn !== shiftOn) ? shifted : normal;
+        }
+        return shiftOn ? shifted : normal;
+    }
+
+    function pressDown(e, key, btn) {
+        e.preventDefault();
+        if (key.isSpacer) return;
+        btn.classList.add('active');
+
+        if (key.id === 'lshift' || key.id === 'rshift') {
+            setModifier('shift', key.id, true); updateKeyLabels();
+        } else if (key.id === 'lctrl' || key.id === 'rctrl') {
+            setModifier('ctrl', key.id, true); updateKeyLabels();
+        } else if (key.id === 'lalt' || key.id === 'ralt') {
+            setModifier('alt', key.id, true); updateKeyLabels();
+        } else if (key.id === 'caps') {
+            window.caps = !window.caps;
+            if (window.caps) btn.classList.add('locked'); else btn.classList.remove('locked');
+            updateKeyLabels();
+        } else {
+            let charToType;
+            if (key.id === 'space') charToType = ' ';
+            else if (key.noType) charToType = null;
+            else if (key.dual) charToType = computeActiveChar(key);
+            else charToType = btn.textContent;
+            if (window.press) window.press({keyCode: key.keyCode, id: key.id, char: charToType});
+        }
+    }
+
+    function pressUp(e, key, btn) {
+        e.preventDefault();
+        if (key.isSpacer) return;
+        btn.classList.remove('active');
+
+        if (key.id === 'lshift' || key.id === 'rshift') {
+            setModifier('shift', key.id, false); updateKeyLabels();
+        } else if (key.id === 'lctrl' || key.id === 'rctrl') {
+            setModifier('ctrl', key.id, false); updateKeyLabels();
+        } else if (key.id === 'lalt' || key.id === 'ralt') {
+            setModifier('alt', key.id, false); updateKeyLabels();
+        }
+    }
+
+    function makeKeyEl(def) {
+        if (def.isSpacer) {
+            var spacer = document.createElement('div');
+            spacer.style.flex = def.flex;
+            spacer.style.visibility = 'hidden';
+            return spacer;
+        }
+
+        var btn = document.createElement('div');
+        btn.className = 'kb-key' + (def.extraClass ? ' ' + def.extraClass : '') + (def.dual ? ' kb-key-dual' : '');
+        btn.id = 'kb-' + def.id;
+        btn.style.flex = def.flex || 1;
+        btn.textContent = def.label;
+
+        if (def.id === 'caps' && window.caps) btn.classList.add('locked');
+
+        btn.addEventListener('touchstart', function(e) { pressDown(e, def, btn); }, {passive: false});
+        btn.addEventListener('touchend', function(e) { pressUp(e, def, btn); }, {passive: false});
+        btn.addEventListener('touchcancel', function(e) { pressUp(e, def, btn); }, {passive: false});
+        btn.addEventListener('mousedown', function(e) { pressDown(e, def, btn); });
+        btn.addEventListener('mouseup', function(e) { pressUp(e, def, btn); });
+        btn.addEventListener('mouseleave', function(e) { if (btn.classList.contains('active')) pressUp(e, def, btn); });
+
+        window.allKeys.push(def);
+        return btn;
+    }
+
+    function appendRow(container, rowDefs, rowClass) {
+        var rowDiv = document.createElement('div');
+        rowDiv.className = rowClass || 'kb-row';
+        rowDefs.forEach(function(def) { rowDiv.appendChild(makeKeyEl(def)); });
+        container.appendChild(rowDiv);
+    }
+
+    // Build Static Keyboard Structure
+    var grid = document.getElementById('kb-grid');
+
+    var colsWrap = document.createElement('div');
+    colsWrap.className = 'kb-cols-wrap';
+
+    var main = document.createElement('div');
+    main.className = 'kb-col kb-main-block';
+
+    var fnRow = document.createElement('div');
+    fnRow.className = 'kb-row kb-fn-row';
+    fnRow.appendChild(makeKeyEl({id: "esc", label: "Esc", keyCode: 27, flex: 5, noType: true}));
+
+    for (var i = 1; i <= 12; i++) {
+        if (i === 5 || i === 9) fnRow.appendChild(makeKeyEl(spacerDef(0.6)));
+        var fGrp = document.createElement('div'); fGrp.className = 'kb-row'; fGrp.style.flex = '4';
+        fGrp.appendChild(makeKeyEl({id: 'f'+i, label: 'F'+i, keyCode: 111+i, flex: 1, noType: true, extraClass: 'kb-fn-key'}));
+        fnRow.appendChild(fGrp);
+    }
+    main.appendChild(fnRow);
+
+    const mainRows = [
+        [ {id:"backtick", label:"`", keyCode:192, flex: 1.5, dual: true}, {id:"n1", label:"1", keyCode:49, flex: 1, dual: true}, {id:"n2", label:"2", keyCode:50, flex: 1, dual: true}, {id:"n3", label:"3", keyCode:51, flex: 1, dual: true}, {id:"n4", label:"4", keyCode:52, flex: 1, dual: true}, {id:"n5", label:"5", keyCode:53, flex: 1, dual: true}, {id:"n6", label:"6", keyCode:54, flex: 1, dual: true}, {id:"n7", label:"7", keyCode:55, flex: 1, dual: true}, {id:"n8", label:"8", keyCode:56, flex: 1, dual: true}, {id:"n9", label:"9", keyCode:57, flex: 1, dual: true}, {id:"n0", label:"0", keyCode:48, flex: 1, dual: true}, {id:"dash", label:"-", keyCode:173, flex: 1, dual: true}, {id:"equal", label:"=", keyCode:61, flex: 1, dual: true}, {id:"back", label:"Back", keyCode:8, flex: 2, noType: true} ],
+        [ {id:"tab", label:"Tab", keyCode:9, flex: 1.5, noType: true}, {id:"q", label:"q", keyCode:81, flex: 1, dual: true}, {id:"w", label:"w", keyCode:87, flex: 1, dual: true}, {id:"e", label:"e", keyCode:69, flex: 1, dual: true}, {id:"r", label:"r", keyCode:82, flex: 1, dual: true}, {id:"t", label:"t", keyCode:84, flex: 1, dual: true}, {id:"y", label:"y", keyCode:89, flex: 1, dual: true}, {id:"u", label:"u", keyCode:85, flex: 1, dual: true}, {id:"i", label:"i", keyCode:73, flex: 1, dual: true}, {id:"o", label:"o", keyCode:79, flex: 1, dual: true}, {id:"p", label:"p", keyCode:80, flex: 1, dual: true}, {id:"open", label:"[", keyCode:219, flex: 1, dual: true}, {id:"close", label:"]", keyCode:221, flex: 1, dual: true}, {id:"backslash", label:"\\", keyCode:220, flex: 1.5, dual: true} ],
+        [ {id:"caps", label:"Caps", keyCode:20, flex: 1.8, noType: true}, {id:"a", label:"a", keyCode:65, flex: 1, dual: true}, {id:"s", label:"s", keyCode:83, flex: 1, dual: true}, {id:"d", label:"d", keyCode:68, flex: 1, dual: true}, {id:"f", label:"f", keyCode:70, flex: 1, dual: true}, {id:"g", label:"g", keyCode:71, flex: 1, dual: true}, {id:"h", label:"h", keyCode:72, flex: 1, dual: true}, {id:"j", label:"j", keyCode:74, flex: 1, dual: true}, {id:"k", label:"k", keyCode:75, flex: 1, dual: true}, {id:"l", label:"l", keyCode:76, flex: 1, dual: true}, {id:"colon", label:";", keyCode:59, flex: 1, dual: true}, {id:"quote", label:"'", keyCode:222, flex: 1, dual: true}, {id:"enter", label:"Enter", keyCode:13, flex: 2.2, noType: true} ],
+        [ {id:"lshift", label:"Shift", keyCode:16, flex: 2.3, noType: true}, {id:"z", label:"z", keyCode:90, flex: 1, dual: true}, {id:"x", label:"x", keyCode:88, flex: 1, dual: true}, {id:"c", label:"c", keyCode:67, flex: 1, dual: true}, {id:"v", label:"v", keyCode:86, flex: 1, dual: true}, {id:"b", label:"b", keyCode:66, flex: 1, dual: true}, {id:"n", label:"n", keyCode:78, flex: 1, dual: true}, {id:"m", label:"m", keyCode:77, flex: 1, dual: true}, {id:"comma", label:",", keyCode:188, flex: 1, dual: true}, {id:"dot", label:".", keyCode:190, flex: 1, dual: true}, {id:"slash", label:"/", keyCode:191, flex: 1, dual: true}, {id:"rshift", label:"Shift", keyCode:16, flex: 2.3, noType: true} ],
+        [ {id:"lctrl", label:"Ctrl", keyCode:17, flex: 1.3, noType: true}, {id:"lalt", label:"Alt", keyCode:18, flex: 1.3, noType: true}, {id:"space", label:"Space", keyCode:32, flex: 6}, {id:"ralt", label:"Alt", keyCode:18, flex: 1.3, noType: true}, {id:"rctrl", label:"Ctrl", keyCode:17, flex: 1.3, noType: true} ]
+    ];
+    mainRows.forEach(function(r) { appendRow(main, r); });
+    colsWrap.appendChild(main);
+
+    var nav = document.createElement('div');
+    nav.className = 'kb-col kb-nav-block';
+
+    var sidePanel = document.createElement('div');
+    sidePanel.id = 'kb-side-panel';
+    sidePanel.className = 'kb-row kb-side-panel';
+    nav.appendChild(sidePanel);
+
+    const navRows = [
+        [ {id:"ins", label:"Ins", keyCode:45, flex:1, noType:true, extraClass:"kb-nav-key"}, {id:"home", label:"Home", keyCode:36, flex:1, noType:true, extraClass:"kb-nav-key"}, {id:"pgup", label:"PgUp", keyCode:33, flex:1, noType:true, extraClass:"kb-nav-key"} ],
+        [ {id:"del", label:"Del", keyCode:46, flex:1, noType:true, extraClass:"kb-nav-key"}, {id:"end", label:"End", keyCode:35, flex:1, noType:true, extraClass:"kb-nav-key"}, {id:"pgdn", label:"PgDn", keyCode:34, flex:1, noType:true, extraClass:"kb-nav-key"} ],
+        [ spacerDef(1) ],
+        [ spacerDef(1), {id:"up", label:"▲", keyCode:38, flex:1, noType:true, extraClass:"kb-nav-key"}, spacerDef(1) ],
+        [ {id:"left", label:"◀", keyCode:37, flex:1, noType:true, extraClass:"kb-nav-key"}, {id:"down", label:"▼", keyCode:40, flex:1, noType:true, extraClass:"kb-nav-key"}, {id:"right", label:"▶", keyCode:39, flex:1, noType:true, extraClass:"kb-nav-key"} ]
+    ];
+    navRows.forEach(function(r) { appendRow(nav, r); });
+    colsWrap.appendChild(nav);
+
+    grid.appendChild(colsWrap);
+
+    function updateKeyLabels() {
+        window.allKeys.forEach(function(key) {
+            var el = document.getElementById('kb-' + key.id);
+            if (!el) return;
+
+            if (key.dual) {
+                var lookup = key.label.toLowerCase();
+                var normal = (window.normalKeys && window.normalKeys[lookup]) || key.label;
+                var shifted = (window.shiftedKeys && window.shiftedKeys[lookup]) || key.label;
+                var active = computeActiveChar(key);
+                
+                el.textContent = active;
+                if (active === shifted && shifted !== normal) {
+                    el.classList.add('active-shift');
+                } else {
+                    el.classList.remove('active-shift');
+                }
+            }
+        });
+    }
+
+    updateKeyLabels();
+
+    var inputViewOffset = 0;
+    var lastCharW = 10, lastPromptWidth = 0, lastCharsPerLine = 20;
+    var lastLine1Start = 0, lastLine2Start = 0, lastLine1Text = '', lastLine2Text = '';
+
+    function measureLineGeometry() {
+        var promptEl = document.getElementById('kb-prompt');
+        var wrapEl = document.getElementById('kb-input-lines');
+        if (!promptEl || !wrapEl) return {charW: lastCharW, promptWidth: lastPromptWidth, charsPerLine: lastCharsPerLine};
+        if (!window._measureCtx) window._measureCtx = document.createElement('canvas').getContext('2d');
+        var ctx = window._measureCtx;
+        var cs = getComputedStyle(promptEl);
+        ctx.font = cs.fontStyle + ' ' + cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily;
+        var charW = ctx.measureText('0').width || 10;
+        var promptWidth = ctx.measureText(promptEl.textContent || '').width;
+        var totalWidth = wrapEl.clientWidth;
+        var charsPerLine = Math.max(1, Math.floor((totalWidth - promptWidth) / charW));
+        return {charW: charW, promptWidth: promptWidth, charsPerLine: charsPerLine};
+    }
+
+    function buildLineSpans(lineText, showCursor, posInLine, lineGlobalStart) {
+        var frag = document.createDocumentFragment();
+        var selStart = null, selEnd = null;
+        if (selAnchor !== null && selAnchor !== cursorPos) {
+            var gStart = Math.min(selAnchor, cursorPos);
+            var gEnd = Math.max(selAnchor, cursorPos);
+            var lineEnd = lineGlobalStart + lineText.length;
+            var s = Math.max(gStart, lineGlobalStart);
+            var eIdx = Math.min(gEnd, lineEnd);
+            if (s < eIdx) { selStart = s - lineGlobalStart; selEnd = eIdx - lineGlobalStart; }
+        }
+
+        function addSpan(str, cls) {
+            var span = document.createElement('span');
+            span.textContent = str === '' ? '\u00A0' : str;
+            if (str === '') span.style.display = 'none';
+            if (cls) span.className = cls;
+            frag.appendChild(span);
+        }
+
+        if (selStart !== null) {
+            addSpan(lineText.slice(0, selStart));
+            addSpan(lineText.slice(selStart, selEnd), 'kb-selected');
+            addSpan(lineText.slice(selEnd));
+        } else if (showCursor) {
+            var before = lineText.slice(0, posInLine);
+            var atChar = lineText.slice(posInLine, posInLine + 1);
+            var after = lineText.slice(posInLine + 1);
+            addSpan(before);
+            var cursorSpan = document.createElement('span');
+            if (insertMode) {
+                cursorSpan.className = 'kb-cursor-bar';
+                frag.appendChild(cursorSpan);
+                addSpan(atChar + after);
+            } else {
+                cursorSpan.className = 'kb-cursor-block';
+                cursorSpan.textContent = atChar === '' ? '\u00A0' : atChar;
+                frag.appendChild(cursorSpan);
+                addSpan(after);
+            }
+        } else {
+            addSpan(lineText);
+        }
+        return frag;
+    }
+
+    function renderInputLine() {
+        var render1 = document.getElementById('kb-input-render1');
+        var render2 = document.getElementById('kb-input-render2');
+        var indent = document.getElementById('kb-line2-indent');
+        if (!render1 || !render2) return;
+
+        var text = inputBuffer;
+        var geom = measureLineGeometry();
+        lastCharW = geom.charW; lastPromptWidth = geom.promptWidth; lastCharsPerLine = geom.charsPerLine;
+        if (indent) indent.style.width = geom.promptWidth + 'px';
+
+        var capacity = geom.charsPerLine * 2;
+        if (cursorPos < inputViewOffset || cursorPos >= inputViewOffset + capacity) {
+            inputViewOffset = Math.floor(cursorPos / geom.charsPerLine) * geom.charsPerLine;
+        }
+
+        var line1Start = inputViewOffset;
+        var line2Start = inputViewOffset + geom.charsPerLine;
+        var line1Text = text.slice(line1Start, line1Start + geom.charsPerLine);
+        var line2Text = text.slice(line2Start, line2Start + geom.charsPerLine);
+        lastLine1Start = line1Start; lastLine2Start = line2Start;
+        lastLine1Text = line1Text; lastLine2Text = line2Text;
+
+        var relPos = cursorPos - inputViewOffset;
+        var cursorOnLine2 = relPos >= geom.charsPerLine;
+        var posInLine = cursorOnLine2 ? relPos - geom.charsPerLine : relPos;
+
+        render1.innerHTML = '';
+        render1.appendChild(buildLineSpans(line1Text, !cursorOnLine2, posInLine, line1Start));
+        render2.innerHTML = '';
+        render2.appendChild(buildLineSpans(line2Text, cursorOnLine2, posInLine, line2Start));
+
+        var modeEl = document.getElementById('kb-mode-indicator');
+        if (modeEl) modeEl.textContent = insertMode ? 'INS' : 'OVR';
+    }
+
+    function handleLineClick(e, lineNum) {
+        var row = e.currentTarget;
+        var rect = row.getBoundingClientRect();
+        var clickX = e.clientX - rect.left - lastPromptWidth;
+        var idx = Math.round(clickX / lastCharW);
+        if (idx < 0) idx = 0;
+        var lineText = lineNum === 0 ? lastLine1Text : lastLine2Text;
+        if (idx > lineText.length) idx = lineText.length;
+        var lineStart = lineNum === 0 ? lastLine1Start : lastLine2Start;
+        cursorPos = Math.max(0, Math.min(inputBuffer.length, lineStart + idx));
+        selAnchor = null;
+        renderInputLine();
+    }
+
+    window.updateOverlayInput = function() {
+        renderInputLine();
+    };
+    window.renderInputLine = renderInputLine;
+    window.setModifier = setModifier;
+    window.updateKeyLabels = updateKeyLabels;
+    
+    window.setKeyVisual = function(id, cls, on) {
+        var el = document.getElementById('kb-' + id);
+        if (!el) return;
+        if (on) el.classList.add(cls); else el.classList.remove(cls);
+    };
+
+    window.showFullKeyboard = function() {
+        document.getElementById('kb-prompt').textContent = cwd + "> ";
+        renderInputLine();
+        document.getElementById('kb-overlay').classList.add('is-open');
+        document.body.classList.add('kb-open');
+    };
+
+    window.hideFullKeyboard = function() {
+        document.getElementById('kb-overlay').classList.remove('is-open');
+        document.body.classList.remove('kb-open');
+    };
+
+    // Prompt toggles the keyboard when tapped
+    document.getElementById('input-bar').addEventListener('click', function() {
+        if (!document.body.classList.contains('kb-open')) {
+            window.showFullKeyboard();
+        }
+    });
+    
+    function clampCursor(pos) { return Math.max(0, Math.min(inputBuffer.length, pos)); }
+    function hasSelection() { return selAnchor !== null && selAnchor !== cursorPos; }
+    function selRange() { return [Math.min(selAnchor, cursorPos), Math.max(selAnchor, cursorPos)]; }
+
+    function deleteSelection() {
+        var range = selRange();
+        inputBuffer = inputBuffer.slice(0, range[0]) + inputBuffer.slice(range[1]);
+        cursorPos = range[0];
+        selAnchor = null;
+    }
+
+    window.press = function(e) {
+        var shiftHeld = (typeof e.shift !== 'undefined') ? e.shift : !!window.shift;
+
+        if (e.id === 'back') {
+            if (hasSelection()) { deleteSelection(); }
+            else if (cursorPos > 0) {
+                inputBuffer = inputBuffer.slice(0, cursorPos - 1) + inputBuffer.slice(cursorPos);
+                cursorPos--;
+            }
+        } else if (e.id === 'del') {
+            if (hasSelection()) {
+                if (shiftHeld) { var r = selRange(); clipboard = inputBuffer.slice(r[0], r[1]); }
+                deleteSelection();
+            } else if (cursorPos < inputBuffer.length) {
+                inputBuffer = inputBuffer.slice(0, cursorPos) + inputBuffer.slice(cursorPos + 1);
+            }
+        } else if (e.id === 'ins') {
+            if (shiftHeld) {
+                if (hasSelection()) deleteSelection();
+                if (clipboard) {
+                    inputBuffer = inputBuffer.slice(0, cursorPos) + clipboard + inputBuffer.slice(cursorPos);
+                    cursorPos += clipboard.length;
+                }
+            } else { insertMode = !insertMode; }
+        } else if (e.id === 'left') {
+            if (shiftHeld) { if (selAnchor === null) selAnchor = cursorPos; cursorPos = clampCursor(cursorPos - 1); }
+            else { cursorPos = hasSelection() ? selRange()[0] : clampCursor(cursorPos - 1); selAnchor = null; }
+        } else if (e.id === 'right') {
+            if (shiftHeld) { if (selAnchor === null) selAnchor = cursorPos; cursorPos = clampCursor(cursorPos + 1); }
+            else { cursorPos = hasSelection() ? selRange()[1] : clampCursor(cursorPos + 1); selAnchor = null; }
+        } else if (e.id === 'home') {
+            if (shiftHeld) { if (selAnchor === null) selAnchor = cursorPos; } else { selAnchor = null; }
+            cursorPos = 0;
+        } else if (e.id === 'end') {
+            if (shiftHeld) { if (selAnchor === null) selAnchor = cursorPos; } else { selAnchor = null; }
+            cursorPos = inputBuffer.length;
+        } else if (e.id === 'enter') {
+            command(inputBuffer);
+            inputBuffer = "";
+            cursorPos = 0;
+            selAnchor = null;
+            document.getElementById('kb-prompt').textContent = cwd + "> ";
+            hideFullKeyboard();
+        } else if (e.id === 'up') {
+            navigateHistory(-1);
+            cursorPos = inputBuffer.length;
+            selAnchor = null;
+        } else if (e.id === 'down') {
+            navigateHistory(1);
+            cursorPos = inputBuffer.length;
+            selAnchor = null;
+        } else if (e.id === 'esc') {
+            hideFullKeyboard();
+        } else if (e.char) {
+            if (hasSelection()) deleteSelection();
+            if (insertMode) { inputBuffer = inputBuffer.slice(0, cursorPos) + e.char + inputBuffer.slice(cursorPos); }
+            else { inputBuffer = inputBuffer.slice(0, cursorPos) + e.char + inputBuffer.slice(cursorPos + 1); }
+            cursorPos++;
+        }
+        renderInputLine();
+    };
+}
+
+// ============================================================================
+// 5. SYSTEM INITIALIZATION
+// ============================================================================
+
+function powerOn() {
+    var overlay = document.createElement('div');
+    overlay.id = 'qandy-power-overlay';
+    Object.assign(overlay.style, {
+      position: 'fixed', left: '0', top: '0', width: '100%', height: '100%',
+      zIndex: '300', background: 'transparent', display: 'flex',
+      alignItems: 'center', justifyContent: 'center', userSelect: 'none'
+    });
+
+    var label = document.createElement('div');
+    label.textContent = 'POWER ON';
+    Object.assign(label.style, {
+      color: '#fff', fontFamily: 'monospace', fontSize: '28px',
+      letterSpacing: '2px', textAlign: 'center', textShadow: '0 1px 0 rgba(0,0,0,0.6)'
+    });
+
+    var helper = document.createElement('div');
+    helper.textContent = 'Touch, Press, or Click screen to power on.';
+    Object.assign(helper.style, {
+      color: '#ffffff', fontFamily: 'monospace', fontSize: '12px', marginTop: '8px'
+    });
+
+    var stack = document.createElement('div');
+    stack.style.display = 'flex'; stack.style.flexDirection = 'column'; stack.style.alignItems = 'center';
+    stack.appendChild(label); stack.appendChild(helper);
+    overlay.appendChild(stack);
+    document.body.appendChild(overlay);
+
+    function engageHandler(e) {
+      overlay.removeEventListener('click', engageHandler, true);
+      document.removeEventListener('keydown', engageHandler, true);
+      
+      try {
+        if (typeof sound_js === 'function') { sound_js(); }
+      } catch (e) { console.warn('qandy: error while initializing sound', e); }
+
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      loadNext();
+    }
+
+    overlay.addEventListener('click', engageHandler, { capture: true, once: true });
+    document.addEventListener('keydown', engageHandler, { capture: true, once: true });
+}
+
+window.onload = function() {
+    powerOn();
+};
+
+function loadNext() {
+    keyboard();
+    
+    print("<p><font color=lime>Qandy Pocket Computer v2029<br>Quintrix and Crew Software</font>");
+    print("<p><font color=cyan>Alpha Testing Prototype Release<br>Free Public Domain Software</font>");
+    
+    showFullKeyboard();
+
+    // Hides keyboard whenever the terminal text area itself is tapped
+    document.getElementById('video-layer').addEventListener('click', function() {
+        hideFullKeyboard();
+    });
+    
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Shift') {
+            window.setModifier('shift', 'physical-shift', true);
+            window.setKeyVisual('lshift', 'active', true);
+            window.setKeyVisual('rshift', 'active', true);
+            window.updateKeyLabels();
+        } else if (e.key === 'Control') {
+            window.setModifier('ctrl', 'physical-ctrl', true);
+            window.setKeyVisual('lctrl', 'active', true);
+            window.setKeyVisual('rctrl', 'active', true);
+            window.updateKeyLabels();
+        } else if (e.key === 'Alt') {
+            window.setModifier('alt', 'physical-alt', true);
+            window.setKeyVisual('lalt', 'active', true);
+            window.setKeyVisual('ralt', 'active', true);
+            window.updateKeyLabels();
+            e.preventDefault();
+        } else if (e.key === 'CapsLock') {
+            window.caps = e.getModifierState && e.getModifierState('CapsLock');
+            window.setKeyVisual('caps', 'locked', window.caps);
+            window.updateKeyLabels();
+        } else if (e.key === 'Backspace') { window.press({id: 'back'}); e.preventDefault(); }
+        else if (e.key === 'Enter') { window.press({id: 'enter'}); e.preventDefault(); }
+        else if (e.key === 'ArrowUp') { window.press({id: 'up'}); e.preventDefault(); }
+        else if (e.key === 'ArrowDown') { window.press({id: 'down'}); e.preventDefault(); }
+        else if (e.key === 'ArrowLeft') { window.press({id: 'left', shift: e.shiftKey}); e.preventDefault(); }
+        else if (e.key === 'ArrowRight') { window.press({id: 'right', shift: e.shiftKey}); e.preventDefault(); }
+        else if (e.key === 'Home') { window.press({id: 'home', shift: e.shiftKey}); e.preventDefault(); }
+        else if (e.key === 'End') { window.press({id: 'end', shift: e.shiftKey}); e.preventDefault(); }
+        else if (e.key === 'Insert') { window.press({id: 'ins', shift: e.shiftKey}); e.preventDefault(); }
+        else if (e.key === 'Delete') { window.press({id: 'del', shift: e.shiftKey}); e.preventDefault(); }
+        else if (e.key === 'Escape') { window.press({id: 'esc'}); }
+        else if (e.key.length === 1) { window.press({char: e.key}); e.preventDefault(); }
+    });
+
+    document.addEventListener('keyup', function(e) {
+        if (e.key === 'Shift') {
+            window.setModifier('shift', 'physical-shift', false);
+            window.setKeyVisual('lshift', 'active', false);
+            window.setKeyVisual('rshift', 'active', false);
+            window.updateKeyLabels();
+        } else if (e.key === 'Control') {
+            window.setModifier('ctrl', 'physical-ctrl', false);
+            window.setKeyVisual('lctrl', 'active', false);
+            window.setKeyVisual('rctrl', 'active', false);
+            window.updateKeyLabels();
+        } else if (e.key === 'Alt') {
+            window.setModifier('alt', 'physical-alt', false);
+            window.setKeyVisual('lalt', 'active', false);
+            window.setKeyVisual('ralt', 'active', false);
+            window.updateKeyLabels();
+        }
+    });
+}
+</script>
+</body>
+</html>

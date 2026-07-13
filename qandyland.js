@@ -31,7 +31,7 @@ var fs   = require('fs');
 
 // ── Configuration ─────────────────────────────────────────────────────────────
 
-var PORT = process.env.PORT || 10000;  
+var PORT = process.env.PORT || 8080;  
 
 var MANIFEST_KEY  = '_dir.sys!';
 var MAX_NAME_BYTES = 255;
@@ -1185,72 +1185,42 @@ function getSectorTerrain(drive, sector) {
 function calculateLineOfSight(driveName, centerSector) {
   let drive = drives[driveName];
   let centerPos = sectorToCoords(centerSector);
-  if (!centerPos) return [centerSector]; // Return just the center for special rooms like _L
+  
+  // Return just the center for special rooms without coordinates (like _L)
+  if (!centerPos) return [centerSector]; 
 
   let terrainChar = getSectorTerrain(drive, centerSector);
-  let elevation = 0;
-  let viewType = 'mid'; // Default flat
-
-  // Determine player's vantage point
-  if (terrainChar === 'M' || terrainChar === 'S' || terrainChar === 'W') {
-    elevation = 1;
-    viewType = 'high';
-  } else if (terrainChar === 'R' || terrainChar === 'T') {
-    elevation = 0;
-    viewType = 'low';
-  }
+  
+  // Determine if player's vantage point is elevated
+  let isElevated = (terrainChar === 'M' || terrainChar === 'S' || terrainChar === 'W');
 
   let visible = new Set();
-  visible.add(centerSector);
+  visible.add(centerSector); // Player can always see their current sector
 
-  // Define relative coordinate offsets based on elevation/terrain
-  let offsets = [];
-  if (viewType === 'low') {
-    // Radius 1 Cross (Swamp/Forest)
-    offsets = [ [0,-1], [0,1], [-1,0], [1,0] ];
-  } else if (viewType === 'mid') {
-    // Radius 2 Diamond (Flat)
-    offsets = [
-      [0,-1], [0,-2], [0,1], [0,2],     // N, S
-      [-1,0], [-2,0], [1,0], [2,0],     // E, W
-      [-1,-1], [1,-1], [-1,1], [1,1]    // Diagonals
-    ];
-  } else if (viewType === 'high') {
-    // Radius 2 Square (Minus extreme corners)
-    for (let dx = -2; dx <= 2; dx++) {
-      for (let dy = -2; dy <= 2; dy++) {
-        if (Math.abs(dx) === 2 && Math.abs(dy) === 2) continue; // Skip corners
-        if (dx === 0 && dy === 0) continue;
-        offsets.push([dx, dy]);
-      }
-    }
-  }
+  // Define relative coordinate offsets (North, South, West, East)
+  let offsets = [ [0,-1], [0,1], [-1,0], [1,0] ];
 
   for (let off of offsets) {
     let tx = centerPos.x + off[0];
     let ty = centerPos.y + off[1];
     let targetSector = coordsToSector(tx, ty);
+    
     if (!targetSector) continue; // Off the edge of the map
 
-    // If we have 0 elevation, check if our line of sight is blocked by a forest/swamp in front of us
-    let isBlocked = false;
-    if (elevation === 0 && (Math.abs(off[0]) === 2 || Math.abs(off[1]) === 2)) {
-      // Find the sector 1-step between us and the 2-step target
-      let midX = centerPos.x + Math.sign(off[0]);
-      let midY = centerPos.y + Math.sign(off[1]);
-      let midSector = coordsToSector(midX, midY);
-      
-      if (midSector) {
-        let midTerrain = getSectorTerrain(drive, midSector);
-        // If the intermediate sector is a Forest (R), Swamp (T), or Wall (anything else abnormal), it blocks LoS
-        if (midTerrain === 'R' || midTerrain === 'T' || (!'ABCDEFGHIJK'.includes(midTerrain) && !'MSW'.includes(midTerrain))) {
-          isBlocked = true;
-        }
-      }
-    }
-
-    if (!isBlocked) {
+    // If the player is elevated, they can see adjacent sectors regardless of terrain.
+    if (isElevated) {
       visible.add(targetSector);
+    } else {
+      // If the player is NOT elevated, they can only see the target if it is flatlands.
+      let targetTerrain = getSectorTerrain(drive, targetSector);
+      
+      // Based on previous logic: 'A' through 'K' are standard open flatlands
+      // ('R'/'T' are forest/swamp, 'M'/'S'/'W' are mountains, others are walls)
+      let isFlatland = 'ABCDEFGHIJK'.includes(targetTerrain);
+      
+      if (isFlatland) {
+        visible.add(targetSector);
+      }
     }
   }
 
@@ -1464,6 +1434,15 @@ function plugboard(req, stacker, plugs, drive, session) {
       case 'Vl':
         if (tape) { runtape(tape); tape = ""; }
         refresh = false; // Turn off the default 'RF' generation
+
+        let myTeam = player.item ? player.item.substring(0, 2) : 'Za';
+        let tsStr = "";
+        
+        // 1. Load teamsectors (Removed the immediate fileSave that was only saving player.map)
+        if (myTeam >= 'Sa' && myTeam <= 'Sd') {
+          let tsLoad = fileLoad(drive, '/', 'w/' + myTeam, session);
+          tsStr = (tsLoad.success && tsLoad.content) ? tsLoad.content : "";
+        }
         
         let activeSectors = {}; 
         
@@ -1488,8 +1467,7 @@ function plugboard(req, stacker, plugs, drive, session) {
         }
         
         let pCSVArr = [];
-        let knownSectorsArr = [];
-        let myTeam = player.item ? player.item.charAt(0) : 'Z'; 
+        let currentlyVisibleSectorsArr = [];
 
         // 3. Evaluate all active sectors
         for (let sec in activeSectors) {
@@ -1506,17 +1484,19 @@ function plugboard(req, stacker, plugs, drive, session) {
                 let fid = fname.substring(0, 2);
                 if (fid >= 'Sa' && fid < 'Ua') {
                   let fz = fname.substring(2, 4);
-                  secPlayers.push(fid + sec + fz);
-                  if (fid.charAt(0) === myTeam) {
+                  let uid = fname.substring(4, 8);
+                  secPlayers.push(fid + sec + fz + uid);
+                  if (fid === myTeam) {
                     teammateInSector = true;
                   }
                 }
               }
-            }
-            
+            }            
+
             // Player knows about the sector if they have Direct LoS OR a teammate is there broadcasting
             if (teammateInSector || isDirectLoS) {
-              knownSectorsArr.push(sec);
+              currentlyVisibleSectorsArr.push(sec);
+              if (tsStr.indexOf(sec) < 0) { tsStr += sec; }
               // Send player info if someone is there
               if (secPlayers.length > 0) {
                 pCSVArr = pCSVArr.concat(secPlayers);
@@ -1525,11 +1505,15 @@ function plugboard(req, stacker, plugs, drive, session) {
           }
         }
 
+        if (myTeam >= 'Sa' && myTeam <= 'Ua') {
+          fileSave(drive, '/', 'w/' + myTeam, tsStr, session, 'system');
+        }
+
         let pCSV = pCSVArr.join('~');
-        let knownSectorsStr = knownSectorsArr.join('');
+        let visibleSectorsStr = currentlyVisibleSectorsArr.join('');
         let zStr = player.z < 10 ? "0" + player.z : String(player.z);
         
-        output += "Vl" + player.map + zStr + pCSV + "|" + knownSectorsStr;
+        output += "Vl" + player.map + zStr + pCSV + "|" + visibleSectorsStr + "|" + tsStr;
         break;
 
       case 'ST':
@@ -1590,6 +1574,19 @@ function plugboard(req, stacker, plugs, drive, session) {
   }
 
   if (tape) { runtape(tape); tape=""; }
+
+  // --- track sectors team has explored ---
+  if (player.item && player.item.length >= 2) {
+    var team = player.item.substring(0, 2);
+    if (team >= 'Sa' && team <= 'Sd') {
+      let tsLoad = fileLoad(drive, '/', 'w/' + team, session);
+      let tsStr = (tsLoad.success && tsLoad.content) ? tsLoad.content : "";
+      if (tsStr.indexOf(player.map) < 0) {
+        tsStr = tsStr + player.map;
+        fileSave(drive, '/', 'w/' + team, tsStr, session, 'system');
+      }
+    }
+  }
   
   // --- PvP Tag Intercept ---
   if (player.pubId && player.map) {

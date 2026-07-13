@@ -811,15 +811,17 @@ function gfxRefresh(rfStr) {
 window.isLooking = false;
 window.terrainCache = null;
 window.lastKnownSectors = "";
+window.lastKnownOpponents = window.lastKnownOpponents || {};
 
 window.gfxRenderGlobalCanvas = function(myMap, myZ, playerData) {
   // 1. Setup Constants and Canvas
   const sectorsY = "ABCDEFGH".split("");
   
-  // Split the data: [0] is the CSV player list, [1] is the visible sectors string
+  // Split the data: [0] is the CSV player list, [1] is the visible sectors string, [2] is explored sectors
   const parts = playerData.split('|');
   const pCSV = parts[0];
-  const knownSectors = parts[1] || ""; 
+  const visibleSectors = parts[1] || ""; 
+  const knownSectors = parts[2] || visibleSectors; 
 
   if (window.lastKnownSectors !== knownSectors) {
     window.terrainCache = null;
@@ -847,33 +849,82 @@ window.gfxRenderGlobalCanvas = function(myMap, myZ, playerData) {
 
   // Helper function to draw players accurately
   function drawPlayers() {
-    if (!pCSV) return;
-    const pList = pCSV.split('~');
-    pList.forEach(p => {
-      if (p.length < 6) return;
-      const id = p.substring(0, 2);
-      const sec = p.substring(2, 4);
-      const z = parseInt(p.substring(4, 6), 10);
-      
-      const sy = sec.charCodeAt(0) - 65; // 'A' -> 0
-      const sx = sec.charCodeAt(1) - 97; // 'a' -> 0
-      
-      if (sy < 0 || sy > 7 || sx < 0 || sx > 7) return;
+    const currentVisiblePlayers = {};
+    if (pCSV) {
+      const pList = pCSV.split('~');
+      pList.forEach(p => {
+        // Must be at least 6 characters (id + sec + z)
+        if (p.length < 6) return;
+        const id = p.substring(0, 2);
+        const sec = p.substring(2, 4);
+        const z = parseInt(p.substring(4, 6), 10);
+        // Extract 4-character UID if present
+        const uid = p.length >= 10 ? p.substring(6, 10) : p; 
+        
+        currentVisiblePlayers[uid] = { id, sec, z };
+        
+        // Track opponents for 'last known location'
+        const myTeam = window.playerItem ? window.playerItem.substring(0, 2) : 'Za';
+        if (id !== myTeam && id >= 'Sa' && id < 'Ua' && p.length >= 10) {
+          window.lastKnownOpponents[uid] = { id, sec, z };
+        }
+      });
+    }
 
-      const tx = z % 8; const ty = Math.floor(z / 8);
-
-      if (id.charAt(0) === 'S') ctx.fillStyle = '#00FFFF';
-      else if (id.charAt(0) === 'T') ctx.fillStyle = '#FF00FF';
-      else ctx.fillStyle = '#FFFFFF';
-
-      // Use startsWith to ensure players remain highlighted even if client adds unique IDs
-      if (window.playerItem && window.playerItem.startsWith(id)) {
-          ctx.fillStyle = '#FFFF00';
-          ctx.fillRect((sx * 32) + (tx * 4) - 1, (sy * 48) + (ty * 4) - 1, 6, 6);
-      } else {
-          ctx.fillRect((sx * 32) + (tx * 4), (sy * 48) + (ty * 4), 4, 4);
+    // Clean up lastKnownOpponents (If their sector is visible, but they aren't there, we lose their trail)
+    for (const uid in window.lastKnownOpponents) {
+      const opp = window.lastKnownOpponents[uid];
+      if (!currentVisiblePlayers[uid]) {
+        if (visibleSectors.includes(opp.sec)) {
+          delete window.lastKnownOpponents[uid];
+        }
       }
-    });
+    }
+
+    // Draw last known opponents ('?')
+    ctx.font = 'bold 8px Courier'; 
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    
+    for (const uid in window.lastKnownOpponents) {
+      if (!currentVisiblePlayers[uid]) {
+        const opp = window.lastKnownOpponents[uid];
+        const sy = opp.sec.charCodeAt(0) - 65; 
+        const sx = opp.sec.charCodeAt(1) - 97; 
+        if (sy < 0 || sy > 7 || sx < 0 || sx > 7) continue;
+        const tx = opp.z % 8; const ty = Math.floor(opp.z / 8);
+        
+        ctx.fillStyle = '#FF0000'; // Enemy Red
+        ctx.fillText('?', (sx * 32) + (tx * 4) + 2, (sy * 48) + (ty * 4) + 3);
+      }
+    }
+
+    // Draw visible players
+    const myTeam = window.playerItem ? window.playerItem.substring(0, 2) : 'Za';
+    const myUid = window.playerId || "";
+
+    for (const uid in currentVisiblePlayers) {
+      const p = currentVisiblePlayers[uid];
+      const sy = p.sec.charCodeAt(0) - 65; 
+      const sx = p.sec.charCodeAt(1) - 97; 
+      
+      if (sy < 0 || sy > 7 || sx < 0 || sx > 7) continue;
+
+      const tx = p.z % 8; const ty = Math.floor(p.z / 8);
+
+      if (p.id === myTeam) {
+        if (uid === myUid || uid === p.id + p.sec + (p.z < 10 ? '0' + p.z : p.z)) {
+          ctx.fillStyle = '#FFFF00'; // Me (Yellow)
+          ctx.fillRect((sx * 32) + (tx * 4) - 1, (sy * 48) + (ty * 4) - 1, 6, 6);
+        } else {
+          ctx.fillStyle = '#00FFFF'; // Teammate (Cyan)
+          ctx.fillRect((sx * 32) + (tx * 4), (sy * 48) + (ty * 4), 4, 4);
+        }
+      } else {
+        ctx.fillStyle = '#FF0000'; // Enemy (Red)
+        ctx.fillRect((sx * 32) + (tx * 4), (sy * 48) + (ty * 4), 4, 4);
+      }
+    }
   }
 
   // 2. Pre-render Terrain Cache if missing
