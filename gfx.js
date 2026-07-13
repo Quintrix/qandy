@@ -6,8 +6,35 @@ window.gfxPong = "..";   // server response
 window.gfxSession = null;
 window.gfxConnected = null;
 
-var _serverUrl = 'https://qandy.onrender.com/qandyland.js';
-var _serverUrl = 'http://localhost:8080/qandyland.js';
+var _serverUrl = location.origin+'/qandyland.js';
+async function testServerReachability() {
+  try {
+    const response = await fetch(_serverUrl, { method: 'HEAD' });
+    if (response.ok) {
+      console.log(_serverUrl+' is reachable.');
+      return true;
+    } else {
+      console.error(_serverUrl+' responded with status:', response.status);
+      return false;
+    }
+  } catch (error) {
+    console.error('Error reaching '+_serverUrl+':', error);
+    return false;
+  }
+}
+
+(async function() {
+  const serverReachable = await testServerReachability();
+  if (!serverReachable) {
+    _serverUrl = 'https://qandy.onrender.com/qandyland.js';
+    const fallbackReachable = await testServerReachability();
+    if (!fallbackReachable) {
+      console.error('Both primary and fallback servers are unreachable.');
+      //IDEA: maybe a stub to use filesystem if location.protocol is 'file'
+      alert('Error: Unable to connect to the server.');
+    }
+  }
+})();
 
 var mapx=7;
 var mapy=11;
