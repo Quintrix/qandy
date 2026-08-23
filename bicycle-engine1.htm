@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>CycleOS v1.1 - Dash with Gears</title>
+    <title>CycleOS v1.0 - Dash</title>
     <link rel="manifest" href="manifest.json">
     <style>
         :root { --glow: #0f0; --bg: #000; --alert: #f00; }
@@ -47,7 +47,7 @@
         }
         #digital-display {
             text-align: center;
-            margin-top: -30px; 
+            margin-top: -30px; /* Pulls text up into the gauge opening */
             z-index: 10;
         }
         #speed { font-size: 4.5rem; font-weight: bold; line-height: 1; }
@@ -64,14 +64,14 @@
         /* Stats Blocks */
         #stats {
             display: grid;
-            grid-template-columns: 1fr 1fr 1fr; /* 3 Columns now */
+            grid-template-columns: 1fr 1fr;
             gap: 10px;
             background: #111;
             border: 1px solid #333;
             padding: 8px;
         }
         .stat-box { text-align: center; }
-        .stat-label { font-size: 0.7rem; color: #888; letter-spacing: 1px; margin-bottom: 2px; }
+        .stat-label { font-size: 0.75rem; color: #888; letter-spacing: 1px; margin-bottom: 2px; }
         .stat-val { font-size: 1.3rem; font-weight: bold; }
         
         /* GPS Tracking Display */
@@ -140,13 +140,9 @@
         <div id="side-pane">
             <div id="stats">
                 <div class="stat-box">
-                    <div class="stat-label">ODO</div>
+                    <div class="stat-label">ODOMETER</div>
                     <div class="stat-val" id="odo">0.00</div>
                     <button class="small-btn" onclick="resetOdo()">RESET</button>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-label">GEAR</div>
-                    <div class="stat-val" id="gearDisplay">N</div>
                 </div>
                 <div class="stat-box">
                     <div class="stat-label">ENGINE</div>
@@ -173,22 +169,9 @@
         let lastPos = null;
         let totalMiles = parseFloat(localStorage.getItem('bikeOdo')) || 0;
 
-        // --- NEW: Gear Configuration Array ---
-        const gears = [
-            { id: 0, label: 'N', minSpeed: 0 },
-            { id: 1, label: '1', minSpeed: 2 },
-            { id: 2, label: '2', minSpeed: 4 },
-            { id: 3, label: '3', minSpeed: 8 },
-            { id: 4, label: '4', minSpeed: 12 },
-            { id: 5, label: '5', minSpeed: 16 },
-            { id: 6, label: '6', minSpeed: 22 }
-        ];
-        let currentGear = 0; // Tracks current active gear
-
         const speedEl = document.getElementById('speed');
         const odoEl = document.getElementById('odo');
         const engStatus = document.getElementById('engStatus');
-        const gearDisplay = document.getElementById('gearDisplay');
         const toggleBtn = document.getElementById('toggleBtn');
         const hornBtn = document.getElementById('hornBtn');
         const gpsCoordsEl = document.getElementById('gps-coords');
@@ -196,6 +179,7 @@
         const canvas = document.getElementById('gauge');
         const ctx = canvas.getContext('2d');
 
+        // Initialize Odometer and Canvas
         odoEl.innerText = totalMiles.toFixed(2);
         drawGauge(0);
 
@@ -204,7 +188,7 @@
             
             oscillator = audioCtx.createOscillator();
             oscillator.type = 'sawtooth';
-            oscillator.frequency.value = 40; // Base Idle freq
+            oscillator.frequency.value = 50;
 
             filter = audioCtx.createBiquadFilter();
             filter.type = 'lowpass';
@@ -228,29 +212,6 @@
 
             oscillator.start();
             lfo.start();
-        }
-
-        // --- NEW: Shift Sound Effect ---
-        function playShiftSound() {
-            if (!audioCtx) return;
-            const now = audioCtx.currentTime;
-            
-            const shiftOsc = audioCtx.createOscillator();
-            const shiftGain = audioCtx.createGain();
-            
-            // Triangle wave dropping quickly sounds like a mechanical "clunk"
-            shiftOsc.type = 'triangle';
-            shiftOsc.frequency.setValueAtTime(120, now);
-            shiftOsc.frequency.exponentialRampToValueAtTime(20, now + 0.1);
-            
-            shiftGain.gain.setValueAtTime(1, now);
-            shiftGain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
-            
-            shiftOsc.connect(shiftGain);
-            shiftGain.connect(audioCtx.destination);
-            
-            shiftOsc.start(now);
-            shiftOsc.stop(now + 0.1);
         }
 
         function playHorn() {
@@ -290,7 +251,7 @@
             const startAngle = 0.75 * Math.PI; 
             const endAngle = 2.25 * Math.PI;   
             const totalAngle = endAngle - startAngle;
-            const maxSpeed = 30; // 30 MPH ceiling
+            const maxSpeed = 30; // 30 MPH ceiling configuration
 
             // Outer Arc Profile
             ctx.strokeStyle = '#0f0';
@@ -320,6 +281,7 @@
                 ctx.lineTo(x2, y2);
                 ctx.stroke();
 
+                // Project text inside ticks
                 const lx = cx + Math.cos(angle) * (radius - 20);
                 const ly = cy + Math.sin(angle) * (radius - 20);
                 ctx.fillText(i, lx, ly);
@@ -345,21 +307,23 @@
             ctx.arc(cx, cy, 5, 0, 2 * Math.PI);
             ctx.fill();
             
-            ctx.shadowBlur = 0;
+            ctx.shadowBlur = 0; // Reset execution stack shadow
         }
 
         function updateLogic(pos) {
             const coords = pos.coords;
-            const mph = (coords.speed || 0) * 2.23694; 
+            const mph = (coords.speed || 0) * 2.23694;
             
             // Sync UI Readouts
             speedEl.innerText = Math.round(mph).toString().padStart(2, '0');
             drawGauge(mph);
 
+            // Display Position Coordinates
             const lat = coords.latitude.toFixed(5);
             const lon = coords.longitude.toFixed(5);
-            gpsCoordsEl.innerText = `LAT: ${lat} | LON: ${lon}`;
+            gpsCoordsEl.innerText = `LATI: ${lat} | LONG: ${lon}`;
 
+            // Distance Telemetry
             if (lastPos) {
                 const dist = calculateDistance(
                     lastPos.latitude, lastPos.longitude,
@@ -371,42 +335,11 @@
             }
             lastPos = coords;
 
-            // --- UPDATED: Process Gear Engine Audio ---
+            // Process Web Audio Modifications
             if (running) {
-                
-                // 1. Determine which gear we belong in based on MPH
-                let targetGear = 0;
-                for (let i = gears.length - 1; i >= 0; i--) {
-                    if (mph >= gears[i].minSpeed) {
-                        targetGear = gears[i].id;
-                        break;
-                    }
-                }
-
-                // 2. Play Shift Sound if gear changed
-                if (targetGear !== currentGear) {
-                    playShiftSound();
-                    currentGear = targetGear;
-                    gearDisplay.innerText = gears[currentGear].label;
-                }
-
-                // 3. Calculate "RPM" (0.0 to 1.0) relative to current gear's speed band
-                let currentGearMin = gears[currentGear].minSpeed;
-                let nextGearMin = (currentGear < gears.length - 1) 
-                    ? gears[currentGear + 1].minSpeed 
-                    : currentGearMin + 10; // Failsafe for top gear
-
-                // Normalize speed to 0.0 - 1.0 percentage within the gear bracket
-                let rpmFactor = (mph - currentGearMin) / (nextGearMin - currentGearMin);
-                rpmFactor = Math.max(0, Math.min(1, rpmFactor)); // Clamp between 0 and 1
-
-                // 4. Update Engine pitch based on RPM
-                // Engine ranges from 40hz to 110hz per gear
-                let targetEngineFreq = 40 + (rpmFactor * 70); 
-                let targetLfoFreq = 4 + (rpmFactor * 6);
-
-                oscillator.frequency.setTargetAtTime(targetEngineFreq, audioCtx.currentTime, 0.1);
-                lfo.frequency.setTargetAtTime(targetLfoFreq, audioCtx.currentTime, 0.1);
+                const clampedMps = Math.min(Math.max(coords.speed || 0, 0), 15);
+                oscillator.frequency.setTargetAtTime(50 + (clampedMps * 8), audioCtx.currentTime, 0.1);
+                lfo.frequency.setTargetAtTime(4 + (clampedMps * 1.5), audioCtx.currentTime, 0.1);
             }
         }
 
@@ -447,8 +380,6 @@
                 audioCtx.suspend();
                 running = false;
                 engStatus.innerText = "OFF";
-                gearDisplay.innerText = "N"; // Reset to Neutral visual
-                currentGear = 0;
                 toggleBtn.innerText = "Start Engine";
                 if (wakeLock) {
                     wakeLock.release();
