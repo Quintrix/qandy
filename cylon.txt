@@ -1,0 +1,59 @@
+
+2029 Qandy Pocket Computer
+Cylon Operating System
+Quintrix and Crew Software
+
+
+
+The Qandy Pocket Computer is a single board computer with USB input and HDMI output that creates a wifi hotspot and lets computers tablets and cellphones connect and run it's command terminal software 'Cylon OS' with it's virtual keyboard and .json virtual drive that runs .htm pages as if they were programs.
+ 
+             cylon.htm — main entry point, the program start here
+            cylon.json — Live CD disk image of the Cylon OS that boots onto a RAM drive
+        cylon-sound.js — sound card driver 
+     cylon-keyboard.js — virtual keyboard unified with any physical or network keyboards 
+      cylon-command.js — processes user commands
+          cylon-dos.js — disk operating system, all file operations happen here
+          cylon-sdk.js — developers kit for interacting with Cylon OS
+          cylon-gfx.js — qandy graphics co-processor 
+  
+       cylon-theme.htm — lets user customize cylon theme
+      cylon-colors.htm — lets user customize cylon colors
+     cylon-desktop.htm — graphical desktop layer
+     cylon-desktop.gfx — disk image of the desktop icons and files
+       cylon-files.htm — graphical file manager
+     
+          qandyland.js — node qandyland.js server
+   qandyland-univac.js — univac graphics processor
+
+
+
+When cylon.htm is booted, it creates a RAM drive and imports cylon.json and cylon-desktop.gfx onto this drive and then loads the command terminal. Input 'help' for a list of DOS commands, or see cylon-dos.txt for detail instructions.
+
+The UNIVAC gfx processor uses a special 'qandy punch code' scripting language of two-character nouns and verbs. The first character will always be an upper-case letter, the second character will be a lower-case letter, numeral, or symbol for a total of 1,352 unique words. The Qandy gfx co-processor was designed to be compatiable with the UNIVAC file format, in theory a .gfx drive can be mounted on either qandy.htm for single-user use or on node qandyland.js for multi-user use.
+
+Because the punch code is based on 2-character words, it is not possible for a code to access a 1-character file or directory name, so any 1-character file or directory name is a 'system file' and cannot be owned by any player, object, or item ... a 1-character file or directory name belongs to the system, the fact that it can violate the 2-character file or directory name is what makes it a system file or directory.
+
+
+
+Cylon DOS File Structure (cylon.json):
+
+Everything is a file, the file structure is the physics engine. The UNIVAC is a dumb terminal that can do smart things. 
+
+  /a/ — alpha, to be processed first. The files in this directory are varialble names, and the contents of the file are the variable's value.
+  
+ 
+ 
+File Structure for .gfx Files (desktop.gfx, capflag.gfx, queville.gfx):
+
+  /a/ — alpha, to be processed first. The files in this directory are varialble names,
+        and the contents of the file are the variable's value.
+
+  /w/ — world, filled with map sector sub-directories, files in each sub-directory are the
+        items on that map sector
+        
+  /p/ — players, players are assigned a unique file ID in this directory and the file 
+        contents contains the map sector the player is currently on
+        
+        
+        
+        

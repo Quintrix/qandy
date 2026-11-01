@@ -3,211 +3,138 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cylon Bootloader</title>
-    <script src="qandy-sound.js"></script>
+    <title>Qandy Pocket Computer</title>
+    <link rel="stylesheet" href="cylon.css">
     <style>
-        html, body {
-            background-color: #000;
-            color: #0f0;
-            font-family: monospace;
-            margin: 0;
-            height: 100vh;
-            width: 100vw;
-            overflow: hidden; /* Prevent body scrolling */
-        }
-        
-        /* Main Display Screen */
-        #screen-wrapper {
-            display: flex;
-            flex-direction: column;
-            width: 100%;
-            height: 100vh;
-            background-color: #050505;
-            position: relative;
-            box-sizing: border-box;
-            overflow: hidden;
-            transition: height 0.4s cubic-bezier(0.22, 1, 0.36, 1);
-        }
-
-        #video-layer {
-            flex: 1;
-            min-height: 0;
-            order: 1; 
-            padding: 15px 15px 0 15px; /* Top, Right, Bottom(0 for seamless merging), Left */
-            box-sizing: border-box;
-            overflow-y: auto;
-            font-size: 1.2rem;
+        /* Standard DOS light grey for terminal text and input prompt */
+        #video-layer, #kb-input-lines {
+            color: var(--input-fg, var(--fg-color, #c0c0c0)); /* Will use InputFg, falling back to fg-color */
+            font-size: clamp(16px, 4.5vw, 22px);
             line-height: 1.4;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            transition: flex 0.4s cubic-bezier(0.22, 1, 0.36, 1), padding 0.4s ease, opacity 0.4s ease;
         }
-
-        #browser-layer {
-            display: none; /* Hidden by default on boot */
-            flex: 1;
-            min-height: 0;
-            order: 1; 
-            border: none;
-            width: 100%;
-            background: #000000; 
-            transition: flex 0.4s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.4s ease;
+        /* Enforce no space/margins around the prompt to save pixel real estate */
+        #kb-prompt {
+            margin: 0 !important;
+            padding: 0 !important;
         }
-
-        /* Collapse the webpage smoothly when the keyboard opens */
-        body.kb-open #browser-layer {
-            flex: 0 0 0px;
-            opacity: 0;
-        }
-
-        body.kb-open #video-layer {
-            flex: 0 0 0px;       /* Shrinks the layer to 0 height */
-            padding-top: 0;      /* Removes padding so it hides completely */
-            padding-bottom: 0;
-            opacity: 0;          /* Fades out the text */
-        }
-
-        /* Persistent Input Prompt */
-        #input-bar {
-            flex: 0 0 auto;
-            order: 2; /* Naturally stays at the bottom of the screen-wrapper */
-            padding: 0 15px 15px 15px; /* Matched horizontal padding to video-layer */
-            background: transparent;
-            font-size: 1.2rem; /* Match terminal */
-            line-height: 1.4; /* Match terminal */
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            position: relative;
-            box-sizing: border-box;
-            cursor: text;
-        }
-
-        /* Virtual Keyboard Overlay */
-        #kb-overlay {
-            position: fixed;
-            bottom: 0; left: 0; right: 0;
-            height: 85vh;
-            background: rgba(10, 10, 10, 0.95);
-            z-index: 99999;
-            display: flex;
-            flex-direction: column;
-            box-sizing: border-box;
-            user-select: none; -webkit-user-select: none;
-            overflow-y: auto; overflow-x: hidden;
-            transform: translateY(100%);
-            transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
-            will-change: transform;
-        }
-
-        #kb-overlay.is-open {
-            transform: translateY(0);
-        }
-
-        /* Terminal Input Text Rendering */
-        #kb-input-lines { width: 100%; box-sizing: border-box; }
-        #kb-line1, #kb-line2 {
-            white-space: pre; overflow: hidden; line-height: 1.4; width: 100%;
-            cursor: text;
-        }
-        #kb-line2-indent { display: inline-block; }
-        #kb-prompt { color: #0f0; } /* Match Terminal Color */
-        #kb-input-render1, #kb-input-render2 { color: #0f0; } /* Match Terminal Color */
-        
-        .kb-selected { background: #0f0; color: #000; }
-        .kb-cursor-bar {
-            display: inline-block; width: 2px; height: 1.2rem; background: #0f0;
-            margin: 0; vertical-align: text-bottom;
-            animation: blink 1s infinite steps(2, start);
-        }
-        .kb-cursor-block {
-            display: inline-block; min-width: 0.6em; height: 1.2rem;
-            background: #0f0; color: #000; vertical-align: text-bottom;
-            animation: blink 1s infinite steps(2, start);
-        }
-        @keyframes blink { 0% { opacity: 1; } 100% { opacity: 0; } }
-        
-        #kb-mode-indicator {
-            position: absolute; top: 0; right: 15px;
-            color: #0a0; font-size: 0.8rem; border: 1px solid #0a0; border-radius: 3px;
-            padding: 2px 4px; background: rgba(0,0,0,0.55); opacity: 0.6;
-            pointer-events: none; z-index: 2;
-        }
-
-        /* Keyboard Grid Buttons */
-        #kb-grid {
-            display: flex; flex-direction: column; flex: 1; padding: 1vh 1vw; gap: 1vh;
-            background: transparent; box-sizing: border-box; min-height: 0; min-width: 0; width: 100%;
-        }
-        .kb-row { display: flex; flex: 1; gap: 1vw; min-height: 0; }
-        .kb-col { display: flex; flex-direction: column; gap: 1vh; min-height: 0; }
-        .kb-key {
-            background: #222; color: #fff; border: 1px solid #444; border-radius: 6px;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 3.5vh; cursor: pointer; text-transform: uppercase;
-            transition: background 0.05s; text-align: center; padding: 0 2px; box-sizing: border-box;
-        }
-        .kb-key.active { background: #666; color: #fff; border-color: #888; }
-        .kb-key.locked { background: #ddd; color: #000; }
-
-        .kb-key-dual {
-            font-size: 5vh;
-            text-transform: none;
-        }
-        .kb-side-panel {
-            flex: 0 0 9vh;
-            border-bottom: 1px solid #222;
-        }
-        .kb-fn-key, .kb-nav-key { font-size: 3vh; }
-        .kb-cols-wrap { display: flex; flex: 1; gap: 1vw; min-height: 0; }
-        .kb-fn-row { flex: 0 0 9vh; display: flex; gap: 1vw; }
-        .kb-main-block { flex: 1; min-width: 0; }
-        .kb-nav-block { width: 15vw; flex: 0 0 auto; justify-content: flex-end; }
     </style>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#000000">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <script src='cylon-sound.js'></script>
+    <script src='cylon-keyboard.js'></script>
+    <script src="cylon-gfx-itemid.js"></script>
+    <script src="cylon-gfx.js"></script>
+    <script src="cylon-dos.js"></script>
+    <script src="cylon-command.js"></script>
 </head>
 <body>
 
-<!-- MAIN DISPLAY & PROMPT -->
-<div id="screen-wrapper">
-    <div id="video-layer"></div>
-    <iframe id="browser-layer"></iframe>
-    <div id="input-bar">
-        <span id="kb-mode-indicator">INS</span>
-        <div id="kb-input-lines">
-            <div id="kb-line1"><span id="kb-prompt"></span><span id="kb-input-render1"></span></div>
-            <div id="kb-line2"><span id="kb-line2-indent"></span><span id="kb-input-render2"></span></div>
-        </div>
+<!-- MAIN DISPLAY LAYER (Hidden until power on) -->
+<div id="screen-wrapper" style="visibility: hidden;">
+    <div id="video-layer">
+        <div class="term-spacer"></div>
+    </div>
+    <div id="browser-layer-container"></div>
+    <!-- NEW: Shield to intercept clicks to the OS surface when a popup is open -->
+    <div id="qandy-popup-shield" style="display:none; position:absolute; top:0; left:0; width:100%; height:100%; background:transparent; touch-action:none;"></div>
+</div>
+
+
+<!-- TASKBAR / TERMINAL PROMPT (Hidden until power on) -->
+<div id="input-bar" style="visibility: hidden;">
+    <div id="os-menu-btn" onclick="event.stopPropagation(); toggleFullKeyboard()">
+        <img src="i/Lk.png" width="24" height="24" alt="Menu" style="image-rendering: pixelated; filter: drop-shadow(0 0 2px #0f0);">
+    </div>
+    <div id="kb-input-lines">
+        <div id="kb-line1"><span id="kb-prompt"></span><span id="kb-input-render1"></span></div>
+        <div id="kb-line2"><span id="kb-line2-indent"></span><span id="kb-input-render2"></span></div>
+        <div id="kb-textarea-view"></div> <!-- NEW -->
+    </div>
+
+    <div id="app-taskbar">
+        <div class="taskbar-sys-btn" onclick="event.stopPropagation(); showTerminal()">Command</div>
+        <div id="taskbar-app-list"></div>
     </div>
 </div>
-
-<!-- VIRTUAL KEYBOARD OVERLAY (Grid container) -->
-<div id="kb-overlay">
+    
+<!-- VIRTUAL KEYBOARD OVERLAY (Hidden until power on) -->
+<div id="kb-overlay" style="visibility: hidden;">
     <div id="kb-grid"></div>
 </div>
-
 
 <script>
 // ============================================================================
 // 1. STATE & VIRTUAL FILE SYSTEM (Qandy DOS)
 // ============================================================================
 
+var sysPrompt = "ram:/>";
+
 let inputBuffer = "";
 let cursorPos = 0;
-let selAnchor = null;   // null = no active selection; otherwise selection spans [selAnchor, cursorPos)
-let insertMode = true;  // true = insert, false = overwrite
+let selAnchor = null;
+let insertMode = true;
 let clipboard = "";
 let cmdHistory = [];
 let historyIdx = -1;
 let cwd = "/";
+let osMode = 'terminal';
+let activeAppTitle = "";
+let proxyInputId = null;
+let popupActive = false; // Tracks if a Cylon Popup is visible to protect the desktop layer
 
-const vfs = {
-    '/': ['system', 'docs', 'boot.sys'],
-    '/system': ['kernel.bin', 'config.txt', 'qandy.sys'],
-    '/docs': ['readme.txt', 'manual.doc']
-};
+document.body.addEventListener('pointerdown', function(e) {
+    // Intercept clicks on the OS background elements to close popups and prevent underlying actions
+    if (popupActive) {
+        if (e.target.closest('#input-bar') || e.target.closest('#screen-wrapper')) {
+            e.preventDefault(); 
+            e.stopPropagation();
+            if (typeof window.hpop === 'function') window.hpop();
+            
+            let shield = document.getElementById('qandy-popup-shield');
+            if (shield) shield.style.display = 'none';
+            popupActive = false;
+        }
+    }
+}, { capture: true });
+
+// DOS Boot State Variables
+let dosInitialized = false;
+let dosInitializing = null;
+window.proxyInputMaxLen = null; // NEW
+
+const PAGES = Object.freeze(new Set([
+    'cylon.htm',
+    'cylon.cfg',
+    'cylon-command.htm',
+    'cylon-files.htm',
+    'cylon-desktop.htm',
+    'cylon-desktop.gfx',
+    'cylon-desktop-pc.gfx',
+    'cylon-desktop-tv.gfx',
+    'cylon-theme.htm',
+    'cylon-calc.htm',
+    'cylon-gfx.js',
+    'cylon-gfx-itemid.js',
+    'cylon-capflag.htm',
+    'cylon-capflag.gfx',
+    'qandyland.js',
+    'qandyland-univac.js',
+    'gfx-tileset.htm',
+    'gfx-create.htm',
+    'gfx-itemid.htm',
+    'gfx-mods.htm',
+    'gfx-viewer.htm',
+    'gfx-compiler.htm',
+    'capflag.htm',
+    'capflag.gfx',
+    'queville.htm',
+    'queville.gfx'
+]));
 
 // ============================================================================
-// 2. DISPLAY COMPONENT
+// 2. DISPLAY COMPONENT & DOS FORMATTERS
 // ============================================================================
 
 function escapeHTML(str) {
@@ -218,17 +145,552 @@ function escapeHTML(str) {
 
 function print(html) {
     const term = document.getElementById('video-layer');
-    const line = document.createElement('div');
-    line.innerHTML = html; // Safe for system strings
-    term.appendChild(line);
-    term.scrollTop = term.scrollHeight; // Auto-scroll to bottom
+    if (!term) return;
+
+    // 1. Split incoming stream by ANSI escape sequences
+    const parts = String(html).split(/(\x1B\[[0-9;]*[a-zA-Z])/);
+    
+    let currentHtml = "";
+    let spanOpen = false;
+    let clearPrevious = 0;
+    
+    for (let i = 0; i < parts.length; i++) {
+        let part = parts[i];
+        if (!part) continue;
+        
+        if (part.startsWith('\x1B[')) {
+            let code = part.substring(2);
+            let cmd = code.slice(-1);
+            let params = code.slice(0, -1).split(';');
+            
+            if (cmd === 'A') { // VT100 Cursor Up
+                clearPrevious += (parseInt(params[0], 10) || 1);
+            } else if (cmd === 'm') { // VT100 Graphic Rendition (Colors)
+                if (params[0] === '0' || params[0] === '') {
+                    if (spanOpen) { currentHtml += '</span>'; spanOpen = false; }
+                } else if (params[0] === '30') {
+                    if (spanOpen) { currentHtml += '</span>'; }
+                    currentHtml += `<span style="color: #444;">`; // dark gray for visibility on black
+                    spanOpen = true;
+                } else if (params[0] === '38' && params[1] === '5') {
+                    let colorCode = parseInt(params[2], 10);
+                    let hex = 'var(--fg-color, #0f0)';
+                    if (colorCode === 22) hex = '#005f00';
+                    else if (colorCode === 28) hex = '#008700';
+                    else if (colorCode === 46) hex = '#00ff00';
+                    
+                    if (spanOpen) { currentHtml += '</span>'; }
+                    currentHtml += `<span style="color: ${hex};">`;
+                    spanOpen = true;
+                }
+            }
+        } else {
+            currentHtml += part;
+        }
+    }
+    
+    if (spanOpen) currentHtml += '</span>';
+    
+    // 2. Erase previous lines if Cursor Up was used
+    if (clearPrevious > 0) {
+        let divs = Array.from(term.querySelectorAll('div:not(.term-spacer)'));
+        for (let j = 0; j < clearPrevious && divs.length > 0; j++) {
+            let lastDiv = divs.pop();
+            if (lastDiv && lastDiv.parentNode) lastDiv.parentNode.removeChild(lastDiv);
+        }
+    }
+    
+    // 3. Line-by-Line DOM Generation (Perserving inline tags across lines)
+    if (currentHtml) {
+        let normalized = currentHtml.replace(/\n/g, '<br>');
+        let rawLines = normalized.split('<br>');
+        
+        // Remove trailing empty line caused by trailing \n or <br> to keep spacing tight
+        if (rawLines.length > 0 && rawLines[rawLines.length - 1] === "") {
+            rawLines.pop(); 
+        }
+        
+        let activeTags = [];
+        for (let line of rawLines) {
+            let prefix = activeTags.join('');
+            
+            // Extract open tags so we can re-apply them to the next line
+            let tagRegex = /<\/?([a-zA-Z0-9]+)[^>]*>/g;
+            let match;
+            while ((match = tagRegex.exec(line)) !== null) {
+                let fullTag = match[0];
+                let tagName = match[1].toLowerCase();
+                if (fullTag.startsWith('</')) {
+                    activeTags.pop();
+                } else if (!fullTag.endsWith('/>') && !['br','img','hr','input'].includes(tagName)) {
+                    activeTags.push(fullTag);
+                }
+            }
+            
+            // Seal this line safely
+            let suffix = activeTags.slice().reverse().map(tag => {
+                let name = tag.match(/<([a-zA-Z0-9]+)/)[1];
+                return `</${name}>`;
+            }).join('');
+            
+            let div = document.createElement('div');
+            let finalHtml = prefix + line + suffix;
+            div.innerHTML = finalHtml === "" ? "&nbsp;" : finalHtml;
+            term.appendChild(div);
+        }
+        
+        term.scrollTop = term.scrollHeight; // Auto-scroll to bottom
+    }
+}
+
+// Special print for DOS output to preserve table spacing and newlines
+// Special print for DOS output with robust ANSI-style [.0] - [.9] state tracking
+function printDOS(text) {
+    let activeFg = null;
+    let activeBg = null;
+    let spanOpen = false;
+
+    let formatted = escapeHTML(String(text == null ? '' : text))
+        // Process color codes sequentially to prevent messy nesting
+        .replace(/\[\.([0-9]?)\]/g, function(match, code) {
+            // [.] Reset everything
+            if (code === '') {
+                activeFg = null;
+                activeBg = null;
+                let res = spanOpen ? '</span>' : '';
+                spanOpen = false;
+                return res;
+            }
+            
+            let num = parseInt(code, 10);
+            if (num === 0) activeFg = `var(--fg-color)`;
+            else if (num >= 1 && num <= 4) activeFg = `var(--text-fg${num})`;
+
+            if (num === 5) activeBg = `var(--bg-color)`;
+            else if (num >= 6 && num <= 9) activeBg = `var(--text-bg${num})`;
+            
+            let res = spanOpen ? '</span>' : '';
+            spanOpen = true;
+            let style = '';
+            if (activeFg) style += `color: ${activeFg}; `;
+            if (activeBg) style += `background-color: ${activeBg}; `;
+            return res + `<span style="${style}">`;
+        });
+
+    if (spanOpen) formatted += '</span>';
+
+    // Apply standard spacing rules
+    formatted = formatted
+        .replace(/ {2,}/g, run => ' ' + new Array(run.length).join('&nbsp;'))
+        .replace(/\r?\n/g, '<br>');
+        
+    print(formatted);
+}
+// ============================================================================
+// 3. DOS INTEGRATION METHODS
+// ============================================================================
+
+function updatePrompt() {
+    if (window.CylonDOS) {
+        let path = window.CylonDOS.pwd();
+        
+        // Ensure path always has a trailing slash for formatting (e.g. ram:/docs/)
+        if (path !== '(no drive)' && !path.endsWith('/')) { path += '/'; }
+        sysPrompt = path;
+        
+        var promptEl = document.getElementById('kb-prompt');
+        
+        // BUGFIX: Allow app-cli mode to use the DOS prompt overlay
+        if (promptEl && (osMode === 'terminal' || osMode === 'app-cli')) {
+            promptEl.textContent = sysPrompt;
+        }
+        
+        // Prompt keyboard renderer to update dimensions against the new prompt length
+        if (typeof window.renderInputLine === 'function') {
+            window.renderInputLine();
+        }
+    }
+}
+
+window.updatePrompt = updatePrompt; // Expose globally for the virtual keyboard
+
+// ==== STATE & VIRTUAL KEY DISPATCH ====
+window.setOSMode = function(mode, promptText) {
+    osMode = mode;
+    inputBuffer = "";
+    cursorPos = 0;
+    selAnchor = null;
+
+    var promptEl = document.getElementById('kb-prompt');
+    if (!promptEl) return;
+
+    if (mode === 'terminal' || mode === 'app-cli') {
+        if (window.updatePrompt) window.updatePrompt();
+    } else if (mode === 'app') {
+        var activeFrame = document.querySelector('.page-frame.active');
+        var title = activeFrame ? activeFrame.dataset.title : 'App';
+        promptEl.textContent = `[ ${title} ]`;
+    } else if (mode === 'app-edit' || mode === 'app-textarea') {
+        if (promptText) promptEl.textContent = promptText;
+    }
+
+    if (window.renderInputLine) window.renderInputLine();
+};
+
+window.toggleAppFocus = function() {
+    if (osMode !== 'app' && osMode !== 'app-cli') return;
+    var activeFrame = document.querySelector('.page-frame.active');
+    
+    if (osMode === 'app') {
+        window.setOSMode('app-cli');
+        if (activeFrame) activeFrame.blur();
+        window.focus(); // Pull focus back to OS terminal
+    } else {
+        window.setOSMode('app');
+        if (activeFrame) activeFrame.focus(); // Push focus to iframe
+    }
+};
+
+// Sync OS Mode dynamically based on what the user's browser is focused on
+function syncAppMode() {
+    if (osMode !== 'app' && osMode !== 'app-cli') return;
+    var activeFrame = document.querySelector('.page-frame.active');
+    
+    // If the active element is the app iframe, switch to APP mode. Otherwise, CLI mode.
+    if (activeFrame && document.activeElement === activeFrame) {
+        if (osMode !== 'app') window.setOSMode('app');
+    } else {
+        if (osMode !== 'app-cli') window.setOSMode('app-cli');
+    }
+}
+
+// Attach capturing listeners for global focus shifts (e.g. physical Tab key)
+window.addEventListener('focus', syncAppMode, true);
+window.addEventListener('blur', () => setTimeout(syncAppMode, 10), true);
+
+window.sendVirtualKey = function(keyName) {
+    var activeFrame = document.querySelector('.page-frame.active');
+    if (activeFrame && activeFrame.contentWindow) {
+        activeFrame.contentWindow.postMessage({ type: 'QANDY_VKEY', key: keyName }, (window.location.origin && window.location.origin !== "null" ? window.location.origin : "*"));
+    }
+};
+
+// ==== CORE ARCHITECTURE: CLI DRIVEN GUI MACROS ====
+window.injectAndExecute = async function(cmdStr, opts) {
+    if (osMode !== 'terminal' && osMode !== 'app') window.setOSMode('app'); 
+    
+    inputBuffer = cmdStr;
+    cursorPos = inputBuffer.length;
+    if (window.renderInputLine) window.renderInputLine();
+    
+    var ok = await command(cmdStr, opts);
+    
+    inputBuffer = "";
+    cursorPos = 0;
+    selAnchor = null;
+    if (window.updatePrompt) window.updatePrompt();
+    if (window.renderInputLine) window.renderInputLine();
+    return ok !== false;
+};
+
+window.addEventListener('message', function(e) {
+    // --- Security Upgrade: Origin and Source Validation ---
+    if (window.location.origin !== "null" && e.origin !== window.location.origin) return;
+    let isKnownFrame = Array.from(document.querySelectorAll('iframe')).some(f => f.contentWindow === e.source);
+    if (e.source !== window && e.source !== window.parent && !isKnownFrame) return;
+    // ------------------------------------------------------
+    
+    if (e.data.type === 'QANDY_REQ_INPUT') {
+        window.setOSMode(
+            e.data.isMultiline ? 'app-textarea' : 'app-edit',
+            `${e.data.id}: `
+        );
+        proxyInputId = e.data.id;
+        window.proxyInputMaxLen = e.data.maxLength || null;
+        
+        inputBuffer = e.data.value || ""; 
+        cursorPos = inputBuffer.length;
+        
+        window.showFullKeyboard();
+        window.updateOverlayInput();
+
+        if (e.data.rect) window.panToRect(e.data.rect);
+    } else if (e.data.type === 'CYLON_PRINT') {
+        if (typeof print === 'function') print(e.data.text);
+    } else if (e.data.type === 'CYLON_POP_HTM') {
+        popupActive = true;
+        let shield = document.getElementById('qandy-popup-shield');
+        if (shield) shield.style.display = 'block';
+    } else if (e.data.type === 'CYLON_POP_HIDE') {
+        popupActive = false;
+        let shield = document.getElementById('qandy-popup-shield');
+        if (shield) shield.style.display = 'none';
+    } else if (e.data.type === 'QANDY_INPUT_RECT') {
+        window.panToRect(e.data.rect);
+    } else if (e.data.type === 'QANDY_SET_MODE') {
+        window.setOSMode(e.data.mode);
+        if (osMode === 'terminal') { window.showFullKeyboard(); }
+    } else if (e.data.type === 'QANDY_PASTE') {
+        if (window.pasteText) window.pasteText(e.data.text);
+    } else if (e.data.type === 'QANDY_APP_CLICKED') {
+        // If the user clicks the app's visual layer, abort the hybrid CLI mode
+        if (osMode === 'app-cli') {
+            window.setOSMode('app');
+            if (typeof window.hideFullKeyboard === 'function') window.hideFullKeyboard();
+        }
+    }
+});
+
+window.addEventListener('copy', function(e) {
+    // If the user highlighted standard text in the history terminal, let the browser copy it natively!
+    if (window.getSelection().toString() !== "") return;
+    
+    // Otherwise, copy the selected text from our virtual DOS input buffer
+    if (selAnchor !== null && selAnchor !== cursorPos) {
+        let start = Math.min(selAnchor, cursorPos);
+        let end = Math.max(selAnchor, cursorPos);
+        let selected = inputBuffer.slice(start, end);
+        if (selected) {
+            e.clipboardData.setData('text/plain', selected);
+            e.preventDefault(); // Tell browser we handled it
+        }
+    }
+});
+
+window.addEventListener('cut', function(e) {
+    // Let native history selections copy freely
+    if (window.getSelection().toString() !== "") return;
+
+    if (selAnchor !== null && selAnchor !== cursorPos) {
+        let start = Math.min(selAnchor, cursorPos);
+        let end = Math.max(selAnchor, cursorPos);
+        let selected = inputBuffer.slice(start, end);
+        if (selected) {
+            // 1. Write to OS Clipboard
+            e.clipboardData.setData('text/plain', selected);
+            e.preventDefault();
+            
+            // 2. Erase from virtual input buffer
+            inputBuffer = inputBuffer.slice(0, start) + inputBuffer.slice(end);
+            cursorPos = start;
+            selAnchor = null;
+            if (window.renderInputLine) window.renderInputLine();
+        }
+    }
+});
+
+window.addEventListener('paste', function(e) {
+    let text = (e.clipboardData || window.clipboardData).getData('text');
+    if (text && window.pasteText) {
+        window.pasteText(text);
+        e.preventDefault();
+    }
+});
+
+// Boot is just the commands a user could type themselves.
+async function bootMount() {
+    var dos = window.CylonDOS;
+    var run = function (cmd) { return window.injectAndExecute(cmd, { boot: true }); };
+    
+    var dbs = window.indexedDB && window.indexedDB.databases ? await window.indexedDB.databases() : [];
+    var dbExists = dbs.some(function(db) { return db.name === 'CylonDOS'; });
+
+    // 1. Installed: boot from the IndexedDB partition
+    if (dbExists) {
+        var parts = await dos.partitions();
+        var boot = parts.filter(function (p) { return p.boot; })[0] ||
+                   parts.filter(function (p) { return p.name === 'cylon'; })[0];
+
+        if (boot && await run('mount ' + boot.name + ' idb')) {
+            await run(boot.name + ':');
+            return;
+        }
+    }
+
+    // 2. Not installed: attempt to boot from the cylon.json image into RAM
+    if (await run('mount cylon.json ram cylon')) {
+        await run('cylon:');
+        printDOS("[.2]System booted to RAM drive, run 'install' to setup indexDB[.]\n");
+    } else {
+        // 3. No image available: blank RAM drive
+        await run('mount ram:');
+        await run('ram:');
+        printDOS("[.2]Booted to RAM drive (cylon.json not found).\nInput 'export cylon.json' to download your work later[.]\n");
+    }
 }
 
 // ============================================================================
-// 3. COMMAND COMPONENT
+// SYSTEM BOOT - load cylon.cfg
 // ============================================================================
 
-function command(cmdStr) {
+// Applies CSS variables globally and alerts all open iframes
+window.CylonColors = {};
+
+// Screen Wrapper dynamically scales the OS Coordinate Grid (Gfx Engine)
+window.fitScreenToGrid = function() {
+    if (!window.CylonGFX) return;
+    const wrapper = document.getElementById('screen-wrapper');
+    if (!wrapper) return;
+
+    const screenW = window.innerWidth;
+    const barH = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--bar-height')) || 60;
+    let screenH = window.innerHeight - barH;
+
+    const cols = window.CylonGFX.gridWide || 8;
+    const rows = window.CylonGFX.gridTall || 4;
+
+    let w = screenW, h = screenH;
+    if (window.CylonGFX.gfxGridStretch) {
+        const aspect = cols / rows;
+        h = screenW / aspect;
+        if (h > screenH) {
+            h = screenH;
+            w = screenH * aspect;
+        }
+        w = Math.floor(w * 0.98);
+        h = Math.floor(h * 0.98);
+    } else {
+        w = cols * window.CylonGFX.gfxTileSize;
+        h = rows * window.CylonGFX.gfxTileSize;
+    }
+
+    wrapper.style.width = w + 'px';
+    wrapper.style.height = h + 'px';
+};
+
+
+// Hot-reloads the global CSS variables by reading directly from /a/ theme variables
+window.applyThemeFromAlpha = async function() {
+    let dos = window.CylonDOS;
+    let vars = {
+        "themeFont": "monospace", "themeBackground": "#000", "themeForeground": "#0f0",
+        "themeMenuBG": "#111", "themeMenuFG": "#aaa", "themeSelectBG": "#333", "themeSelectFG": "#0f0",
+        "themeInputFG": "#0f0", "themeInputBG": "#000", "themeCaseBG": "#080808", "themeCaseFG": "#0a0",
+        "themeKeyUpBG": "#222", "themeKeyUpFG": "#fff", "themeKeyDownBG": "#666", "themeKeyDownFG": "#fff",
+        "themeTextFg1": "#000000", "themeTextFg2": "#ffff00", "themeTextFg3": "#ff0000", "themeTextFg4": "#00ff00",
+        "themeTextBg6": "#ffffff", "themeTextBg7": "#ffff00", "themeTextBg8": "#800080", "themeTextBg9": "#008000",
+        "htmlLink": "#0066cc", "htmlVisited": "#800080", "htmlHover": "#00aaff", "htmlActive": "#ff0000",
+        "keysVirtual": "true" // NEW: Virtual Keyboard Toggle Default
+    }
+    try {
+        if (await dos.exists('/a')) {
+            for (let v of Object.keys(vars)) {
+                if (await dos.exists('/a/' + v)) {
+                    vars[v] = (await dos.load('/a/' + v)).trim();
+                }
+            }
+        }
+    } catch(e) { console.warn("Could not load /a/ theme vars", e); }
+    window.CylonVirtualKeyboardEnabled = (vars.keysVirtual.toLowerCase() !== 'false');
+
+    window.CylonColors = {
+        BackgroundColor: vars.themeBackground, ForegroundColor: vars.themeForeground,
+        Font: vars.themeFont, MenuBgColor: vars.themeMenuBG, MenuFgColor: vars.themeMenuFG,
+        SelectBgColor: vars.themeSelectBG, SelectFgColor: vars.themeSelectFG,
+        // Expose to apps
+        TextFg0: vars.themeTextFg0, TextFg1: vars.themeTextFg1, TextFg2: vars.themeTextFg2, TextFg3: vars.themeTextFg3, TextFg4: vars.themeTextFg4,
+        TextBg5: vars.themeTextBg5, TextBg6: vars.themeTextBg6, TextBg7: vars.themeTextBg7, TextBg8: vars.themeTextBg8, TextBg9: vars.themeTextBg9
+    };
+
+    let root = document.documentElement;
+    root.style.setProperty('--font-face', vars.themeFont + ', monospace');
+    root.style.setProperty('--bg-color', vars.themeBackground);
+    root.style.setProperty('--fg-color', vars.themeForeground);
+    root.style.setProperty('--menu-bg', vars.themeMenuBG);
+    root.style.setProperty('--menu-fg', vars.themeMenuFG);
+    root.style.setProperty('--sel-bg', vars.themeSelectBG);
+    root.style.setProperty('--sel-fg', vars.themeSelectFG);
+
+    root.style.setProperty('--input-fg', vars.themeInputFG);
+    root.style.setProperty('--input-bg', vars.themeInputBG);
+    root.style.setProperty('--case-bg', vars.themeCaseBG);
+    root.style.setProperty('--case-fg', vars.themeCaseFG);
+    root.style.setProperty('--key-bg', vars.themeKeyUpBG);
+    root.style.setProperty('--key-fg', vars.themeKeyUpFG);
+    root.style.setProperty('--key-hl-bg', vars.themeKeyDownBG);
+    root.style.setProperty('--key-hl-fg', vars.themeKeyDownFG);
+
+    root.style.setProperty('--html-link', vars.htmlLink);
+    root.style.setProperty('--html-visited', vars.htmlVisited);
+    root.style.setProperty('--html-hover', vars.htmlHover);
+    root.style.setProperty('--html-active', vars.htmlActive);
+
+    // NEW: Inject Text Palette CSS Variables
+    for(let i=1; i<=4; i++) root.style.setProperty(`--text-fg${i}`, vars[`themeTextFg${i}`]);
+    for(let i=6; i<=9; i++) root.style.setProperty(`--text-bg${i}`, vars[`themeTextBg${i}`]);
+
+    document.querySelectorAll('iframe.page-frame').forEach(frame => {
+        if (frame.contentWindow) {
+            frame.contentWindow.postMessage({type: 'QANDY_UPDATE_COLORS', colors: window.CylonColors}, (window.location.origin && window.location.origin !== "null" ? window.location.origin : "*"));
+        }
+    });
+};
+
+window.desktopInit = async function() {
+    let dos = window.CylonDOS;
+    
+    // 1. Load system colors from /a/ retro-objects BEFORE autoexec loads apps
+    await window.applyThemeFromAlpha();
+
+    // 2. Initialize Headless GFX Physics Engine for the OS Terminal
+    if (window.CylonGFX) {
+        let mnt = await dos.mounts();
+        let bootDrive = mnt.find(m => m.current) || {name: 'ram'};
+        
+        let startSector = 'Aa';
+        try {
+            let loaded = await dos.load(bootDrive.name + ':/a/gfxSector');
+            if (loaded && loaded.trim().length === 2) startSector = loaded.trim();
+        } catch(e) {}
+        
+        // This runs safely in the background tracing coordinates even in pure terminal mode
+        await window.CylonGFX.init(bootDrive.name + ':/w/' + startSector);
+        
+        // Connect the OS Terminal wrapper to the dynamic screen sizing
+        window.fitScreenToGrid();
+        window.addEventListener('resize', window.fitScreenToGrid);
+    }
+
+    // 3. Check for cylon.cfg (our autoexec file)
+    let cfgText = "";
+    if (await dos.exists('cylon.cfg')) { cfgText = await dos.load('cylon.cfg'); }
+    
+    // 4. Process the autoexec file line-by-line
+    let lines = cfgText.split('\n');
+    for (let line of lines) {
+        line = line.trim();
+        if (!line || line.startsWith('//') || line.startsWith(';')) continue;
+        if (line.toLowerCase().endsWith('.htm') || line.toLowerCase().endsWith('.html')) {
+            try { await window.PageOpen(line); } catch(e) {
+                printDOS(`{.yellow}Autoexec: Could not open ${line}{.}\n`);
+            }
+        }
+    }
+};
+
+function initializeDos() {
+    if (dosInitialized) return Promise.resolve();
+    if (dosInitializing) return dosInitializing;
+    if (!window.CylonDOS) return Promise.reject(new Error('<font color=yellow>CylonDOS is not loaded!</font>'));
+
+    dosInitializing = window.CylonDOS.ready().then(bootMount).then(function () {
+        dosInitialized = true;
+        updatePrompt();
+        if (typeof window.desktopInit === 'function') window.desktopInit();
+    });
+    
+    dosInitializing.catch(function () { dosInitializing = null; });
+    return dosInitializing;
+}
+
+window.cylonDOSInitialize = initializeDos;
+
+// ============================================================================
+// 4. COMMAND COMPONENT
+// ============================================================================
+
+// Changed to async to natively support DOS operations seamlessly
+async function command(cmdStr, opts) {
     cmdStr = cmdStr.trim();
     
     if (cmdStr) {
@@ -236,37 +698,62 @@ function command(cmdStr) {
         historyIdx = -1;
     }
 
+    // Moved up to print the prompt and text BEFORE the empty check (this enables blank lines)
+    // Removed trailing `<br><br>` because `print()` naturally wraps into block elements, saving blank vertical lines
+    print(sysPrompt + escapeHTML(cmdStr)); 
+
     if (!cmdStr) return;
 
-    // Print to terminal history
-    print("Qandy " + escapeHTML(cmdStr)); 
-
-    let video = document.getElementById('video-layer');
-    let browser = document.getElementById('browser-layer');
-
-    // 1. Check if the user wants to go back to the terminal
-    if (cmdStr.toLowerCase() === 'exit') {
-        browser.style.display = 'none';
-        video.style.display = 'block';
-        browser.src = ''; // Stop loading the page
-        print("Returned to terminal.");
+    // Handled locally since it directly manipulates the DOM
+    if (cmdStr.toLowerCase() === 'cls' || cmdStr.toLowerCase() === 'clear') {
+        document.getElementById('video-layer').innerHTML = '<div class="term-spacer"></div>';
         return;
     }
 
-    // 2. Format the input as a URL
-    let url = cmdStr;
-    // If they just typed "example.com", add the https://
-    if (!/^https?:\/\//i.test(url)) {
-        url = 'https://' + url;
+    // --- CYLON DOS COMMAND INTERCEPT ---
+    if (window.CylonDOS && window.handleCylonCommand) {
+        // Ensure DOS is loaded before dispatching (the bootloader runs *inside* init, so it skips this)
+        if (!(opts && opts.boot)) await initializeDos();
+        try {
+            let result = await window.handleCylonCommand(cmdStr);
+            updatePrompt();
+            if (result && result.handled) {
+                if (result.output) printDOS(result.output);
+                return result.ok !== false; // Stop here, DOS handled the command (false = it failed).
+            }
+        } catch (error) {
+            printDOS("Error: [.4]" + (error.message || String(error))+"[.]");
+            return false; 
+        }
     }
 
-    print("Loading: " + escapeHTML(url) + " ...");
+    // --- LEGACY APP / SYSTEM COMMANDS ---
+    if (cmdStr.toLowerCase() === 'exit') {
+        showTerminal();
+        return;
+    }
 
-    // 3. Hide terminal text, show the iframe, and load the site
-    video.style.display = 'none';
-    browser.style.display = 'block';
-    browser.src = url;
+    let closeMatch = cmdStr.match(/^close\s+(\S+)$/i);
+    if (closeMatch) {
+        PageClose(closeMatch[1]);
+        return;
+    }
+
+    if (/\.html?$/i.test(cmdStr)) {
+      try {
+          await PageOpen(cmdStr);
+      } catch (error) {
+          printDOS(error.message || String(error));
+      }
+      return;
+    }
+
+    print("Error: [.4]Unknown command: " + escapeHTML(cmdStr)+"[.]");
 }
+
+// ----------------------------------------------------------------------------
+// Page/App management
+// ----------------------------------------------------------------------------
 
 function navigateHistory(direction) {
     if (cmdHistory.length === 0) return;
@@ -286,428 +773,6 @@ function navigateHistory(direction) {
 }
 
 // ============================================================================
-// 4. KEYBOARD COMPONENT
-// ============================================================================
-
-window.normalKeys = {
-    '`':'`', '1':'1', '2':'2', '3':'3', '4':'4', '5':'5', '6':'6', '7':'7', '8':'8', '9':'9', '0':'0',
-    '-':'-', '=':'=', '[':'[', ']':']', '\\':'\\', ';':';', "'":"'", ',':',', '.':'.', '/':'/',
-    'q':'q', 'w':'w', 'e':'e', 'r':'r', 't':'t', 'y':'y', 'u':'u', 'i':'i', 'o':'o', 'p':'p',
-    'a':'a', 's':'s', 'd':'d', 'f':'f', 'g':'g', 'h':'h', 'j':'j', 'k':'k', 'l':'l',
-    'z':'z', 'x':'x', 'c':'c', 'v':'v', 'b':'b', 'n':'n', 'm':'m'
-};
-
-window.shiftedKeys = {
-    '`':'~', '1':'!', '2':'@', '3':'#', '4':'$', '5':'%', '6':'^', '7':'&', '8':'*', '9':'(', '0':')',
-    '-':'_', '=':'+', '[':'{', ']':'}', '\\':'|', ';':':', "'":'"', ',':'<', '.':'>', '/':'?',
-    'q':'Q', 'w':'W', 'e':'E', 'r':'R', 't':'T', 'y':'Y', 'u':'U', 'i':'I', 'o':'O', 'p':'P',
-    'a':'A', 's':'S', 'd':'D', 'f':'F', 'g':'G', 'h':'H', 'j':'J', 'k':'K', 'l':'L',
-    'z':'Z', 'x':'X', 'c':'C', 'v':'V', 'b':'B', 'n':'N', 'm':'M'
-};
-
-function keyboard() {
-    document.getElementById('kb-line1').addEventListener('click', function(e) { handleLineClick(e, 0); });
-    document.getElementById('kb-line2').addEventListener('click', function(e) { handleLineClick(e, 1); });
-
-    window.modState = { shift: new Set(), ctrl: new Set(), alt: new Set() };
-    window.shift = 0; window.ctrl = 0; window.alt = 0; window.caps = false;
-    window.allKeys = [];
-
-    function spacerDef(flex) {
-        return {id: '_sp_' + Math.random().toString(36).slice(2), label: '', flex: flex, isSpacer: true};
-    }
-
-    function setModifier(type, id, on) {
-        if (on) window.modState[type].add(id); else window.modState[type].delete(id);
-        window[type] = window.modState[type].size > 0 ? 1 : 0;
-    }
-
-    function isLetterKey(lookup) {
-        return /^[a-z]$/.test(lookup);
-    }
-
-    function computeActiveChar(def) {
-        var lookup = def.label.toLowerCase();
-        var normal = (window.normalKeys && window.normalKeys[lookup]) || def.label;
-        var shifted = (window.shiftedKeys && window.shiftedKeys[lookup]) || def.label;
-        var shiftOn = !!window.shift;
-        var capsOn = !!window.caps;
-
-        if (isLetterKey(lookup)) {
-            return (capsOn !== shiftOn) ? shifted : normal;
-        }
-        return shiftOn ? shifted : normal;
-    }
-
-    function pressDown(e, key, btn) {
-        e.preventDefault();
-        if (key.isSpacer) return;
-        btn.classList.add('active');
-
-        if (key.id === 'lshift' || key.id === 'rshift') {
-            setModifier('shift', key.id, true); updateKeyLabels();
-        } else if (key.id === 'lctrl' || key.id === 'rctrl') {
-            setModifier('ctrl', key.id, true); updateKeyLabels();
-        } else if (key.id === 'lalt' || key.id === 'ralt') {
-            setModifier('alt', key.id, true); updateKeyLabels();
-        } else if (key.id === 'caps') {
-            window.caps = !window.caps;
-            if (window.caps) btn.classList.add('locked'); else btn.classList.remove('locked');
-            updateKeyLabels();
-        } else {
-            let charToType;
-            if (key.id === 'space') charToType = ' ';
-            else if (key.noType) charToType = null;
-            else if (key.dual) charToType = computeActiveChar(key);
-            else charToType = btn.textContent;
-            if (window.press) window.press({keyCode: key.keyCode, id: key.id, char: charToType});
-        }
-    }
-
-    function pressUp(e, key, btn) {
-        e.preventDefault();
-        if (key.isSpacer) return;
-        btn.classList.remove('active');
-
-        if (key.id === 'lshift' || key.id === 'rshift') {
-            setModifier('shift', key.id, false); updateKeyLabels();
-        } else if (key.id === 'lctrl' || key.id === 'rctrl') {
-            setModifier('ctrl', key.id, false); updateKeyLabels();
-        } else if (key.id === 'lalt' || key.id === 'ralt') {
-            setModifier('alt', key.id, false); updateKeyLabels();
-        }
-    }
-
-    function makeKeyEl(def) {
-        if (def.isSpacer) {
-            var spacer = document.createElement('div');
-            spacer.style.flex = def.flex;
-            spacer.style.visibility = 'hidden';
-            return spacer;
-        }
-
-        var btn = document.createElement('div');
-        btn.className = 'kb-key' + (def.extraClass ? ' ' + def.extraClass : '') + (def.dual ? ' kb-key-dual' : '');
-        btn.id = 'kb-' + def.id;
-        btn.style.flex = def.flex || 1;
-        btn.textContent = def.label;
-
-        if (def.id === 'caps' && window.caps) btn.classList.add('locked');
-
-        btn.addEventListener('touchstart', function(e) { pressDown(e, def, btn); }, {passive: false});
-        btn.addEventListener('touchend', function(e) { pressUp(e, def, btn); }, {passive: false});
-        btn.addEventListener('touchcancel', function(e) { pressUp(e, def, btn); }, {passive: false});
-        btn.addEventListener('mousedown', function(e) { pressDown(e, def, btn); });
-        btn.addEventListener('mouseup', function(e) { pressUp(e, def, btn); });
-        btn.addEventListener('mouseleave', function(e) { if (btn.classList.contains('active')) pressUp(e, def, btn); });
-
-        window.allKeys.push(def);
-        return btn;
-    }
-
-    function appendRow(container, rowDefs, rowClass) {
-        var rowDiv = document.createElement('div');
-        rowDiv.className = rowClass || 'kb-row';
-        rowDefs.forEach(function(def) { rowDiv.appendChild(makeKeyEl(def)); });
-        container.appendChild(rowDiv);
-    }
-
-    // Build Static Keyboard Structure
-    var grid = document.getElementById('kb-grid');
-
-    var colsWrap = document.createElement('div');
-    colsWrap.className = 'kb-cols-wrap';
-
-    var main = document.createElement('div');
-    main.className = 'kb-col kb-main-block';
-
-    var fnRow = document.createElement('div');
-    fnRow.className = 'kb-row kb-fn-row';
-    fnRow.appendChild(makeKeyEl({id: "esc", label: "Esc", keyCode: 27, flex: 5, noType: true}));
-
-    for (var i = 1; i <= 12; i++) {
-        if (i === 5 || i === 9) fnRow.appendChild(makeKeyEl(spacerDef(0.6)));
-        var fGrp = document.createElement('div'); fGrp.className = 'kb-row'; fGrp.style.flex = '4';
-        fGrp.appendChild(makeKeyEl({id: 'f'+i, label: 'F'+i, keyCode: 111+i, flex: 1, noType: true, extraClass: 'kb-fn-key'}));
-        fnRow.appendChild(fGrp);
-    }
-    main.appendChild(fnRow);
-
-    const mainRows = [
-        [ {id:"backtick", label:"`", keyCode:192, flex: 1.5, dual: true}, {id:"n1", label:"1", keyCode:49, flex: 1, dual: true}, {id:"n2", label:"2", keyCode:50, flex: 1, dual: true}, {id:"n3", label:"3", keyCode:51, flex: 1, dual: true}, {id:"n4", label:"4", keyCode:52, flex: 1, dual: true}, {id:"n5", label:"5", keyCode:53, flex: 1, dual: true}, {id:"n6", label:"6", keyCode:54, flex: 1, dual: true}, {id:"n7", label:"7", keyCode:55, flex: 1, dual: true}, {id:"n8", label:"8", keyCode:56, flex: 1, dual: true}, {id:"n9", label:"9", keyCode:57, flex: 1, dual: true}, {id:"n0", label:"0", keyCode:48, flex: 1, dual: true}, {id:"dash", label:"-", keyCode:173, flex: 1, dual: true}, {id:"equal", label:"=", keyCode:61, flex: 1, dual: true}, {id:"back", label:"Back", keyCode:8, flex: 2, noType: true} ],
-        [ {id:"tab", label:"Tab", keyCode:9, flex: 1.5, noType: true}, {id:"q", label:"q", keyCode:81, flex: 1, dual: true}, {id:"w", label:"w", keyCode:87, flex: 1, dual: true}, {id:"e", label:"e", keyCode:69, flex: 1, dual: true}, {id:"r", label:"r", keyCode:82, flex: 1, dual: true}, {id:"t", label:"t", keyCode:84, flex: 1, dual: true}, {id:"y", label:"y", keyCode:89, flex: 1, dual: true}, {id:"u", label:"u", keyCode:85, flex: 1, dual: true}, {id:"i", label:"i", keyCode:73, flex: 1, dual: true}, {id:"o", label:"o", keyCode:79, flex: 1, dual: true}, {id:"p", label:"p", keyCode:80, flex: 1, dual: true}, {id:"open", label:"[", keyCode:219, flex: 1, dual: true}, {id:"close", label:"]", keyCode:221, flex: 1, dual: true}, {id:"backslash", label:"\\", keyCode:220, flex: 1.5, dual: true} ],
-        [ {id:"caps", label:"Caps", keyCode:20, flex: 1.8, noType: true}, {id:"a", label:"a", keyCode:65, flex: 1, dual: true}, {id:"s", label:"s", keyCode:83, flex: 1, dual: true}, {id:"d", label:"d", keyCode:68, flex: 1, dual: true}, {id:"f", label:"f", keyCode:70, flex: 1, dual: true}, {id:"g", label:"g", keyCode:71, flex: 1, dual: true}, {id:"h", label:"h", keyCode:72, flex: 1, dual: true}, {id:"j", label:"j", keyCode:74, flex: 1, dual: true}, {id:"k", label:"k", keyCode:75, flex: 1, dual: true}, {id:"l", label:"l", keyCode:76, flex: 1, dual: true}, {id:"colon", label:";", keyCode:59, flex: 1, dual: true}, {id:"quote", label:"'", keyCode:222, flex: 1, dual: true}, {id:"enter", label:"Enter", keyCode:13, flex: 2.2, noType: true} ],
-        [ {id:"lshift", label:"Shift", keyCode:16, flex: 2.3, noType: true}, {id:"z", label:"z", keyCode:90, flex: 1, dual: true}, {id:"x", label:"x", keyCode:88, flex: 1, dual: true}, {id:"c", label:"c", keyCode:67, flex: 1, dual: true}, {id:"v", label:"v", keyCode:86, flex: 1, dual: true}, {id:"b", label:"b", keyCode:66, flex: 1, dual: true}, {id:"n", label:"n", keyCode:78, flex: 1, dual: true}, {id:"m", label:"m", keyCode:77, flex: 1, dual: true}, {id:"comma", label:",", keyCode:188, flex: 1, dual: true}, {id:"dot", label:".", keyCode:190, flex: 1, dual: true}, {id:"slash", label:"/", keyCode:191, flex: 1, dual: true}, {id:"rshift", label:"Shift", keyCode:16, flex: 2.3, noType: true} ],
-        [ {id:"lctrl", label:"Ctrl", keyCode:17, flex: 1.3, noType: true}, {id:"lalt", label:"Alt", keyCode:18, flex: 1.3, noType: true}, {id:"space", label:"Space", keyCode:32, flex: 6}, {id:"ralt", label:"Alt", keyCode:18, flex: 1.3, noType: true}, {id:"rctrl", label:"Ctrl", keyCode:17, flex: 1.3, noType: true} ]
-    ];
-    mainRows.forEach(function(r) { appendRow(main, r); });
-    colsWrap.appendChild(main);
-
-    var nav = document.createElement('div');
-    nav.className = 'kb-col kb-nav-block';
-
-    var sidePanel = document.createElement('div');
-    sidePanel.id = 'kb-side-panel';
-    sidePanel.className = 'kb-row kb-side-panel';
-    nav.appendChild(sidePanel);
-
-    const navRows = [
-        [ {id:"ins", label:"Ins", keyCode:45, flex:1, noType:true, extraClass:"kb-nav-key"}, {id:"home", label:"Home", keyCode:36, flex:1, noType:true, extraClass:"kb-nav-key"}, {id:"pgup", label:"PgUp", keyCode:33, flex:1, noType:true, extraClass:"kb-nav-key"} ],
-        [ {id:"del", label:"Del", keyCode:46, flex:1, noType:true, extraClass:"kb-nav-key"}, {id:"end", label:"End", keyCode:35, flex:1, noType:true, extraClass:"kb-nav-key"}, {id:"pgdn", label:"PgDn", keyCode:34, flex:1, noType:true, extraClass:"kb-nav-key"} ],
-        [ spacerDef(1) ],
-        [ spacerDef(1), {id:"up", label:"▲", keyCode:38, flex:1, noType:true, extraClass:"kb-nav-key"}, spacerDef(1) ],
-        [ {id:"left", label:"◀", keyCode:37, flex:1, noType:true, extraClass:"kb-nav-key"}, {id:"down", label:"▼", keyCode:40, flex:1, noType:true, extraClass:"kb-nav-key"}, {id:"right", label:"▶", keyCode:39, flex:1, noType:true, extraClass:"kb-nav-key"} ]
-    ];
-    navRows.forEach(function(r) { appendRow(nav, r); });
-    colsWrap.appendChild(nav);
-
-    grid.appendChild(colsWrap);
-
-    function updateKeyLabels() {
-        window.allKeys.forEach(function(key) {
-            var el = document.getElementById('kb-' + key.id);
-            if (!el) return;
-
-            if (key.dual) {
-                var lookup = key.label.toLowerCase();
-                var normal = (window.normalKeys && window.normalKeys[lookup]) || key.label;
-                var shifted = (window.shiftedKeys && window.shiftedKeys[lookup]) || key.label;
-                var active = computeActiveChar(key);
-                
-                el.textContent = active;
-                if (active === shifted && shifted !== normal) {
-                    el.classList.add('active-shift');
-                } else {
-                    el.classList.remove('active-shift');
-                }
-            }
-        });
-    }
-
-    updateKeyLabels();
-
-    var inputViewOffset = 0;
-    var lastCharW = 10, lastPromptWidth = 0, lastCharsPerLine = 20;
-    var lastLine1Start = 0, lastLine2Start = 0, lastLine1Text = '', lastLine2Text = '';
-
-    function measureLineGeometry() {
-        var promptEl = document.getElementById('kb-prompt');
-        var wrapEl = document.getElementById('kb-input-lines');
-        if (!promptEl || !wrapEl) return {charW: lastCharW, promptWidth: lastPromptWidth, charsPerLine: lastCharsPerLine};
-        if (!window._measureCtx) window._measureCtx = document.createElement('canvas').getContext('2d');
-        var ctx = window._measureCtx;
-        var cs = getComputedStyle(promptEl);
-        ctx.font = cs.fontStyle + ' ' + cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily;
-        var charW = ctx.measureText('0').width || 10;
-        var promptWidth = ctx.measureText(promptEl.textContent || '').width;
-        var totalWidth = wrapEl.clientWidth;
-        var charsPerLine = Math.max(1, Math.floor((totalWidth - promptWidth) / charW));
-        return {charW: charW, promptWidth: promptWidth, charsPerLine: charsPerLine};
-    }
-
-    function buildLineSpans(lineText, showCursor, posInLine, lineGlobalStart) {
-        var frag = document.createDocumentFragment();
-        var selStart = null, selEnd = null;
-        if (selAnchor !== null && selAnchor !== cursorPos) {
-            var gStart = Math.min(selAnchor, cursorPos);
-            var gEnd = Math.max(selAnchor, cursorPos);
-            var lineEnd = lineGlobalStart + lineText.length;
-            var s = Math.max(gStart, lineGlobalStart);
-            var eIdx = Math.min(gEnd, lineEnd);
-            if (s < eIdx) { selStart = s - lineGlobalStart; selEnd = eIdx - lineGlobalStart; }
-        }
-
-        function addSpan(str, cls) {
-            var span = document.createElement('span');
-            span.textContent = str === '' ? '\u00A0' : str;
-            if (str === '') span.style.display = 'none';
-            if (cls) span.className = cls;
-            frag.appendChild(span);
-        }
-
-        if (selStart !== null) {
-            addSpan(lineText.slice(0, selStart));
-            addSpan(lineText.slice(selStart, selEnd), 'kb-selected');
-            addSpan(lineText.slice(selEnd));
-        } else if (showCursor) {
-            var before = lineText.slice(0, posInLine);
-            var atChar = lineText.slice(posInLine, posInLine + 1);
-            var after = lineText.slice(posInLine + 1);
-            addSpan(before);
-            var cursorSpan = document.createElement('span');
-            if (insertMode) {
-                cursorSpan.className = 'kb-cursor-bar';
-                frag.appendChild(cursorSpan);
-                addSpan(atChar + after);
-            } else {
-                cursorSpan.className = 'kb-cursor-block';
-                cursorSpan.textContent = atChar === '' ? '\u00A0' : atChar;
-                frag.appendChild(cursorSpan);
-                addSpan(after);
-            }
-        } else {
-            addSpan(lineText);
-        }
-        return frag;
-    }
-
-    function renderInputLine() {
-        var render1 = document.getElementById('kb-input-render1');
-        var render2 = document.getElementById('kb-input-render2');
-        var indent = document.getElementById('kb-line2-indent');
-        if (!render1 || !render2) return;
-
-        var text = inputBuffer;
-        var geom = measureLineGeometry();
-        lastCharW = geom.charW; lastPromptWidth = geom.promptWidth; lastCharsPerLine = geom.charsPerLine;
-        if (indent) indent.style.width = geom.promptWidth + 'px';
-
-        var capacity = geom.charsPerLine * 2;
-        if (cursorPos < inputViewOffset || cursorPos >= inputViewOffset + capacity) {
-            inputViewOffset = Math.floor(cursorPos / geom.charsPerLine) * geom.charsPerLine;
-        }
-
-        var line1Start = inputViewOffset;
-        var line2Start = inputViewOffset + geom.charsPerLine;
-        var line1Text = text.slice(line1Start, line1Start + geom.charsPerLine);
-        var line2Text = text.slice(line2Start, line2Start + geom.charsPerLine);
-        lastLine1Start = line1Start; lastLine2Start = line2Start;
-        lastLine1Text = line1Text; lastLine2Text = line2Text;
-
-        var relPos = cursorPos - inputViewOffset;
-        var cursorOnLine2 = relPos >= geom.charsPerLine;
-        var posInLine = cursorOnLine2 ? relPos - geom.charsPerLine : relPos;
-
-        render1.innerHTML = '';
-        render1.appendChild(buildLineSpans(line1Text, !cursorOnLine2, posInLine, line1Start));
-        render2.innerHTML = '';
-        render2.appendChild(buildLineSpans(line2Text, cursorOnLine2, posInLine, line2Start));
-
-        var modeEl = document.getElementById('kb-mode-indicator');
-        if (modeEl) modeEl.textContent = insertMode ? 'INS' : 'OVR';
-    }
-
-    function handleLineClick(e, lineNum) {
-        var row = e.currentTarget;
-        var rect = row.getBoundingClientRect();
-        var clickX = e.clientX - rect.left - lastPromptWidth;
-        var idx = Math.round(clickX / lastCharW);
-        if (idx < 0) idx = 0;
-        var lineText = lineNum === 0 ? lastLine1Text : lastLine2Text;
-        if (idx > lineText.length) idx = lineText.length;
-        var lineStart = lineNum === 0 ? lastLine1Start : lastLine2Start;
-        cursorPos = Math.max(0, Math.min(inputBuffer.length, lineStart + idx));
-        selAnchor = null;
-        renderInputLine();
-    }
-
-    window.updateOverlayInput = function() {
-        renderInputLine();
-    };
-    window.renderInputLine = renderInputLine;
-    window.setModifier = setModifier;
-    window.updateKeyLabels = updateKeyLabels;
-    
-    window.setKeyVisual = function(id, cls, on) {
-        var el = document.getElementById('kb-' + id);
-        if (!el) return;
-        if (on) el.classList.add(cls); else el.classList.remove(cls);
-    };
-
-    window.showFullKeyboard = function() {
-        document.getElementById('kb-prompt').textContent = cwd + "> ";
-        renderInputLine();
-        document.getElementById('kb-overlay').classList.add('is-open');
-        document.body.classList.add('kb-open');
-    };
-
-    window.hideFullKeyboard = function() {
-        document.getElementById('kb-overlay').classList.remove('is-open');
-        document.body.classList.remove('kb-open');
-    };
-
-    // Prompt toggles the keyboard when tapped
-    document.getElementById('input-bar').addEventListener('click', function() {
-        if (!document.body.classList.contains('kb-open')) {
-            window.showFullKeyboard();
-        }
-    });
-    
-    function clampCursor(pos) { return Math.max(0, Math.min(inputBuffer.length, pos)); }
-    function hasSelection() { return selAnchor !== null && selAnchor !== cursorPos; }
-    function selRange() { return [Math.min(selAnchor, cursorPos), Math.max(selAnchor, cursorPos)]; }
-
-    function deleteSelection() {
-        var range = selRange();
-        inputBuffer = inputBuffer.slice(0, range[0]) + inputBuffer.slice(range[1]);
-        cursorPos = range[0];
-        selAnchor = null;
-    }
-
-    window.press = function(e) {
-        var shiftHeld = (typeof e.shift !== 'undefined') ? e.shift : !!window.shift;
-
-        if (e.id === 'back') {
-            if (hasSelection()) { deleteSelection(); }
-            else if (cursorPos > 0) {
-                inputBuffer = inputBuffer.slice(0, cursorPos - 1) + inputBuffer.slice(cursorPos);
-                cursorPos--;
-            }
-        } else if (e.id === 'del') {
-            if (hasSelection()) {
-                if (shiftHeld) { var r = selRange(); clipboard = inputBuffer.slice(r[0], r[1]); }
-                deleteSelection();
-            } else if (cursorPos < inputBuffer.length) {
-                inputBuffer = inputBuffer.slice(0, cursorPos) + inputBuffer.slice(cursorPos + 1);
-            }
-        } else if (e.id === 'ins') {
-            if (shiftHeld) {
-                if (hasSelection()) deleteSelection();
-                if (clipboard) {
-                    inputBuffer = inputBuffer.slice(0, cursorPos) + clipboard + inputBuffer.slice(cursorPos);
-                    cursorPos += clipboard.length;
-                }
-            } else { insertMode = !insertMode; }
-        } else if (e.id === 'left') {
-            if (shiftHeld) { if (selAnchor === null) selAnchor = cursorPos; cursorPos = clampCursor(cursorPos - 1); }
-            else { cursorPos = hasSelection() ? selRange()[0] : clampCursor(cursorPos - 1); selAnchor = null; }
-        } else if (e.id === 'right') {
-            if (shiftHeld) { if (selAnchor === null) selAnchor = cursorPos; cursorPos = clampCursor(cursorPos + 1); }
-            else { cursorPos = hasSelection() ? selRange()[1] : clampCursor(cursorPos + 1); selAnchor = null; }
-        } else if (e.id === 'home') {
-            if (shiftHeld) { if (selAnchor === null) selAnchor = cursorPos; } else { selAnchor = null; }
-            cursorPos = 0;
-        } else if (e.id === 'end') {
-            if (shiftHeld) { if (selAnchor === null) selAnchor = cursorPos; } else { selAnchor = null; }
-            cursorPos = inputBuffer.length;
-        } else if (e.id === 'enter') {
-            command(inputBuffer);
-            inputBuffer = "";
-            cursorPos = 0;
-            selAnchor = null;
-            document.getElementById('kb-prompt').textContent = cwd + "> ";
-            hideFullKeyboard();
-        } else if (e.id === 'up') {
-            navigateHistory(-1);
-            cursorPos = inputBuffer.length;
-            selAnchor = null;
-        } else if (e.id === 'down') {
-            navigateHistory(1);
-            cursorPos = inputBuffer.length;
-            selAnchor = null;
-        } else if (e.id === 'esc') {
-            hideFullKeyboard();
-        } else if (e.char) {
-            if (hasSelection()) deleteSelection();
-            if (insertMode) { inputBuffer = inputBuffer.slice(0, cursorPos) + e.char + inputBuffer.slice(cursorPos); }
-            else { inputBuffer = inputBuffer.slice(0, cursorPos) + e.char + inputBuffer.slice(cursorPos + 1); }
-            cursorPos++;
-        }
-        renderInputLine();
-    };
-}
-
-// ============================================================================
 // 5. SYSTEM INITIALIZATION
 // ============================================================================
 
@@ -716,21 +781,21 @@ function powerOn() {
     overlay.id = 'qandy-power-overlay';
     Object.assign(overlay.style, {
       position: 'fixed', left: '0', top: '0', width: '100%', height: '100%',
-      zIndex: '300', background: 'transparent', display: 'flex',
+      zIndex: '300', background: '#000000', display: 'flex', // Solid black effectively simulates screen off
       alignItems: 'center', justifyContent: 'center', userSelect: 'none'
     });
 
     var label = document.createElement('div');
-    label.textContent = 'POWER ON';
+    label.textContent = 'TOUCH, PRESS, OR CLICK ANY KEY';
     Object.assign(label.style, {
       color: '#fff', fontFamily: 'monospace', fontSize: '28px',
       letterSpacing: '2px', textAlign: 'center', textShadow: '0 1px 0 rgba(0,0,0,0.6)'
     });
 
     var helper = document.createElement('div');
-    helper.textContent = 'Touch, Press, or Click screen to power on.';
+    helper.textContent = 'TO POWER ON THE QANDY POCKET COMPUTER';
     Object.assign(helper.style, {
-      color: '#ffffff', fontFamily: 'monospace', fontSize: '12px', marginTop: '8px'
+      color: '#ffffff', fontFamily: 'monospace', fontSize: '28px', marginTop: '8px'
     });
 
     var stack = document.createElement('div');
@@ -739,17 +804,39 @@ function powerOn() {
     overlay.appendChild(stack);
     document.body.appendChild(overlay);
 
+    window.triggerOSMenu = function() {
+        if (osMode === 'terminal') return; // Future expansion: terminal OS menu
+        // Send the OS menu command down to the currently active app iframe
+        const activeFrame = document.querySelector('.page-frame.active');
+        if (activeFrame) {
+            activeFrame.contentWindow.postMessage({ type: 'QANDY_OS_MENU' }, (window.location.origin && window.location.origin !== "null" ? window.location.origin : "*"));
+        }
+    };
+
     function engageHandler(e) {
       overlay.removeEventListener('click', engageHandler, true);
       document.removeEventListener('keydown', engageHandler, true);
       
+      // Request Fullscreen mode to hide the browser UI (URL bar, tabs)
+      try {
+          if (document.documentElement.requestFullscreen) {
+              document.documentElement.requestFullscreen().catch(err => console.warn(err));
+          } else if (document.documentElement.webkitRequestFullscreen) { /* Safari */
+              document.documentElement.webkitRequestFullscreen();
+          }
+      } catch (err) {
+          console.warn('Fullscreen API not supported or blocked.');
+      }
+
       try {
         if (typeof sound_js === 'function') { sound_js(); }
       } catch (e) { console.warn('qandy: error while initializing sound', e); }
 
+      beep(950, 32, 1); 
+
       if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
       loadNext();
-    }
+    }    
 
     overlay.addEventListener('click', engageHandler, { capture: true, once: true });
     document.addEventListener('keydown', engageHandler, { capture: true, once: true });
@@ -757,22 +844,56 @@ function powerOn() {
 
 window.onload = function() {
     powerOn();
+
+    // Monkey-patch local popHtm/hpop in case they are called natively to toggle the shield and state
+    let _origPopHtm = window.popHtm;
+    if (_origPopHtm) {
+        window.popHtm = function() {
+            popupActive = true;
+            let shield = document.getElementById('qandy-popup-shield');
+            if (shield) shield.style.display = 'block';
+            return _origPopHtm.apply(this, arguments);
+        };
+    }
+    let _origHpop = window.hpop;
+    if (_origHpop) {
+        window.hpop = function() {
+            popupActive = false;
+            let shield = document.getElementById('qandy-popup-shield');
+            if (shield) shield.style.display = 'none';
+            return _origHpop.apply(this, arguments);
+        };
+    }
 };
 
 function loadNext() {
-    keyboard();
-    
-    print("<p><font color=lime>Qandy Pocket Computer v2029<br>Quintrix and Crew Software</font>");
-    print("<p><font color=cyan>Alpha Testing Prototype Release<br>Free Public Domain Software</font>");
-    
-    showFullKeyboard();
+    // Reveal the UI layers now that power is on
+    document.getElementById('screen-wrapper').style.visibility = '';
+    document.getElementById('input-bar').style.visibility = '';
+    document.getElementById('kb-overlay').style.visibility = '';
 
-    // Hides keyboard whenever the terminal text area itself is tapped
+    // Assuming this function is defined elsewhere from your external scripts
+    if (typeof keyboard === 'function') keyboard();
+    
+    var promptEl = document.getElementById('kb-prompt');
+    if (promptEl) promptEl.textContent = sysPrompt;
+
+    // --- Initialize DOS AFTER the welcome message, not behind the click-overlay
+    initializeDos().catch(function(err) {
+        printDOS("Error: [.4]" + (err.message || String(err))+"[.]");
+    });
+
+    printDOS("\n[.1]2029 Qandy Pocket Computer v.2n - Quintrix and Crew Software[.]\n");
+    printDOS("[.2]Alpha Testing Prototype Release - Free Public Domain Software[.]\n");
+    printDOS("[.3]DISCLAIMER: Written with the assistance of Artificial Intelligence[.]\n\n");
+
     document.getElementById('video-layer').addEventListener('click', function() {
-        hideFullKeyboard();
+        if (typeof hideFullKeyboard === 'function') hideFullKeyboard();
     });
     
     document.addEventListener('keydown', function(e) {
+        if (!window.setModifier) return; // Guard clause if key handlers missing
+        
         if (e.key === 'Shift') {
             window.setModifier('shift', 'physical-shift', true);
             window.setKeyVisual('lshift', 'active', true);
@@ -793,6 +914,9 @@ function loadNext() {
             window.caps = e.getModifierState && e.getModifierState('CapsLock');
             window.setKeyVisual('caps', 'locked', window.caps);
             window.updateKeyLabels();
+        } else if (e.key === 'Meta' || e.key === 'OS' || e.key === 'Windows') { 
+            window.toggleFullKeyboard(); 
+            e.preventDefault(); 
         } else if (e.key === 'Backspace') { window.press({id: 'back'}); e.preventDefault(); }
         else if (e.key === 'Enter') { window.press({id: 'enter'}); e.preventDefault(); }
         else if (e.key === 'ArrowUp') { window.press({id: 'up'}); e.preventDefault(); }
@@ -803,11 +927,32 @@ function loadNext() {
         else if (e.key === 'End') { window.press({id: 'end', shift: e.shiftKey}); e.preventDefault(); }
         else if (e.key === 'Insert') { window.press({id: 'ins', shift: e.shiftKey}); e.preventDefault(); }
         else if (e.key === 'Delete') { window.press({id: 'del', shift: e.shiftKey}); e.preventDefault(); }
-        else if (e.key === 'Escape') { window.press({id: 'esc'}); }
-        else if (e.key.length === 1) { window.press({char: e.key}); e.preventDefault(); }
+        else if (e.key === 'Tab') {
+            e.preventDefault();
+            if (window.toggleAppFocus) window.toggleAppFocus();
+        }
+        else if (e.key === '`' || e.key === '~') {
+            e.preventDefault();
+            //window.toggleFullKeyboard();
+            if (window.cycleActivePage) window.cycleActivePage(); 
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            if (window.press) window.press({id: 'esc'});
+        } else if (e.key.length === 1) { 
+            // Bypass preventDefault for native OS clipboard shortcuts (Ctrl/Cmd + C, X, V, A)
+            if (e.ctrlKey || e.metaKey) {
+                let k = e.key.toLowerCase();
+                if (['c', 'x', 'v', 'a'].includes(k)) return; 
+            }
+            window.press({char: e.key}); 
+            e.preventDefault(); 
+        }
+        
     });
 
     document.addEventListener('keyup', function(e) {
+        if (!window.setModifier) return;
+        
         if (e.key === 'Shift') {
             window.setModifier('shift', 'physical-shift', false);
             window.setKeyVisual('lshift', 'active', false);
@@ -826,6 +971,7 @@ function loadNext() {
         }
     });
 }
+
 </script>
 </body>
 </html>

@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cylon Theme</title>
+    <script src="cylon-sdk.js"></script>
+    <style>
+        :root {
+            --theme: default;
+            --font-face: Courier, monospace;
+            --bg-color: #030;
+            --fg-color: #080;
+            --menu-bg: #ccc;
+            --menu-fg: #030;
+            --sel-bg: #00c;
+            --sel-fg: #ccc;
+            --html-link: #0066cc;
+            --html-visited: #800080;
+            --html-hover: #00aaff;
+            --html-active: #ff0000;
+        }
+
+        html, body {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            background-color: var(--bg-color); color: var(--fg-color);
+            font-family: var(--font-face); font-size: 18px; font-weight: bold;
+            display: flex; flex-direction: column; align-items: flex-start; 
+            justify-content: flex-start; padding-top: 40px; padding-left: 10px; 
+            box-sizing: border-box; overflow-y: auto;
+        }
+
+        .config-grid {
+            display: grid; grid-template-columns: 160px auto 160px auto; 
+            gap: 4px 10px; align-items: center; 
+        }
+
+        .label { text-align: right; user-select: none; white-space: pre; }
+
+        .input-wrap { display: flex; align-items: center; gap: 6px; }
+
+        .swatch {
+            width: 22px; height: 22px; border: 1px solid var(--menu-fg);
+            cursor: pointer; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.5);
+            transition: transform 0.1s;
+        }
+        .swatch:active { transform: scale(0.9); }
+
+        input[type="text"] {
+            background-color: var(--menu-bg); color: var(--menu-fg);
+            font-family: inherit; font-size: inherit; font-weight: bold;
+            border: none; outline: none; padding: 2px 6px; width: 120px; cursor: pointer;
+        }
+
+        .spacer { height: 12px; grid-column: 1 / -1; }
+
+        .action-row {
+            grid-column: 1 / -1; display: flex; justify-content: center;
+            align-items: center; gap: 10px; margin-top: 10px;
+        }
+
+        .btn-action {
+            background-color: var(--sel-bg); color: var(--sel-fg); text-align: center;
+            padding: 2px 16px; cursor: pointer; user-select: none; display: inline-block;
+            transition: transform 0.05s;
+        }
+        .btn-action:active { transform: scale(0.95); }
+
+        #error-msg { color: #f00; margin-bottom: 20px; display: none; }
+        
+        /* Live Preview Links */
+        a.preview-link, a.preview-visited {
+            text-decoration: underline;
+            cursor: pointer;
+            font-family: var(--font-face);
+            font-weight: bold;
+        }
+        a.preview-link { color: var(--html-link); }
+        a.preview-link:hover { color: var(--html-hover); }
+        a.preview-link:active { color: var(--html-active); }
+
+        a.preview-visited { color: var(--html-visited); }
+        a.preview-visited:hover { color: var(--html-hover); }
+        a.preview-visited:active { color: var(--html-active); }
+    </style>
+</head>
+<body>
+
+    <div id="error-msg">Error: CylonDOS not connected.</div>
+
+    <div class="config-grid">
+        <!-- Row 1 -->
+        <div class="label">Profile:</div>
+        <div class="input-wrap">
+            <input type="text" id="themeName" value="default" style="width: 90px;">
+            <div class="btn-action" onclick="loadThemePop()" style="padding: 2px 6px; font-size: 14px;">LOAD</div>
+            <div id="btn-save" class="btn-action" onclick="saveThemeProfile()" style="padding: 2px 6px; font-size: 14px;">SAVE</div>
+        </div>
+        <div class="label">themeInputFG:</div>
+        <div class="input-wrap">
+            <input type="text" id="themeInputFG" value="#0f0">
+            <div class="swatch" id="swatch-themeInputFG" onclick="showPicker(event, 'themeInputFG')"></div>
+        </div>
+
+        <div class="spacer"></div>
+
+        <!-- Row 2 -->
+        <div class="label">themeFont:</div>
+        <div><input type="text" id="themeFont" value="Courier"></div>
+        <div class="label">themeInputBG:</div>
+        <div class="input-wrap">
+            <input type="text" id="themeInputBG" value="#000">
+            <div class="swatch" id="swatch-themeInputBG" onclick="showPicker(event, 'themeInputBG')"></div>
+        </div>
+
+        <div class="spacer"></div>
+
+        <!-- Row 3 -->
+        <div class="label">themeBackground:</div>
+        <div class="input-wrap">
+            <input type="text" id="themeBackground" value="#030">
+            <div class="swatch" id="swatch-themeBackground" onclick="showPicker(event, 'themeBackground')"></div>
+        </div>
+        <div class="label">themeCaseBG:</div>
+        <div class="input-wrap">
+            <input type="text" id="themeCaseBG" value="#080808">
+            <div class="swatch" id="swatch-themeCaseBG" onclick="showPicker(event, 'themeCaseBG')"></div>
+        </div>
+
+        <!-- Row 4 -->
+        <div class="label">themeForeground:</div>
+        <div class="input-wrap">
+            <input type="text" id="themeForeground" value="#080">
+            <div class="swatch" id="swatch-themeForeground" onclick="showPicker(event, 'themeForeground')"></div>
+        </div>
+        <div class="label">themeCaseFG:</div>
+        <div class="input-wrap">
+            <input type="text" id="themeCaseFG" value="#0a0">
+            <div class="swatch" id="swatch-themeCaseFG" onclick="showPicker(event, 'themeCaseFG')"></div>
+        </div>
+
+        <div class="spacer"></div>
+
+        <!-- Row 5 -->
+        <div class="label">themeMenuBG:</div>
+        <div class="input-wrap">
+            <input type="text" id="themeMenuBG" value="#ccc">
+            <div class="swatch" id="swatch-themeMenuBG" onclick="showPicker(event, 'themeMenuBG')"></div>
+        </div>
+        <div class="label">themeKeyUpBG:</div>
+        <div class="input-wrap">
+            <input type="text" id="themeKeyUpBG" value="#222">
+            <div class="swatch" id="swatch-themeKeyUpBG" onclick="showPicker(event, 'themeKeyUpBG')"></div>
+        </div>
+
+        <!-- Row 6 -->
+        <div class="label">themeMenuFG:</div>
+        <div class="input-wrap">
+            <input type="text" id="themeMenuFG" value="#030">
+            <div class="swatch" id="swatch-themeMenuFG" onclick="showPicker(event, 'themeMenuFG')"></div>
+        </div>
+        <div class="label">themeKeyUpFG:</div>
+        <div class="input-wrap">
+            <input type="text" id="themeKeyUpFG" value="#fff">
+            <div class="swatch" id="swatch-themeKeyUpFG" onclick="showPicker(event, 'themeKeyUpFG')"></div>
+        </div>
+
+        <div class="spacer"></div>
+
+        <!-- Row 7 -->
+        <div class="label">themeSelectBG:</div>
+        <div class="input-wrap">
+            <input type="text" id="themeSelectBG" value="#00c">
+            <div class="swatch" id="swatch-themeSelectBG" onclick="showPicker(event, 'themeSelectBG')"></div>
+        </div>
+        <div class="label">themeKeyDownBG:</div>
+        <div class="input-wrap">
+            <input type="text" id="themeKeyDownBG" value="#666">
+            <div class="swatch" id="swatch-themeKeyDownBG" onclick="showPicker(event, 'themeKeyDownBG')"></div>
+        </div>
+
+        <!-- Row 8 -->
+        <div class="label">themeSelectFG:</div>
+        <div class="input-wrap">
+            <input type="text" id="themeSelectFG" value="#ccc">
+            <div class="swatch" id="swatch-themeSelectFG" onclick="showPicker(event, 'themeSelectFG')"></div>
+        </div>
+        <div class="label">themeKeyDownFG:</div>
+        <div class="input-wrap">
+            <input type="text" id="themeKeyDownFG" value="#fff">
+            <div class="swatch" id="swatch-themeKeyDownFG" onclick="showPicker(event, 'themeKeyDownFG')"></div>
+        </div>
+
+        <div class="spacer"></div>
+        <div class="spacer"></div>
+
+        <!-- Terminal Palette Divider -->
+        <div class="spacer" style="border-bottom: 2px solid var(--menu-bg); margin: 15px 0 5px 0;"></div>
+        <div style="grid-column: 1 / -1; text-align: center; color: var(--menu-bg);">Terminal Palette (Foreground / Background)</div>
+        <div class="spacer"></div>
+
+        <!-- Palette Fg1 / Bg6 -->
+        <div class="label">themeTextFg1</div>
+        <div class="input-wrap">
+            <input type="text" id="themeTextFg1" value="#000000">
+            <div class="swatch" id="swatch-themeTextFg1" onclick="showPicker(event, 'themeTextFg1')"></div>
+        </div>
+        <div class="label">themeTextBg6</div>
+        <div class="input-wrap">
+            <input type="text" id="themeTextBg6" value="#ffffff">
+            <div class="swatch" id="swatch-themeTextBg6" onclick="showPicker(event, 'themeTextBg6')"></div>
+        </div>
+
+        <!-- Palette Fg2 / Bg7 -->
+        <div class="label">themeTextFg2</div>
+        <div class="input-wrap">
+            <input type="text" id="themeTextFg2" value="#ffff00">
+            <div class="swatch" id="swatch-themeTextFg2" onclick="showPicker(event, 'themeTextFg2')"></div>
+        </div>
+        <div class="label">themeTextBg7</div>
+        <div class="input-wrap">
+            <input type="text" id="themeTextBg7" value="#ffff00">
+            <div class="swatch" id="swatch-themeTextBg7" onclick="showPicker(event, 'themeTextBg7')"></div>
+        </div>
+
+        <!-- Palette Fg3 / Bg8 -->
+        <div class="label">themeTextFg3</div>
+        <div class="input-wrap">
+            <input type="text" id="themeTextFg3" value="#ff0000">
+            <div class="swatch" id="swatch-themeTextFg3" onclick="showPicker(event, 'themeTextFg3')"></div>
+        </div>
+        <div class="label">themeTextBg8</div>
+        <div class="input-wrap">
+            <input type="text" id="themeTextBg8" value="#800080">
+            <div class="swatch" id="swatch-themeTextBg8" onclick="showPicker(event, 'themeTextBg8')"></div>
+        </div>
+
+        <!-- Palette Fg4 / Bg9 -->
+        <div class="label">themeTextFg4</div>
+        <div class="input-wrap">
+            <input type="text" id="themeTextFg4" value="#00ff00">
+            <div class="swatch" id="swatch-themeTextFg4" onclick="showPicker(event, 'themeTextFg4')"></div>
+        </div>
+        <div class="label">themeTextBg9</div>
+        <div class="input-wrap">
+            <input type="text" id="themeTextBg9" value="#008000">
+            <div class="swatch" id="swatch-themeTextBg9" onclick="showPicker(event, 'themeTextBg9')"></div>
+        </div>
+
+        <!-- HTML Link Palette Divider -->
+        <div class="spacer" style="border-bottom: 2px solid var(--menu-bg); margin: 15px 0 5px 0;"></div>
+        <div style="grid-column: 1 / -1; text-align: center; color: var(--menu-bg);">HTML Link Colors</div>
+        <div class="spacer"></div>
+
+        <!-- HTML Links Row 1 -->
+        <div class="label">htmlLink:</div>
+        <div class="input-wrap">
+            <input type="text" id="htmlLink" value="#0066cc">
+            <div class="swatch" id="swatch-htmlLink" onclick="showPicker(event, 'htmlLink')"></div>
+        </div>
+        <div class="label">htmlVisited:</div>
+        <div class="input-wrap">
+            <input type="text" id="htmlVisited" value="#800080">
+            <div class="swatch" id="swatch-htmlVisited" onclick="showPicker(event, 'htmlVisited')"></div>
+        </div>
+
+        <!-- HTML Links Row 2 -->
+        <div class="label">htmlHover:</div>
+        <div class="input-wrap">
+            <input type="text" id="htmlHover" value="#00aaff">
+            <div class="swatch" id="swatch-htmlHover" onclick="showPicker(event, 'htmlHover')"></div>
+        </div>
+        <div class="label">htmlActive:</div>
+        <div class="input-wrap">
+            <input type="text" id="htmlActive" value="#ff0000">
+            <div class="swatch" id="swatch-htmlActive" onclick="showPicker(event, 'htmlActive')"></div>
+        </div>
+
+        <div style="grid-column: 1 / -1; text-align: center; margin-top: 10px;">
+            Preview: <a href="javascript:void(0)" class="preview-link">Normal Link</a> &nbsp;|&nbsp; 
+            <a href="javascript:void(0)" class="preview-visited">Visited Link</a>
+        </div>
+        
+        <div class="action-row" style="margin-top: 25px;">
+            <div class="label">System Application:</div>
+            <div id="apply-btn" class="btn-action" onclick="applyTheme()">APPLY CHANGES</div>
+        </div>
+        
+        <div class="spacer"></div>
+    </div>
+
+    <script>
+        const THEME_DIR = 'cylon-theme';
+
+        const THEME_VARS = {
+            "themeName": "default", "themeFont": "Courier", "themeBackground": "#030", "themeForeground": "#080",
+            "themeMenuBG": "#ccc", "themeMenuFG": "#030", "themeSelectBG": "#00c", "themeSelectFG": "#ccc",
+            "themeInputFG": "#0f0", "themeInputBG": "#000", "themeCaseBG": "#080808", "themeCaseFG": "#0a0",
+            "themeKeyUpBG": "#222", "themeKeyUpFG": "#fff", "themeKeyDownBG": "#666", "themeKeyDownFG": "#fff",
+            "themeTextFg0": "#ffffff", "themeTextFg1": "#000000", "themeTextFg2": "#ffff00", "themeTextFg3": "#ff0000", "themeTextFg4": "#00ff00",
+            "themeTextBg5": "#000000", "themeTextBg6": "#ffffff", "themeTextBg7": "#ffff00", "themeTextBg8": "#800080", "themeTextBg9": "#008000",
+            "htmlLink": "#0066cc", "htmlVisited": "#800080", "htmlHover": "#00aaff", "htmlActive": "#ff0000"
+        };
+                
+        const PALETTE_COLORS = [
+            // White/Grey  Yellow      Green       Blue        Purple      Red         Black/Dark
+            '#ffffff',   '#ffffcc',  '#ccffcc',  '#ccccff',  '#ffccff',  '#ffcccc',  '#555555', // Row 1 (Lightest)
+            '#eeeeee',   '#ffff66',  '#66ff66',  '#6666ff',  '#ff66ff',  '#ff6666',  '#333333', // Row 2 (Light)
+            '#cccccc',   '#ffff00',  '#00ff00',  '#0000ff',  '#ff00ff',  '#ff0000',  '#222222', // Row 3 (Base)
+            '#aaaaaa',   '#cccc00',  '#00cc00',  '#0000cc',  '#cc00cc',  '#cc0000',  '#111111', // Row 4 (Dark)
+            '#888888',   '#808000',  '#008000',  '#000080',  '#800080',  '#800000',  '#000000'  // Row 5 (Darkest)
+        ];
+        
+        let activeColorInputId = null;
+
+        function showPicker(e, inputId) {
+            activeColorInputId = inputId;
+            let currentVal = document.getElementById(inputId).value || '#000000';
+
+            // Read the active theme configurations to style the popup consistently
+            let menuBg = document.getElementById('themeMenuBG').value || '#ccc';
+            let menuFg = document.getElementById('themeMenuFG').value || '#030';
+            let mainFg = document.getElementById('themeForeground').value || '#080';
+
+            let html = `
+                <style>
+                    .cylon-color-cell { width: 30px; height: 30px; border: 1px solid #000; cursor: pointer; box-sizing: border-box; transition: transform 0.1s; }
+                    .cylon-color-cell:hover { border: 2px solid #fff !important; transform: scale(1.15); z-index: 10; position: relative; }
+                    .picker-container {
+                        display: flex; flex-direction: column; gap: 8px;
+                        background-color: ${menuBg}; padding: 12px; 
+                        border: 2px solid ${mainFg}; 
+                        box-shadow: 4px 4px 15px rgba(0,0,0,0.8);
+                        color: ${menuFg}; font-family: Courier, monospace; font-size: 14px;
+                    }
+                    .picker-header {
+                        font-weight: bold; text-align: center; 
+                        border-bottom: 2px solid ${menuFg}; 
+                        padding-bottom: 6px; margin-bottom: 2px;
+                    }
+                    .picker-footer {
+                        display: flex; justify-content: space-between; align-items: center; 
+                        border-top: 2px solid ${menuFg}; 
+                        padding-top: 8px; margin-top: 2px; font-weight: bold;
+                    }
+                    .picker-sample {
+                        width: 24px; height: 24px; border: 1px solid #000; 
+                        box-shadow: inset 0 0 0 1px rgba(255,255,255,0.4);
+                    }
+                </style>
+                <div class="picker-container" onmouseleave="if(window.hpop) window.hpop();">
+                    <div class="picker-header">${inputId}</div>
+                    <div style="display: grid; grid-template-columns: repeat(7, 30px); gap: 4px;">
+                        ${PALETTE_COLORS.map(color => `<div class="cylon-color-cell" title="${color}" style="background-color: ${color};" onclick="var f=document.querySelector('.page-frame.active'); if(f) f.contentWindow.selectColor('${color}'); else if(window.selectColor) window.selectColor('${color}'); if(window.hpop) window.hpop();"></div>`).join('')}
+                    </div>
+                    <div class="picker-footer">
+                        <span>${currentVal}</span>
+                        <div class="picker-sample" style="background-color: ${currentVal};"></div>
+                    </div>
+                </div>
+            `;
+            if (window.parent) {
+                // Pass calculated coordinates to the parent OS for accurate alignment
+                if (e) {
+                    let px = e.clientX;
+                    let py = e.clientY;
+                    if (window.frameElement) {
+                        let rect = window.frameElement.getBoundingClientRect();
+                        px += rect.left;
+                        py += rect.top;
+                    }
+                    window.parent.popX = px;
+                    window.parent.popY = py;
+                    window.parent.PopX = px; // Case fallback
+                    window.parent.PopY = py; // Case fallback
+                    window.parent.mouseX = px;
+                    window.parent.mouseY = py;
+                }
+
+                if (window.parent.PopAlign !== undefined) window.parent.PopAlign = "click";
+                if (typeof window.parent.popHtm === 'function') window.parent.popHtm(html);
+            }
+        } 
+       
+        function selectColor(color) {
+            if (activeColorInputId) {
+                let input = document.getElementById(activeColorInputId);
+                if (input) { input.value = color; updateLivePreview(); }
+            }
+            activeColorInputId = null;
+        }
+
+        CylonSDK.onSystemMenu = function() {
+            let bg = document.getElementById('themeBackground').value || '#000';
+            let fg = document.getElementById('themeForeground').value || '#0f0';
+            let font = document.getElementById('themeFont').value || 'monospace';
+            let menuBg = document.getElementById('themeMenuBG').value || '#111';
+            let menuFg = document.getElementById('themeMenuFG').value || '#aaa';
+            let selBg = document.getElementById('themeSelectBG').value || '#333';
+            let selFg = document.getElementById('themeSelectFG').value || '#0f0';
+
+            let html = `
+                <div style="background-color: ${bg}; color: ${fg}; font-family: ${font}, monospace; padding: 20px; border: 2px solid ${fg}; box-shadow: 0px 4px 15px rgba(0,0,0,0.8); text-align: center; min-width: 250px;" onmouseleave="if(window.hpop) window.hpop();">
+                    <h2 style="margin-top: 0; margin-bottom: 15px; border-bottom: 2px solid ${fg}; padding-bottom: 10px; font-size: 24px;">Cylon Themes</h2>
+                    <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 25px;">
+                        <div style="background-color: ${menuBg}; color: ${menuFg}; padding: 12px; border: 1px solid ${menuFg}; font-weight: bold;">Menu Option Preview</div>
+                        <div style="background-color: ${selBg}; color: ${selFg}; padding: 12px; border: 1px solid ${selFg}; font-weight: bold;">Selected Option Preview</div>
+                    </div>
+                    <div style="display: flex; justify-content: center; gap: 10px;">
+                        <button onclick="var f = document.querySelector('.page-frame.active'); if(f && f.contentWindow.applyTheme) f.contentWindow.applyTheme(); window.hpop();" style="padding: 10px 16px; background: ${selBg}; color: ${selFg}; border: 1px solid ${fg}; cursor: pointer; font-family: inherit; font-weight: bold;">APPLY</button>
+                        <button onclick="window.hpop()" style="padding: 10px 16px; background: ${menuBg}; color: ${menuFg}; border: 1px solid ${fg}; cursor: pointer; font-family: inherit; font-weight: bold;">CLOSE</button>
+                    </div>
+                </div>
+            `;
+            if (window.parent && window.parent.popHtm) {
+                if (window.parent.PopAlign !== undefined) window.parent.PopAlign = "center";
+                window.parent.popHtm(html);
+            }
+        };
+
+        document.addEventListener('input', (e) => { if (e.target.tagName === 'INPUT') updateLivePreview(); });
+
+        function updateLivePreview() {
+            let root = document.documentElement;
+            root.style.setProperty('--font-face', document.getElementById('themeFont').value + ', monospace');
+            root.style.setProperty('--bg-color', document.getElementById('themeBackground').value);
+            root.style.setProperty('--fg-color', document.getElementById('themeForeground').value);
+            root.style.setProperty('--menu-bg', document.getElementById('themeMenuBG').value);
+            root.style.setProperty('--menu-fg', document.getElementById('themeMenuFG').value);
+            root.style.setProperty('--sel-bg', document.getElementById('themeSelectBG').value);
+            root.style.setProperty('--sel-fg', document.getElementById('themeSelectFG').value);
+            
+            // Apply new HTML link variables
+            root.style.setProperty('--html-link', document.getElementById('htmlLink').value);
+            root.style.setProperty('--html-visited', document.getElementById('htmlVisited').value);
+            root.style.setProperty('--html-hover', document.getElementById('htmlHover').value);
+            root.style.setProperty('--html-active', document.getElementById('htmlActive').value);
+            
+            Object.keys(THEME_VARS).forEach(id => {
+                let input = document.getElementById(id);
+                let swatch = document.getElementById('swatch-' + id);
+                if (input && swatch) swatch.style.backgroundColor = input.value;
+            });
+        }
+
+        // Apply raw text configuration from a library profile (.cfg)
+        function applyTextToInputs(rawText) {
+            rawText.split('\n').forEach(line => {
+                line = line.trim();
+                if (line && line.includes('=')) {
+                    let parts = line.split('=');
+                    let key = parts[0].trim();
+                    // Fallback map for legacy cylon-colors.cfg themes
+                    let legacyMap = {
+                        "Theme": "themeName", "Font": "themeFont", "BackgroundColor": "themeBackground", "ForegroundColor": "themeForeground",
+                        "MenuBgColor": "themeMenuBG", "MenuFgColor": "themeMenuFG", "SelectBgColor": "themeSelectBG", "SelectFgColor": "themeSelectFG",
+                        "InputFg": "themeInputFG", "InputBg": "themeInputBG", "CaseBg": "themeCaseBG", "CaseFg": "themeCaseFG",
+                        "KeyBg": "themeKeyUpBG", "KeyFg": "themeKeyUpFG", "KeyHlBg": "themeKeyDownBG", "KeyHlFg": "themeKeyDownFG"
+                    };
+                    let actualKey = legacyMap[key] || key;
+                    let inputEl = document.getElementById(actualKey);
+                    if (inputEl) inputEl.value = parts.slice(1).join('=').trim();
+                }
+            });
+        }
+
+        // GUI Pop-up to load a saved profile
+        async function loadThemePop() {
+            let dos = window.parent.CylonDOS;
+            if (!dos) return;
+            await initThemes(dos);
+            let files = await dos.dir(THEME_DIR);
+            
+            let menuBg = document.getElementById('themeMenuBG').value || '#ccc';
+            let menuFg = document.getElementById('themeMenuFG').value || '#030';
+            let selBg = document.getElementById('themeSelectBG').value || '#00c';
+            let selFg = document.getElementById('themeSelectFG').value || '#ccc';
+            let mainFg = document.getElementById('themeForeground').value || '#080';
+
+            let html = `
+                <div style="background-color: ${menuBg}; color: ${menuFg}; padding: 15px; border: 2px solid ${mainFg}; box-shadow: 4px 4px 15px rgba(0,0,0,0.8); font-family: Courier, monospace; min-width: 240px;" onmouseleave="if(window.hpop) window.hpop();">
+                    <h3 style="margin-top:0; border-bottom: 2px solid ${menuFg}; padding-bottom: 5px; text-align: center;">Load Profile</h3>
+                    <div style="display: flex; flex-direction: column; gap: 4px; max-height: 250px; overflow-y: auto;">
+            `;
+            
+            let count = 0;
+            files.forEach(f => {
+                if (f.name.endsWith('.cfg')) {
+                    let tName = f.name.substring(f.name.lastIndexOf('/') + 1).replace('.cfg', '');
+                    html += `<div style="padding: 8px 12px; cursor: pointer; border: 1px solid transparent; background: ${menuBg}; font-weight: bold;" 
+                                  onmouseover="this.style.background='${selBg}'; this.style.color='${selFg}'; this.style.borderColor='${selFg}';" 
+                                  onmouseout="this.style.background='${menuBg}'; this.style.color='${menuFg}'; this.style.borderColor='transparent';"
+                                  onclick="var f=document.querySelector('.page-frame.active'); if(f) f.contentWindow.loadProfile('${tName}'); else if(window.loadProfile) window.loadProfile('${tName}'); if(window.hpop) window.hpop();">${tName}</div>`;
+                    count++;
+                }
+            });
+            
+            if (count === 0) html += `<div style="padding: 10px; text-align: center;">No profiles found.</div>`;
+
+            html += `
+                    </div>
+                    <div style="margin-top: 15px; text-align: center;">
+                        <button onclick="if(window.hpop) window.hpop();" style="padding: 6px 16px; cursor: pointer; background: ${menuBg}; color: ${menuFg}; border: 1px solid ${menuFg}; font-weight: bold; font-family: inherit;">CANCEL</button>
+                    </div>
+                </div>
+            `;
+
+            if (window.parent && window.parent.popHtm) {
+                if (window.parent.PopAlign !== undefined) window.parent.PopAlign = "center";
+                window.parent.popHtm(html);
+            }
+        }
+        
+        // Exposed to global so the pop window can trigger it
+        window.loadProfile = async function(tName) {
+            let dos = window.parent.CylonDOS;
+            let themeFile = `${THEME_DIR}/${tName}.cfg`;
+            if (await dos.exists(themeFile)) {
+                // Clear fields to ensure old themes without link colors fallback to default
+                Object.keys(THEME_VARS).forEach(k => {
+                    let el = document.getElementById(k);
+                    if (el) el.value = THEME_VARS[k];
+                });
+                applyTextToInputs(await dos.load(themeFile));
+                document.getElementById('themeName').value = tName;
+                updateLivePreview();
+            }
+        };
+
+        // Write the currently visible inputs strictly to the theme profile storage directory
+        async function saveThemeProfile() {
+            let dos = window.parent.CylonDOS;
+            if (!dos) return;
+            
+            let themeName = document.getElementById('themeName').value.replace(/[^a-zA-Z0-9_-]/g, '').trim() || 'default';
+            document.getElementById('themeName').value = themeName;
+            
+            let cfgLines = [];
+            for (let v of Object.keys(THEME_VARS)) {
+                let el = document.getElementById(v);
+                let val = (v === 'themeName') ? themeName : (el ? el.value.trim() : THEME_VARS[v]);
+                cfgLines.push(`${v}=${val}`);
+            }
+
+            if (!(await dos.exists(THEME_DIR))) await dos.mkdir(THEME_DIR);
+            await dos.save(`${THEME_DIR}/${themeName}.cfg`, cfgLines.join('\n') + '\n');
+            
+            let btn = document.getElementById('btn-save');
+            if (btn) {
+                let oldText = btn.textContent;
+                btn.textContent = "SAVED!";
+                setTimeout(() => { btn.textContent = oldText; }, 1000);
+            }
+        }
+
+        async function initThemes(dos) {
+            if (!(await dos.exists(THEME_DIR))) {
+                await dos.mkdir(THEME_DIR);
+                await dos.save(`${THEME_DIR}/dos.cfg`, "themeName=dos\nthemeFont=Courier\nthemeBackground=#000000\nthemeForeground=#aaaaaa\nthemeMenuBG=#cccccc\nthemeMenuFG=#000000\nthemeSelectBG=#0000cc\nthemeSelectFG=#cccccc\nthemeInputFG=#eeeeee\nthemeInputBG=#000000\nthemeCaseBG=#080808\nthemeCaseFG=#aaaaaa\nthemeKeyUpBG=#222222\nthemeKeyUpFG=#ffffff\nthemeKeyDownBG=#555555\nthemeKeyDownFG=#ffffff\nthemeTextFg0=#ffffff\nthemeTextFg1=#aaaaaa\nthemeTextFg2=#aaaaaa\nthemeTextFg3=#aaaaaa\nthemeTextFg4=#aaaaaa\nthemeTextBg5=#000000\nthemeTextBg6=#ffffff\nthemeTextBg7=#ffff00\nthemeTextBg8=#800080\nthemeTextBg9=#008000\n");
+                await dos.save(`${THEME_DIR}/ansi.cfg`, "themeName=ansi\nthemeFont=Courier\nthemeBackground=#111111\nthemeForeground=#cccccc\nthemeMenuBG=#cccccc\nthemeMenuFG=#000000\nthemeSelectBG=#000080\nthemeSelectFG=#ffffff\nthemeInputFG=#ffccff\nthemeInputBG=#100010\nthemeCaseBG=#150015\nthemeCaseFG=#800080\nthemeKeyUpBG=#300030\nthemeKeyUpFG=#ffffff\nthemeKeyDownBG=#800080\nthemeKeyDownFG=#ffffff\nthemeTextFg0=#ffffff\nthemeTextFg1=#ffff00\nthemeTextFg2=#00ff00\nthemeTextFg3=#0000ff\nthemeTextFg4=#ff0000\nthemeTextBg5=#000000\nthemeTextBg6=#ff0000\nthemeTextBg7=#00ff00\nthemeTextBg8=#0000ff\nthemeTextBg9=#ffff00\n");
+                await dos.save(`${THEME_DIR}/green.cfg`, "themeName=green\nthemeFont=Courier\nthemeBackground=#002200\nthemeForeground=#66ff66\nthemeMenuBG=#cccccc\nthemeMenuFG=#003300\nthemeSelectBG=#008000\nthemeSelectFG=#ffff00\nthemeInputFG=#ccffcc\nthemeInputBG=#000000\nthemeCaseBG=#080808\nthemeCaseFG=#555555\nthemeKeyUpBG=#222222\nthemeKeyUpFG=#ffffff\nthemeKeyDownBG=#666666\nthemeKeyDownFG=#ffffff\nthemeTextFg0=#ffffff\nthemeTextFg1=#ffff00\nthemeTextFg2=#00cc00\nthemeTextFg3=#6666ff\nthemeTextFg4=#ff6666\nthemeTextBg5=#000000\nthemeTextBg6=#ffffff\nthemeTextBg7=#ffff00\nthemeTextBg8=#800080\nthemeTextBg9=#008000\n");
+                await dos.save(`${THEME_DIR}/purple.cfg`, "themeName=purple\nthemeFont=Courier\nthemeBackground=#200020\nthemeForeground=#ffd0ff\nthemeMenuBG=#333333\nthemeMenuFG=#ffd0ff\nthemeSelectBG=#200020\nthemeSelectFG=#ffffff\nthemeInputFG=#ffccff\nthemeInputBG=#100010\nthemeCaseBG=#150015\nthemeCaseFG=#800080\nthemeKeyUpBG=#300030\nthemeKeyUpFG=#ffffff\nthemeKeyDownBG=#800080\nthemeKeyDownFG=#ffffff\nthemeTextFg0=#ffffff\nthemeTextFg1=#000000\nthemeTextFg2=#ffff00\nthemeTextFg3=#ff0000\nthemeTextFg4=#00ff00\nthemeTextBg5=#000000\nthemeTextBg6=#ffffff\nthemeTextBg7=#ffff00\nthemeTextBg8=#800080\nthemeTextBg9=#008000\nhtmlLink=#0000cc\nhtmlVisited=#800080\nhtmlHover=#00aaff\nhtmlActive=#ff0000\n");
+                await dos.save(`${THEME_DIR}/win.cfg`, "themeName=win\nthemeFont=sans-serif\nthemeBackground=#008080\nthemeForeground=#ffffff\nthemeMenuBG=#c0c0c0\nthemeMenuFG=#000000\nthemeSelectBG=#000080\nthemeSelectFG=#ffffff\nthemeInputFG=#000000\nthemeInputBG=#ffffff\nthemeCaseBG=#c0c0c0\nthemeCaseFG=#000000\nthemeKeyUpBG=#c0c0c0\nthemeKeyUpFG=#000000\nthemeKeyDownBG=#ffffff\nthemeKeyDownFG=#000000\n");
+            }
+        }
+
+        async function init() {
+            if (!window.parent || !window.parent.CylonDOS) {
+                document.getElementById('error-msg').style.display = 'block';
+                return;
+            }
+            let dos = window.parent.CylonDOS;
+            await initThemes(dos);
+            
+            // "Everything is a file" - Read the active system variables directly from /a/
+            if (!(await dos.exists('/a'))) await dos.mkdir('/a');
+            
+            for (let v of Object.keys(THEME_VARS)) {
+                if (await dos.exists('/a/' + v)) {
+                    let rawVal = await dos.load('/a/' + v);
+                    // .trim() prevents newline breaks in CSS color assignments from Qandy dos.save operations
+                    document.getElementById(v).value = rawVal ? rawVal.trim() : THEME_VARS[v];
+                } else {
+                    document.getElementById(v).value = THEME_VARS[v]; // Default fallback
+                }
+            }
+            
+            updateLivePreview();
+        }
+
+        // Strictly applies and activates the settings physically modifying the OS state
+        async function applyTheme() {
+            let btn = document.getElementById('apply-btn');
+            if (!window.parent || !window.CylonScript) {
+                if(btn) btn.textContent = "ERROR"; return;
+            }
+
+            let themeName = document.getElementById('themeName').value.replace(/[^a-zA-Z0-9_-]/g, '').trim() || 'default';
+            document.getElementById('themeName').value = themeName; 
+            
+            let dos = window.parent.CylonDOS;
+            if (!(await dos.exists('/a'))) await dos.mkdir('/a');
+
+            // 1. Build a DOS Batch Script
+            let script = "echo {.green}Applying Theme Variables...{.}\n";
+
+            for (let v of Object.keys(THEME_VARS)) {
+                let el = document.getElementById(v);
+                let val = (v === 'themeName') ? themeName : (el ? el.value.trim() : THEME_VARS[v]);
+                
+                // Write each variable to its own file in /a/ using the OS CLI
+                script += `save /a/${v} ${val}\n`;
+            }
+
+            try {
+                // 2. Execute the batch script to physically save the variables
+                await window.CylonScript(script);
+
+                // 3. Force parent OS to hot-reload its CSS vars from the /a/ directory
+                if (window.parent.applyThemeFromAlpha) {
+                    await window.parent.applyThemeFromAlpha();
+                }
+
+                if (btn) {
+                    let oldText = btn.textContent;
+                    btn.textContent = "APPLIED!";
+                    btn.style.backgroundColor = document.getElementById('themeForeground').value;
+                    btn.style.color = document.getElementById('themeBackground').value;
+                    setTimeout(() => { btn.textContent = oldText; updateLivePreview(); }, 1000);
+                }
+            } catch (err) {
+                console.error("Failed to apply:", err);
+                if(btn) { btn.textContent = "FAIL"; setTimeout(() => btn.textContent = "APPLY CHANGES", 1000); }
+            }
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>

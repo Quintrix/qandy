@@ -1,0 +1,80 @@
+
+Cylon Graphics & Physics Co-Processor 
+Quintrix and Crew Software
+
+"Everything is a file. The filesystem is the physics engine."
+
+
+
+Qandy Punch Code is a 2-character language of 'nouns' and 'verbs', the first character
+is always an upper-case letter and the second character is either a lower-case letter,
+a numeral, or a symbol. This gives the Qandy 1,352 unique ID codes. 
+
+The /t/ directory has the .png images of the 2d background tiles.
+
+The /i/ directory has the .png images of the 'items' (and objects), the cylon-gfx-itemid.js
+file is the master list of the name of every item code in the game. 
+
+
+
+The terminal command 'gfx' is the bridge to the Qandy's gfx co-processor that renders the
+world maps:
+
+           gfx refresh - refresh the current displayed sector
+
+              gfx tile - pop() the tile code the cursor is currently on
+
+       gfx tile [code] - change the tile code the cursor is currently on
+
+       gfx item [code] - add 'item' to the tile the cursor is currently on
+
+ gfx obj [code] [data] - add 'object' to the tile the cursor is currently on, if no data
+                         is passed then defaults to 'Za' (Nothing)   
+
+
+
+Cylon OS was designed to mount and unmount .json files a disk drives, the Cylon OS itself
+is all stored in the cylon.json file as a 'Live CD' .json file that can be installed to indexDB.
+
+A .gfx file is a JSON drive with a special file structure that the graphics co-processor
+can render into a graphical 'world' with objects, items, and players. The Cylon Desktop
+is a .gfx file where the desktop is the world, the icons are the objects, and the cursor 
+is the player's avatar. 
+
+This file format is compatiable with the node qandyland.js server and it's UNIVAC mutliplayer
+processor, so users can use their Qandy to write and design .gfx worlds and then they can be
+run on the Qandyland Server.
+
+In the .gfx format, any file or directory name that is 1 character is a 'system file'. Because
+the Qandy uses a 2-character bytecode, a 1-character file or directory name cannot belong
+to any object, item, or player. The fact that the system can violate the 2-character
+code is what makes it a system file. 
+
+The /a/ directory stands for Alpha (run first), every file in this directory is the name of a
+variable and the file's contents are the variable's value. This allows all systems to know
+the variables without any code: the Cylon OS, the Qandyland.js server, the UNIVAC processor,
+as well as the developer and even the user can access them via the terminal without needing
+to access any code.
+
+
+    gfxCharDir character image directory
+    gfxIconDir icon image directory
+    gfxTileDir tile image directory
+    gfxMapsDir map image directory 
+   gfxIconSize size of icons (32, 48, 64, etc)
+   gfxGridTall sector height in number of tiles
+   gfxGridWide sector width in number of tiles
+ gfxLowerBound lower bounds of map (ie: Hh, Zz)
+gfxGridStretch if true, stretch grid to fill full screen
+ gfxRoundWorld if true, world is round and can scroll A <-> Z
+    gfxAirLock if true, automatic scrolling on edge tiles
+ gfxCommandLog if true, commands sent via CylonCommand() as if the user had typed them,
+               leaving a terminal record of each command and it's output for the developer.
+      gfxCycle speed player moves from tile to tile   
+     gfxSector current map sector being rendered
+   gfxRickRate How often client pings the server, 0 = single player, capflag = 1 second
+        
+
+
+
+

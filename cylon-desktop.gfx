@@ -1,0 +1,323 @@
+{
+  "format": "qandy-ramdrive",
+  "version": 2,
+  "drive": "desktop",
+  "created": "2026-10-30T02:22:17.254Z",
+  "entries": [
+    {
+      "name": "a",
+      "type": "directory",
+      "size": 0,
+      "timestamp": "20261016194026",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "a/gfxAirLock",
+      "type": "file",
+      "content": "false",
+      "size": 5,
+      "timestamp": "20261019113430",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "a/gfxCharDir",
+      "type": "file",
+      "content": "/c/",
+      "size": 3,
+      "timestamp": "20261018200437",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "a/gfxCommandLog",
+      "type": "file",
+      "content": "true",
+      "size": 4,
+      "timestamp": "20261019125606",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "a/gfxCursorZ",
+      "type": "file",
+      "content": "00",
+      "size": 2,
+      "timestamp": "20261019200036",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "a/gfxCycle",
+      "type": "file",
+      "content": ".075",
+      "size": 4,
+      "timestamp": "20261019112509",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "a/gfxGridStretch",
+      "type": "file",
+      "content": "true",
+      "size": 4,
+      "timestamp": "20261019130309",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "a/gfxGridTall",
+      "type": "file",
+      "content": "4",
+      "size": 1,
+      "timestamp": "20261018194906",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "a/gfxGridWide",
+      "type": "file",
+      "content": "8",
+      "size": 1,
+      "timestamp": "20261018194858",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "a/gfxIconDir",
+      "type": "file",
+      "content": "/i/",
+      "size": 3,
+      "timestamp": "20261019114131",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "a/gfxIconSize",
+      "type": "file",
+      "content": "64",
+      "size": 2,
+      "timestamp": "20261019114232",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "a/gfxLowerBound",
+      "type": "file",
+      "content": "Ab",
+      "size": 2,
+      "timestamp": "20261019112712",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "a/gfxMapsDir",
+      "type": "file",
+      "content": "/m/",
+      "size": 3,
+      "timestamp": "20261018200347",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "a/gfxRoundWorld",
+      "type": "file",
+      "content": "true",
+      "size": 4,
+      "timestamp": "20261019095020",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "a/gfxSector",
+      "type": "file",
+      "content": "Aa",
+      "size": 2,
+      "timestamp": "20261029032634",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "a/gfxTickRate",
+      "type": "file",
+      "content": "0",
+      "size": 1,
+      "timestamp": "20261029032630",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "a/gfxTileDir",
+      "type": "file",
+      "content": "/t/",
+      "size": 3,
+      "timestamp": "20261018200340",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "a/playerZ",
+      "type": "file",
+      "content": "12",
+      "size": 2,
+      "timestamp": "20261029222204",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "p",
+      "type": "directory",
+      "size": 0,
+      "timestamp": "20261011140253",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "w",
+      "type": "directory",
+      "size": 0,
+      "timestamp": "20261011133202",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "w/Aa",
+      "type": "directory",
+      "size": 0,
+      "timestamp": "20261011140408",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "w/Aa/Aq00Za",
+      "type": "file",
+      "content": "\\n",
+      "size": 2,
+      "timestamp": "20261029221328",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "w/Aa/As09Za",
+      "type": "file",
+      "content": "\\n",
+      "size": 2,
+      "timestamp": "20261029221616",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "w/Aa/At01Za",
+      "type": "file",
+      "content": "\\n",
+      "size": 2,
+      "timestamp": "20261029222135",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "w/Aa/Av08Za",
+      "type": "file",
+      "content": "\\n",
+      "size": 2,
+      "timestamp": "20261029221558",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "w/Aa/Aw02Za",
+      "type": "file",
+      "content": "\\n",
+      "size": 2,
+      "timestamp": "20261029222040",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "w/Aa/Ax03Za",
+      "type": "file",
+      "content": "\\n",
+      "size": 2,
+      "timestamp": "20261029221949",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "w/Aa/Az31Za",
+      "type": "file",
+      "content": "\\n",
+      "size": 2,
+      "timestamp": "20261029222202",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "w/Aa/m",
+      "type": "file",
+      "content": "ArArArArArArArArArArArArArArArArArArArArArArArArArArArArArArArAr",
+      "size": 64,
+      "timestamp": "20261029032739",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "w/Aa/t",
+      "type": "file",
+      "content": "ArArArArArArArArArArArArArArArArArArArArArArArArArArArArArArArAr",
+      "size": 64,
+      "timestamp": "20261019125804",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "w/Ab",
+      "type": "directory",
+      "size": 0,
+      "timestamp": "20261019085342",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "w/Ab/t",
+      "type": "file",
+      "content": "AsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAs",
+      "size": 64,
+      "timestamp": "20261019111027",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    }
+  ]
+}

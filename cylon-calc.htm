@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculator</title>
+    <!-- Connect to the Qandy OS SDK for keyboard and theme bindings -->
+    <script src="cylon-sdk.js"></script>
+    <style>
+        /* Fallback CSS Variables in case OS theming hasn't loaded yet */
+        :root {
+            --bg-color: #000;
+            --fg-color: #0f0;
+            --font-face: Courier, monospace;
+            --menu-bg: #111;
+            --menu-fg: #aaa;
+            --sel-bg: #333;
+            --sel-fg: #0f0;
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-color);
+            color: var(--fg-color);
+            font-family: var(--font-face);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            user-select: none; /* Prevent accidental text selection while tapping */
+        }
+
+        .calc-wrapper {
+            background-color: var(--menu-bg);
+            border: 2px solid var(--sel-bg);
+            padding: 15px;
+            box-shadow: 6px 6px 15px rgba(0,0,0,0.8);
+            width: 90%;
+            max-width: 320px;
+            box-sizing: border-box;
+        }
+
+        .display-container {
+            background-color: var(--bg-color);
+            border: 2px solid var(--fg-color);
+            padding: 15px 10px;
+            margin-bottom: 15px;
+            text-align: right;
+            word-wrap: break-word;
+            min-height: 40px;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+        }
+
+        .calc-history {
+            font-size: 14px;
+            color: var(--menu-fg);
+            min-height: 16px;
+            margin-bottom: 5px;
+        }
+
+        .calc-display {
+            font-size: 32px;
+            font-weight: bold;
+            color: var(--fg-color);
+        }
+
+        .keypad {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+        }
+
+        .btn {
+            background-color: var(--bg-color);
+            color: var(--fg-color);
+            border: 1px solid var(--fg-color);
+            padding: 15px 0;
+            font-size: 20px;
+            font-family: inherit;
+            font-weight: bold;
+            cursor: pointer;
+            text-align: center;
+            transition: transform 0.05s, filter 0.05s;
+        }
+
+        .btn:active {
+            transform: scale(0.95);
+            background-color: var(--sel-bg);
+            color: var(--sel-fg);
+        }
+
+        /* Operator buttons styling */
+        .btn.op {
+            background-color: var(--sel-bg);
+            color: var(--sel-fg);
+            border-color: var(--sel-fg);
+        }
+        
+        .btn.op:active {
+            filter: brightness(1.3);
+        }
+
+        /* Span zero button across two columns */
+        .btn.span-2 {
+            grid-column: span 2;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="calc-wrapper">
+        <div class="display-container">
+            <div id="history" class="calc-history"></div>
+            <div id="display" class="calc-display">0</div>
+        </div>
+
+        <div class="keypad">
+            <div class="btn op" data-action="clear">C</div>
+            <div class="btn op" data-action="toggle-sign">+/-</div>
+            <div class="btn op" data-action="percent">%</div>
+            <div class="btn op" data-action="operator" data-value="/">/</div>
+
+            <div class="btn" data-action="digit" data-value="7">7</div>
+            <div class="btn" data-action="digit" data-value="8">8</div>
+            <div class="btn" data-action="digit" data-value="9">9</div>
+            <div class="btn op" data-action="operator" data-value="*">*</div>
+
+            <div class="btn" data-action="digit" data-value="4">4</div>
+            <div class="btn" data-action="digit" data-value="5">5</div>
+            <div class="btn" data-action="digit" data-value="6">6</div>
+            <div class="btn op" data-action="operator" data-value="-">-</div>
+
+            <div class="btn" data-action="digit" data-value="1">1</div>
+            <div class="btn" data-action="digit" data-value="2">2</div>
+            <div class="btn" data-action="digit" data-value="3">3</div>
+            <div class="btn op" data-action="operator" data-value="+">+</div>
+
+            <div class="btn span-2" data-action="digit" data-value="0">0</div>
+            <div class="btn" data-action="decimal">.</div>
+            <div class="btn op" data-action="equals">=</div>
+        </div>
+    </div>
+
+    <script>
+        // --- Calculator State ---
+        let currentInput = '0';
+        let previousInput = null;
+        let operator = null;
+        let waitingForNewValue = false;
+
+        const displayEl = document.getElementById('display');
+        const historyEl = document.getElementById('history');
+
+        function updateDisplay() {
+            // Trim long numbers to fit screen gracefully
+            if (currentInput.length > 12) {
+                displayEl.innerText = parseFloat(currentInput).toPrecision(10);
+            } else {
+                displayEl.innerText = currentInput;
+            }
+            
+            if (previousInput !== null && operator !== null && waitingForNewValue) {
+                historyEl.innerText = `${previousInput} ${operator}`;
+            } else {
+                historyEl.innerText = '';
+            }
+        }
+
+        function inputDigit(digit) {
+            if (waitingForNewValue) {
+                currentInput = digit;
+                waitingForNewValue = false;
+            } else {
+                currentInput = currentInput === '0' ? digit : currentInput + digit;
+            }
+            updateDisplay();
+        }
+
+        function inputDecimal() {
+            if (waitingForNewValue) {
+                currentInput = '0.';
+                waitingForNewValue = false;
+                return updateDisplay();
+            }
+            if (!currentInput.includes('.')) {
+                currentInput += '.';
+                updateDisplay();
+            }
+        }
+
+        function handleOperator(nextOperator) {
+            const inputValue = parseFloat(currentInput);
+
+            if (operator && waitingForNewValue) {
+                operator = nextOperator;
+                updateDisplay();
+                return;
+            }
+
+            if (previousInput === null && !isNaN(inputValue)) {
+                previousInput = inputValue;
+            } else if (operator) {
+                const result = calculate(previousInput, inputValue, operator);
+                // Fix Javascript floating point oddities (e.g. 0.1 + 0.2 = 0.30000000000000004)
+                currentInput = String(parseFloat(result.toFixed(10)));
+                previousInput = result;
+            }
+
+            waitingForNewValue = true;
+            operator = nextOperator;
+            updateDisplay();
+        }
+
+        function calculate(first, second, op) {
+            if (op === '+') return first + second;
+            if (op === '-') return first - second;
+            if (op === '*') return first * second;
+            if (op === '/') return second === 0 ? 0 : first / second; // Avoid Infinity on div zero
+            return second;
+        }
+
+        function clearCalc() {
+            currentInput = '0';
+            previousInput = null;
+            operator = null;
+            waitingForNewValue = false;
+            updateDisplay();
+        }
+
+        function toggleSign() {
+            currentInput = String(parseFloat(currentInput) * -1);
+            updateDisplay();
+        }
+
+        function applyPercent() {
+            currentInput = String(parseFloat(currentInput) / 100);
+            updateDisplay();
+        }
+
+        // --- Hardware/Virtual Keyboard Binding (via cylon-sdk.js) ---
+        window.keydown = function(key, e) {
+            // Numbers
+            if (/^[0-9]$/.test(key)) { inputDigit(key); }
+            // Decimal
+            else if (key === '.') { inputDecimal(); }
+            // Operations
+            else if (['+', '-', '*', '/'].includes(key)) { handleOperator(key); }
+            // Equals
+            else if (key === 'Enter' || key === '=') { handleOperator('='); }
+            // Clear
+            else if (key === 'Escape' || key.toLowerCase() === 'c') { clearCalc(); }
+            // Backspace
+            else if (key === 'Backspace') {
+                if (!waitingForNewValue) {
+                    currentInput = currentInput.length > 1 ? currentInput.slice(0, -1) : '0';
+                    updateDisplay();
+                }
+            }
+        };
+
+        // --- Mouse / Touch Binding ---
+        document.querySelectorAll('.btn').forEach(btn => {
+            btn.addEventListener('pointerdown', (e) => {
+                const action = btn.dataset.action;
+                const value = btn.dataset.value;
+
+                if (action === 'digit') inputDigit(value);
+                else if (action === 'decimal') inputDecimal();
+                else if (action === 'operator') handleOperator(value);
+                else if (action === 'clear') clearCalc();
+                else if (action === 'equals') handleOperator('=');
+                else if (action === 'toggle-sign') toggleSign();
+                else if (action === 'percent') applyPercent();
+            });
+        });
+
+        // --- Cylon OS Theme Engine Hook ---
+        window.addEventListener('message', (e) => {
+            if (e.data.type === 'QANDY_UPDATE_COLORS' && window.CylonSDK && window.CylonSDK.applyColors) {
+                window.CylonSDK.applyColors(e.data.colors);
+            }
+        });
+
+        // Auto-bootstrap colors if loaded after the parent finishes emitting
+        if (window.parent && window.parent.CylonColors && window.CylonSDK && window.CylonSDK.applyColors) {
+            window.CylonSDK.applyColors(window.parent.CylonColors);
+        }
+
+        // Initial setup
+        updateDisplay();
+    </script>
+</body>
+</html>
