@@ -286,8 +286,8 @@ window.onload = async function() {
     // ------------------------------------------------------------------------
     const isLocal = window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1');
 
-    //const url = isLocal ? 'http://localhost:8080/qandyland.js' : 'https://qandy.onrender.com/qandyland.js';
-    const url = 'http://localhost:8080/qandyland.js';
+    const url = isLocal ? 'http://localhost:8080/qandyland.js' : 'https://qandy.onrender.com/qandyland.js';
+    //const url = 'http://localhost:8080/qandyland.js';
     
     const baseUrl = url.replace('/qandyland.js', '');
 
