@@ -628,6 +628,15 @@ window.applyThemeFromAlpha = async function() {
 
 window.desktopInit = async function() {
     let dos = window.CylonDOS;
+
+    let origin = window.location.origin;
+    if (origin && origin !== "null") {
+        try {
+            await dos.save('/a/cylonHostOrigin', origin);
+        } catch(e) {
+            console.warn("Could not save hostOrigin to /a/");
+        }
+    }
     
     // 1. Load system colors from /a/ retro-objects BEFORE autoexec loads apps
     await window.applyThemeFromAlpha();

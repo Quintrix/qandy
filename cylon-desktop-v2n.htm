@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cylon Desktop</title>
+<script src="cylon-sdk.js"></script>
+<script src="qandyland-univac.js"></script>
+<script src="cylon-gfx-itemid.js"></script>
+<script src="cylon-gfx.js"></script>
+<style>
+/* Desktop Workspace Styles */
+body, html {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background-color: var(--bg-color, #000);
+    color: var(--fg-color, #0f0);
+    font-family: var(--font-face, monospace);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+}
+ 
+#desktop-wrapper {
+   position: relative;
+   background-color: #000;
+   border: 2px solid var(--sel-bg, #333);
+   box-shadow: 0px 10px 30px rgba(0, 0, 0, 0.8);
+   overflow: hidden;
+   box-sizing: border-box; 
+}
+ 
+#bg-canvas {
+   position: absolute;
+   top: 0;
+   left: 0;
+   width: 100%;
+   height: 100%;
+   z-index: 1;
+   image-rendering: -moz-crisp-edges;
+   image-rendering: -webkit-optimize-contrast;
+   image-rendering: crisp-edges;
+   image-rendering: pixelated;
+}
+ 
+#tiles-layer {
+   position: absolute;
+   top: 0;
+   left: 0;
+   width: 100%;
+   height: 100%;
+   z-index: 5;
+}
+ 
+#icons-layer {
+   position: absolute;
+   top: 0;
+   left: 0;
+   width: 100%;
+   height: 100%;
+   z-index: 10;
+}
+ 
+.icon-wrap {
+   position: absolute;
+   cursor: pointer;
+   display: flex;
+   flex-direction: column;
+   align-items: center;
+   justify-content: center;
+   border-radius: 4px;
+   transition: background-color 0.1s;
+}
+ 
+.icon-wrap:hover {
+   background-color: rgba(255, 255, 255, 0.1);
+   z-index: 20;
+}
+ 
+.icon-wrap:active {
+   transform: scale(0.95);
+   background-color: rgba(255, 255, 255, 0.2);
+}
+ 
+.icon-img {
+   max-width: 60%;
+   max-height: 55%;
+   object-fit: contain;
+   image-rendering: pixelated;
+   filter: drop-shadow(2px 2px 2px rgba(0,0,0,0.8));
+}
+ 
+.icon-label {
+   margin-top: 4px;
+   font-size: clamp(9px, 2vmin, 14px);
+   font-weight: bold;
+   color: #fff;
+   font-family: sans-serif;
+   text-shadow: 1px 1px 1px #000, -1px -1px 1px #000, 1px -1px 1px #000, -1px 1px 1px #000;
+   text-align: center;
+   line-height: 1.1;
+   width: 90%;
+   white-space: nowrap;
+   overflow: hidden;
+   text-overflow: ellipsis;
+}
+</style>
+</head>
+<body>
+<div id="desktop-wrapper">
+   <canvas id="bg-canvas"></canvas>
+   <div id="tiles-layer"></div>
+   <div id="icons-layer"></div>
+</div>
+<script>
+// ============================================================================
+// LOCAL OFFLINE FILESYSTEM & UNIVAC EMULATOR
+// ============================================================================
+window.GfxSyncFS = {
+    getPrefix: function(driveName) { return 'cylon:' + driveName + ':'; },
+    fileLoad: function(driveName, root, filepath, session) {
+        let key = this.getPrefix(driveName) + filepath;
+        let raw = window.localStorage.getItem(key);
+        if (!raw) return { success: false };
+        try { let entry = JSON.parse(raw); return { success: true, content: entry.content }; } catch(e) { return { success: false }; }
+    },
+    fileSave: function(driveName, root, filepath, content, session1, session2, timestamp) {
+        let key = this.getPrefix(driveName) + filepath;
+        let entry = { path: filepath, type: 'file', content: String(content), size: String(content).length, timestamp: timestamp || new Date().toISOString(), readOnly: false };
+        try { window.localStorage.setItem(key, JSON.stringify(entry)); return { success: true }; } catch(e) { return { success: false, error: "localStorage full" }; }
+    },
+    fileDelete: function(driveName, root, filepath, session) { window.localStorage.removeItem(this.getPrefix(driveName) + filepath); return { success: true }; },
+    fileSearch: function(driveName, pattern) {
+        let prefix = this.getPrefix(driveName);
+        let results = [];
+        let regexStr = '^' + pattern.replace(/\*/g, '.*').replace(/\?/g, '.') + '$';
+        let regex = new RegExp(regexStr);
+        for (let i = 0; i < window.localStorage.length; i++) {
+            let key = window.localStorage.key(i);
+            if (key.startsWith(prefix)) {
+                let path = key.substring(prefix.length);
+                let basename = path.split('/').pop();
+                if (regex.test(path) || regex.test(basename)) {
+                    let raw = window.localStorage.getItem(key);
+                    let size = 0, timestamp = '';
+                    try { let e = JSON.parse(raw); size = e.size || 0; timestamp = e.timestamp || ''; } catch(e) {}
+                    results.push({ name: path, size: size, timestamp: timestamp });
+                }
+            }
+        }
+        return { success: true, results: results };
+    },
+    fileList: function(driveName, directory, ignored, session) {
+        let dirPath = directory.endsWith('/') ? directory : directory + '/';
+        let prefix = this.getPrefix(driveName) + dirPath;
+        let files = [];
+        for (let i = 0; i < window.localStorage.length; i++) {
+            let key = window.localStorage.key(i);
+            if (key.startsWith(prefix)) {
+                let filename = key.substring(prefix.length).replace(/^\//, '');
+                if (filename.indexOf('/') === -1) files.push(filename);
+            }
+        }
+        return { success: true, listing: files.join(' ') };
+    }
+};
+
+window.localPlayerIndex = new Map();
+window.register = {};
+
+window.localPlugboard = function(plugs, drive, session) {
+    let output = "";
+    let player = window.localPlayerIndex.get(session);
+    if (!player) player = { drive: drive, fullPath: null, map: "A1", z: 0, item: "", avatar: "", pubId: "" };
+
+    function runtape(code) {
+        if (code && typeof window.UNIVAC === 'function') {
+            let uResult = window.UNIVAC(drive, player.fullPath, "RAM:" + code, session);
+            if (uResult) {
+                player.map = uResult.sector; player.z = uResult.z; player.avatar = uResult.avatar;
+                if (uResult.playerid) player.pubId = uResult.playerid;
+                if (uResult.item) player.item = uResult.item + player.pubId;
+                player.fullPath = uResult.fullPath; output += uResult.output;
+            }
+        }
+    }
+    
+    function runfile(filepath) {
+        if (typeof window.UNIVAC === 'function') {
+            let uResult = window.UNIVAC(drive, player.fullPath, filepath, session);
+            if (uResult) {
+                player.map = uResult.sector; player.z = uResult.z; player.avatar = uResult.avatar;
+                if (uResult.playerid) player.pubId = uResult.playerid;
+                if (uResult.item) player.item = uResult.item + player.pubId;
+                player.fullPath = uResult.fullPath; output += uResult.output;
+            }
+        }
+    }
+
+    runfile('w/b'); 
+    let refresh = true; let column = 0; let tape = "";
+
+    while (column < plugs.length) {
+        let code = plugs.slice(column, column + 2);
+        column += 2; 
+        switch (code) {
+            case 'Vn': case 'Vs': case 'Ve': case 'Vw':
+                if (player.item) tape += code; break;
+            case 'Vd': 
+                if (player.item) tape += code + plugs.slice(column, column + 2); 
+                column += 2; break;
+            case 'OD':
+                if (tape) { runtape(tape); tape = ""; }
+                let objid = plugs.slice(column, column + 2);
+                let objz  = plugs.slice(column + 2, column + 4);
+                column += 4;
+                if (player.item === 'Za' && objid.charAt(0) === 'S') player.z = objz;
+                let pZStr = (player.z < 10 ? '0' : '') + player.z;
+                let odSearch = 'w/' + player.map + '/' + objid + pZStr + '??';
+                let odFiles = window.GfxSyncFS.fileSearch(drive, odSearch);
+                let objfile = null;
+                if (odFiles.success && odFiles.results.length > 0) {
+                    for (let r of odFiles.results) {
+                        let base = r.name.split('/').pop();
+                        if (base.length === 6) { objfile = r.name; break; }
+                    }
+                }
+                if (objfile) runfile(objfile);
+                break;
+            case 'ID':
+                if (tape) { runtape(tape); tape = ""; }
+                let itemId = plugs.slice(column, column + 2);
+                let itemZ  = plugs.slice(column + 2, column + 4);
+                column += 4;
+                
+                let idSearch = 'w/' + player.map + '/' + itemId + '*';
+                let idFiles = window.GfxSyncFS.fileSearch(drive, idSearch);
+                if (idFiles.success && idFiles.results.length > 0) {
+                    for (let r of idFiles.results) {
+                        let base = r.name.split('/').pop();
+                        if (base.substring(2, 4) === itemZ) {
+                            let pubId = base.length >= 8 ? base.substring(4, 8) : "";
+                            let fullId = pubId ? itemId + pubId : itemId;
+                            
+                            if (itemId === 'Zj') { runfile('w/f'); break; } 
+                            if (fullId === player.item) {
+                                let invLoad = window.GfxSyncFS.fileLoad(drive, '/', player.fullPath, session);
+                                output += "S^Vi" + (invLoad.success ? invLoad.content : '') + "^S";
+                                break;
+                            }
+                            if (itemId >= 'Aa' && itemId < 'Qa') tape += 'XnVd' + itemId;
+                            break;
+                        }
+                    }
+                }
+                break;
+            case 'ST':
+                if (tape) { runtape(tape); tape = ""; }
+                if (!window.localPlayerIndex.has(session)) {
+                    let chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+                    let pubId = '';
+                    for (let i = 0; i < 4; i++) pubId += chars.charAt(Math.floor(Math.random() * chars.length));
+                    player = { drive, fullPath: null, map: "A1", item: "", z: 0, avatar: "", pubId };
+                    window.localPlayerIndex.set(session, player);
+                    runtape("XaZa"); // Ghost slot
+                    player.item = 'Za';
+                    output += "ST" + session;
+                    refresh = false;
+                }
+                column = plugs.length;
+                break;
+            default: tape += code; break;
+        }
+    }
+
+    if (tape) runtape(tape);
+    runfile('w/c'); // After script
+    window.localPlayerIndex.set(session, player);
+
+    if (refresh) {
+        let list = window.GfxSyncFS.fileList(drive, 'w/' + player.map, null, session);
+        let items = [];
+        if (list.success && list.listing) {
+            let files = list.listing.split(' ');
+            files.forEach(f => {
+                if (f.length !== 6 || f.charAt(0) === 'V' || f.charAt(0) === 'X') items.push(f); 
+            });
+        }
+        let numericZ = parseInt(player.z, 10) || 0;
+        let z = numericZ < 10 ? "0" + numericZ : String(numericZ);
+        let pItemId = player.item ? player.item.substring(0, 2) : "Za";
+        let pPubId = (player.pubId || "0000").padEnd(4, '0');
+        
+        output = "PI" + pItemId + z + pPubId + output;
+        output += "RF" + player.map + z + items.join('~');
+    }
+    return output;
+};
+
+
+window.onload = async function() {
+    if (window.CylonSDK && window.CylonSDK.injectDesktopStyles) {
+        window.CylonSDK.applyColors(window.parent.CylonColors);
+    }
+     
+    if (!window.CylonCommand || !window.qdosLoad) {
+        document.body.innerHTML = "<h3 style='padding:20px;'>Error: Cylon OS not fully connected.</h3>";
+        return;
+    }
+    if (typeof window.UNIVAC !== 'undefined') window.UNIVAC.inject(window.GfxSyncFS);
+
+    // ====================================================================
+    // UNIVAC THIN-CLIENT ARCHITECTURE OVERRIDES
+    // ====================================================================
+    
+    window.gfxDo = "ST";        // Initialize with Session Token request
+    window.playerItem = "Za";   // Placeholder until UNIVAC assigns Si cursor
+    window.cylonGfxSession = null;
+    window.desktopDrive = 'desktop';
+    window.remoteQandylandUrl = null; 
+    
+    let _origInit = window.CylonGFX.init;
+
+    // Route CylonGFX cursor movements through the UNIVAC punch code pipeline
+    window.CylonGFX.moveCursor = function(dx, dy) {
+        let cmd = null;
+        if (dy < 0) cmd = 'Vn';
+        else if (dy > 0) cmd = 'Vs';
+        else if (dx < 0) cmd = 'Vw';
+        else if (dx > 0) cmd = 'Ve';
+        
+        if (cmd) {
+            if (window.gfxDo === "RF") window.gfxDo = "";
+            window.gfxDo += cmd;
+        }
+    };
+
+    // Intercept local coordinate tracking; VFS updates are handled strictly by UNIVAC
+    window.CylonGFX.setCursorZ = function(newZ) {
+        window.playerZ = newZ;
+        this.renderCursor();
+    };
+
+    window.serverdown = function(code) {
+        console.log("Desktop received server plug:", code);
+    };
+
+    window.keydown = function(key, e) {
+        if (!window.CylonGFX) return;
+
+        if (window.parent && window.parent.CylonPopManager && window.parent.CylonPopManager.isMenuOpen) {
+            if (window.parent.CylonPopManager.handleMenuKey(key)) {
+                if (e) e.preventDefault();
+                return;
+            }
+        }
+        
+        // Interrupt auto-walking on physical keypress
+        window.CylonGFX.targetCursorZ = -1;
+        window.CylonGFX.pendingCursorAction = null;
+
+        let handled = false;
+        let todo = null;
+        
+        if (key === 'ArrowUp' || key === 'w' || key === 'W')    { todo = 'Vn'; handled = true; }
+        if (key === 'ArrowDown' || key === 's' || key === 'S')  { todo = 'Vs'; handled = true; }
+        if (key === 'ArrowLeft' || key === 'a' || key === 'A')  { todo = 'Vw'; handled = true; }
+        if (key === 'ArrowRight' || key === 'd' || key === 'D') { todo = 'Ve'; handled = true; }
+        
+        if (todo) {
+            if (window.gfxDo === "RF") window.gfxDo = "";
+            window.gfxDo += todo;
+        }
+
+        if (key === 'Enter') { 
+            window.CylonGFX.executeCursor(); 
+            handled = true; 
+        }
+        
+        if (handled && e) {
+            e.preventDefault(); 
+        }
+    };
+
+    // ====================================================================
+    // OS BOOT SCRIPT - Transparent terminal logic driven by iferror
+    // ====================================================================
+     
+    let dosObj = window.parent && window.parent.CylonDOS ? window.parent.CylonDOS : window.CylonDOS;
+    let isInstalled = false;
+    if (dosObj) {
+        let mnts = await dosObj.mounts();
+        isInstalled = mnts.some(m => m.name === 'cylon' && m.type === 'idb');
+    }
+
+    await window.CylonCommand(`desktop:`);
+    if (isInstalled) {
+        await window.CylonCommand(`iferror mount desktop ls`);
+        await window.CylonCommand(`cd desktop:/a`);
+        await window.CylonCommand(`iferror import cylon-desktop.gfx ls desktop`);
+    } else {
+        await window.CylonCommand(`iferror mount cylon-desktop.gfx ls desktop`);
+        await window.CylonCommand(`cd desktop:/a`);
+    }
+    await window.CylonCommand(`cylon:`);
+    await window.CylonCommand(`iferror ram:`);
+     
+    if (window.CylonGFX) {
+       let startSector = 'Aa';
+       try {
+           let loaded = await window.qdosLoad('desktop:/a/gfxSector');
+           if (loaded) {
+               let s = loaded.trim();
+               if (s.length === 2) startSector = s;
+           }
+       } catch(e) {}
+       
+       // Call original Init for config variables without overwriting our client bindings
+       await _origInit.call(window.CylonGFX, 'desktop:/w/' + startSector);
+       
+       // Activate the unified GFX Networking & Plugboard Loop
+       window.CylonGFX.startNetworkTick();
+
+    } else {
+       console.error("CylonGFX Engine missing!");
+    }
+     
+    window.addEventListener('resize', fitDesktopToScreen);
+    if (window.ResizeObserver) {
+        new ResizeObserver(fitDesktopToScreen).observe(document.body);
+    }
+};
+ 
+function fitDesktopToScreen() {
+   if (!window.CylonGFX) return;
+ 
+   const wrapper = document.getElementById('desktop-wrapper');
+   const screenW = window.innerWidth;
+   const screenH = window.innerHeight;
+ 
+   const cols = window.CylonGFX.gridWide;
+   const rows = window.CylonGFX.gridTall;
+ 
+   if (!cols || !rows || screenW === 0 || screenH === 0) return;
+ 
+   let w, h;
+ 
+   if (window.CylonGFX.gfxGridStretch) {
+       const aspect = cols / rows;
+       w = screenW;
+       h = screenW / aspect;
+ 
+       if (h > screenH) {
+           h = screenH;
+           w = screenH * aspect;
+       }
+ 
+       w = Math.floor(w * 0.98);
+       h = Math.floor(h * 0.98); 
+   } else {
+       w = cols * window.CylonGFX.gfxTileSize;
+       h = rows * window.CylonGFX.gfxTileSize;
+   }
+ 
+   wrapper.style.width = w + 'px';
+   wrapper.style.height = h + 'px';
+}
+</script>
+</body>
+</html>

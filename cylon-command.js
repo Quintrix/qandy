@@ -1160,7 +1160,8 @@ window.cycleActivePage = function() {
             if (!e.data || typeof e.data !== 'object') return;
             // --- Security Upgrade: Origin and Source Validation ---
             if (window.location.origin !== "null" && e.origin !== window.location.origin) return;
-            if (e.source !== window && e.source !== window.parent) return;
+            let isKnownFrame = Array.from(document.querySelectorAll('iframe')).some(f => f.contentWindow === e.source);
+            if (e.source !== window && e.source !== window.parent && !isKnownFrame) return;
             // ------------------------------------------------------
 
             const { type } = e.data;

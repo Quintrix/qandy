@@ -1,0 +1,32 @@
+
+ Qandy
+
+The first radios were powered by crystals,
+Qandy uses Krystals to talk to other Qandys:
+ 
+ Krystals:
+ 
+Quintrix Qandy (cylon)     (passcode)
+Quintrix  A32  (keyboard)  (passcode)
+Quintrix  iOS  (display)   (passcode)
+  Joe    Qandy (cylon)     (passcode)
+ 
+
+
+My thinking is qandyland.js should assign each Qandy it serves cylon.htm to
+a unique ID and passcode, half should be assigned by the client and the other
+half by the server. This is much like tracking Blue Tooth devices, we are
+tracking which devices are available for connections.
+
+We'll need a cylon-krystal.htm for the client, we can either patch into cylon-sdk.js
+or start a new cylon-krystal.js if needed. This page should do two things:
+
+1. Display a list of available devices
+2. Provide options to offer this device as a keyboard or display for another device.
+
+Now my thinking so far has been we set-up a wifi hotspot and serve the cylon.htm when
+someone connects, I'm wondering if we should use Blue Tooth instead? Or offer both?
+The idea is, we should be able to connect a Qandy running cylon.htm to a Blue Tooth
+speaker, yes? It would be nice to have all these features packaged together.
+
+Your thoughts?

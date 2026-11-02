@@ -145,9 +145,12 @@ window.ObjDown = function(iconId) {
             if (parent && typeof parent.PageOpen === 'function') parent.PageOpen('cylon-calc.htm'); 
             return true;
         case 'Az': // trash
-            if (typeof window.pop === 'function') {
-                window.pop("<div style='padding:20px; text-align:center; font-weight:bold; line-height:1.6;'>There is no trash<br>on a Qandy Pocket Computer!</div>");
-            }
+          if (parent && typeof parent.popHtm === 'function') {
+              parent.popHtm("<div style='padding:20px; text-align:center; font-weight:bold; line-height:1.6;'>There is no trash<br>on a Qandy Pocket Computer!</div>");
+          }
+          return true;
+        case 'Se': // black flag
+            if (parent && typeof parent.PageOpen === 'function') parent.PageOpen('cylon-capflag.htm'); 
             return true;
     }
     return false; // Icon wasn't a recognized core app, fallback to executing script file
@@ -284,21 +287,29 @@ window.onload = async function() {
     // ------------------------------------------------------------------------
     // BOOT SEQUENCE
     // ------------------------------------------------------------------------
-    const isLocal = window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1');
+    
+    // 1. Define a safe fallback (Production)
+    let hostOrigin = 'https://qandy.onrender.com';
+    
+    // 2. Query the OS for the actual Host Origin Environment Variable
+    try {
+        if (window.parent && window.parent.CylonDOS) {
+            let savedOrigin = await window.parent.CylonDOS.load('/a/cylonHostOrigin');
+            if (savedOrigin) hostOrigin = savedOrigin.trim();
+        }
+    } catch(err) {
+        console.warn('Could not read /a/cylonHostOrigin, using fallback.');
+    }
 
-    // const url = isLocal ? 'http://localhost:8080/qandyland.js' : 'https://qandy.onrender.com/qandyland.js';
-    // const url = 'http://localhost:8080/qandyland.js';
-    const url = 'https://qandy.onrender.com/qandyland.js';
-    const baseUrl = url.replace('/qandyland.js', '');
+    // 3. Build dynamic URLs based purely on where the OS booted from
+    const url = `${hostOrigin}/qandyland.js`;
+    const baseUrl = hostOrigin;
 
     try {
-        // 1. Mount the remote desktop graphics package into RAM
+        // Mount the remote desktop graphics package into RAM
         await CylonCommand(`mount ${baseUrl}/cylon-desktop.gfx ram desktop`);
         
-        // 2. Set tick rate to 0 so we don't continuously poll the server (single user mode)
-        // await CylonCommand('save desktop:/a/gfxTickRate 0');
-        
-        // 3. Connect to server to register session, apply map, and complete one-time sync
+        // Connect to server to register session, apply map, and complete one-time sync
         await CylonCommand(`gfx connect ${url} desktop`);
     } catch (err) {
         console.error('Cylon Desktop startup failed:', err);
@@ -306,7 +317,7 @@ window.onload = async function() {
             window.parent.print(`[.4]Cylon Desktop startup failed: ${String(err.message || err)}[.]\n`);
         }
     }
-
+    
     // Connect Screen Scaling Observer
     window.addEventListener('resize', fitDesktopToScreen);
     if (window.ResizeObserver) new ResizeObserver(fitDesktopToScreen).observe(document.body);
