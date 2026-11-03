@@ -8,7 +8,6 @@
 <script src="cylon-gfx.js"></script>
 <style>
    body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; color: #0f0; font-family: monospace; overflow: hidden; user-select: none; }
-   body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; color: #0f0; font-family: monospace; overflow: hidden; user-select: none; }
    #desktop-wrapper { position: relative; width: 100%; height: calc(100% - 60px); overflow: hidden; }
    
    /* Action-RPG Style Inventory HUD */
@@ -218,11 +217,24 @@ window.onload = async function() {
    let startup = async () => {
        window.PopAlign = "center";
        
-       let isLocal = window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1');
-       // let url = isLocal ? 'http://localhost:8080/qandyland.js' : 'https://qandy.onrender.com/qandyland.js';
-       // leave URL on localhost until alpha release, this version of capflag.htm cannot connect to the server on onrender.com  
-       let url = 'http://localhost:8080/qandyland.js';
-       let baseUrl = url.replace('/qandyland.js', '');
+       let jdos = window.parent && window.parent.CylonDOS ? window.parent.CylonDOS : window.CylonDOS;
+       let hostOrigin = 'https://qandy.onrender.com';
+       
+       // 1. Fetch OS Host Origin for Asset Loading
+       try {
+           if (jdos) {
+               let savedOrigin = await jdos.load('cylon:/a/cylonHostOrigin');
+               if (savedOrigin) hostOrigin = savedOrigin.trim();
+           }
+       } catch(err) {
+           console.warn('Could not read cylon:/a/cylonHostOrigin, using fallback.');
+       }
+       
+       let baseUrl = hostOrigin.endsWith('/') ? hostOrigin.slice(0, -1) : hostOrigin;
+       
+       // 2. Select the correct backend GFX Server
+       let isLocal = window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1') || baseUrl.includes('localhost');
+       let url = isLocal ? 'http://localhost:8080/qandyland.js' : 'https://qandy.onrender.com/qandyland.js';
        let world = 'capflag';
  
        let PUP = `<div>Connecting...</div>`;
@@ -230,9 +242,7 @@ window.onload = async function() {
        else if (window.popHtm) window.popHtm(PUP, 'center');
  
        // Mount the filesystem into the OS RAM so the engine can pull the tile graphics natively
-       // @@ need to fixs this, for now we hard code it 
-       // await CylonCommand(`mount ${baseUrl}/${world}.gfx ram ${world}`);
-       await CylonCommand('mount http://localhost:8080/cylon-capflag.gfx ram capflag');
+       await CylonCommand(`mount ${baseUrl}/cylon-${world}.gfx ram ${world}`);
        
        // Directly connect our App's local engine rather than backgrounding it to the OS Terminal
        window.remoteQandylandUrl = url;
