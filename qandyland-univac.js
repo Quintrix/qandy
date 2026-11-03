@@ -54,7 +54,7 @@ function inject(deps) {
 // Path format:  w/[sector]/[filename]
 // Returns { sector, filename, id, z, avatar } or null on parse failure.
 //
-function _parseItemPath(itemfile) {
+function _parseItemPath(itemfile, zBase) {
   if (!itemfile) return null;
 
   var p = itemfile.replace(/^\//, '');
@@ -69,7 +69,7 @@ function _parseItemPath(itemfile) {
   // Always uniform: First 2 are ID, next 2 are Z
   var id   = filename.substring(0, 2);
   var zRaw = filename.substring(2, 4);
-  var z    = parseInt(zRaw, 10);
+  var z    = parseInt(zRaw, zBase || 10);
   if (isNaN(z)) return null;
 
   var playerid = '';
@@ -83,7 +83,7 @@ function _parseItemPath(itemfile) {
     avatar = filename.length > 4 ? filename.substring(4) : '';
   }
 
-  return { sector: sector, filename: filename, id: id, z: z, zStr: zRaw, playerid: playerid, avatar: avatar };
+  return { sector: sector, filename: filename, id: id, z: z, zStr: zRaw.toUpperCase(), playerid: playerid, avatar: avatar };
 }
 
 //
@@ -190,6 +190,13 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
     console.error('UNIVAC: dependencies not injected – call UNIVAC.inject(deps) at startup');
     return;
   }
+  
+  var zBase = 10;
+  var baseLoad = _deps.fileLoad(driveName, '/', 'a/gfxZBase', 'UNIVAC');
+  if (baseLoad.success && baseLoad.content) {
+    var b = parseInt(baseLoad.content, 10);
+    if (!isNaN(b) && b >= 2 && b <= 36) zBase = b;
+  }
 
   var _global = typeof window !== 'undefined' ? window : (typeof global !== 'undefined' ? global : this);
   if (!_global.register) _global.register = {};
@@ -205,7 +212,7 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
   var oldPath = itemfile || null; 
 
   if (itemfile) {
-    parsedItem = _parseItemPath(itemfile);
+    parsedItem = _parseItemPath(itemfile, zBase);
     var itemLoad = _deps.fileLoad(driveName, '/', itemfile, 'UNIVAC');
     if (!itemLoad.success) {
       console.error('UNIVAC: cannot load item file: ' + itemfile);
@@ -216,7 +223,7 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
 
   // ── stuff W[] with user-register values (Wa-Wz and W@) from the item file ─────
   for (var _rk in register) { if (/^W[a-z@]$/.test(_rk)) delete register[_rk]; }
-  var _userRegMatches = content.match(/W[a-z@]\d{2}/g) || [];
+  var _userRegMatches = content.match(/W[a-z@][0-9A-Za-z]{2}/g) || [];
   _userRegMatches.forEach(function(m) {
     register[m.substring(0, 2)] = m.substring(2, 4);
   });
@@ -272,7 +279,7 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
     return null;
   }
 
-  // Finds a 6-character object in the given sector whose last 2 chars are numerals
+  // Finds a 6-character object in the given sector whose last 2 chars indicate a Z target
   function findCityExitZ(sectorCode) {
     if (typeof _deps.fileList === 'function') {
       var listRes = _deps.fileList(driveName, 'w/' + sectorCode, null, 'UNIVAC');
@@ -280,7 +287,7 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
         var files = listRes.listing.trim().split(/\s+/);
         for (var i = 0; i < files.length; i++) {
           var fname = files[i];
-          if (fname.length === 6 && /^\d{2}$/.test(fname.substring(4, 6))) {
+          if (fname.length === 6 && /^[0-9A-Za-z]{2}$/.test(fname.substring(4, 6))) {
             return fname.substring(4, 6);
           }
         }
@@ -289,7 +296,7 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
     return null;
   }
 
-  // Resolves "05", "W2", "Wa" etc. directly to its numeric value
+  // Resolves "05", "W2", "Wa" etc. directly to its numeric value for purely Math/Logic operations (Base-10 Engine Math)
   function getRegValue(valStr) {
     if (!valStr || valStr.length !== 2) return 0;
 
@@ -313,6 +320,12 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
     // A=65, B=66... a=97, 0=48. 
     // This ensures 'Aa' < 'Ab' and 'A0' < 'A1' and 'Aa' < 'Ba'
     return (str.charCodeAt(0) * 100) + str.charCodeAt(1);
+  }
+
+  // Resolves "05", "FF", "W2" into an integer using the custom zBase for Coordinate Teleportation/Placement
+  function resolveZToken(token) {
+    var str = (token.charAt(0) === 'W') ? (register[token] || "00") : token;
+    return parseInt(str, zBase);
   }
 
   // Cache sector 'm' files in RAM for the duration of this tape read
@@ -377,8 +390,8 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
             state.playerid = tickOdometer(driveName);
             if (register['W0']) state.sector = register['W0'];
             if (register['W1']) {
-              state.zStr = register['W1'];
-              state.z = parseInt(state.zStr, 10);
+              state.zStr = register['W1'].toUpperCase();
+              state.z = parseInt(state.zStr, zBase);
             }
             state.avatar = '';   
             state.content = inventoryString;
@@ -396,10 +409,10 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
           if (appliedXa) {
             // Scan for W user-registers and apply their value to the register mapping
             // so later math commands read the correct quantity before Cleanup.
-            state.content = state.content.replace(/(W[a-z@])(\d{2})?/g, function(match, rk, val) {
+            state.content = state.content.replace(/(W[a-z@])([0-9A-Za-z]{2})?/g, function(match, rk, val) {
               if (val) {
                 register[rk] = val;
-                return match;     // Keep the existing formatted pair (e.g. Wz99)
+                return match;     // Keep the existing formatted pair (e.g. Wz99, WsFF)
               } else {
                 register[rk] = '01';
                 return rk + '01'; // If there's no numeral suffix, treat it as quantity 1 and sanitize
@@ -611,7 +624,7 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
         var noun = tape.slice(column, column + 2); column += 2;
         
         if (!switchopen) {
-          // state.zStr is already properly zero-padded (e.g., '05', '44')
+          // state.zStr is already properly padded (e.g., '05', '44', 'FF')
           output += "S^Vr" + noun + state.zStr + "^S";
         }
         break;
@@ -651,6 +664,19 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
         if (!switchopen) {
           var GFX_COLS = 8;
           var GFX_ROWS = 12;
+          
+          var aWideLoad = _deps.fileLoad(driveName, '/', 'a/gfxGridWide', 'UNIVAC');
+          if (!aWideLoad.success) aWideLoad = _deps.fileLoad(driveName, '/', 'a/mapx', 'UNIVAC');
+          if (aWideLoad.success && aWideLoad.content) {
+              GFX_COLS = parseInt(aWideLoad.content, 10) || GFX_COLS;
+          }
+          
+          var aTallLoad = _deps.fileLoad(driveName, '/', 'a/gfxGridTall', 'UNIVAC');
+          if (!aTallLoad.success) aTallLoad = _deps.fileLoad(driveName, '/', 'a/mapy', 'UNIVAC');
+          if (aTallLoad.success && aTallLoad.content) {
+              GFX_ROWS = parseInt(aTallLoad.content, 10) || GFX_ROWS;
+          }
+
           var GFX_TOTAL_TILES = GFX_COLS * GFX_ROWS;
 
           var currentZ   = state.z;
@@ -775,7 +801,7 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
                 // We are exiting a city map back to the world. Check for an exit object.
                 var exitZ = findCityExitZ(nextSector);
                 if (exitZ !== null) {
-                  targetZ = parseInt(exitZ, 10);
+                  targetZ = parseInt(exitZ, zBase);
                 } else {
                   // If no specific exit object exists, leave player at exactly the Z location they are at
                   targetZ = currentZ; 
@@ -800,7 +826,7 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
 
           state.sector = targetMap;
           state.z      = targetZ;
-          state.zStr   = (targetZ < 10 ? '0' : '') + targetZ;
+          state.zStr   = targetZ.toString(zBase).toUpperCase().padStart(2, '0');
           state.avatar = newAvatar;
         }
         break;
@@ -819,18 +845,28 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
             } 
           }
           
-          if (/^\d{2}$/.test(zToken)) {
-            targetZStr = zToken;
+          var isValidZ = false;
+          if (zBase === 10) {
+            isValidZ = /^\d{2}$/.test(zToken);
+          } else {
+            var zNum = parseInt(zToken, zBase);
+            isValidZ = !isNaN(zNum) && zToken.toUpperCase() === zNum.toString(zBase).toUpperCase().padStart(2, '0');
+          }
+
+          if (isValidZ && !/^[A-Z][a-z0-9]$/.test(zToken)) {
+            targetZStr = zToken.toUpperCase();
           } else if (/^[A-Z]/.test(zToken)) {
             var foundZ = findItemZ(targetSector, zToken);
             if (foundZ !== null) {
-              targetZStr = foundZ;
+              targetZStr = foundZ.toUpperCase();
+            } else if (isValidZ) {
+              targetZStr = zToken.toUpperCase();
             }
           }
           
           state.sector = targetSector;
           state.zStr   = targetZStr;
-          state.z      = parseInt(targetZStr, 10);
+          state.z      = parseInt(targetZStr, zBase);
         }
         break;
       }
@@ -850,11 +886,11 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
               var targetZStr = state.zStr; 
 
               var exitZ = findCityExitZ(targetSector);
-              if (exitZ !== null) { targetZStr = exitZ; }
+              if (exitZ !== null) { targetZStr = exitZ.toUpperCase(); }
 
               state.sector = targetSector;
               state.zStr   = targetZStr;
-              state.z      = parseInt(targetZStr, 10);
+              state.z      = parseInt(targetZStr, zBase);
             }
           } else {
             // EXIT CITY (XnVc)
@@ -865,10 +901,10 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
               var targetSector = state.sector.charAt(0) + worldChar;
               var targetZStr = state.zStr;
               var exitZ = findCityExitZ(targetSector);
-              if (exitZ !== null) { targetZStr = exitZ; }
+              if (exitZ !== null) { targetZStr = exitZ.toUpperCase(); }
               state.sector = targetSector;
               state.zStr   = targetZStr;
-              state.z      = parseInt(targetZStr, 10);
+              state.z      = parseInt(targetZStr, zBase);
             }
           }
           ifnot = false; // flag was consumed
@@ -981,9 +1017,6 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
               }
 
               // Ensure the target exists in this room and is on an opposing team
-              //console.log("###970### targetTeamId="+targetTeamId+" myTeamId="+myTeamId);
-              // ###970### targetTeamId=S myTeamIdS
-  
               if (targetTeamId && targetTeamId !== myTeamId) {
                 // Drop the tag marker!
                 // Filename = Xt[targetID]. Contents = [myID][attackPower]
@@ -992,13 +1025,8 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
                 // Allow the tag to expire via lazy garbage collection after 1 minute if target goes offline
                 var tsTag = _deps.futureTimestamp(1);
                 _deps.fileSave(driveName, '/', tagPath, tagContent, sessionToken, sessionToken, 'X' + tsTag);
-                //console.log("UNIVAC() Xt: Tagged player " + targetId + " (Power: " + attackVal + ")");
-              } else {
-                //console.log("UNIVAC() Xt: Target " + targetId + " not found or on same team.");
-              }
+              } 
             }
-          } else {
-            //console.log("UNIVAC() Xt: Tag failed, W7 register not set.");
           }
         }
         ifnot = false;
@@ -1015,8 +1043,9 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
         if (!switchopen) {
           // If the sector token is a register (like W0), use its value, otherwise use literal
           var targetSector = (secToken.charAt(0) === 'W') ? (register[secToken] || secToken) : secToken;
-          var targetZ = getRegValue(zToken);
-          var targetZStr = targetZ.toString().padStart(2, '0');
+          var targetZ = resolveZToken(zToken);
+          if (isNaN(targetZ)) targetZ = 0;
+          var targetZStr = targetZ.toString(zBase).toUpperCase().padStart(2, '0');
           
           // --- Marker Logic: Update client map tile visually via file sync ---
           var listRes = typeof _deps.fileList === 'function' ? _deps.fileList(driveName, 'w/' + targetSector, null, sessionToken) : {success: false, listing: ''};
@@ -1039,7 +1068,6 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
           var markerFile = 'Xz' + targetZStr + tileCode;
           var tsMarker = _deps.futureTimestamp(1);
           _deps.fileSave(driveName, '/', 'w/' + targetSector + '/' + markerFile, '', sessionToken, sessionToken, tsMarker);
-          //console.log("UNIVAC() Xz: deployed client marker " + markerFile + " to w/" + targetSector);
 
           // --- Server-side 'm' file modification for physical collision / persistence ---
           var mPath = 'w/' + targetSector + '/m';
@@ -1075,7 +1103,6 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
                 if (oParts.length >= 3 && oParts[0] === 'w' && oParts[2].length >= 6) {
                   var oId = oParts[2].substring(0, 2);
                   register[token] = oId;
-                  //console.log("register["+token+"] = "+oId);
                 }
               }
             }
@@ -1130,14 +1157,11 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
                       var tsObj = _deps.futureTimestamp(1); 
                       _deps.fileSave(driveName, '/', newObjFile, tape, sessionToken, sessionToken, tsObj);
                     }
-                    //console.log("UNIVAC() Vx: modified object " + objfile + " -> " + newObjFile);
                     objfile = newObjFile; // Update path for subsequent commands
                   }
                 }
               }
-            } else {
-              //console.log("UNIVAC() Vx: cannot modify a RAM object.");
-            }
+            } 
           }
         }
         
@@ -1156,7 +1180,7 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
                 var oParts = objfile.replace(/^\//, '').split('/');
                 if (oParts.length >= 3 && oParts[0] === 'w' && oParts[2].length >= 6) {
                   var oZ = oParts[2].substring(2, 4);
-                  register[token] = oZ; // oZ is already safely zero-padded (e.g. '05')
+                  register[token] = oZ; // oZ is already safely properly base-formatted
                 }
               }
             }
@@ -1173,8 +1197,10 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
                   var oZ = oFilename.substring(2, 4);
                   var oData = oFilename.substring(4);
                   
-                  // Use getRegValue to resolve the integer string, then zero-pad it
-                  var targetZStr = getRegValue(token).toString().padStart(2, '0');
+                  // Use resolveZToken to ensure the integer reflects the custom zBase, then proper-pad it
+                  var targetZ = resolveZToken(token);
+                  if (isNaN(targetZ)) targetZ = 0;
+                  var targetZStr = targetZ.toString(zBase).toUpperCase().padStart(2, '0');
                   
                   if (oZ !== targetZStr) {
                     var newFilename = oId + targetZStr + oData;
@@ -1219,13 +1245,10 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
                       var tsObj = 'X' + _deps.futureTimestamp(1); 
                       _deps.fileSave(driveName, '/', newObjFile, tape, sessionToken, sessionToken, tsObj);
                     }
-                    //console.log("UNIVAC() Vy: modified object " + objfile + " -> " + newObjFile);
                     objfile = newObjFile; // Update path for subsequent commands
                   }
                 }
               }
-            } else {
-              //console.log("UNIVAC() Vy: cannot modify a RAM object.");
             }
           }
         }
@@ -1247,9 +1270,10 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
             }
           } else {
             // Move player to Z-location ##
-            var targetZ = getRegValue(zToken);
+            var targetZ = resolveZToken(zToken);
+            if (isNaN(targetZ)) targetZ = 0;
             state.z = targetZ;
-            state.zStr = targetZ.toString().padStart(2, '0');
+            state.zStr = targetZ.toString(zBase).toUpperCase().padStart(2, '0');
           }
         }
         ifnot = false; // flag was consumed
@@ -1289,10 +1313,8 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
       }
       
       default: {
-      	 //console.log('UNIVAC: unknown word [' + word + '] at column ' + (column - 2) + ' – abort script');
           break; 
       }
-      // If it didn't start with W, it's a true unknown command
       break;
     }
   }
@@ -1302,7 +1324,7 @@ function UNIVAC(driveName, itemfile, objfile, sessionToken) {
   for (var _rk in register) {
     if (!/^W[a-z@]$/.test(_rk)) continue; // only user registers (Wa-Wz and W@) live in inventory
     var _rv = register[_rk];
-    var _re = new RegExp(_rk + '\\d{2}');
+    var _re = new RegExp(_rk + '[0-9A-Za-z]{2}');
     if (!_rv || _rv === '00') {
       // Undeclared / zeroed registers are simply absent from the inventory string
       state.content = state.content.replace(_re, '');
@@ -1379,7 +1401,6 @@ function loadconfig(drive) {
   if (!configfile || !configfile.success || typeof configfile.content !== 'string') return;
   
   let config = configfile.content;
-  //console.log("loadconfig() config=" + config);
   
   for (let column = 0; column < config.length; column += 4) {
     const code = config.substring(column, column + 2); 
@@ -1401,7 +1422,6 @@ function tickOdometer(driveName) {
       } else {
         registeradd('W3');
       }
-      // FIX: This previously said W2 + W2, causing false collisions
       candidatePath = 'p/' + register['W2'] + register['W3']; 
     }
     saveconfig(driveName);
@@ -1532,4 +1552,10 @@ function flipAvatarDirection(avatarStr, cmd) {
 // ── Exports ───────────────────────────────────────────────────────────────────
 
 UNIVAC.inject = inject;
-module.exports = UNIVAC;
+
+// Browser-safe global export
+if (typeof window !== 'undefined') { window.UNIVAC = UNIVAC; }
+if (typeof globalThis !== 'undefined') { globalThis.UNIVAC = UNIVAC; }
+
+// Preserve Node/CommonJS compatibility
+if (typeof module !== 'undefined' && module.exports) { module.exports = UNIVAC; }
