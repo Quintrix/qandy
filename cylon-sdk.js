@@ -313,17 +313,21 @@ window.CylonSDK.renderIconGrid = function(containerId, items) {
     container.innerHTML = '';
     container.classList.add('cylon-grid-container');
 
+    let hostOrigin = window.cylonHostOrigin || '';
+    let iconBase = (window.CylonGFX && window.CylonGFX.gfxIconDir) ? window.CylonGFX.gfxIconDir : (hostOrigin + 'i/');
+    let fallbackBase = (hostOrigin + 'q/');
+
     items.forEach(item => {
         let iconWrap = document.createElement('div');
         iconWrap.className = 'gfx-icon';
         iconWrap.title = item.title || item.label;
 
         let img = document.createElement('img');
-        img.src = item.iconPath || `i/${item.iconId}.png`;
+        img.src = item.iconPath || `${iconBase}${item.iconId}.png`;
         
         img.onerror = function() { 
             this.onerror = null; 
-            this.src = 'q/file.png'; 
+            this.src = `${fallbackBase}file.png`; 
         }; 
 
         let label = document.createElement('div');
@@ -402,7 +406,7 @@ window.CylonSDK.showAppPopup = function(item) {
         html = `
         <div style="text-align: center; padding: 8px;">
             <div style="margin-bottom: 8px;">
-                <img src="i/${itemId}.png" style="width: 64px; height: 64px; image-rendering: pixelated;" />
+                <img src="${window.cylonHostOrigin || ''}i/${itemId}.png" style="width: 64px; height: 64px; image-rendering: pixelated;" />
             </div>
             <div style="font-weight: bold; margin: 6px 0;">
                 <strong>${app.title}</strong>
@@ -448,6 +452,8 @@ window.CylonSDK.renderListGrid = function(containerId, items) {
     container.className = '';
     container.style.cssText = 'display: flex; flex-direction: column; padding: 10px; overflow-y: auto; height: 100%; box-sizing: border-box; background-color: var(--bg-color, #000);';
 
+    let fallbackBase = (window.cylonHostOrigin || '') + 'q/';
+
     items.forEach(item => {
         let row = document.createElement('div');
         row.style.cssText = `display: flex; align-items: center; padding: 6px; cursor: pointer; border-bottom: 1px solid var(--fg-color, #0f0); opacity: 0.8; transition: opacity 0.1s;`;
@@ -459,9 +465,9 @@ window.CylonSDK.renderListGrid = function(containerId, items) {
         row.style.paddingLeft = (6 + indent) + 'px';
 
         let img = document.createElement('img');
-        img.src = item.iconPath || 'q/file.png';
+        img.src = item.iconPath || `${fallbackBase}file.png`;
         img.style.cssText = 'width: 24px; height: 24px; image-rendering: pixelated; margin-right: 12px; filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.5));';
-        img.onerror = function() { this.onerror = null; this.src = 'q/file.png'; };
+        img.onerror = function() { this.onerror = null; this.src = `${fallbackBase}file.png`; };
 
         let label = document.createElement('div');
         label.textContent = item.label;

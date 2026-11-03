@@ -45,7 +45,8 @@
 <!-- TASKBAR / TERMINAL PROMPT (Hidden until power on) -->
 <div id="input-bar" style="visibility: hidden;">
     <div id="os-menu-btn" onclick="event.stopPropagation(); toggleFullKeyboard()">
-        <img src="i/Lk.png" width="24" height="24" alt="Menu" style="image-rendering: pixelated; filter: drop-shadow(0 0 2px #0f0);">
+        <!-- Added ID to dynamically fix icon URL if running offline -->
+        <img id="os-menu-icon" src="i/Lk.png" width="24" height="24" alt="Menu" style="image-rendering: pixelated; filter: drop-shadow(0 0 2px #0f0);">
     </div>
     <div id="kb-input-lines">
         <div id="kb-line1"><span id="kb-prompt"></span><span id="kb-input-render1"></span></div>
@@ -243,7 +244,6 @@ function print(html) {
     }
 }
 
-// Special print for DOS output to preserve table spacing and newlines
 // Special print for DOS output with robust ANSI-style [.0] - [.9] state tracking
 function printDOS(text) {
     let activeFg = null;
@@ -629,13 +629,28 @@ window.applyThemeFromAlpha = async function() {
 window.desktopInit = async function() {
     let dos = window.CylonDOS;
 
+    let basePath = "";
     let origin = window.location.origin;
-    if (origin && origin !== "null") {
-        try {
-            await dos.save('/a/cylonHostOrigin', origin);
-        } catch(e) {
-            console.warn("Could not save hostOrigin to /a/");
-        }
+    
+    // Evaluate if running off a valid webserver or sandbox/local file
+    if (origin && origin !== "null" && !origin.startsWith('file')) {
+        let path = window.location.pathname;
+        let dir = path.substring(0, path.lastIndexOf('/'));
+        basePath = origin + dir;
+    } else {
+        basePath = "https://qandy.onrender.com"; 
+    }
+
+    try {
+        await dos.save('cylon:/a/cylonHostOrigin', basePath);
+    } catch(e) {
+        console.warn("Could not save hostOrigin to cylon:/a/");
+    }
+
+    // Fix OS menu icon if running standalone
+    let osMenuIcon = document.getElementById('os-menu-icon');
+    if (osMenuIcon) {
+        osMenuIcon.src = basePath + "/i/Lk.png";
     }
     
     // 1. Load system colors from /a/ retro-objects BEFORE autoexec loads apps

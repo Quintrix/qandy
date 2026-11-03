@@ -290,27 +290,68 @@ window.onload = async function() {
     
     // 1. Define a safe fallback (Production)
     let hostOrigin = 'https://qandy.onrender.com';
+    let jdos = window.parent && window.parent.CylonDOS ? window.parent.CylonDOS : window.CylonDOS;
     
     // 2. Query the OS for the actual Host Origin Environment Variable
     try {
-        if (window.parent && window.parent.CylonDOS) {
-            let savedOrigin = await window.parent.CylonDOS.load('/a/cylonHostOrigin');
+        if (jdos) {
+            let savedOrigin = await jdos.load('cylon:/a/cylonHostOrigin');
             if (savedOrigin) hostOrigin = savedOrigin.trim();
         }
     } catch(err) {
-        console.warn('Could not read /a/cylonHostOrigin, using fallback.');
+        console.warn('Could not read cylon:/a/cylonHostOrigin, using fallback.');
     }
 
     // 3. Build dynamic URLs based purely on where the OS booted from
-    const url = `${hostOrigin}/qandyland.js`;
-    const baseUrl = hostOrigin;
+    const baseUrl = hostOrigin.endsWith('/') ? hostOrigin.slice(0, -1) : hostOrigin;
+    const url = `${baseUrl}/qandyland.js`;
 
     try {
-        // Mount the remote desktop graphics package into RAM
-        await CylonCommand(`mount ${baseUrl}/cylon-desktop.gfx ram desktop`);
+        let isMounted = false;
+        if (jdos) {
+            let mounts = await jdos.mounts();
+            isMounted = mounts.some(m => m.name === 'desktop');
+        }
+        
+        // Mount the remote desktop graphics package into RAM if not already persistent
+        if (!isMounted) {
+            await CylonCommand(`mount ${baseUrl}/cylon-desktop.gfx ram desktop`);
+        }
         
         // Connect to server to register session, apply map, and complete one-time sync
         await CylonCommand(`gfx connect ${url} desktop`);
+        
+        // --- FIX: Force absolute URLs so images load regardless of OS drive state ---
+        // If the OS booted from a blank drive, cylonHostOrigin fails to load inside GFX init, 
+        // leaving the image paths as relative 't/', 'i/' etc. We inject the absolute baseUrl here.
+        if (window.CylonGFX) {
+            let refreshNeeded = false;
+            
+            if (!window.CylonGFX.gfxTileDir.match(/^https?:\/\//i) && !window.CylonGFX.gfxTileDir.startsWith('data:')) {
+                window.CylonGFX.gfxTileDir = `${baseUrl}/` + window.CylonGFX.gfxTileDir.replace(/^\/+/, '');
+                refreshNeeded = true;
+            }
+            if (!window.CylonGFX.gfxIconDir.match(/^https?:\/\//i) && !window.CylonGFX.gfxIconDir.startsWith('data:')) {
+                window.CylonGFX.gfxIconDir = `${baseUrl}/` + window.CylonGFX.gfxIconDir.replace(/^\/+/, '');
+                refreshNeeded = true;
+            }
+            if (!window.CylonGFX.gfxCharDir.match(/^https?:\/\//i) && !window.CylonGFX.gfxCharDir.startsWith('data:')) {
+                window.CylonGFX.gfxCharDir = `${baseUrl}/` + window.CylonGFX.gfxCharDir.replace(/^\/+/, '');
+                refreshNeeded = true;
+            }
+            if (!window.CylonGFX.gfxMapsDir.match(/^https?:\/\//i) && !window.CylonGFX.gfxMapsDir.startsWith('data:')) {
+                window.CylonGFX.gfxMapsDir = `${baseUrl}/` + window.CylonGFX.gfxMapsDir.replace(/^\/+/, '');
+                refreshNeeded = true;
+            }
+            
+            if (refreshNeeded) {
+                await window.CylonGFX.renderScreen();
+            }
+        }
+        
+        // Restore global hostOrigin for SDK popups since GFX Engine might have wiped it on a blank boot
+        window.cylonHostOrigin = `${baseUrl}/`;
+        
     } catch (err) {
         console.error('Cylon Desktop startup failed:', err);
         if (window.parent && window.parent.print) {

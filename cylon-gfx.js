@@ -81,11 +81,23 @@ window.CylonGFX = {
         window.map = parts[parts.length - 1] || "A1";
         let drive = startPath.split(':')[0]; 
         
+        let dosObj = window.parent && window.parent.CylonDOS ? window.parent.CylonDOS : window.CylonDOS;
+        
+        // --- NEW: Retrieve the host origin to correctly path images when running standalone/local ---
+        let hostOrigin = '';
+        if (dosObj) {
+            try {
+                let savedOrigin = await dosObj.load('cylon:/a/cylonHostOrigin');
+                if (savedOrigin) hostOrigin = savedOrigin.trim();
+            } catch(e) {}
+        }
+        if (hostOrigin && !hostOrigin.endsWith('/')) hostOrigin += '/';
+        window.cylonHostOrigin = hostOrigin; // Expose globally for SDK or others
+
         if (window.CylonSDK && window.CylonSDK.injectDesktopStyles) {
             window.CylonSDK.injectDesktopStyles();
         }
 
-        let dosObj = window.parent && window.parent.CylonDOS ? window.parent.CylonDOS : window.CylonDOS;
         if (!dosObj) return;
 
         let tDir = await this.qdosLoadSafe(dosObj, `${drive}:/a/gfxTileDir`);
@@ -121,6 +133,15 @@ window.CylonGFX = {
         if (cDir) this.gfxCharDir = cDir.trim();
         if (mDir) this.gfxMapsDir = mDir.trim();
         if (tSize) this.gfxTileSize = parseInt(tSize, 10);
+        
+        // Prepend hostOrigin if it exists and the paths are relative
+        if (hostOrigin) {
+            if (!this.gfxTileDir.match(/^https?:\/\//i) && !this.gfxTileDir.startsWith('data:')) this.gfxTileDir = hostOrigin + this.gfxTileDir;
+            if (!this.gfxIconDir.match(/^https?:\/\//i) && !this.gfxIconDir.startsWith('data:')) this.gfxIconDir = hostOrigin + this.gfxIconDir;
+            if (!this.gfxCharDir.match(/^https?:\/\//i) && !this.gfxCharDir.startsWith('data:')) this.gfxCharDir = hostOrigin + this.gfxCharDir;
+            if (!this.gfxMapsDir.match(/^https?:\/\//i) && !this.gfxMapsDir.startsWith('data:')) this.gfxMapsDir = hostOrigin + this.gfxMapsDir;
+        }
+
         if (gWide) this.gridWide = parseInt(gWide, 10);
         if (gTall) this.gridTall = parseInt(gTall, 10);
         if (gStretch) this.gfxGridStretch = (gStretch.trim().toLowerCase() === 'true');
@@ -383,7 +404,11 @@ window.CylonGFX = {
                 let output = "[.2]Available GFX Servers:[.]\n\n";
                 let dos = window.parent && window.parent.CylonDOS ? window.parent.CylonDOS : window.CylonDOS;
                 
-                let serverUrl = window.remoteQandylandUrl || window.location.origin + '/qandyland.js';
+                let path = window.location.pathname;
+                let dir = path.substring(0, path.lastIndexOf('/'));
+                let fallbackUrl = window.location.origin !== "null" ? (window.location.origin + dir + '/qandyland.js') : "";
+                
+                let serverUrl = window.remoteQandylandUrl || fallbackUrl;
                 let remoteFound = false;
                 
                 if (serverUrl.startsWith('http')) {
@@ -568,7 +593,6 @@ window.CylonGFX = {
             img.style.objectFit = 'contain';
             img.style.imageRendering = 'pixelated';
             img.style.filter = 'drop-shadow(2px 2px 2px rgba(0,0,0,0.8))';
-            //img.onerror = function() { this.src = 'q/file.png'; };
             img.onerror = function() { this.src = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxIiBoZWlnaHQ9IjEiLz4="; };
             container.appendChild(img);
             return img;
@@ -636,8 +660,8 @@ window.CylonGFX = {
             let redW = 100 - registerVal;
             
             meterEl.innerHTML = `
-                <img src="i/Zn.png" style="position:absolute; left:0; top:0; height:100%; width:${greenW}%;" />
-                <img src="i/Zm.png" style="position:absolute; right:0; top:0; height:100%; width:${redW}%;" />
+                <img src="${this.gfxIconDir}Zn.png" style="position:absolute; left:0; top:0; height:100%; width:${greenW}%;" />
+                <img src="${this.gfxIconDir}Zm.png" style="position:absolute; right:0; top:0; height:100%; width:${redW}%;" />
             `;
             container.appendChild(meterEl);
         }

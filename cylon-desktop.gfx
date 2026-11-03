@@ -2,7 +2,7 @@
   "format": "qandy-ramdrive",
   "version": 2,
   "drive": "desktop",
-  "created": "2026-11-02T01:15:17.162Z",
+  "created": "2026-11-03T00:25:56.357Z",
   "entries": [
     {
       "name": "a",
@@ -26,9 +26,9 @@
     {
       "name": "a/gfxCharDir",
       "type": "file",
-      "content": "/c/",
-      "size": 3,
-      "timestamp": "20261018200437",
+      "content": "c/",
+      "size": 2,
+      "timestamp": "20261102192541",
       "owner": "",
       "session": "",
       "readOnly": false
@@ -96,9 +96,9 @@
     {
       "name": "a/gfxIconDir",
       "type": "file",
-      "content": "/i/",
-      "size": 3,
-      "timestamp": "20261019114131",
+      "content": "i/",
+      "size": 2,
+      "timestamp": "20261102192526",
       "owner": "",
       "session": "",
       "readOnly": false
@@ -126,9 +126,9 @@
     {
       "name": "a/gfxMapsDir",
       "type": "file",
-      "content": "/m/",
-      "size": 3,
-      "timestamp": "20261018200347",
+      "content": "m/",
+      "size": 2,
+      "timestamp": "20261102192536",
       "owner": "",
       "session": "",
       "readOnly": false
@@ -166,9 +166,9 @@
     {
       "name": "a/gfxTileDir",
       "type": "file",
-      "content": "/t/",
-      "size": 3,
-      "timestamp": "20261018200340",
+      "content": "t/",
+      "size": 2,
+      "timestamp": "20261102192520",
       "owner": "",
       "session": "",
       "readOnly": false
@@ -178,7 +178,7 @@
       "type": "file",
       "content": "10",
       "size": 2,
-      "timestamp": "20261101201505",
+      "timestamp": "20261102192435",
       "owner": "",
       "session": "",
       "readOnly": false
