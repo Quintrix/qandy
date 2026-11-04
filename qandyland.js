@@ -1744,10 +1744,7 @@ function plugboard(req, stacker, plugs, drive, session) {
       let files = list.listing.split(' ');
       files.forEach(f => {
         if (f.length > 1) { 
-          // Allow 6-character files if they are 'V' or 'X' (Punch Code Markers)
-          if (f.length !== 6 || f.charAt(0) === 'V' || f.charAt(0) === 'X') { 
-            items.push(f); 
-          }
+          items.push(f); 
         }
       });
     }
