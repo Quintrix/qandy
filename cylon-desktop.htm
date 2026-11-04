@@ -135,6 +135,9 @@ window.ObjDown = function(iconId) {
         case 'At': // desktop
             if (parent && typeof parent.PageOpen === 'function') parent.PageOpen('cylon-desktop.htm'); 
             return true;
+        case 'Au': // Files
+            if (parent && typeof parent.PageOpen === 'function') parent.PageOpen('cylon-files.htm'); 
+            return true;
         case 'Av': // create
             if (parent && typeof parent.PageOpen === 'function') parent.PageOpen('gfx-create.htm'); 
             return true;

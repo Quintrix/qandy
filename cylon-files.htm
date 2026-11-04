@@ -6,194 +6,325 @@
 <title>Cylon Files</title>
 <script src="cylon-sdk.js"></script>
 <style>
-    /* Clean Grouped List View Styles */
-    .file-row {
-        display: flex; align-items: center; padding: 12px 16px; cursor: pointer;
-        border-bottom: 1px dashed var(--sel-bg, #333); transition: background 0.1s;
+    /* Base OS Theme Integration */
+    body, html {
+        margin: 0; padding: 0; height: 100%; width: 100%;
+        background-color: var(--bg-color, #000);
+        color: var(--fg-color, #0f0);
+        font-family: var(--font-face, monospace);
+        box-sizing: border-box;
+        overflow: hidden;
     }
-    .file-row:hover { background-color: var(--sel-bg, #111); }
-    .f-icon { width: 28px; height: 28px; image-rendering: pixelated; margin-right: 16px; flex-shrink: 0; filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.5)); }
-    .f-name { flex: 1; font-weight: bold; font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .f-meta { color: var(--fg-color, #0f0); font-size: 14px; opacity: 0.7; margin-left: 10px; }
+
+    #file-manager {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        width: 100%;
+    }
+
+    /* Columnar Grid Layout */
+    .fm-grid {
+        display: grid;
+        grid-template-columns: minmax(200px, 4fr) 100px 160px;
+        gap: 10px;
+        padding: 6px 12px;
+        align-items: center;
+    }
+
+    /* Header Styling */
+    .fm-header {
+        background-color: var(--menu-bg, #111);
+        color: var(--menu-fg, #aaa);
+        border-bottom: 2px solid var(--fg-color, #0f0);
+        font-weight: bold;
+        font-size: 14px;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        user-select: none;
+    }
+
+    /* Scrollable File List */
+    #fm-root {
+        flex: 1;
+        overflow-y: auto;
+        padding-bottom: 20px;
+    }
+
+    /* Row Styling */
+    .fm-row {
+        border-bottom: 1px dashed var(--sel-bg, #333);
+        transition: background 0.1s;
+    }
+    .fm-row:hover {
+        background-color: var(--sel-bg, #111);
+    }
+
+    /* Name Column */
+    .fm-col-name {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        overflow: hidden;
+        white-space: nowrap;
+    }
+    
+    .fm-toggle {
+        font-weight: bold;
+        cursor: pointer;
+        width: 24px;
+        flex-shrink: 0;
+        user-select: none;
+    }
+
+    .fm-icon {
+        width: 20px;
+        height: 20px;
+        image-rendering: pixelated;
+        flex-shrink: 0;
+    }
+
+    .fm-link {
+        color: var(--html-link, #0066cc);
+        text-decoration: none;
+        cursor: pointer;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .fm-link:hover {
+        color: var(--html-hover, #00aaff);
+        text-decoration: underline;
+    }
+    
+    /* Meta Columns */
+    .fm-col-size, .fm-col-date {
+        font-size: 14px;
+        opacity: 0.8;
+        white-space: nowrap;
+        pointer-events: none;
+    }
+
+    /* Tree View Nesting */
+    .fm-children {
+        display: none;
+        margin-left: 18px;
+        border-left: 1px dashed var(--sel-bg, #333);
+        padding-left: 4px;
+    }
+    .expanded > .fm-children {
+        display: block;
+    }
+    
+    .loading-text {
+        padding: 4px 12px;
+        opacity: 0.5;
+        font-size: 14px;
+        font-style: italic;
+    }
 </style>
 </head>
 <body>
-<div id="files-container" style="display: flex; flex-direction: column; overflow-y: auto; height: 100%; box-sizing: border-box; background-color: var(--bg-color, #000); color: var(--fg-color, #0f0); font-family: var(--font-face, monospace);"></div>
+
+<div id="file-manager">
+    <!-- Static Header -->
+    <div class="fm-grid fm-header">
+        <div>Name</div>
+        <div>Size</div>
+        <div>Date Modified</div>
+    </div>
+    
+    <!-- Dynamic Root Container -->
+    <div id="fm-root"></div>
+</div>
+
 <script>
     window.onload = async function() {
         CylonSDK.injectDesktopStyles();
 
         if (!window.parent || !window.parent.CylonDOS) {
-            document.getElementById('files-container').innerHTML = "<h3 style='padding:20px;'>Error: CylonDOS not connected.</h3>";
+            document.getElementById('fm-root').innerHTML = "<h3 style='padding:20px;'>Error: CylonDOS not connected.</h3>";
             return;
         }
 
-        let dos = window.parent.CylonDOS;
-        let currentDir = dos.cwd || '/';
-        let container = document.getElementById('files-container');
-        
-        try {
-            // Strictly fetch current directory avoiding deep recursive logic
-            let rawFiles = await dos.dir(currentDir);
-            
-            let folders = [];
-            let fileGroups = {}; 
+        const dos = window.parent.CylonDOS;
+        const hostOrigin = window.parent.cylonHostOrigin || '';
+        const iconBase = hostOrigin + 'i/';
+        const rootContainer = document.getElementById('fm-root');
 
-            // Parse and Group
-            for (let f of rawFiles) {
-                let internalPath = f.name.replace(/[<>]/g, '');
-                let name = internalPath.substring(internalPath.lastIndexOf('/') + 1);
-                
-                if (f.type === 'directory') {
-                    folders.push({ name: name, fullPath: '/' + internalPath });
-                } else {
-                    let dotIdx = name.lastIndexOf('.');
-                    let base = dotIdx > 0 ? name.substring(0, dotIdx) : name;
-                    let ext = dotIdx > 0 ? name.substring(dotIdx).toLowerCase() : '(none)';
-                    
-                    if (!fileGroups[base]) fileGroups[base] = [];
-                    fileGroups[base].push({ name: name, ext: ext, fullPath: '/' + internalPath, size: f.size });
-                }
-            }
-
-            // Up Directory Row
-            if (currentDir !== '/' && currentDir !== '') {
-                container.appendChild(makeRow('q/folder.png', '.. (Up)', '', async () => {
-                    await window.parent.injectAndExecute('cd ..');
-                    window.location.reload(); 
-                }));
-            }
-
-            // Folder Rows
-            folders.sort((a,b) => a.name.localeCompare(b.name)).forEach(dir => {
-                container.appendChild(makeRow('q/folder.png', dir.name, '', () => {
-                    window.parent.injectAndExecute(`cd "${dir.fullPath}"`);
-                    setTimeout(() => window.location.reload(), 100);
-                }));
-            });
-
-            function getIconForBase(exts) {
-                if (exts.includes('.htm') || exts.includes('.html')) return 'q/cylon.png';
-                if (exts.includes('.js')) return 'q/dot-js.png';
-                if (exts.includes('.txt')) return 'q/dot-txt.png';
-                if (exts.includes('.json')) return 'q/dot-json.png';
-                if (exts.includes('.cfg')) return 'q/folder.png';
-                return 'q/file.png';
-            }
-
-            // File Group Rows
-            Object.keys(fileGroups).sort().forEach(base => {
-                let files = fileGroups[base];
-                let exts = files.map(f => f.ext);
-                let metaText = files.length > 1 ? `[${files.length} files]` : files[0].ext;
-                
-                let icon = getIconForBase(exts);
-                
-                let row = makeRow(icon, base, metaText, (e) => {
-                    // Fast action if only 1 file in group
-                    if (files.length === 1) {
-                        showActionMenu(e, files[0], base);
-                    } else {
-                        // Open Extension Selector Menu
-                        let extMenu = files.map(f => ({
-                            label: `[ ${f.ext} ]`,
-                            action: () => setTimeout(() => showActionMenu(e, f, base), 50)
-                        }));
-                        window.parent.CylonPopManager.showContextMenu(e, extMenu);
-                    }
-                });
-                
-                container.appendChild(row);
-            });
-
-        } catch (err) {
-            console.error("File Explorer Error:", err);
+        // Map extensions to known Cylon GFX Icon Codes, defaulting to Au (Folder)
+        function getIconCode(isDir, name) {
+            if (isDir) return 'Au'; 
+            let ext = name.includes('.') ? name.split('.').pop().toLowerCase() : '';
+            if (ext === 'htm' || ext === 'html') return 'Aa';
+            if (ext === 'js') return 'Lj';
+            if (ext === 'txt' || ext === 'cfg' || ext === 'json') return 'Tx';
+            if (ext === 'png' || ext === 'jpg' || ext === 'gif') return 'Im';
+            return 'Fi'; // Generic File
         }
 
-        // Action Engine 
-        function showActionMenu(e, f, baseName) {
-            window.parent.CylonPopManager.showContextMenu(e, [
-                { label: `Load ${f.name}`, action: () => {
-                    window.parent.injectAndExecute(`load "${f.fullPath}"`);
-                }},
-                { label: `Add to Desktop`, action: async () => {
-                    try {
-                        let dos = window.parent.CylonDOS;
-                        
-                        // Safety measure to ensure we have a valid desktop mount
-                        await window.parent.injectAndExecute(`iferror mount desktop idb`);
-                        
-                        let desktopPath = 'desktop:/w/Aa';
-                        let deskFiles = [];
-                        try { deskFiles = await dos.dir(desktopPath); } catch(e) {}
-                        
-                        // Scan for occupied Z index slots on the desktop
-                        let usedZ = new Set();
-                        deskFiles.forEach(df => {
-                            let fn = df.name.replace(/[<>]/g, '').split('/').pop();
-                            if (fn.length >= 4 && fn !== 't' && fn !== 'm') {
-                                usedZ.add(parseInt(fn.substring(2,4), 16));
-                            }
-                        });
-                        
-                        // Discover next free slot
-                        let freeZ = 0; 
-                        while(usedZ.has(freeZ) && freeZ <= 255) freeZ++;
-                        if (freeZ > 255) { window.parent.print("[.3]Desktop is full![.]\\n"); return; }
-                        
-                        let hexZ = freeZ.toString(16).padStart(2, '0').toUpperCase();
-                        
-                        // Map extension to GFX Icon IDs
-                        let iconId = 'Fi'; 
-                        if (f.ext === '.htm' || f.ext === '.html') iconId = 'Aa';
-                        else if (f.ext === '.js') iconId = 'Lj';
-                        else if (f.ext === '.txt' || f.ext === '.cfg' || f.ext === '.json') iconId = 'Tx';
-                        else if (f.ext === '.png' || f.ext === '.jpg' || f.ext === '.gif') iconId = 'Im';
-                        
-                        let safeLabel = baseName.substring(0, 10).replace(/[^a-zA-Z0-9_\- ]/g, '');
-                        let targetFile = `${desktopPath}/${iconId}${hexZ}${safeLabel}`;
-                        let cmd = `load "${f.fullPath}"`;
-                        
-                        // Execute physical file construction directly to VFS via terminal save
-                        await window.parent.injectAndExecute(`save "${targetFile}" "${cmd}"`);
-                        window.parent.print(`\\n[.4]Icon added to Desktop at ${targetFile}[.]\\n`);
-                        
-                    } catch(err) {
-                        window.parent.print(`\\n[.3]Failed to add icon: ${err.message}[.]\\n`);
-                    }
-                }},
-                { label: `Delete ${f.name}`, action: () => {
-                    window.parent.injectAndExecute(`delete "${f.fullPath}" -y`);
-                    setTimeout(() => window.location.reload(), 100);
-                }}
-            ]);
+        // Format Cylon YYYYMMDDHHMMSS timestamps
+        function formatDate(ts) {
+            if (!ts || ts.length !== 14) return ts || '--';
+            return `${ts.substring(0,4)}-${ts.substring(4,6)}-${ts.substring(6,8)} ${ts.substring(8,10)}:${ts.substring(10,12)}`;
         }
 
-        // GUI Row Constructor
-        function makeRow(icon, name, metaText, onClick) {
+        // Build a single row for the tree grid
+        function createRow(isDir, name, size, date, fullPath) {
+            let wrapper = document.createElement('div');
+            wrapper.className = 'fm-item-wrapper';
+
             let row = document.createElement('div');
-            row.className = 'file-row';
-            
+            row.className = 'fm-grid fm-row';
+
+            // --- Column 1: Name, Icon, Toggle ---
+            let colName = document.createElement('div');
+            colName.className = 'fm-col-name';
+
+            let toggleSpan = document.createElement('span');
+            toggleSpan.className = 'fm-toggle';
+            toggleSpan.textContent = isDir ? '[+]' : '   ';
+
+            let iconCode = getIconCode(isDir, name);
             let img = document.createElement('img');
-            img.src = icon;
-            img.className = 'f-icon';
-            img.onerror = function() { this.src = 'q/file.png'; };
-            
-            let nameDiv = document.createElement('div');
-            nameDiv.textContent = name;
-            nameDiv.className = 'f-name';
-            
-            let metaDiv = document.createElement('div');
-            metaDiv.textContent = metaText;
-            metaDiv.className = 'f-meta';
-            
-            row.appendChild(img);
-            row.appendChild(nameDiv);
-            row.appendChild(metaDiv);
-            row.onclick = onClick;
-            
-            return row;
+            img.src = `${iconBase}${iconCode}.png`;
+            img.className = 'fm-icon';
+            img.onerror = function() { this.src = `${iconBase}Au.png`; }; // Fallback to Au
+
+            let link = document.createElement('a');
+            link.className = 'fm-link';
+            link.textContent = name;
+            link.title = fullPath;
+
+            colName.appendChild(toggleSpan);
+            colName.appendChild(img);
+            colName.appendChild(link);
+
+            // --- Column 2: Size ---
+            let colSize = document.createElement('div');
+            colSize.className = 'fm-col-size';
+            colSize.textContent = size;
+
+            // --- Column 3: Date ---
+            let colDate = document.createElement('div');
+            colDate.className = 'fm-col-date';
+            colDate.textContent = date;
+
+            row.appendChild(colName);
+            row.appendChild(colSize);
+            row.appendChild(colDate);
+            wrapper.appendChild(row);
+
+            // --- Children Container (For Folders) ---
+            let childrenContainer = document.createElement('div');
+            childrenContainer.className = 'fm-children';
+            wrapper.appendChild(childrenContainer);
+
+            // --- Event Listeners ---
+            if (isDir) {
+                let loaded = false;
+                let expanded = false;
+
+                let toggleDir = async (e) => {
+                    e.stopPropagation();
+                    expanded = !expanded;
+                    toggleSpan.textContent = expanded ? '[-]' : '[+]';
+                    
+                    if (expanded) {
+                        wrapper.classList.add('expanded');
+                        if (!loaded) {
+                            loaded = true;
+                            childrenContainer.innerHTML = '<div class="loading-text">Loading...</div>';
+                            await loadDirectory(fullPath, childrenContainer);
+                        }
+                    } else {
+                        wrapper.classList.remove('expanded');
+                    }
+                };
+
+                toggleSpan.onclick = toggleDir;
+                link.onclick = toggleDir;
+                img.onclick = toggleDir;
+            } else {
+                link.onclick = (e) => {
+                    e.stopPropagation();
+                    showContextMenu(e, name, fullPath, wrapper);
+                };
+            }
+
+            return wrapper;
         }
+
+        // Fetch directory contents and append them inside the parent folder's container
+        async function loadDirectory(path, container) {
+            try {
+                let entries = await dos.dir(path);
+                container.innerHTML = '';
+
+                let dirs = entries.filter(e => e.type === 'directory').sort((a,b) => a.name.localeCompare(b.name));
+                let files = entries.filter(e => e.type === 'file').sort((a,b) => a.name.localeCompare(b.name));
+
+                // Filter out system manifest files
+                files = files.filter(f => !f.name.endsWith('_dir.sys!'));
+
+                if (dirs.length === 0 && files.length === 0) {
+                    container.innerHTML = '<div class="loading-text">(empty)</div>';
+                    return;
+                }
+
+                for (let d of dirs) {
+                    let cleanName = d.name.replace(/[<>]/g, '');
+                    let folderName = cleanName.substring(cleanName.lastIndexOf('/') + 1);
+                    let fullPath = path + (path.endsWith('/') ? '' : '/') + folderName;
+                    container.appendChild(createRow(true, folderName, '', formatDate(d.timestamp), fullPath));
+                }
+
+                for (let f of files) {
+                    let fileName = f.name.substring(f.name.lastIndexOf('/') + 1);
+                    let fullPath = path + (path.endsWith('/') ? '' : '/') + fileName;
+                    container.appendChild(createRow(false, fileName, dos.formatSize(f.size), formatDate(f.timestamp), fullPath));
+                }
+            } catch (err) {
+                container.innerHTML = `<div class="loading-text" style="color:red;">Error reading directory.</div>`;
+            }
+        }
+
+        // Trigger context menu for file interactions
+        function showContextMenu(e, name, fullPath, rowWrapper) {
+            if (!window.parent.CylonPopManager) return;
+            
+            let items = [
+                { label: `Open: ${name}`, action: () => {
+                    window.parent.injectAndExecute(`load "${fullPath}"`);
+                }},
+                { label: `Delete`, action: () => {
+                    window.parent.injectAndExecute(`delete "${fullPath}" -y`);
+                    rowWrapper.style.display = 'none'; // Visually remove immediately for UX
+                }}
+            ];
+
+            window.parent.CylonPopManager.showContextMenu(e, items);
+        }
+
+        // Boot Init: List all Mounted Drives as the root nodes
+        async function initFilesystem() {
+            rootContainer.innerHTML = '';
+            let mounts = await dos.mounts();
+            
+            for (let m of mounts) {
+                // Formatting Drive Names to stand out
+                let driveName = m.name + ':';
+                let drivePath = m.name + ':/';
+                
+                // Pass size info for drives
+                let sizeStr = `${dos.formatSize(m.used)} / ${m.quota ? dos.formatSize(m.quota) : '∞'}`;
+                
+                let row = createRow(true, driveName, sizeStr, m.type.toUpperCase(), drivePath);
+                rootContainer.appendChild(row);
+            }
+        }
+
+        initFilesystem();
     };
 </script>
 </body>

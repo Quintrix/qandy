@@ -300,7 +300,7 @@ window.gfxItemID = function(i) {
         "Ar": "Files",
         "As": "Compiler",
         "At": "Desktop",
-        "Au": "Folder",
+        "Au": "Files",
         "Av": "Create",
         "Aw": "Theme",
         "Ax": "Calc",
