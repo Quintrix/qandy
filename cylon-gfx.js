@@ -378,7 +378,7 @@ window.CylonGFX = {
                             let fname = lf.name.substring(lf.name.lastIndexOf('/') + 1);
                             if (fname === 'm' || fname === 'e' || fname === 't') continue;
                             if (!serverFileList.includes(fname)) {
-                                await dos.delete(lf.name);
+                                await dos.delete(targetPath + '/' + fname);
                             }
                         }
                         for (let sf of serverFileList) {
@@ -387,7 +387,9 @@ window.CylonGFX = {
                                 await dos.save(fpath, "");
                             }
                         }
-                    } catch(e) {}
+                    } catch(e) {
+                        console.error("Local DOS sync failed:", e);
+                    }
                 }
                 await this.renderScreen();
             }
@@ -1201,7 +1203,7 @@ window.CylonGFX = {
         }
     },
 
-        setTileAtCursor: async function(code) {
+    setTileAtCursor: async function(code) {
         let dos = window.parent && window.parent.CylonDOS ? window.parent.CylonDOS : window.CylonDOS;
         if (!dos) return;
         

@@ -362,7 +362,7 @@ window.onload = async function() {
                        label: `${labelText}`,
                        action: () => window.objdown(fullCode)
                    });
-               } else if (itemId + pubId === window.playerItem) {
+               } else if (itemId === window.playerItem && (pubId === window.playerId || !window.playerId)) {
                    items.push({
                        label: `Inventory`,
                        action: () => window.objdown(fullCode)
@@ -457,7 +457,7 @@ window.objdown = function(code) {
            return;
        }
  
-       if (itemid + uniqueid === window.playerItem) {
+       if (itemid === window.playerItem && (uniqueid === window.playerId || !window.playerId)) {
            if (window.gfxDo === "RF") window.gfxDo = "";
            window.gfxDo += "Vi"; // request inventory
        } else {
