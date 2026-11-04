@@ -1,406 +1,333 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Cylon Desktop</title>
-<script src="cylon-sdk.js"></script>
-<script src="cylon-gfx-itemid.js"></script>
-<script src="cylon-gfx.js"></script>
-<style>
-/* Desktop Workspace Styles */
-body, html {
-    margin: 0;
-    padding: 0;
-    width: 100%;
-    height: 100%;
-    background-color: var(--bg-color, #000);
-    color: var(--fg-color, #0f0);
-    font-family: var(--font-face, monospace);
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    overflow: hidden;
-    user-select: none;
-    -webkit-user-select: none;
-}
- 
-#desktop-wrapper {
-   position: relative;
-   background-color: #000;
-   border: 2px solid var(--sel-bg, #333);
-   box-shadow: 0px 10px 30px rgba(0, 0, 0, 0.8);
-   overflow: hidden;
-   box-sizing: border-box; 
-}
- 
-#bg-canvas {
-   position: absolute;
-   top: 0;
-   left: 0;
-   width: 100%;
-   height: 100%;
-   z-index: 1;
-   image-rendering: -moz-crisp-edges;
-   image-rendering: -webkit-optimize-contrast;
-   image-rendering: crisp-edges;
-   image-rendering: pixelated;
-}
- 
-#tiles-layer {
-   position: absolute;
-   top: 0;
-   left: 0;
-   width: 100%;
-   height: 100%;
-   z-index: 5;
-}
- 
-#icons-layer {
-   position: absolute;
-   top: 0;
-   left: 0;
-   width: 100%;
-   height: 100%;
-   z-index: 10;
-}
- 
-.icon-wrap {
-   position: absolute;
-   cursor: pointer;
-   display: flex;
-   flex-direction: column;
-   align-items: center;
-   justify-content: center;
-   border-radius: 4px;
-   transition: background-color 0.1s;
-}
- 
-.icon-wrap:hover {
-   background-color: rgba(255, 255, 255, 0.1);
-   z-index: 20;
-}
- 
-.icon-wrap:active {
-   transform: scale(0.95);
-   background-color: rgba(255, 255, 255, 0.2);
-}
- 
-.icon-img {
-   max-width: 60%;
-   max-height: 55%;
-   object-fit: contain;
-   image-rendering: pixelated;
-   filter: drop-shadow(2px 2px 2px rgba(0,0,0,0.8));
-}
- 
-.icon-label {
-   margin-top: 4px;
-   font-size: clamp(9px, 2vmin, 14px);
-   font-weight: bold;
-   color: #fff;
-   font-family: sans-serif;
-   text-shadow: 1px 1px 1px #000, -1px -1px 1px #000, 1px -1px 1px #000, -1px 1px 1px #000;
-   text-align: center;
-   line-height: 1.1;
-   width: 90%;
-   white-space: nowrap;
-   overflow: hidden;
-   text-overflow: ellipsis;
-}
-</style>
-</head>
-<body>
-<div id="desktop-wrapper">
-   <canvas id="bg-canvas"></canvas>
-   <div id="tiles-layer"></div>
-   <div id="icons-layer"></div>
-</div>
-<script>
-// ============================================================================
-// SYSTEM APP ROUTING
-// ============================================================================
-window.ObjDown = function(iconId) {
-    const parent = window.parent;
-    switch(iconId) {
-        case 'Aq': // command
-            if (parent && typeof parent.showTerminal === 'function') parent.showTerminal(); 
-            return true;
-        case 'Ar': // files
-            if (parent && typeof parent.PageOpen === 'function') parent.PageOpen('cylon-files.htm'); 
-            return true;
-        case 'As': // compiler
-            if (parent && typeof parent.PageOpen === 'function') parent.PageOpen('gfx-compiler.htm'); 
-            return true;
-        case 'At': // desktop
-            if (parent && typeof parent.PageOpen === 'function') parent.PageOpen('cylon-desktop.htm'); 
-            return true;
-        case 'Au': // Files
-            if (parent && typeof parent.PageOpen === 'function') parent.PageOpen('cylon-files.htm'); 
-            return true;
-        case 'Av': // create
-            if (parent && typeof parent.PageOpen === 'function') parent.PageOpen('gfx-create.htm'); 
-            return true;
-        case 'Aw': // theme
-            if (parent && typeof parent.PageOpen === 'function') parent.PageOpen('cylon-theme.htm'); 
-            return true;
-        case 'Ax': // calc
-            if (parent && typeof parent.PageOpen === 'function') parent.PageOpen('cylon-calc.htm'); 
-            return true;
-        case 'Az': // trash
-          if (parent && typeof parent.popHtm === 'function') {
-              parent.popHtm("<div style='padding:20px; text-align:center; font-weight:bold; line-height:1.6;'>There is no trash<br>on a Qandy Pocket Computer!</div>");
-          }
-          return true;
-        case 'Se': // black flag
-            if (parent && typeof parent.PageOpen === 'function') parent.PageOpen('cylon-capflag.htm'); 
-            return true;
+{
+  "format": "qandy-ramdrive",
+  "version": 2,
+  "drive": "desktop",
+  "created": "2026-11-04T03:58:59.422Z",
+  "entries": [
+    {
+      "name": "a",
+      "type": "directory",
+      "size": 0,
+      "timestamp": "20261016194026",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "a/gfxAirLock",
+      "type": "file",
+      "content": "false",
+      "size": 5,
+      "timestamp": "20261019113430",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "a/gfxCharDir",
+      "type": "file",
+      "content": "c/",
+      "size": 2,
+      "timestamp": "20261102192541",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "a/gfxCommandLog",
+      "type": "file",
+      "content": "true",
+      "size": 4,
+      "timestamp": "20261019125606",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "a/gfxCursorZ",
+      "type": "file",
+      "content": "00",
+      "size": 2,
+      "timestamp": "20261019200036",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "a/gfxCycle",
+      "type": "file",
+      "content": ".075",
+      "size": 4,
+      "timestamp": "20261019112509",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "a/gfxGridStretch",
+      "type": "file",
+      "content": "true",
+      "size": 4,
+      "timestamp": "20261019130309",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "a/gfxGridTall",
+      "type": "file",
+      "content": "4",
+      "size": 1,
+      "timestamp": "20261018194906",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "a/gfxGridWide",
+      "type": "file",
+      "content": "8",
+      "size": 1,
+      "timestamp": "20261018194858",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "a/gfxIconDir",
+      "type": "file",
+      "content": "i/",
+      "size": 2,
+      "timestamp": "20261102192526",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "a/gfxIconSize",
+      "type": "file",
+      "content": "64",
+      "size": 2,
+      "timestamp": "20261019114232",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "a/gfxLowerBound",
+      "type": "file",
+      "content": "Ab",
+      "size": 2,
+      "timestamp": "20261019112712",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "a/gfxMapsDir",
+      "type": "file",
+      "content": "m/",
+      "size": 2,
+      "timestamp": "20261102192536",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "a/gfxRoundWorld",
+      "type": "file",
+      "content": "true",
+      "size": 4,
+      "timestamp": "20261019095020",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "a/gfxSector",
+      "type": "file",
+      "content": "Aa",
+      "size": 2,
+      "timestamp": "20261101201459",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "a/gfxTickRate",
+      "type": "file",
+      "content": "0",
+      "size": 1,
+      "timestamp": "20261029032630",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "a/gfxTileDir",
+      "type": "file",
+      "content": "t/",
+      "size": 2,
+      "timestamp": "20261102192520",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "a/playerZ",
+      "type": "file",
+      "content": "9",
+      "size": 1,
+      "timestamp": "20261103225849",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "p",
+      "type": "directory",
+      "size": 0,
+      "timestamp": "20261011140253",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "w",
+      "type": "directory",
+      "size": 0,
+      "timestamp": "20261011133202",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "w/Aa",
+      "type": "directory",
+      "size": 0,
+      "timestamp": "20261011140408",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "w/Aa/Aq11Za",
+      "type": "file",
+      "content": "\\n",
+      "size": 2,
+      "timestamp": "20261103225804",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "w/Aa/At13Za",
+      "type": "file",
+      "content": "\\n",
+      "size": 2,
+      "timestamp": "20261103225844",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "w/Aa/Au12Za",
+      "type": "file",
+      "content": "\\n",
+      "size": 2,
+      "timestamp": "20261103225839",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "w/Aa/Aw19Za",
+      "type": "file",
+      "content": "\\n",
+      "size": 2,
+      "timestamp": "20261103225842",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "w/Aa/Ax20Za",
+      "type": "file",
+      "content": "\\n",
+      "size": 2,
+      "timestamp": "20261103225834",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "w/Aa/Az21Za",
+      "type": "file",
+      "content": "\\n",
+      "size": 2,
+      "timestamp": "20261103225848",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "w/Aa/Se09Za",
+      "type": "file",
+      "content": "\\n",
+      "size": 2,
+      "timestamp": "20261103225807",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "w/Aa/m",
+      "type": "file",
+      "content": "ArArArArArArArArArArArArArArArArArArArArArArArArArArArArArArArAr",
+      "size": 64,
+      "timestamp": "20261029032739",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "w/Aa/t",
+      "type": "file",
+      "content": "ArArArArArArArArArArArArArArArArArArArArArArArArArArArArArArArAr",
+      "size": 64,
+      "timestamp": "20261019125804",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "w/Ab",
+      "type": "directory",
+      "size": 0,
+      "timestamp": "20261019085342",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "w/Ab/m",
+      "type": "file",
+      "content": "AsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAs",
+      "size": 64,
+      "timestamp": "20261101201453",
+      "owner": "",
+      "session": "",
+      "readOnly": false
+    },
+    {
+      "name": "w/Ab/t",
+      "type": "file",
+      "content": "AsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAsAs",
+      "size": 64,
+      "timestamp": "20261019111027",
+      "owner": "",
+      "session": "",
+      "readOnly": false
     }
-    return false; // Icon wasn't a recognized core app, fallback to executing script file
-};
-
-// ============================================================================
-// LOCAL DESKTOP CLIENT
-// The desktop is a local, editable RAM drive.
-// CylonGFX supplies the renderer, local cursor, and file-based desktop actions.
-// ============================================================================
-
-window.onload = async function() {
-    if (window.CylonSDK && window.CylonSDK.injectDesktopStyles) {
-        window.CylonSDK.applyColors(window.parent.CylonColors);
-    }
-
-    if (!window.CylonCommand || !window.CylonGFX) {
-        document.body.innerHTML = "<h3 style='padding:20px;'>Error: Cylon OS or CylonGFX is not available.</h3>";
-        return;
-    }
-
-    // Set Identity properties for the local desktop
-    window.desktopDrive = 'desktop';
-    window.playerItem = 'Si'; // System cursor icon
-    window.gfxDo = 'RF';
-    
-    // Enable point-and-click functionality rather than pathing/walking
-    window.CylonGFX.clickMovesCursor = true;
-    window.CylonGFX.enableFileMove = true;
-
-    // ------------------------------------------------------------------------
-    // OVERRIDE: TARGET MENU
-    // Disables "Walk Here" and "Scroll", providing instant execution instead.
-    // ------------------------------------------------------------------------
-    window.CylonGFX.showTargetMenu = function(z, clientX, clientY) {
-        if (!window.parent || !window.parent.CylonPopManager || typeof window.parent.CylonPopManager.showContextMenu !== 'function') return;
-
-        let items = [];
-        let iconWraps = document.querySelectorAll(`.icon-wrap[data-z="${z}"]`);
-        
-        iconWraps.forEach(wrap => {
-            let labelText = wrap.getAttribute('data-label');
-            let fullPath = wrap.getAttribute('data-path');
-            if (labelText && fullPath) {
-                
-                // Add Open Target
-                items.push({ label: 'Open ' + labelText, action: () => {
-                    // Extract icon punch-code ID from the file path to route system apps
-                    let filename = fullPath.substring(fullPath.lastIndexOf('/') + 1);
-                    let iconId = filename.substring(0, 2);
-                    
-                    if (window.ObjDown && window.ObjDown(iconId)) {
-                        // The action was natively handled by the core ObjDown router
-                    } else {
-                        // Fallback to evaluating the file contents directly
-                        this.executeScript(fullPath);
-                    }
-                }});
-                
-                if (this.enableFileMove) {
-                    items.push({ label: 'Move ' + labelText, action: () => {
-                        this.pendingMovePath = fullPath;
-                        if (window.parent && window.parent.print) window.parent.print('Select a destination tile to drop this file.\n');
-                    }});
-                }
-                items.push({ label: 'Remove ' + labelText, action: () => this.removeScript(fullPath) });
-            }
-        });
-
-        // Only pop a context menu if there is something under the cursor to interact with
-        if (items.length > 0) {
-            let mockEvent = { clientX, clientY, view: window };
-            window.parent.CylonPopManager.showContextMenu(mockEvent, items);
-        }
-    };
-
-    // ------------------------------------------------------------------------
-    // OVERRIDE: EXECUTE CURSOR (Keyboard Enter)
-    // Ensures users can drop a pending "Moved" file by pressing Enter
-    // ------------------------------------------------------------------------
-    const origExecuteCursor = window.CylonGFX.executeCursor.bind(window.CylonGFX);
-    window.CylonGFX.executeCursor = function() {
-        if (this.enableFileMove && this.pendingMovePath) {
-            const pendingPath = this.pendingMovePath;
-            this.pendingMovePath = null;
-            let z = window.playerZ;
-            
-            this.moveObjectToZ(pendingPath, z).then(() => {
-                let x = z % this.gridWide;
-                let y = Math.floor(z / this.gridWide);
-                const wrapper = document.getElementById('desktop-wrapper');
-                let rect = wrapper.getBoundingClientRect();
-                let clientX = rect.left + (x + 0.5) * (rect.width / this.gridWide);
-                let clientY = rect.top + (y + 0.5) * (rect.height / this.gridTall);
-                this.showTargetMenu(z, clientX, clientY);
-            });
-            return;
-        }
-        origExecuteCursor();
-    };
-
-    // ------------------------------------------------------------------------
-    // NATIVE KEYBOARD HANDLING
-    // Move the cursor fluidly, no step logic, block native mainframe collisions
-    // ------------------------------------------------------------------------
-    window.keydown = function(key, e) {
-        const gfx = window.CylonGFX;
-        if (!gfx) return;
-        
-        // Pass keyboard actions to the popup menu if it's currently focused
-        if (window.parent && window.parent.CylonPopManager && window.parent.CylonPopManager.isMenuOpen) {
-            if (window.parent.CylonPopManager.handleMenuKey(key)) {
-                if (e) e.preventDefault();
-                return;
-            }
-        }
-        
-        let dx = 0, dy = 0;
-        if (key === 'ArrowUp' || key === 'w' || key === 'W') dy = -1;
-        else if (key === 'ArrowDown' || key === 's' || key === 'S') dy = 1;
-        else if (key === 'ArrowLeft' || key === 'a' || key === 'A') dx = -1;
-        else if (key === 'ArrowRight' || key === 'd' || key === 'D') dx = 1;
-        else if (key === 'Enter') { 
-            gfx.executeCursor(); 
-            if (e) e.preventDefault(); 
-            return; 
-        }
-        else return;
-        
-        gfx.moveCursor(dx, dy);
-        if (e) e.preventDefault();
-    };
-
-    // ------------------------------------------------------------------------
-    // BOOT SEQUENCE
-    // ------------------------------------------------------------------------
-    
-    // 1. Define a safe fallback (Production)
-    let hostOrigin = 'https://qandy.onrender.com';
-    let jdos = window.parent && window.parent.CylonDOS ? window.parent.CylonDOS : window.CylonDOS;
-    
-    // 2. Query the OS for the actual Host Origin Environment Variable
-    try {
-        if (jdos) {
-            let savedOrigin = await jdos.load('cylon:/a/cylonHostOrigin');
-            if (savedOrigin) hostOrigin = savedOrigin.trim();
-        }
-    } catch(err) {
-        console.warn('Could not read cylon:/a/cylonHostOrigin, using fallback.');
-    }
-
-    // 3. Build dynamic URLs based purely on where the OS booted from
-    const baseUrl = hostOrigin.endsWith('/') ? hostOrigin.slice(0, -1) : hostOrigin;
-    const url = `${baseUrl}/qandyland.js`;
-
-    try {
-        let isMounted = false;
-        if (jdos) {
-            let mounts = await jdos.mounts();
-            isMounted = mounts.some(m => m.name === 'desktop');
-        }
-        
-        // Mount the remote desktop graphics package into RAM if not already persistent
-        if (!isMounted) {
-            await CylonCommand(`mount ${baseUrl}/cylon-desktop.gfx ram desktop`);
-        }
-        
-        // Connect to server to register session, apply map, and complete one-time sync
-        await CylonCommand(`gfx connect ${url} desktop`);
-        
-        // --- FIX: Force absolute URLs so images load regardless of OS drive state ---
-        // If the OS booted from a blank drive, cylonHostOrigin fails to load inside GFX init, 
-        // leaving the image paths as relative 't/', 'i/' etc. We inject the absolute baseUrl here.
-        if (window.CylonGFX) {
-            let refreshNeeded = false;
-            
-            if (!window.CylonGFX.gfxTileDir.match(/^https?:\/\//i) && !window.CylonGFX.gfxTileDir.startsWith('data:')) {
-                window.CylonGFX.gfxTileDir = `${baseUrl}/` + window.CylonGFX.gfxTileDir.replace(/^\/+/, '');
-                refreshNeeded = true;
-            }
-            if (!window.CylonGFX.gfxIconDir.match(/^https?:\/\//i) && !window.CylonGFX.gfxIconDir.startsWith('data:')) {
-                window.CylonGFX.gfxIconDir = `${baseUrl}/` + window.CylonGFX.gfxIconDir.replace(/^\/+/, '');
-                refreshNeeded = true;
-            }
-            if (!window.CylonGFX.gfxCharDir.match(/^https?:\/\//i) && !window.CylonGFX.gfxCharDir.startsWith('data:')) {
-                window.CylonGFX.gfxCharDir = `${baseUrl}/` + window.CylonGFX.gfxCharDir.replace(/^\/+/, '');
-                refreshNeeded = true;
-            }
-            if (!window.CylonGFX.gfxMapsDir.match(/^https?:\/\//i) && !window.CylonGFX.gfxMapsDir.startsWith('data:')) {
-                window.CylonGFX.gfxMapsDir = `${baseUrl}/` + window.CylonGFX.gfxMapsDir.replace(/^\/+/, '');
-                refreshNeeded = true;
-            }
-            
-            if (refreshNeeded) {
-                await window.CylonGFX.renderScreen();
-            }
-        }
-        
-        // Restore global hostOrigin for SDK popups since GFX Engine might have wiped it on a blank boot
-        window.cylonHostOrigin = `${baseUrl}/`;
-        
-    } catch (err) {
-        console.error('Cylon Desktop startup failed:', err);
-        if (window.parent && window.parent.print) {
-            window.parent.print(`[.4]Cylon Desktop startup failed: ${String(err.message || err)}[.]\n`);
-        }
-    }
-    
-    // Connect Screen Scaling Observer
-    window.addEventListener('resize', fitDesktopToScreen);
-    if (window.ResizeObserver) new ResizeObserver(fitDesktopToScreen).observe(document.body);
-};
- 
-function fitDesktopToScreen() {
-   if (!window.CylonGFX) return;
- 
-   const wrapper = document.getElementById('desktop-wrapper');
-   const screenW = window.innerWidth;
-   const screenH = window.innerHeight;
- 
-   const cols = window.CylonGFX.gridWide;
-   const rows = window.CylonGFX.gridTall;
- 
-   if (!cols || !rows || screenW === 0 || screenH === 0) return;
- 
-   let w, h;
- 
-   if (window.CylonGFX.gfxGridStretch) {
-       const aspect = cols / rows;
-       w = screenW;
-       h = screenW / aspect;
- 
-       if (h > screenH) {
-           h = screenH;
-           w = screenH * aspect;
-       }
- 
-       w = Math.floor(w * 0.98);
-       h = Math.floor(h * 0.98); 
-   } else {
-       w = cols * window.CylonGFX.gfxTileSize;
-       h = rows * window.CylonGFX.gfxTileSize;
-   }
- 
-   wrapper.style.width = w + 'px';
-   wrapper.style.height = h + 'px';
+  ]
 }
-</script>
-</body>
-</html>
